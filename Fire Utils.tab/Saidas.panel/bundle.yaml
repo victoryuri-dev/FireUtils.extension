@@ -1,0 +1,8 @@
+title: Ocupação e População
+tooltip: Descrição do que o script faz
+author: Seu Nome
+layout:
+  - Dimensionar Saidas
+  - Identificar Ambiente
+  - Por Nivel
+  - Todos

@@ -1,0 +1,8 @@
+title: Sistema de Hidrantes
+tooltip: Descrição do que o script faz
+author: Seu Nome
+layout:
+  - Dimensionar Hidrantes
+  - Classificar Sistema
+  - Mapear trechos
+  - Inserir Valvula
