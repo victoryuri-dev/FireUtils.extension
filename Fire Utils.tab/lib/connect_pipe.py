@@ -450,7 +450,12 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
     desc_vert = _pipe_is_vertical(pipe_desc)
 
     if not clicou_ponta:
-        P_target   = _projetar_segmento(P_knee, pt_A, pt_B)
+        # Usa a posição do CLIQUE do usuário (não P_knee) para determinar
+        # ONDE no pipe_ref a conexão deve ser feita.
+        # P_knee pode estar fora da extensão do pipe_ref e causaria projeção
+        # clamped para um endpoint → gerava joelho em vez de tê.
+        ref_proj = pt_click_ref if pt_click_ref is not None else P_knee
+        P_target   = _projetar_segmento(ref_proj, pt_A, pt_B)
         dist_horiz = P_knee.DistanceTo(P_target)
         need_horiz = dist_horiz > TOL_SEG
         if not need_horiz:
@@ -508,10 +513,27 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
             # ── SEÇÃO HORIZONTAL — MODO CORPO (Tê) ──────────────────────────
             if not clicou_ponta:
                 if need_horiz:
-                    pipe_h      = _mk_pipe(doc, P_knee, P_target, pt_id, sys_id, lvl_id, diam_ft)
-                    c_hk        = _conn_near(pipe_h, P_knee)
-                    conn_branch = _conn_near(pipe_h, P_target)
-                    _elbows_pend.append((conn_knee, c_hk))
+                    # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
+                    # seg2 perpendicular. Garante ângulos retos mesmo quando
+                    # P_knee está fora da extensão lateral de pipe_ref.
+                    P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_knee, P_target, d_ref)
+                    conn_cur = conn_knee
+
+                    if needs_s1:
+                        seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
+                        c_s1_k = _conn_near(seg1, P_knee)
+                        c_s1_m = _conn_near(seg1, P_mid)
+                        _elbows_pend.append((conn_cur, c_s1_k))
+                        conn_cur = c_s1_m
+
+                    if needs_s2:
+                        seg2   = _mk_pipe(doc, P_mid, P_target, pt_id, sys_id, lvl_id, diam_ft)
+                        c_s2_m = _conn_near(seg2, P_mid)
+                        c_s2_e = _conn_near(seg2, P_target)
+                        _elbows_pend.append((conn_cur, c_s2_m))
+                        conn_cur = c_s2_e
+
+                    conn_branch = conn_cur
                 else:
                     conn_branch = conn_knee
 
