@@ -1,8 +1,14 @@
 title: Sistema de Hidrantes
-tooltip: Descrição do que o script faz
+tooltip: Descricao do que o script faz
 author: Seu Nome
 layout:
   - Dimensionar Hidrantes
   - Classificar Sistema
   - Mapear trechos
   - Inserir Valvula
+  - Inserir Hidrante
+  - Inserir Hidrante por Nivel
+  - Inserir Hidrante com Abrigo
+  - Posicionar Abrigos
+  - Conectar Abrigo
+  - Inserir Alarme de Incendio
