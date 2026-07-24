@@ -28,11 +28,11 @@ NOME_FAMILIA = u"Valvula para Hidrante"
 def _caminho_padrao():
     """
     Resolve o caminho padrão do .rfa relativo a este arquivo.
-    lib/ → ../ → Hidrantes.panel/families/
+    lib/ → family_library/Hidrantes/ (biblioteca única de famílias da extensão)
     """
     lib_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.normpath(
-        os.path.join(lib_dir, u"..", u"Hidrantes.panel", u"families",
+        os.path.join(lib_dir, u"family_library", u"Hidrantes",
                      NOME_FAMILIA + u".rfa")
     )
 
@@ -59,7 +59,7 @@ def garantir_valvula(doc, familia_path=None):
     if not os.path.exists(familia_path):
         return None, (u"Família não encontrada em:\n{}\n\n"
                       u"Verifique se o arquivo existe na pasta "
-                      u"families/ da extensão.".format(familia_path))
+                      u"lib/family_library/Hidrantes/ da extensão.".format(familia_path))
 
     # 2 — Procura família já carregada no documento
     familia = next(
