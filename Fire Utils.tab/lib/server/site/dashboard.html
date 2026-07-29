@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fire Utils · Dashboard</title>
+  <link rel="stylesheet" href="/site/style.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <span class="topbar-brand">Fire Utils</span>
+    <div class="topbar-right">
+      <span id="topbar-user" class="topbar-user"></span>
+      <button class="topbar-btn" id="btn-logout">Sair</button>
+    </div>
+  </div>
+
+  <div class="wrapper dash-wrapper">
+    <div class="dash-header">
+      <div>
+        <h1 class="dash-titulo">Meus Projetos</h1>
+        <p class="dash-sub">Projetos calculados pelo plugin Fire Utils no Revit</p>
+      </div>
+      <div class="dash-actions">
+        <input type="file" id="file-input" accept=".json" style="display:none">
+        <button class="btn-secundario" id="btn-trazer">Trazer Projeto</button>
+        <button class="btn-primario" disabled>+ Novo Projeto</button>
+      </div>
+    </div>
+
+    <div id="projetos-grid" class="projetos-grid">
+      <div class="loading-state">Carregando projetos...</div>
+    </div>
+  </div>
+
+  <script src="/site/auth.js"></script>
+  <script src="/site/dashboard.js"></script>
+
+</body>
+</html>

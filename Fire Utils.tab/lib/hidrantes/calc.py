@@ -14,16 +14,30 @@ import datetime
 # ===========================================================================
 # Constantes
 # ===========================================================================
-C_HW       = 120
-_f         = 0.022
-_g         = 9.81
-_Lm        = 30.0
-MAX_ITER   = 20
-TOLERANCIA = 1.0   # L/min
+C_HW = 120
+_f   = 0.022
+_g   = 9.81
+_Lm  = 30.0
 
-# Caminho do arquivo de cache (resultados salvos entre botões)
-_CACHE_NOME = u"fireutils_hidrantes_cache.json"
-_CACHE_PATH = os.path.join(os.environ.get("TEMP", os.path.expanduser("~")), _CACHE_NOME)
+_CACHE_NOME    = u"firedata.json"
+_LAST_PROJ_TXT = u"fireutils_last_project.txt"
+
+
+def _cache_path(projeto_dir=None):
+    d = projeto_dir or os.environ.get("TEMP", os.path.expanduser("~"))
+    return os.path.join(d, _CACHE_NOME)
+
+
+def _salvar_ponteiro_projeto(projeto_dir):
+    """Grava %TEMP%/fireutils_last_project.txt para que Flask encontre o cache."""
+    if not projeto_dir:
+        return
+    temp = os.environ.get("TEMP") or os.environ.get("TMP") or os.path.expanduser("~")
+    try:
+        with io.open(os.path.join(temp, _LAST_PROJ_TXT), "w", encoding="utf-8") as f:
+            f.write(projeto_dir)
+    except Exception:
+        pass
 
 
 # ===========================================================================
@@ -78,62 +92,102 @@ def calc_potencia(Qt_m3s, Ht, eta_decimal):
     return (1000.0 * Qt_m3s * Ht) / (75.0 * eta_decimal)
 
 
-def iterar_vazoes(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
-                  Hm_mangueira, Hesg, Pmin, C):
+# ===========================================================================
+# RESOLUÇÃO DA REDE HIDRÁULICA — MODELO DE DEMANDA FIXA
+# ===========================================================================
+
+def calcular_rede(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
+                  Hesg, Pmin, C,
+                  Dm_mangueira_m=None,
+                  **kwargs):
     """
-    Laço de iteração de vazão.
-    trechos_data: dict com chaves t1..t4, cada uma contendo L, D, Leq, acessorios, n_tubos.
-    Retorna dict completo com resultados convergidos.
+    Calcula a rede hidráulica de dois hidrantes em paralelo.
+
+    Modelo de demanda fixa: cada hidrante opera com a vazão normativa mínima
+    Q_i = Qs_lmin (demanda especificada pela norma). Isso determina o sistema
+    completamente — sem coeficiente empírico, sem igualdade artificial de energia
+    entre ramais. As pressões resultam das equações hidráulicas; não são impostas.
+
+    Sequência de cálculo (ordem física da rede):
+      1. Q1 = Q2 = Qs_lmin → Qt = Q1 + Q2
+      2. Hazen-Williams em cada trecho com as vazões especificadas
+      3. Darcy-Weisbach na mangueira de cada hidrante
+      4. Energia de cada ramal: E_i = hf_ramal_i + Hm_i + Hesg − ΔZ_i
+      5. Ramal governante: argmax(E1, E2) → determina a HMT mínima da bomba
+      6. HMT: Ht = Pmin + Hf_tronco + E_gov
+      7. Pressões reais (P1 ≠ P2 em geral): P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg
+         O ramal governante tem P = Pmin; o outro tem P = Pmin + (E_gov − E_i) > Pmin.
+
+    Hipótese de projeto: demanda fixa é a modelagem padrão em dimensionamento
+    de sistemas de proteção contra incêndio (analogia ao fire flow analysis no EPANET:
+    demanda nodal especificada → solver calcula pressões).
     """
-    Q_h01 = Qs_lmin
-    Q_h02 = Qs_lmin
-    K     = None
+    Qs = Qs_lmin / 60000.0   # m³/s
 
-    hf = {}
-    Hf1 = Hf2 = Ht = p1 = p2 = 0.0
-    hid_governa = u"HID-01"
-    Hf_gov = Hz_gov = 0.0
-    iteracoes = 0
+    # Demandas especificadas pela norma (vazão mínima em cada hidrante)
+    Q1 = Qs
+    Q2 = Qs
+    Qt = Q1 + Q2
 
-    for i in range(MAX_ITER):
-        iteracoes = i + 1
-        Qt = (Q_h01 + Q_h02) / 60000.0
-        Q1 = Q_h01 / 60000.0
-        Q2 = Q_h02 / 60000.0
+    # Hazen-Williams em cada trecho com as respectivas vazões
+    hf = {
+        "t1": calc_hf_trecho(trechos_data["t1"], Qt, C, u"RTI → Bomba"),
+        "t2": calc_hf_trecho(trechos_data["t2"], Qt, C, u"Bomba → Ponto A"),
+        "t3": calc_hf_trecho(trechos_data["t3"], Q1, C, u"Ponto A → HID-01"),
+        "t4": calc_hf_trecho(trechos_data["t4"], Q2, C, u"Ponto A → HID-02"),
+    }
 
-        hf = {
-            "t1": calc_hf_trecho(trechos_data["t1"], Qt, C, u"RTI → Bomba"),
-            "t2": calc_hf_trecho(trechos_data["t2"], Qt, C, u"Bomba → Ponto A"),
-            "t3": calc_hf_trecho(trechos_data["t3"], Q1, C, u"Ponto A → HID-01"),
-            "t4": calc_hf_trecho(trechos_data["t4"], Q2, C, u"Ponto A → HID-02"),
-        }
+    Hf_tronco = hf["t1"]["Hf"] + hf["t2"]["Hf"]
+    Hf1       = Hf_tronco + hf["t3"]["Hf"]
+    Hf2       = Hf_tronco + hf["t4"]["Hf"]
 
-        Hf1 = hf["t1"]["Hf"] + hf["t2"]["Hf"] + hf["t3"]["Hf"]
-        Hf2 = hf["t1"]["Hf"] + hf["t2"]["Hf"] + hf["t4"]["Hf"]
+    # Darcy-Weisbach na mangueira de cada hidrante
+    Hm1 = calc_hf_mangueira(Q1, Dm_mangueira_m) if Dm_mangueira_m else 0.0
+    Hm2 = calc_hf_mangueira(Q2, Dm_mangueira_m) if Dm_mangueira_m else 0.0
 
-        nec1 = Pmin + Hf1 - Hz_H1 + Hm_mangueira + Hesg
-        nec2 = Pmin + Hf2 - Hz_H2 + Hm_mangueira + Hesg
-        Ht   = max(nec1, nec2)
+    # Energia de cada ramal vista do Nó A (demanda energética do ramal, sem Pmin)
+    E1 = hf["t3"]["Hf"] + Hm1 + Hesg - Hz_H1
+    E2 = hf["t4"]["Hf"] + Hm2 + Hesg - Hz_H2
 
-        if nec1 >= nec2:
-            hid_governa = u"HID-01"; Hf_gov = Hf1; Hz_gov = Hz_H1
-        else:
-            hid_governa = u"HID-02"; Hf_gov = Hf2; Hz_gov = Hz_H2
+    # Ramal governante: o mais exigente define a HMT mínima da bomba
+    E_gov = max(E1, E2)
+    Ht    = float(Pmin) + Hf_tronco + E_gov
 
-        p1 = calc_pressao(Ht, Hz_H1, Hf1)
-        p2 = calc_pressao(Ht, Hz_H2, Hf2)
+    # Pressões reais em cada hidrante (resultado das equações — não impostas)
+    p1 = Ht + Hz_H1 - Hf1 - Hm1 - Hesg
+    p2 = Ht + Hz_H2 - Hf2 - Hm2 - Hesg
 
-        if i == 0:
-            K = Qs_lmin / (min(p1, p2) ** 0.5)
+    norm_ok = (p1 >= float(Pmin) - 0.01 and p2 >= float(Pmin) - 0.01)
 
-        Q_h01_novo = K * (p1 ** 0.5)
-        Q_h02_novo = K * (p2 ** 0.5)
+    historico = [{
+        "ciclo":   1,
+        "Qt":      Qt * 60000.0,
+        "Q_h01":   Q1 * 60000.0,
+        "Q_h02":   Q2 * 60000.0,
+        "Hf_t1":   hf["t1"]["Hf"],
+        "Hf_t2":   hf["t2"]["Hf"],
+        "Hf_t3":   hf["t3"]["Hf"],
+        "Hf_t4":   hf["t4"]["Hf"],
+        "Hf1":     Hf1,
+        "Hf2":     Hf2,
+        "Hm1":     Hm1,
+        "Hm2":     Hm2,
+        "E1":      E1,
+        "E2":      E2,
+        "Ht":      Ht,
+        "p1":      p1,
+        "p2":      p2,
+        "V_t1":    hf["t1"]["V"],
+        "V_t2":    hf["t2"]["V"],
+        "V_t3":    hf["t3"]["V"],
+        "V_t4":    hf["t4"]["V"],
+        "norm_ok": norm_ok,
+    }]
 
-        if abs(Q_h01_novo - Q_h01) <= TOLERANCIA and abs(Q_h02_novo - Q_h02) <= TOLERANCIA:
-            Q_h01 = Q_h01_novo; Q_h02 = Q_h02_novo
-            break
-
-        Q_h01 = Q_h01_novo; Q_h02 = Q_h02_novo
+    if E1 >= E2:
+        hid_governa = u"HID-01"; Hf_gov = Hf1; Hz_gov = Hz_H1; Hm_gov = Hm1
+    else:
+        hid_governa = u"HID-02"; Hf_gov = Hf2; Hz_gov = Hz_H2; Hm_gov = Hm2
 
     return {
         "hf":          hf,
@@ -142,14 +196,17 @@ def iterar_vazoes(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
         "Ht":          Ht,
         "p_hid01":     p1,
         "p_hid02":     p2,
-        "Q_h01":       Q_h01,
-        "Q_h02":       Q_h02,
-        "Qt_final":    Q_h01 + Q_h02,
-        "K":           K,
+        "Q_h01":       Q1 * 60000.0,
+        "Q_h02":       Q2 * 60000.0,
+        "Qt_final":    Qt * 60000.0,
         "hid_governa": hid_governa,
         "Hf_governa":  Hf_gov,
         "Hz_governa":  Hz_gov,
-        "iteracoes":   iteracoes,
+        "Hm_governa":  Hm_gov,
+        "Hm_hid01":    Hm1,
+        "Hm_hid02":    Hm2,
+        "iteracoes":   1,
+        "historico":   historico,
     }
 
 
@@ -201,28 +258,45 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
 # CACHE — salvar e carregar resultados entre botões
 # ===========================================================================
 
-def salvar_cache(payload):
-    """Salva o resultado do dimensionamento como JSON em disco."""
-    payload["_timestamp"] = datetime.datetime.now().strftime(u"%Y-%m-%d %H:%M:%S")
-    with io.open(_CACHE_PATH, "w", encoding="utf-8") as f:
-        data = json.dumps(payload, ensure_ascii=False, indent=2)
-        f.write(unicode(data) if hasattr(__builtins__, 'unicode') else data)
-    return _CACHE_PATH
+def salvar_cache(payload, projeto_dir=None):
+    """Salva o resultado do dimensionamento na chave 'hidrantes' do arquivo unificado."""
+    payload["_timestamp"]   = datetime.datetime.now().strftime(u"%Y-%m-%d %H:%M:%S")
+    payload["_projeto_dir"] = projeto_dir or u""
+    path = _cache_path(projeto_dir)
+    try:
+        with io.open(path, "r", encoding="utf-8") as f:
+            dados = json.loads(f.read())
+    except Exception:
+        dados = {}
+    dados[u"hidrantes"] = payload
+    with io.open(path, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+    _salvar_ponteiro_projeto(projeto_dir)
+    return path
 
 
-def carregar_cache():
-    """
-    Carrega o cache do último dimensionamento.
-    Retorna (payload, erro). Se erro não for None, payload é None.
-    """
-    if not os.path.exists(_CACHE_PATH):
+def carregar_cache(projeto_dir=None):
+    """Retorna (payload, erro). Se erro não for None, payload é None."""
+    path = _cache_path(projeto_dir)
+    if not os.path.exists(path):
         return None, u"Nenhum dimensionamento encontrado.\nExecute 'Dimensionar Hidrantes' primeiro."
     try:
-        with io.open(_CACHE_PATH, "r", encoding="utf-8") as f:
-            return json.loads(f.read()), None
+        with io.open(path, "r", encoding="utf-8") as f:
+            dados = json.loads(f.read())
+        payload = dados.get(u"hidrantes")
+        if payload is None:
+            return None, u"Nenhum dimensionamento encontrado.\nExecute 'Dimensionar Hidrantes' primeiro."
+        return payload, None
     except Exception as e:
         return None, u"Erro ao ler cache: {}".format(str(e))
 
 
-def cache_existe():
-    return os.path.exists(_CACHE_PATH)
+def cache_existe(projeto_dir=None):
+    path = _cache_path(projeto_dir)
+    if not os.path.exists(path):
+        return False
+    try:
+        with io.open(path, "r", encoding="utf-8") as f:
+            return u"hidrantes" in json.loads(f.read())
+    except Exception:
+        return False

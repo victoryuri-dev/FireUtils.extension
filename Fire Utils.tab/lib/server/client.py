@@ -29,7 +29,7 @@ def url_servidor():
 
 
 def url_memorial():
-    return u"{}/memorial".format(_BASE)
+    return u"{}/dashboard".format(_BASE)
 
 
 # ==============================================================================
@@ -77,10 +77,9 @@ def enviar_hidrantes(payload):
     return _post_json(u"/api/hidrantes", payload)
 
 
-def enviar_saidas(payload):
+def enviar_se_import(se_import):
     """
-    Envia o cache de saídas ao servidor.
-    `payload` deve ser o mesmo dict salvo por salvar_cache_saidas().
+    Envia o se_import compacto de saídas ao servidor.
     Retorna True em caso de sucesso.
     """
-    return _post_json(u"/api/saidas", payload)
+    return _post_json(u"/api/se_import", se_import)

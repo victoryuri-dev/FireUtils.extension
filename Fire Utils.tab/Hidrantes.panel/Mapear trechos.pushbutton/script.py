@@ -127,6 +127,38 @@ except Exception as e:
     script.exit()
 
 # ===========================================================================
+# 0b — Reset: limpa parâmetros FireUtils de todo o modelo
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 0b - Resetando mapeamento anterior")
+
+_todos = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements()
+_resetados = 0
+with Transaction(doc, "FireUtils - Reset Mapeamento") as _t:
+    _t.Start()
+    try:
+        for _elem in _todos:
+            _p_trecho = _elem.LookupParameter(P_TRECHO)
+            _p_ident  = _elem.LookupParameter(P_IDENTIFICADOR)
+            _alterou  = False
+            if _p_trecho and not _p_trecho.IsReadOnly and _p_trecho.AsString():
+                _p_trecho.Set(u"")
+                _alterou = True
+            if _p_ident and not _p_ident.IsReadOnly and _p_ident.AsString():
+                _p_ident.Set(u"")
+                _alterou = True
+            if _alterou:
+                _resetados += 1
+        _t.Commit()
+    except Exception as _e:
+        _t.RollBack()
+        forms.alert(u"Erro ao resetar mapeamento:\n{}".format(str(_e)),
+                    title="Fire Utils", warn_icon=True)
+        script.exit()
+
+output.print_md(u"{} elemento(s) com parametros resetados.".format(_resetados))
+
+# ===========================================================================
 # 1 — Usuário seleciona os dois hidrantes mais desfavoráveis
 # ===========================================================================
 output.print_md("---")

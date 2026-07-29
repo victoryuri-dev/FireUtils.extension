@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memorial de PPCI · Fire Utils</title>
+  <link rel="stylesheet" href="/site/style.css">
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="topbar-left">
+      <a href="/dashboard" class="topbar-back">&#8592; Dashboard</a>
+      <span class="topbar-brand">Memorial de PPCI</span>
+    </div>
+    <div class="topbar-right">
+      <span id="update-indicator" class="topbar-status">—</span>
+      <button class="topbar-btn" onclick="fetchAndRender()">&#8635; Sincronizar</button>
+    </div>
+  </div>
+
+  <div class="wrapper" id="app" data-auto-sync="1">
+    <div class="loading-state">Carregando dados do servidor...</div>
+  </div>
+
+  <script src="/site/auth.js"></script>
+  <script>Auth.require();</script>
+  <script src="/site/memorial.js"></script>
+
+</body>
+</html>

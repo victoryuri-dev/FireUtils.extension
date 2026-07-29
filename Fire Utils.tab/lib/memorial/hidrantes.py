@@ -84,26 +84,20 @@ def _html_secao_dados(dados_sistema, valor_sistema, calculo_escolha,
 
 
 def _html_secao_elevacoes(Z_RTI, Z_HID01, Z_HID02, Hz_H1, Hz_H2):
-    tab_cotas = _tabela(
-        [u"Ponto", u"Cota Z (m)"],
-        [
-            [u"RTI", u"<mono>{:.3f} m</mono>".format(Z_RTI)],
-            [u"HID-01", u"<mono>{:.3f} m</mono>".format(Z_HID01)],
-            [u"HID-02", u"<mono>{:.3f} m</mono>".format(Z_HID02)],
-        ]
-    )
-    tab_desn = _tabela(
-        [u"Percurso", u"ΔZ (m)", u"Condição"],
-        [
-            [u"RTI → HID-01",
-             u"<mono>{:.3f}</mono>".format(Hz_H1),
-             _cond_badge(Hz_H1)],
-            [u"RTI → HID-02",
-             u"<mono>{:.3f}</mono>".format(Hz_H2),
-             _cond_badge(Hz_H2)],
-        ]
-    )
-    nota = (u'<p class="nota">ΔZ = Z<sub>RTI</sub> − Z<sub>hidrante</sub>. '
+    rows_cotas = [
+        [u"RTI",    u"<mono>{:.3f} m</mono>".format(Z_RTI)],
+        [u"HID-01", u"<mono>{:.3f} m</mono>".format(Z_HID01)],
+        [u"HID-02", u"<mono>{:.3f} m</mono>".format(Z_HID02)],
+    ]
+    tab_cotas = _tabela([u"Ponto", u"Cota Z (m)"], rows_cotas)
+
+    rows_desn = [
+        [u"RTI → HID-01", u"<mono>{:.3f}</mono>".format(Hz_H1), _cond_badge(Hz_H1)],
+        [u"RTI → HID-02", u"<mono>{:.3f}</mono>".format(Hz_H2), _cond_badge(Hz_H2)],
+    ]
+    tab_desn = _tabela([u"Percurso", u"ΔZ (m)", u"Condição"], rows_desn)
+
+    nota = (u'<p class="nota">ΔZ = Z<sub>RTI</sub> − Z<sub>válvula</sub>. '
             u'Negativo indica hidrante <strong>acima</strong> da RTI — '
             u'a bomba precisa vencer essa altura.</p>')
     return tab_cotas + u"<br>" + tab_desn + nota
@@ -214,17 +208,18 @@ def _html_secao_hmt(res, Hm_mangueira, Hesg, Pmin):
         hz_desc = u"Mesmo nível"
 
     linhas = [
-        [u"Σhf (percurso crítico)",
+        [u"Σhf (ramal governante)",
          u"<mono><strong>{:.4f} mca</strong></mono>".format(res["Hf_governa"]),
          u"Soma das perdas por atrito"],
         [u"ΔZ (com sinal)",
          u"<mono><strong>{:.4f} m</strong></mono>".format(hz),
          hz_desc],
     ]
-    if Hm_mangueira > 0:
-        linhas.append([u"Hm (mangueira)",
-                       u"<mono>{:.4f} mca</mono>".format(Hm_mangueira),
-                       u"Darcy-Weisbach"])
+    Hm_gov = res.get(u"Hm_governa", Hm_mangueira)
+    if Hm_gov > 0:
+        linhas.append([u"Hm (mangueira — ramal governante)",
+                       u"<mono>{:.4f} mca</mono>".format(Hm_gov),
+                       u"Darcy-Weisbach · Q real convergido"])
     if Hesg > 0:
         linhas.append([u"Hesg (esguicho)",
                        u"<mono>{:.4f} mca</mono>".format(Hesg), u"—"])
@@ -234,9 +229,9 @@ def _html_secao_hmt(res, Hm_mangueira, Hesg, Pmin):
 
     tab = _tabela([u"Parcela", u"Valor", u"Descrição"], linhas)
 
-    if Hm_mangueira > 0:
+    if Hm_gov > 0:
         eq = u"Ht = Σhf − ΔZ + Hm + Hesg + Pmin = {:.4f} − ({:.4f}) + {:.4f} + {:.4f} + {} = <strong>{:.4f} mca</strong>".format(
-            res["Hf_governa"], hz, Hm_mangueira, Hesg, Pmin, res["Ht"])
+            res["Hf_governa"], hz, Hm_gov, Hesg, Pmin, res["Ht"])
     else:
         eq = u"Ht = Σhf − ΔZ + Pmin = {:.4f} − ({:.4f}) + {} = <strong>{:.4f} mca</strong>".format(
             res["Hf_governa"], hz, Pmin, res["Ht"])
@@ -262,7 +257,7 @@ def _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin):
                  u"<mono>{:.4f} + ({:.4f}) − {:.4f}</mono>".format(res["Ht"], Hz, Hf),
                  u"<mono><strong>{:.4f} mca</strong></mono>".format(P)],
                 [u"Vazão real (Q)",
-                 u"<mono>{:.4f} × √{:.4f}</mono>".format(res["K"], P),
+                 u"Equilíbrio hidráulico da rede",
                  u"<mono><strong>{:.2f} L/min</strong></mono>".format(Q)],
                 [u"Verificação normativa",
                  u"Pmin = {} / Pmax = 100 mca".format(Pmin),
@@ -281,9 +276,9 @@ def _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin):
     b1 = bloco(u"HID-01", Hz_H1, res["Hf_Hid01"], res["p_hid01"], res["Q_h01"], u"1º mais desfavorável")
     b2 = bloco(u"HID-02", Hz_H2, res["Hf_Hid02"], res["p_hid02"], res["Q_h02"], u"2º mais desfavorável")
     diff = abs(res["p_hid02"] - res["p_hid01"])
-    nota = u'<p class="nota">Iteração convergida em <strong>{} ciclo(s)</strong> · K = <mono>{:.4f}</mono> · ΔP = <mono>{:.4f} mca</mono></p>'.format(
-        res["iteracoes"], res["K"], diff)
-    formula = _formula(u"P = Ht + ΔZ − Σhf  &nbsp;|&nbsp;  Q = K × √P")
+    nota = u'<p class="nota">Modelo de demanda fixa · Q_i = Qs_min · ΔP = <mono>{:.4f} mca</mono> · Pressões calculadas pelas equações hidráulicas</p>'.format(
+        diff)
+    formula = _formula(u"P = Ht + ΔZ − Σhf  &nbsp;|&nbsp;  E₁(Q₁) = E₂(Qt − Q₁)")
 
     return formula + nota + u'<div class="hid-grid">' + b1 + b2 + u'</div>'
 
@@ -292,7 +287,7 @@ def _html_secao_bomba(res, eta, eta_dec, pot_cv, pot_kw):
     tab = _tabela(
         [u"Parâmetro", u"Valor", u"Observação"],
         [
-            [u"Vazão total convergida (Qt)",
+            [u"Vazão total de projeto (Qt)",
              u"<mono><strong>{:.2f} L/min = {:.4f} m³/s</strong></mono>".format(
                  res["Qt_final"], res["Qt_final"]/60000.0),
              u"Q<sub>HID-01</sub> + Q<sub>HID-02</sub>"],
@@ -384,7 +379,7 @@ CSS = u"""
   --bg3:       #eef0f4;
   --border:    #d0d5de;
   --border2:   #b8bfcc;
-  --accent:    #CC1A32;
+  --accent:    #4a5568;
   --accent2:   #c94a24;
   --text:      #1a1d24;
   --text2:     #4a5060;
@@ -757,7 +752,8 @@ mono {
 def build_corpo_hidrantes(res, dados_sistema, Z_RTI, Z_HID01, Z_HID02,
                           Hz_H1, Hz_H2, Hm_mangueira, Hesg, C_HW,
                           eta, pot_cv, pot_kw, calculo_escolha, valor_sistema,
-                          data_str=None):
+                          data_str=None,
+                          cache_hid_Dm=None):
     """Retorna o HTML do corpo do memorial de hidrantes (sem wrapper <html> nem rodapé)."""
     if data_str is None:
         data_str = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
@@ -779,9 +775,60 @@ def build_corpo_hidrantes(res, dados_sistema, Z_RTI, Z_HID01, Z_HID02,
     sr = _html_resumo(res, Pmin, pot_cv, pot_kw)
 
     secao_mangueira = u""
-    if Hm_mangueira > 0:
-        hm_formula = _formula(
-            u"Hm = (2 × f × Lm) / (g × π² × Dm⁵) × Q² = <strong>{:.4f} mca</strong>".format(Hm_mangueira)
+    _Dm_m = cache_hid_Dm if cache_hid_Dm is not None else (
+        dados_sistema["mangueira_dn"] / 1000.0 if Hm_mangueira > 0 else None
+    )
+    if _Dm_m is not None:
+        import math as _math
+        _f_val  = 0.022
+        _g_val  = 9.81
+        _Lm_val = 30.0
+        pi2  = _math.pi ** 2
+        Dm5  = _Dm_m ** 5
+
+        # Parâmetros constantes da fórmula
+        tab_params = _tabela(
+            [u"Parâmetro", u"Símbolo", u"Valor"],
+            [
+                [u"Fator de atrito Darcy (mangueira lisa)", u"f",   u"<mono>0,022</mono>"],
+                [u"Comprimento da mangueira",               u"Lm",  u"<mono>30,0 m</mono>"],
+                [u"Aceleração da gravidade",                u"g",   u"<mono>9,81 m/s²</mono>"],
+                [u"Diâmetro interno da mangueira",          u"Dm",  u"<mono>{:.4f} m ({} mm)</mono>".format(
+                    _Dm_m, dados_sistema["mangueira_dn"])],
+            ]
+        )
+
+        # Hm por hidrante — usa Q real convergido
+        Hm1 = res.get(u"Hm_hid01", Hm_mangueira)
+        Hm2 = res.get(u"Hm_hid02", Hm_mangueira)
+        Q1  = res.get(u"Q_h01", Qs_lmin)
+        Q2  = res.get(u"Q_h02", Qs_lmin)
+        Q1_m3s = Q1 / 60000.0
+        Q2_m3s = Q2 / 60000.0
+
+        tab_hm = _tabela(
+            [u"Hidrante", u"Q real (L/min)", u"Q real (m³/s)", u"Hm (mca)"],
+            [
+                [u"HID-01",
+                 u"<mono>{:.2f}</mono>".format(Q1),
+                 u"<mono>{:.6f}</mono>".format(Q1_m3s),
+                 u"<mono><strong>{:.4f}</strong></mono>".format(Hm1)],
+                [u"HID-02",
+                 u"<mono>{:.2f}</mono>".format(Q2),
+                 u"<mono>{:.6f}</mono>".format(Q2_m3s),
+                 u"<mono><strong>{:.4f}</strong></mono>".format(Hm2)],
+            ]
+        )
+
+        hm_formula = (
+            tab_params
+            + _formula(
+                u"Hm = (2 × f × Lm) / (g × π² × Dm⁵) × Q²<br>"
+                u"Hm = (2 × {f} × {Lm}) / ({g} × {pi2:.6f} × {Dm5:.4e}) × Q²".format(
+                    f=_f_val, Lm=_Lm_val, g=_g_val, pi2=pi2, Dm5=Dm5)
+            )
+            + u'<h3 class="sub-secao">Hm por hidrante (Q real convergido)</h3>'
+            + tab_hm
         )
         secao_mangueira = _secao(u"3", u"Perda de Carga na Mangueira (Darcy-Weisbach)", hm_formula)
         s3_num = u"4"; s4_num = u"5"; s5_num = u"6"; s6_num = u"7"

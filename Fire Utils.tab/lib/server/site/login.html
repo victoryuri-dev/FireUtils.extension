@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fire Utils · Entrar</title>
+  <link rel="stylesheet" href="/site/style.css">
+</head>
+<body class="page-login">
+
+  <div class="login-shell">
+    <div class="login-card">
+
+      <div class="login-brand">Fire Utils</div>
+      <p class="login-tagline">Plataforma de PPCI</p>
+
+      <form id="form-login" autocomplete="on" novalidate>
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input id="email" name="email" type="email"
+                 placeholder="nome@empresa.com" required autofocus>
+        </div>
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input id="senha" name="senha" type="password"
+                 placeholder="••••••••" required>
+        </div>
+        <p id="login-erro" class="login-erro" hidden></p>
+        <button type="submit" class="btn-primario btn-full">Entrar</button>
+      </form>
+
+    </div>
+  </div>
+
+  <script src="/site/auth.js"></script>
+  <script>
+    'use strict';
+    if (Auth.getUser()) window.location.href = '/dashboard';
+
+    document.getElementById('form-login').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var email = document.getElementById('email').value.trim();
+      var senha = document.getElementById('senha').value;
+      var erro  = document.getElementById('login-erro');
+
+      if (!email || !senha) {
+        erro.textContent = 'Preencha todos os campos.';
+        erro.hidden = false;
+        return;
+      }
+
+      erro.hidden = true;
+      Auth.setUser({ email: email });
+      window.location.href = '/dashboard';
+    });
+  </script>
+
+</body>
+</html>

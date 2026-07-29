@@ -6,15 +6,35 @@ Coleta ambientes, calcula AD / ER / PT por pavimento e exibe conferência rápid
 __title__ = "Dimensionar\nSaídas"
 
 import math
+import os
 import datetime
 from pyrevit import revit, DB, forms, script
-from saidas.calc import calcular_saidas, salvar_cache_saidas
+from saidas.calc  import calcular_saidas, salvar_cache_se_import
+from saidas.forms import form_config_distancias
+from projeto      import exigir_projeto_e_estado, carregar_dados_projeto
 
 doc    = revit.doc
 output = script.get_output()
 
 # ===========================================================================
-# PASSO 1 — Identificar o pavimento térreo
+# PASSO 1 — Verificar projeto e estado configurados
+# ===========================================================================
+
+projeto_dir, sigla_estado, estado = exigir_projeto_e_estado(doc, forms, script)
+
+# ===========================================================================
+# PASSO 2 — Parâmetros de distância máxima a percorrer
+# ===========================================================================
+
+# Ocupação principal vem dos Dados do Projeto (configurada uma vez por obra)
+_dados_proj       = carregar_dados_projeto(projeto_dir)
+_ocup_principal   = _dados_proj.get(u"ocupacao_principal") if _dados_proj else None
+
+config_distancias = form_config_distancias(estado, ocupacao_principal=_ocup_principal)
+# Retorna None se o estado não tiver tabela de distâncias ou ocupação não configurada
+
+# ===========================================================================
+# PASSO 3 — Identificar o pavimento térreo
 # ===========================================================================
 
 niveis = DB.FilteredElementCollector(doc)\
@@ -33,7 +53,7 @@ if not nome_terreo:
     script.exit()
 
 # ===========================================================================
-# PASSO 2 — Coletar ambientes com ocupação identificada
+# PASSO 4 — Coletar ambientes com ocupação identificada
 # ===========================================================================
 
 rooms_revit = DB.FilteredElementCollector(doc)\
@@ -83,19 +103,21 @@ if not rooms_data:
     script.exit()
 
 # ===========================================================================
-# PASSO 3 — Calcular
+# PASSO 5 — Calcular
 # ===========================================================================
 
-res = calcular_saidas(rooms_data, nome_terreo=nome_terreo)
+res = calcular_saidas(rooms_data, nome_terreo=nome_terreo, estado=estado)
 
 # ===========================================================================
-# PASSO 4 — Output rápido de conferência
+# PASSO 6 — Output rápido de conferência
 # ===========================================================================
 
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 
 output.print_md(u"# Fire Utils — Dimensionamento de Saídas de Emergência")
-output.print_md(u"*Calculado em {}  ·  Térreo: {}*".format(timestamp, nome_terreo))
+output.print_md(u"*Calculado em {}  ·  Estado: {}  ·  Térreo: {}*".format(
+    timestamp, estado.get(u"nome", sigla_estado), nome_terreo
+))
 output.print_md(u"---")
 
 # Aviso de ambientes sem ocupação
@@ -185,29 +207,110 @@ for nd in res[u"pt"]:
     ))
 
 output.print_md(u"")
+
+# Exibir distâncias aplicáveis no output (se configuradas)
+if config_distancias:
+    dist_cfg_e = estado.get(u"distancias_maximas", {})
+    mapa_d   = dist_cfg_e.get(u"mapa_ocupacao", {})
+    grupos_d = dist_cfg_e.get(u"grupos", {})
+    ocup_p   = config_distancias[u"ocupacao_principal"]
+    saida_k  = u"saida_unica"   if config_distancias[u"saida_unica"] else u"mais_saidas"
+    chu_k    = u"com_chuveiro"  if config_distancias[u"chuveiro"]    else u"sem_chuveiro"
+    det_k    = u"com_deteccao"  if config_distancias[u"deteccao"]    else u"sem_deteccao"
+    nome_grupo = mapa_d.get(ocup_p)
+    if nome_grupo and nome_grupo in grupos_d:
+        cfg_g = grupos_d[nome_grupo]
+        def _dv(pav):
+            try:
+                return cfg_g[pav][chu_k][saida_k][det_k]
+            except (KeyError, TypeError):
+                return u"N/A"
+        output.print_md(u"### Distâncias máximas a percorrer")
+        output.print_md(
+            u"Ocupação: **{}** · {} · {} · {}".format(
+                ocup_p,
+                u"Saída única"  if config_distancias[u"saida_unica"] else u"2+ saídas",
+                u"Com chuveiro" if config_distancias[u"chuveiro"]    else u"Sem chuveiro",
+                u"Com detecção" if config_distancias[u"deteccao"]    else u"Sem detecção",
+            )
+        )
+        output.print_md(u"| Piso de descarga | Demais pavimentos |")
+        output.print_md(u"|---|---|")
+        output.print_md(u"| **{} m** | **{} m** |".format(_dv(u"terreo"), _dv(u"demais")))
+        output.print_md(u"")
+
 output.print_md(u"---")
 output.print_md(u"*Cache salvo. Use o botão **Gerar Memorial** para o relatório completo.*")
 
 # ===========================================================================
-# PASSO 5 — Salvar cache
+# PASSO 7 — Montar se_import e salvar
 # ===========================================================================
 
-payload_saidas = {
-    u"resultados":              res,
-    u"rooms_data":              rooms_data,
-    u"nome_terreo":             nome_terreo,
-    u"timestamp":               timestamp,
-}
-salvar_cache_saidas(payload_saidas)
+def _build_se_import():
+    """Constrói o payload compacto se_import a partir dos dados coletados."""
+    tabela = estado.get(u"tabela", {})
+
+    # Atribuir IDs de pavimento relativos ao térreo
+    terreo_idx = next(
+        (i for i, n in enumerate(niveis_ordenados) if n.Name == nome_terreo), None
+    )
+    floor_ids = {}
+    if terreo_idx is not None:
+        for i in range(terreo_idx):
+            floor_ids[niveis_ordenados[i].Name] = u"sub-{}".format(terreo_idx - i)
+        floor_ids[nome_terreo] = u"P1"
+        for i in range(terreo_idx + 1, len(niveis_ordenados)):
+            floor_ids[niveis_ordenados[i].Name] = u"P{}".format(i - terreo_idx + 1)
+
+    # Agrupar ambientes por nível mantendo ordem de elevação
+    by_nivel = {}
+    for room in rooms_data:
+        by_nivel.setdefault(room[u"nivel"], []).append(room)
+
+    nivel_nomes = [n.Name for n in niveis_ordenados if n.Name in by_nivel]
+
+    pavimentos = []
+    for nome_nivel in nivel_nomes:
+        ambientes = []
+        for room in by_nivel[nome_nivel]:
+            divisao = room[u"grupo"]
+            taxa_a  = tabela.get(divisao, {}).get(u"A")
+            if taxa_a is not None and float(taxa_a) > 0:
+                ambientes.append({u"nome": room[u"nome"], u"divisao": divisao,
+                                   u"area": room[u"area"], u"popTipo": u"area"})
+            else:
+                ambientes.append({u"nome": room[u"nome"], u"divisao": divisao,
+                                   u"area": room[u"area"], u"popTipo": u"manual",
+                                   u"popManual": room[u"pop"]})
+        pavimentos.append({
+            u"id":        floor_ids.get(nome_nivel, u"P1"),
+            u"nome":      nome_nivel,
+            u"tipo":      u"descarga" if nome_nivel == nome_terreo else u"normal",
+            u"ambientes": ambientes,
+        })
+
+    cd = config_distancias or {}
+    return {
+        u"_timestamp":   timestamp,
+        u"uf":           sigla_estado,
+        u"saida_unica":  bool(cd.get(u"saida_unica",  False)),
+        u"temChuveiros": bool(cd.get(u"chuveiro",     False)),
+        u"temDeteccao":  bool(cd.get(u"deteccao",     False)),
+        u"pavimentos":   pavimentos,
+    }
+
+
+se_import = _build_se_import()
+salvar_cache_se_import(se_import, projeto_dir)
 
 # ===========================================================================
-# PASSO 6 — Enviar ao servidor local (se ativo)
+# PASSO 8 — Enviar ao servidor local (se ativo)
 # ===========================================================================
 
 try:
-    from server.client import servidor_ativo, enviar_saidas
+    from server.client import servidor_ativo, enviar_se_import
     if servidor_ativo():
-        enviado = enviar_saidas(payload_saidas)
+        enviado = enviar_se_import(se_import)
         if enviado:
             output.print_md(u"✅ *Dados enviados ao servidor local — memorial atualizado.*")
 except Exception:

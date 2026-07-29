@@ -6,15 +6,21 @@ Conecta dois tubos com roteamento em ângulos retos.
 Fluxo:
   Clique 1 — ponta do PIPE_DESC (tubo desconectado)
   Clique 2 — PIPE_REF (tubo referência): corpo → cria Tê  |  ponta → roteia até a ponta com joelhos
+  Escolha  — onde a rota sobe/desce de altura: junto ao tubo desconectado
+             (padrão) ou junto ao tubo de referência (ver modo_altura em _conectar)
 
 Etapa 1 — Extensão direta:
-  Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref,
-  apenas estende e conecta (tê ou joelho conforme posição).
+  Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref
+  E as retas forem REALMENTE colineares (não só paralelas), apenas estende
+  e conecta (tê ou joelho conforme posição).
 
 Etapa 2 — Roteamento em L:
-  pipe_desc horizontal  → tubo vertical P_start→P_knee + joelho em P_start
-  pipe_desc vertical    → estende a curva do tubo até z_ref
-  mesma cota            → conecta direto sem segmento vertical
+  modo_altura="origem"  (padrão): sobe/desce logo na saída de pipe_desc
+    pipe_desc horizontal  → tubo vertical P_start→P_knee + joelho em P_start
+    pipe_desc vertical    → estende a curva do tubo até z_ref
+    mesma cota            → conecta direto sem segmento vertical
+  modo_altura="destino": roteia horizontal na cota de pipe_desc e só
+    sobe/desce no último trecho, já junto ao ponto de conexão em pipe_ref
 
 Casos PIPE_REF (clique):
   corpo  → tubo horizontal P_knee→P_target + Tê (BreakCurve)
@@ -49,6 +55,7 @@ TOL_DZ        = _to_ft(0.01)  # 1 cm  — diferença de Z considerada "mesmo ní
 TOL_SEG       = _to_ft(0.05)  # 5 cm  — distância mínima para criar segmento
 TOL_PONTA_REF = _to_ft(0.40)  # 40 cm — raio do clique para detectar ponta do PIPE_REF
 TOL_CONN      = _to_ft(0.50)  # 50 cm — raio de busca de conector próximo
+TOL_COLINEAR  = _to_ft(0.02)  # 2 cm  — desvio perpendicular máx. p/ considerar 2 retas paralelas como a MESMA reta
 
 
 # ============================================================================
@@ -317,14 +324,35 @@ def run(doc, uidoc, output):
                     title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
-    _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output)
+    # ── Onde muda de altura? ─────────────────────────────────────────────
+    escolha = forms.SelectFromList.show(
+        [u"Junto ao tubo desconectado", u"Junto ao tubo de referência"],
+        title=u"Fire Utils — Conectar Tubo",
+        prompt=u"Onde a tubulação deve subir/descer de altura?",
+        multiselect=False
+    )
+    if not escolha:
+        pyscript.exit()
+    modo_altura = (u"destino" if escolha == u"Junto ao tubo de referência"
+                   else u"origem")
+
+    _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
+               modo_altura=modo_altura)
 
 
 # ============================================================================
 # LÓGICA DE CONEXÃO
 # ============================================================================
 
-def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
+def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
+              modo_altura=u"origem"):
+    """
+    modo_altura : "origem"  → sobe/desce logo na saída do tubo desconectado
+                              (comportamento padrão/histórico).
+                  "destino" → roteia horizontalmente na cota do tubo
+                              desconectado e só sobe/desce por último,
+                              já junto ao tubo de referência.
+    """
 
     # ── Endpoint de PIPE_DESC selecionado pelo clique ────────────────────────
     if pt_click_desc is not None:
@@ -412,8 +440,21 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
                         warn_icon=True)
             return
 
-        # Caso colinear: tubos alinhados ponta a ponta
+        # Caso colinear: tubos alinhados ponta a ponta.
+        # dot_par só confirma que as direções são PARALELAS — dois tubos
+        # paralelos porém em retas diferentes (ex.: alturas/afastamentos
+        # distintos) NÃO são colineares. Sem checar o desvio perpendicular,
+        # o trecho abaixo ligaria P_other direto a pt_A/pt_B criando um
+        # tubo diagonal (fora de esquadro) em vez de rotear em ângulo reto.
         dot_par = abs(d_ext.DotProduct(d_ref))
+        if dot_par > 0.99:
+            w      = pt_A - P_start
+            w_proj = w.DotProduct(d_ext)
+            perp   = XYZ(w.X - d_ext.X * w_proj,
+                        w.Y - d_ext.Y * w_proj,
+                        w.Z - d_ext.Z * w_proj)
+            if perp.GetLength() > TOL_COLINEAR:
+                dot_par = 0.0  # paralelo mas não colinear → cai para o roteamento em L
         if dot_par > 0.99:
             t_a = (pt_A - P_start).DotProduct(d_ext)
             t_b = (pt_B - P_start).DotProduct(d_ext)
@@ -469,6 +510,9 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
                     title=u"Fire Utils")
         return
 
+    # Ponto final da rota — onde o último trecho encontra pipe_ref.
+    P_final = pt_endpoint if clicou_ponta else P_target
+
     pt_id, sys_id, _,      diam_ft = _pipe_params(doc, pipe_desc)
     _,     _,      lvl_id, _       = _pipe_params(doc, pipe_ref)
 
@@ -476,92 +520,77 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
         t.Start()
         try:
             _elbows_pend = []
-            conn_knee    = None
 
-            # ── SEÇÃO VERTICAL ────────────────────────────────────────────────
-            if not need_vert:
-                conn_knee = _conn_near(pipe_desc, P_start)
+            if modo_altura == u"destino":
+                # ── Muda de altura junto ao tubo de REFERÊNCIA ────────────────
+                # Roteia horizontalmente ainda na cota do tubo desconectado,
+                # alinhando X/Y ao ponto final; sobe/desce só no último trecho.
+                P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
+                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_start, P_pre, d_ref)
+                conn_cur = conn_desc
 
-            elif desc_vert:
-                # pipe_desc vertical: estende a curva até z_ref
-                c  = pipe_desc.Location.Curve
-                p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
-                if p0.DistanceTo(P_start) < p1.DistanceTo(P_start):
-                    pipe_desc.Location.Curve = Line.CreateBound(
-                        XYZ(p0.X, p0.Y, z_ref), p1)
-                else:
-                    pipe_desc.Location.Curve = Line.CreateBound(
-                        p0, XYZ(p1.X, p1.Y, z_ref))
-                doc.Regenerate()
-                conn_knee = _conn_near(pipe_desc, P_knee)
+                if needs_s1:
+                    seg1   = _mk_pipe(doc, P_start, P_mid, pt_id, sys_id, lvl_id, diam_ft)
+                    c_s1_k = _conn_near(seg1, P_start)
+                    c_s1_m = _conn_near(seg1, P_mid)
+                    _elbows_pend.append((conn_cur, c_s1_k))
+                    conn_cur = c_s1_m
+
+                if needs_s2:
+                    seg2   = _mk_pipe(doc, P_mid, P_pre, pt_id, sys_id, lvl_id, diam_ft)
+                    c_s2_m = _conn_near(seg2, P_mid)
+                    c_s2_e = _conn_near(seg2, P_pre)
+                    _elbows_pend.append((conn_cur, c_s2_m))
+                    conn_cur = c_s2_e
+
+                if need_vert:
+                    pipe_vert = _mk_pipe(doc, P_pre, P_final, pt_id, sys_id, lvl_id, diam_ft)
+                    c_v_pre   = _conn_near(pipe_vert, P_pre)
+                    c_v_final = _conn_near(pipe_vert, P_final)
+                    _elbows_pend.append((conn_cur, c_v_pre))
+                    conn_cur = c_v_final
+
+                conn_final = conn_cur
 
             else:
-                # pipe_desc horizontal: cria tubo vertical P_start → P_knee
-                pipe_vert = _mk_pipe(doc, P_start, P_knee, pt_id, sys_id, lvl_id, diam_ft)
-                conn_knee = _conn_near(pipe_vert, P_knee)
-                c_d       = _conn_near(pipe_desc,  P_start)
-                c_v       = _conn_near(pipe_vert,  P_start)
-                _elbows_pend.append((c_d, c_v))
+                # ── Muda de altura junto ao tubo DESCONECTADO (padrão) ────────
+                conn_knee = None
 
-            if conn_knee is None:
-                forms.alert(
-                    u"Não foi possível localizar o conector em P_knee.",
-                    title=u"Fire Utils", warn_icon=True)
-                t.RollBack()
-                return
+                if not need_vert:
+                    conn_knee = _conn_near(pipe_desc, P_start)
 
-            # ── SEÇÃO HORIZONTAL — MODO CORPO (Tê) ──────────────────────────
-            if not clicou_ponta:
-                if need_horiz:
-                    # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
-                    # seg2 perpendicular. Garante ângulos retos mesmo quando
-                    # P_knee está fora da extensão lateral de pipe_ref.
-                    P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_knee, P_target, d_ref)
-                    conn_cur = conn_knee
-
-                    if needs_s1:
-                        seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-                        c_s1_k = _conn_near(seg1, P_knee)
-                        c_s1_m = _conn_near(seg1, P_mid)
-                        _elbows_pend.append((conn_cur, c_s1_k))
-                        conn_cur = c_s1_m
-
-                    if needs_s2:
-                        seg2   = _mk_pipe(doc, P_mid, P_target, pt_id, sys_id, lvl_id, diam_ft)
-                        c_s2_m = _conn_near(seg2, P_mid)
-                        c_s2_e = _conn_near(seg2, P_target)
-                        _elbows_pend.append((conn_cur, c_s2_m))
-                        conn_cur = c_s2_e
-
-                    conn_branch = conn_cur
-                else:
-                    conn_branch = conn_knee
-
-                if conn_branch:
-                    doc.Regenerate()
-                    _TOL_PONTA_GEO = _to_ft(0.05)
-                    at_end_a = P_target.DistanceTo(pt_A) < _TOL_PONTA_GEO
-                    at_end_b = P_target.DistanceTo(pt_B) < _TOL_PONTA_GEO
-                    if at_end_a or at_end_b:
-                        pt_ponta = pt_A if at_end_a else pt_B
-                        c_ponta  = _conn_near(pipe_ref, pt_ponta)
-                        if c_ponta:
-                            ok = _elbow(doc, c_ponta, conn_branch)
-                            if not ok:
-                                output.print_md(u"| Joelho na ponta | **falhou** |")
+                elif desc_vert:
+                    # pipe_desc vertical: estende a curva até z_ref
+                    c  = pipe_desc.Location.Curve
+                    p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
+                    if p0.DistanceTo(P_start) < p1.DistanceTo(P_start):
+                        pipe_desc.Location.Curve = Line.CreateBound(
+                            XYZ(p0.X, p0.Y, z_ref), p1)
                     else:
-                        ok = _tee(doc, pipe_ref, P_target, conn_branch)
-                        if not ok:
-                            output.print_md(u"| Tê | **falhou** — verifique se há família de tê carregada |")
-
+                        pipe_desc.Location.Curve = Line.CreateBound(
+                            p0, XYZ(p1.X, p1.Y, z_ref))
                     doc.Regenerate()
-                    for c1, c2 in _elbows_pend:
-                        _elbow(doc, c1, c2)
+                    conn_knee = _conn_near(pipe_desc, P_knee)
 
-            # ── SEÇÃO HORIZONTAL — MODO PONTA (joelhos) ─────────────────────
-            else:
-                P_end = pt_endpoint
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_knee, P_end, d_ref)
+                else:
+                    # pipe_desc horizontal: cria tubo vertical P_start → P_knee
+                    pipe_vert = _mk_pipe(doc, P_start, P_knee, pt_id, sys_id, lvl_id, diam_ft)
+                    conn_knee = _conn_near(pipe_vert, P_knee)
+                    c_d       = _conn_near(pipe_desc,  P_start)
+                    c_v       = _conn_near(pipe_vert,  P_start)
+                    _elbows_pend.append((c_d, c_v))
+
+                if conn_knee is None:
+                    forms.alert(
+                        u"Não foi possível localizar o conector em P_knee.",
+                        title=u"Fire Utils", warn_icon=True)
+                    t.RollBack()
+                    return
+
+                # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
+                # seg2 perpendicular. Garante ângulos retos mesmo quando
+                # P_knee está fora da extensão lateral de pipe_ref.
+                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_knee, P_final, d_ref)
                 conn_cur = conn_knee
 
                 if needs_s1:
@@ -572,16 +601,42 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
                     conn_cur = c_s1_m
 
                 if needs_s2:
-                    seg2   = _mk_pipe(doc, P_mid, P_end, pt_id, sys_id, lvl_id, diam_ft)
+                    seg2   = _mk_pipe(doc, P_mid, P_final, pt_id, sys_id, lvl_id, diam_ft)
                     c_s2_m = _conn_near(seg2, P_mid)
-                    c_s2_e = _conn_near(seg2, P_end)
+                    c_s2_e = _conn_near(seg2, P_final)
                     _elbows_pend.append((conn_cur, c_s2_m))
                     conn_cur = c_s2_e
 
+                conn_final = conn_cur
+
+            # ── Conexão final a pipe_ref: Tê (modo corpo) ou joelho (modo ponta) ──
+            if not clicou_ponta:
+                if conn_final:
+                    doc.Regenerate()
+                    _TOL_PONTA_GEO = _to_ft(0.05)
+                    at_end_a = P_final.DistanceTo(pt_A) < _TOL_PONTA_GEO
+                    at_end_b = P_final.DistanceTo(pt_B) < _TOL_PONTA_GEO
+                    if at_end_a or at_end_b:
+                        pt_ponta = pt_A if at_end_a else pt_B
+                        c_ponta  = _conn_near(pipe_ref, pt_ponta)
+                        if c_ponta:
+                            ok = _elbow(doc, c_ponta, conn_final)
+                            if not ok:
+                                output.print_md(u"| Joelho na ponta | **falhou** |")
+                    else:
+                        ok = _tee(doc, pipe_ref, P_final, conn_final)
+                        if not ok:
+                            output.print_md(u"| Tê | **falhou** — verifique se há família de tê carregada |")
+
+                    doc.Regenerate()
+                    for c1, c2 in _elbows_pend:
+                        _elbow(doc, c1, c2)
+
+            else:
                 doc.Regenerate()
-                c_ref_end = _conn_near(pipe_ref, P_end)
-                if c_ref_end and conn_cur:
-                    ok = _elbow(doc, c_ref_end, conn_cur)
+                c_ref_end = _conn_near(pipe_ref, P_final)
+                if c_ref_end and conn_final:
+                    ok = _elbow(doc, c_ref_end, conn_final)
                     if not ok:
                         output.print_md(
                             u"| Joelho na ponta | **falhou** — "

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fire Utils · Projeto</title>
+  <link rel="stylesheet" href="/site/style.css">
+</head>
+<body>
+
+  <div id="root"></div>
+
+  <script src="/site/auth.js"></script>
+  <script src="/site/memorial.js"></script>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ── STORAGE ────────────────────────────────────────────────────────────────
+
+    function loadProjects() {
+      try { return JSON.parse(localStorage.getItem('fu_projects') || '[]'); }
+      catch { return []; }
+    }
+
+    function persistProject(proj) {
+      const arr = loadProjects();
+      const idx = arr.findIndex(p => p.id === proj.id);
+      if (idx >= 0) arr[idx] = proj; else arr.unshift(proj);
+      localStorage.setItem('fu_projects', JSON.stringify(arr));
+    }
+
+    // ── IMPORTAÇÃO (botão Atualizar Projeto) ───────────────────────────────────
+
+    function detectTipo(data) {
+      if ((data.hidrantes && typeof data.hidrantes === 'object') ||
+          (data.saidas    && typeof data.saidas    === 'object')) return 'unificado';
+      if (data.resultados && 'sigla_estado' in data) return 'saidas';
+      if (data.res        && data.dados_sistema)     return 'hidrantes';
+      return null;
+    }
+
+    function mergeImport(fileData, tipo, currentProj) {
+      let hidData = null, saiData = null;
+      if (tipo === 'unificado') {
+        hidData = fileData.hidrantes || null;
+        saiData = fileData.saidas    || null;
+      } else if (tipo === 'saidas') { saiData = fileData; }
+      else                          { hidData = fileData; }
+
+      const projData = fileData.dados_projeto || fileData.projeto || null;
+      const updated  = { ...currentProj };
+
+      if (hidData) {
+        updated.hidrantes    = hidData;
+        updated.nome         = hidData._nome_projeto || updated.nome;
+      }
+      if (saiData) {
+        updated.saidas       = saiData;
+        updated.nome         = saiData._nome_projeto || updated.nome;
+        updated.uf           = saiData.sigla_estado  || updated.uf;
+        updated.estado       = saiData._estado?.nome || updated.estado;
+      }
+      if (projData) {
+        updated.identificador  = projData.identificador || projData.nome || updated.identificador;
+        updated.uf             = projData.uf             || updated.uf;
+        updated.estado         = projData.estado         || updated.estado;
+        updated.ocupacao_principal = projData.ocupacao_principal ?? updated.ocupacao_principal;
+        updated.area_construida    = projData.area_construida    ?? updated.area_construida;
+        updated.area_terreno       = projData.area_terreno       ?? updated.area_terreno;
+      }
+      persistProject(updated);
+      return updated;
+    }
+
+    // ── HELPERS ────────────────────────────────────────────────────────────────
+
+    function ultimaEdicaoGeral(project) {
+      function parseTs(s) {
+        if (!s) return 0;
+        const a = s.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+        if (a) return new Date(+a[1], +a[2]-1, +a[3], +a[4], +a[5]).getTime();
+        const b = s.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/);
+        if (b) return new Date(+b[3], +b[2]-1, +b[1], +b[4], +b[5]).getTime();
+        return 0;
+      }
+      return [project.hidrantes?._timestamp, project.saidas?.timestamp]
+        .filter(Boolean)
+        .reduce((best, ts) => parseTs(ts) > parseTs(best) ? ts : best, null);
+    }
+
+    // ── APP ────────────────────────────────────────────────────────────────────
+
+    function App() {
+      const [project, setProject] = useState(null);
+      const [section, setSection] = useState('resumo');
+
+      useEffect(() => {
+        const user = Auth.require();
+        if (!user) return;
+
+        const id = new URLSearchParams(window.location.search).get('id');
+        if (!id) { window.location.href = '/dashboard'; return; }
+
+        const proj = loadProjects().find(p => p.id === decodeURIComponent(id));
+        if (!proj) { window.location.href = '/dashboard'; return; }
+
+        setProject(proj);
+        document.body.classList.add('layout-fixed');
+        return () => document.body.classList.remove('layout-fixed');
+      }, []);
+
+      if (!project) return (
+        <div className="loading-state" style={{ marginTop: 80 }}>Carregando projeto...</div>
+      );
+
+      return (
+        <div className="proj-shell">
+          <Topbar project={project} onAtualizar={setProject} />
+          <div className="proj-body">
+            <Sidebar project={project} active={section} onSelect={setSection} />
+            <main className="proj-main">
+              <Content project={project} section={section} onNav={setSection} />
+            </main>
+          </div>
+        </div>
+      );
+    }
+
+    // ── TOPBAR ─────────────────────────────────────────────────────────────────
+
+    function Topbar({ project, onAtualizar }) {
+      const [loading,  setLoading]  = useState(false);
+      const [feedback, setFeedback] = useState('');
+
+      async function handleAtualizar() {
+        setLoading(true);
+        setFeedback('');
+        try {
+          // Passa a pasta do projeto para que Flask leia o firedata.json correto
+          const dir  = project.dir || '';
+          const url  = '/api/recarregar' + (dir ? '?dir=' + encodeURIComponent(dir) : '');
+          const resp = await fetch(url);
+          const json = await resp.json();
+
+          if (!json.ok) throw new Error(json.erro || 'Erro ao ler arquivo');
+
+          const tipo = detectTipo(json.data);
+          if (!tipo) throw new Error('Formato de arquivo não reconhecido');
+
+          const updated = mergeImport(json.data, tipo, project);
+          onAtualizar(updated);
+          setFeedback('✓ Dados atualizados');
+        } catch (err) {
+          setFeedback('✗ ' + err.message);
+        } finally {
+          setLoading(false);
+          setTimeout(() => setFeedback(''), 3000);
+        }
+      }
+
+      return (
+        <div className="topbar">
+          <div className="topbar-left">
+            <a href="/dashboard" className="topbar-back">&#8592; Dashboard</a>
+            <span className="topbar-brand">{project.identificador || project.nome}</span>
+          </div>
+          <div className="topbar-right">
+            {(project.estado || project.uf) &&
+              <span className="topbar-status">{project.estado || project.uf}</span>}
+            {feedback
+              ? <span className={`topbar-status ${feedback.startsWith('✓') ? 'topbar-feedback' : ''}`}
+                      style={feedback.startsWith('✗') ? { color: 'var(--err-text)' } : {}}>
+                  {feedback}
+                </span>
+              : <button
+                  className="topbar-btn"
+                  onClick={handleAtualizar}
+                  disabled={loading}
+                  style={loading ? { opacity: 0.6, cursor: 'default' } : {}}>
+                  {loading ? 'Carregando...' : '&#8635; Atualizar Projeto'}
+                </button>
+            }
+          </div>
+        </div>
+      );
+    }
+
+    // ── SIDEBAR ────────────────────────────────────────────────────────────────
+
+    function Sidebar({ project, active, onSelect }) {
+      const hasHid = !!project.hidrantes;
+      const hasSai = !!project.saidas;
+
+      return (
+        <aside className="proj-sidebar">
+          <NavItem id="resumo" label="Resumo do Projeto" active={active} onSelect={onSelect} />
+
+          <div className="sidebar-group-label">Medidas de Segurança</div>
+          <NavItem
+            id="hid" label="Hidrantes"
+            active={active} onSelect={onSelect}
+            sub disabled={!hasHid}
+          />
+          <NavItem
+            id="sai" label="Saídas de Emergência"
+            active={active} onSelect={onSelect}
+            sub disabled={!hasSai}
+          />
+        </aside>
+      );
+    }
+
+    function NavItem({ id, label, active, onSelect, sub, disabled }) {
+      const cls = [
+        'sidebar-item',
+        active === id ? 'sidebar-item-active'   : '',
+        sub           ? 'sidebar-item-sub'       : '',
+        disabled      ? 'sidebar-item-disabled'  : '',
+      ].filter(Boolean).join(' ');
+
+      return (
+        <button
+          className={cls}
+          disabled={disabled}
+          onClick={() => !disabled && onSelect(id)}
+        >
+          {label}
+          {disabled && <span className="sidebar-item-badge">—</span>}
+        </button>
+      );
+    }
+
+    // ── CONTEÚDO PRINCIPAL ─────────────────────────────────────────────────────
+
+    function Content({ project, section, onNav }) {
+      if (section === 'hid' && project.hidrantes) {
+        return (
+          <div
+            className="memorial-section"
+            dangerouslySetInnerHTML={{ __html: renderHidrantes(project.hidrantes) }}
+          />
+        );
+      }
+      if (section === 'sai' && project.saidas) {
+        return (
+          <div
+            className="memorial-section"
+            dangerouslySetInnerHTML={{ __html: renderSaidas(project.saidas) }}
+          />
+        );
+      }
+      return <ResumoView project={project} onNav={onNav} />;
+    }
+
+    // ── RESUMO DO PROJETO ──────────────────────────────────────────────────────
+
+    function ResumoView({ project, onNav }) {
+      const hasHid   = !!project.hidrantes;
+      const hasSai   = !!project.saidas;
+      const ultimaTs = ultimaEdicaoGeral(project);
+
+      return (
+        <div>
+          <div className="proj-section-title">
+            Informações do Projeto
+            {ultimaTs && <span className="proj-ultima-edicao">atualizado em {ultimaTs}</span>}
+          </div>
+          <div className="info-grid">
+            {project.identificador && <InfoCard label="Identificador" value={project.identificador} />}
+            {project.estado && <InfoCard label="Estado" value={`${project.estado}${project.uf ? ' — ' + project.uf : ''}`} />}
+            {project.ocupacao_principal && <InfoCard label="Ocupação principal" value={project.ocupacao_principal} />}
+            {project.area_construida != null && (
+              <InfoCard label="Área construída" value={Number(project.area_construida).toLocaleString('pt-BR') + ' m²'} />
+            )}
+            {project.area_terreno != null && (
+              <InfoCard label="Área do terreno" value={Number(project.area_terreno).toLocaleString('pt-BR') + ' m²'} />
+            )}
+            {project.dir && <InfoCard label="Pasta" value={project.dir} mono />}
+          </div>
+
+          <div className="proj-section-title" style={{ marginTop: 40 }}>Medidas de Segurança</div>
+          <div className="dim-list">
+            <MedidaCard
+              label="Hidrantes"
+              ts={project.hidrantes?._timestamp}
+              onNav={hasHid ? () => onNav('hid') : null}
+            />
+            <MedidaCard
+              label="Saídas de Emergência"
+              ts={project.saidas?.timestamp}
+              onNav={hasSai ? () => onNav('sai') : null}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    function InfoCard({ label, value, mono }) {
+      return (
+        <div className="info-card">
+          <div className="info-label">{label}</div>
+          <div className={mono ? 'info-value info-value-mono' : 'info-value'}>{value}</div>
+        </div>
+      );
+    }
+
+    function MedidaCard({ label, ts, onNav }) {
+      if (!onNav) {
+        return (
+          <div className="dim-card medida-card medida-card-missing">
+            <div className="dim-card-nome">{label}</div>
+            <div className="medida-missing-msg">
+              Dimensionamento não encontrado — execute no Revit
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div
+          className="dim-card medida-card"
+          onClick={onNav}
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onNav(); }}
+        >
+          <div className="dim-card-nome">{label}</div>
+          {ts && <div className="dim-card-ts">Calculado em: {ts}</div>}
+          <div className="medida-card-hint">Ver memorial &#8594;</div>
+        </div>
+      );
+    }
+
+    // ── MOUNT ──────────────────────────────────────────────────────────────────
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+
+</body>
+</html>

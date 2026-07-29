@@ -22,10 +22,28 @@ from System.Diagnostics import Process, ProcessStartInfo
 from System.IO import Path
 
 # ---- constantes ---------------------------------------------------------------
-_PORT    = 5000
-_HOST    = u"127.0.0.1"
-_BASE    = u"http://{}:{}".format(_HOST, _PORT)
-_APP_PY  = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"app.py")
+_PORT = 5000
+_HOST = u"127.0.0.1"
+_BASE = u"http://{}:{}".format(_HOST, _PORT)
+
+
+def _encontrar_app_py():
+    """
+    Localiza app.py do servidor Flask.
+    Ordem de busca:
+      1. Variável de ambiente FIREUTILS_SERVER_DIR  (pasta do servidor standalone)
+      2. Mesmo diretório deste arquivo              (instalação legado / desenvolvimento)
+    """
+    env = os.environ.get(u"FIREUTILS_SERVER_DIR")
+    if env:
+        candidate = os.path.join(env, u"app.py")
+        if os.path.isfile(candidate):
+            return candidate
+    # fallback — junto com launcher.py
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), u"app.py")
+
+
+_APP_PY = _encontrar_app_py()
 
 # Processo filho armazenado para poder encerrar depois
 _proc = None
@@ -160,11 +178,48 @@ def iniciar_servidor():
 
 # ==============================================================================
 def parar_servidor():
-    """Encerra o processo do servidor se ele foi iniciado por este launcher."""
+    """
+    Encerra o servidor.
+    Tenta primeiro via /api/shutdown (HTTP); se não responder, mata o processo.
+    """
     global _proc
+
+    # 1 — pedir ao servidor para encerrar gentilmente
+    if servidor_ativo():
+        try:
+            clr.AddReference("System.Net")
+            from System.Net import WebClient, WebHeaderCollection
+            wc = WebClient()
+            wc.Headers.Add(u"Content-Type", u"application/json")
+            wc.UploadString(u"{}/api/shutdown".format(_BASE), u"POST", u"{}")
+            time.sleep(0.8)
+        except Exception:
+            pass
+
+    # 2 — matar o processo filho se ainda tiver referência
     if _proc is not None:
         try:
-            _proc.Kill()
+            if not _proc.HasExited:
+                _proc.Kill()
         except Exception:
             pass
         _proc = None
+
+
+def recarregar_modulos():
+    """
+    Pede ao servidor para descartar o cache de módulos Python em memória.
+    O próximo acesso a /memorial reimportará tudo do disco.
+    Retorna True se bem-sucedido.
+    """
+    if not servidor_ativo():
+        return False
+    try:
+        clr.AddReference("System.Net")
+        from System.Net import WebClient
+        wc = WebClient()
+        wc.Headers.Add(u"Content-Type", u"application/json")
+        wc.UploadString(u"{}/api/reload".format(_BASE), u"POST", u"{}")
+        return True
+    except Exception:
+        return False
