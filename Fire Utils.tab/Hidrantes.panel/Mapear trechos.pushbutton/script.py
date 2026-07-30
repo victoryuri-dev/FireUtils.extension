@@ -17,6 +17,7 @@ from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script
 from collections import deque
+from System.Collections.Generic import List
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -75,13 +76,15 @@ def set_param(elem, nome, valor):
     return False
 
 def bfs_ate(elem_ini, eid_ini, eid_alvo):
-    """BFS de elem_ini até eid_alvo. Retorna lista de IDs do caminho."""
+    """BFS de elem_ini ate eid_alvo. Retorna (caminho, visitados).
+    Se o alvo nao for alcancado, caminho vem vazio e visitados guarda
+    tudo que a busca conseguiu percorrer, para diagnostico da quebra."""
     visitados = set([eid_ini])
     fila      = deque([(elem_ini, [eid_ini])])
     while fila:
         elem, caminho = fila.popleft()
         if get_id(elem) == eid_alvo:
-            return caminho
+            return caminho, visitados
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -92,7 +95,49 @@ def bfs_ate(elem_ini, eid_ini, eid_alvo):
                         visitados.add(vid)
                         fila.append((viz, caminho + [vid]))
             except: continue
-    return []
+    return [], visitados
+
+def get_pontas_abertas(visitados):
+    """Dentre os elementos alcancados pelo BFS, retorna os que tem
+    conector desconectado - candidatos ao ponto onde a rede quebrou."""
+    pontas = []
+    for eid in visitados:
+        elem = doc.GetElement(ElementId(eid))
+        if not elem: continue
+        conns = get_conectores(elem)
+        if not conns: continue
+        for conn in conns:
+            try:
+                if not conn.IsConnected:
+                    pontas.append(eid)
+                    break
+            except: continue
+    return pontas
+
+def reporta_quebra(visitados, alvo_desc):
+    """Mostra onde o rastreamento parou: quantos elementos foram
+    alcancados e, se houver, os IDs com conector aberto (clicaveis
+    para selecionar/mostrar no Revit)."""
+    output.print_md(u"**Caminho ate {} nao encontrado.**".format(alvo_desc))
+    output.print_md(u"{} elemento(s) alcancado(s) antes de parar.".format(len(visitados)))
+    pontas = get_pontas_abertas(visitados)
+    if pontas:
+        output.print_md(u"Possivel(is) ponto(s) de quebra (conector desconectado):")
+        for eid in pontas:
+            try:
+                link = output.linkify(ElementId(eid), title=u"Mostrar ID {}".format(eid))
+            except:
+                link = u"ID {}".format(eid)
+            output.print_md(u"- {}".format(link))
+        try:
+            uidoc.Selection.SetElementIds(List[ElementId]([ElementId(eid) for eid in pontas]))
+        except: pass
+    else:
+        output.print_md(
+            u"Nenhum conector aberto encontrado no trecho alcancado. "
+            u"A quebra pode ser um elemento sem ConnectorManager "
+            u"(categoria nao suportada) logo apos o ultimo elemento acima."
+        )
 
 class PipeFilter(ISelectionFilter):
     def AllowElement(self, e): return isinstance(e, Pipe)
@@ -201,11 +246,13 @@ output.print_md(u"Saida RTI: ID **{}** | Entrada bomba: ID **{}** | Saida bomba:
 output.print_md("---")
 output.print_md("### 3 - Mapeando Succao (RTI > Bomba)")
 
-ids_succao = set(bfs_ate(tubo_rti, eid_rti, eid_bomba))
-if not ids_succao:
+caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
+if not caminho_succao:
+    reporta_quebra(visitados_succao, u"entrada da bomba (succao)")
     forms.alert(u"Caminho nao encontrado entre saida RTI e entrada da bomba.",
                 title="Fire Utils", warn_icon=True)
     script.exit()
+ids_succao = set(caminho_succao)
 output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
 
 # ===========================================================================
@@ -214,13 +261,15 @@ output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
 output.print_md("---")
 output.print_md("### 4 - Mapeando Recalque")
 
-caminho_h1 = bfs_ate(tubo_rec, eid_rec, eid_h1)
-caminho_h2 = bfs_ate(tubo_rec, eid_rec, eid_h2)
+caminho_h1, visitados_h1 = bfs_ate(tubo_rec, eid_rec, eid_h1)
+caminho_h2, visitados_h2 = bfs_ate(tubo_rec, eid_rec, eid_h2)
 
 if not caminho_h1:
+    reporta_quebra(visitados_h1, u"HID-01")
     forms.alert(u"Caminho nao encontrado ate HID-01.", title="Fire Utils", warn_icon=True)
     script.exit()
 if not caminho_h2:
+    reporta_quebra(visitados_h2, u"HID-02")
     forms.alert(u"Caminho nao encontrado ate HID-02.", title="Fire Utils", warn_icon=True)
     script.exit()
 
