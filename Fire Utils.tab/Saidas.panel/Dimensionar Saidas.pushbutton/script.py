@@ -303,15 +303,3 @@ def _build_se_import():
 se_import = _build_se_import()
 salvar_cache_se_import(se_import, projeto_dir)
 
-# ===========================================================================
-# PASSO 8 — Enviar ao servidor local (se ativo)
-# ===========================================================================
-
-try:
-    from server.client import servidor_ativo, enviar_se_import
-    if servidor_ativo():
-        enviado = enviar_se_import(se_import)
-        if enviado:
-            output.print_md(u"✅ *Dados enviados ao servidor local — memorial atualizado.*")
-except Exception:
-    pass  # servidor inativo ou não instalado — silencioso

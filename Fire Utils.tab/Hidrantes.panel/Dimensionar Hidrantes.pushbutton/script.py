@@ -533,12 +533,3 @@ payload_hid = {
 }
 salvar_cache(payload_hid, projeto_dir)
 
-# --- Etapa 9: enviar ao servidor local (se ativo) ---
-try:
-    from server.client import servidor_ativo, enviar_hidrantes
-    if servidor_ativo():
-        enviado = enviar_hidrantes(payload_hid)
-        if enviado:
-            output.print_md(u"✅ *Dados enviados ao servidor local — memorial atualizado.*")
-except Exception:
-    pass  # servidor inativo ou não instalado — silencioso

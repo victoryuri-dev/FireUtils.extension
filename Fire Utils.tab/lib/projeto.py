@@ -20,7 +20,7 @@ _LAST_PROJ  = os.path.join(_TEMP, u"fireutils_last_project.txt")
 # ── Ponteiro ──────────────────────────────────────────────────────────────────
 
 def salvar_ponteiro(projeto_dir):
-    """Grava %TEMP%/fireutils_last_project.txt para o servidor Flask encontrar o cache."""
+    """Grava %TEMP%/fireutils_last_project.txt para rastrear o último projeto usado."""
     try:
         with io.open(_LAST_PROJ, "w", encoding="utf-8") as f:
             f.write(projeto_dir)
@@ -77,7 +77,7 @@ def exigir_projeto_e_estado(doc, forms, script):
         script.exit()
 
     projeto_dir = os.path.dirname(doc.PathName)
-    salvar_ponteiro(projeto_dir)   # mantém ponteiro atualizado para o servidor Flask
+    salvar_ponteiro(projeto_dir)
 
     # 2 — estado configurado?
     dados = carregar_dados_projeto(projeto_dir)

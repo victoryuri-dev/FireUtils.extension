@@ -24,7 +24,7 @@ def _cache_path(projeto_dir=None):
 
 
 def _salvar_ponteiro_projeto(projeto_dir):
-    """Grava %TEMP%/fireutils_last_project.txt para que Flask encontre o cache."""
+    """Grava %TEMP%/fireutils_last_project.txt para rastrear o último projeto usado."""
     if not projeto_dir:
         return
     temp = os.environ.get("TEMP") or os.environ.get("TMP") or os.path.expanduser("~")
