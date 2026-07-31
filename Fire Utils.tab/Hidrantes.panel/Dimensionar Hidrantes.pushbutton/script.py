@@ -26,13 +26,21 @@ except ImportError:
 from projeto import exigir_projeto_e_estado
 from hidrantes.db import SISTEMAS_HIDRANTE
 from hidrantes.calc import (
-    calcular_rede, calc_hf_mangueira, calc_potencia,
+    calcular_rede, calc_hf_mangueira, calc_potencia, hesg_mca,
     extrair_trecho, salvar_cache,
     C_HW, _f, _g, _Lm,
 )
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 P_TRECHO           = u"FireUtils - Trecho"
+
+# Referência normativa de Pmin na cadeia de energia:
+#   "esguicho" (default) — o par Q/Pmin da NT 22 já é definido na entrada do
+#                           esguicho regulável; Hesg = 0 (perda já incorporada em Pmin).
+#   "valvula"             — Pmin é referenciado na válvula do hidrante; Hesg é
+#                           calculado por hesg_mca() e somado à cadeia de energia,
+#                           com mangueira/esguicho compostos a jusante da válvula.
+PMIN_REF = u"esguicho"
 P_IDENTIFICADOR    = u"FireUtils - Identificador"
 
 doc    = __revit__.ActiveUIDocument.Document
@@ -112,6 +120,13 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     hf_fin = res["hf"]
     hist   = res.get(u"historico", [])
 
+    # Ponto de referência onde P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg é de fato calculada:
+    # "válvula" quando não há mangueira/esguicho no cálculo (Hm=0) ou quando Pmin
+    # é referenciado na válvula (PMIN_REF="valvula"); caso contrário, a subtração
+    # de Hm desloca o ponto calculado para a entrada do esguicho.
+    _ponto_pmin = (u"válvula" if (Dm_mangueira_m is None or PMIN_REF == u"valvula")
+                   else u"entrada do esguicho")
+
     def _vel(v):
         return u"✓ {:.3f} m/s".format(v) if v <= 3.0 else u"✗ {:.3f} m/s (> 3,0)".format(v)
 
@@ -135,7 +150,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     output.print_md(u"| Hidrantes simultâneos | **2** | NT 22 |")
     output.print_md(u"| Vazão mínima por hidrante (Qmin) | **{} L/min = {:.6f} m³/s** | NT 22 |".format(
         dados_sistema["vazao_min"], dados_sistema["vazao_min"] / 60000.0))
-    output.print_md(u"| Pressão mínima na válvula (Pmin) | **{} mca** | NT 22 |".format(Pmin))
+    output.print_md(u"| Pressão mínima na {} (Pmin) | **{} mca** | NT 22 |".format(_ponto_pmin, Pmin))
     output.print_md(u"| Pressão máxima | **100 mca** | NT 22 |")
     output.print_md(u"| Coef. Hazen-Williams (C) | **{}** | Aço/ferro galvanizado |".format(C_HW))
     output.print_md(u"| Velocidade máxima | **3,0 m/s** | NBR 13714 |")
@@ -149,16 +164,16 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     output.print_md(u"## 2. Cotas Altimétricas e Desníveis")
     output.print_md(u"| Ponto | Cota Z (m) |")
     output.print_md(u"|---|---|")
-    output.print_md(u"| RTI (Reservatório / referência) | **{:.3f}** |".format(Z_RTI))
-    output.print_md(u"| HID-01 (1° mais desfavorável) | **{:.3f}** |".format(Z_HID01))
-    output.print_md(u"| HID-02 (2° mais desfavorável) | **{:.3f}** |".format(Z_HID02))
+    output.print_md(u"| RTI (Reservatório / referência) | **{:.4f}** |".format(Z_RTI))
+    output.print_md(u"| HID-01 (1° mais desfavorável) | **{:.4f}** |".format(Z_HID01))
+    output.print_md(u"| HID-02 (2° mais desfavorável) | **{:.4f}** |".format(Z_HID02))
     output.print_md(u"")
     output.print_md(u"**ΔZ = Z_RTI − Z_válvula** (positivo = RTI acima = favorável ao bombeamento)")
     output.print_md(u"| Percurso | ΔZ (m) | Condição |")
     output.print_md(u"|---|---|---|")
     for hz, lbl in [(Hz_H1, u"RTI → HID-01"), (Hz_H2, u"RTI → HID-02")]:
         cond = u"RTI acima — favorável" if hz > 0.05 else (u"RTI abaixo — desfavorável" if hz < -0.05 else u"Mesmo nível")
-        output.print_md(u"| {} | **{:.3f}** | {} |".format(lbl, hz, cond))
+        output.print_md(u"| {} | **{:.4f}** | {} |".format(lbl, hz, cond))
     output.print_md(u"")
 
     # ── 3. Caracterização dos trechos ──────────────────────────────────────
@@ -200,7 +215,10 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
         output.print_md(u"A perda de carga na mangueira é calculada individualmente para cada "
                         u"hidrante usando a **vazão normativa especificada** Q_i = Qs_min.")
         output.print_md(u"")
-        output.print_md(u"**Fórmula:** Hm = (2 × f × Lm) / (g × π² × Dm⁵) × Q²")
+        output.print_md(u"**Fórmula:** Hm = (8 × f × Lm) / (g × π² × Dm⁵) × Q²")
+        output.print_md(u"")
+        output.print_md(u"*Dedução:* hf = f·(L/D)·(V²/2g), com V = 4Q/(π·D²) → "
+                        u"hf = 8·f·L·Q² / (g·π²·D⁵)")
         output.print_md(u"")
         _pi2 = _math.pi ** 2
         _Dm5 = Dm_mangueira_m ** 5
@@ -215,8 +233,17 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
         output.print_md(u"| π² | — | {:.6f} |".format(_pi2))
         output.print_md(u"| Dm⁵ | — | {:.4e} m⁵ |".format(_Dm5))
         output.print_md(u"| **Denominador constante** g × π² × Dm⁵ | — | **{:.6e}** |".format(_denom))
-        output.print_md(u"| Numerador constante 2 × f × Lm | — | **{:.4f}** |".format(2 * 0.022 * 30.0))
+        output.print_md(u"| Numerador constante 8 × f × Lm | — | **{:.4f}** |".format(8.0 * 0.022 * 30.0))
         output.print_md(u"")
+        if PMIN_REF == u"esguicho":
+            output.print_md(
+                u"**Modelo de demanda fixa:** adota-se o par normativo do esguicho "
+                u"regulável (Q = {} L/min a P = {} mca na entrada do esguicho), de modo "
+                u"que a pressão requerida do esguicho já está incorporada em Pmin e "
+                u"Hesg = 0 na cadeia de energia. As vazões reais de operação serão "
+                u"iguais ou superiores às normativas.".format(
+                    dados_sistema["vazao_min"], Pmin))
+            output.print_md(u"")
         output.print_md(u"*Os valores de Hm resultantes por hidrante são apresentados em cada ciclo abaixo.*")
         output.print_md(u"")
 
@@ -241,7 +268,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     output.print_md(u"**Equações utilizadas:**")
     output.print_md(u"- Hazen-Williams: hf = 10,643 × Q^1,852 / (C^1,852 × D^4,871) × Lt")
     if Dm_mangueira_m is not None:
-        output.print_md(u"- Darcy-Weisbach (mangueira): Hm = (2fLm)/(gπ²Dm⁵) × Q²")
+        output.print_md(u"- Darcy-Weisbach (mangueira): Hm = (8fLm)/(gπ²Dm⁵) × Q²")
     output.print_md(u"- Energia do ramal: E_i = hf_ramal_i + Hm_i + Hesg − ΔZ_i")
     output.print_md(u"- HMT: Ht = Pmin + Hf_tronco + E_gov (ramal governante = max E_i)")
     output.print_md(u"- Pressão: P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg")
@@ -283,7 +310,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
 
     if Dm_mangueira_m is not None:
         output.print_md(u"### Darcy-Weisbach — mangueira")
-        output.print_md(u"Hm = (2 × f × Lm) / (g × π² × Dm⁵) × Q²")
+        output.print_md(u"Hm = (8 × f × Lm) / (g × π² × Dm⁵) × Q²")
         output.print_md(u"| Hidrante | Q (m³/s) | Q² (m⁶/s²) | Hm (mca) |")
         output.print_md(u"|---|---|---|---|")
         output.print_md(u"| HID-01 | {:.6f} | {:.4e} | **{:.4f}** |".format(
@@ -310,7 +337,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     output.print_md(u"Ht = {:.2f} + {:.4f} + {:.4f} = **{:.4f} mca**".format(
         float(Pmin), c.get("Hf_t1", 0.0) + c.get("Hf_t2", 0.0), _E_gov, c.get("Ht", 0.0)))
     output.print_md(u"")
-    output.print_md(u"P_i = Ht + ΔZ_i − Σhf_i − Hm_i − Hesg")
+    output.print_md(u"P_i = Ht + ΔZ_i − Σhf_i − Hm_i − Hesg  (ponto de cálculo: {})".format(_ponto_pmin))
     output.print_md(u"| Hidrante | Cálculo | **P real (mca)** | Q (L/min) | Verificação P | Verificação Q |")
     output.print_md(u"|---|---|---|---|---|---|")
     for lbl, hz, hf_tot, hm, p, q in [
@@ -339,7 +366,8 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     if Dm_mangueira_m is not None:
         output.print_md(u"| Hm mangueira | {:.4f} | {:.4f} | mca |".format(
             res.get("Hm_hid01", 0.0), res.get("Hm_hid02", 0.0)))
-    output.print_md(u"| **Pressão real na válvula** | **{:.4f}** | **{:.4f}** | mca |".format(
+    output.print_md(u"| **Pressão real na {}** | **{:.4f}** | **{:.4f}** | mca |".format(
+        _ponto_pmin,
         res["p_hid01"], res["p_hid02"]))
     _pv1 = u"✓ ATENDE" if float(Pmin) <= res["p_hid01"] <= 100.0 else u"✗ NÃO ATENDE"
     _pv2 = u"✓ ATENDE" if float(Pmin) <= res["p_hid02"] <= 100.0 else u"✗ NÃO ATENDE"
@@ -472,6 +500,13 @@ Hz_H2 = Z_RTI - Z_HID02
 Hm_mangueira = 0.0; Hesg = 0.0; Dm_mangueira_m = None
 if calculo_escolha == u"Ponta do Esguicho Regulável":
     Dm_mangueira_m = Dm_m
+    if PMIN_REF == u"valvula":
+        # Pmin referenciado na válvula: a perda no esguicho regulável passa a
+        # ser explícita na cadeia de energia (E_i, Ht, P_i), em vez de já
+        # estar incorporada em Pmin (comportamento default "esguicho").
+        esguicho_dn = SISTEMAS_HIDRANTE[tipo_num].get("esguicho_dn")
+        if esguicho_dn:
+            Hesg = hesg_mca(Qs_lmin, d_mm=esguicho_dn)
 
 # --- Etapa 5: extrair dados dos trechos e iterar ---
 trechos_data = {

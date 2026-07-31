@@ -85,15 +85,15 @@ def _html_secao_dados(dados_sistema, valor_sistema, calculo_escolha,
 
 def _html_secao_elevacoes(Z_RTI, Z_HID01, Z_HID02, Hz_H1, Hz_H2):
     rows_cotas = [
-        [u"RTI",    u"<mono>{:.3f} m</mono>".format(Z_RTI)],
-        [u"HID-01", u"<mono>{:.3f} m</mono>".format(Z_HID01)],
-        [u"HID-02", u"<mono>{:.3f} m</mono>".format(Z_HID02)],
+        [u"RTI",    u"<mono>{:.4f} m</mono>".format(Z_RTI)],
+        [u"HID-01", u"<mono>{:.4f} m</mono>".format(Z_HID01)],
+        [u"HID-02", u"<mono>{:.4f} m</mono>".format(Z_HID02)],
     ]
     tab_cotas = _tabela([u"Ponto", u"Cota Z (m)"], rows_cotas)
 
     rows_desn = [
-        [u"RTI → HID-01", u"<mono>{:.3f}</mono>".format(Hz_H1), _cond_badge(Hz_H1)],
-        [u"RTI → HID-02", u"<mono>{:.3f}</mono>".format(Hz_H2), _cond_badge(Hz_H2)],
+        [u"RTI → HID-01", u"<mono>{:.4f}</mono>".format(Hz_H1), _cond_badge(Hz_H1)],
+        [u"RTI → HID-02", u"<mono>{:.4f}</mono>".format(Hz_H2), _cond_badge(Hz_H2)],
     ]
     tab_desn = _tabela([u"Percurso", u"ΔZ (m)", u"Condição"], rows_desn)
 
@@ -241,7 +241,7 @@ def _html_secao_hmt(res, Hm_mangueira, Hesg, Pmin):
     return nota + tab + _formula(eq)
 
 
-def _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin):
+def _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin, ponto_pmin=u"válvula"):
     def bloco(label, Hz, Hf, P, Q, ordem):
         status = _status_badge(P, Pmin, 100.0)
         tab = _tabela(
@@ -253,7 +253,7 @@ def _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin):
                 [u"ΔZ",
                  u"Z<sub>RTI</sub> − Z<sub>{}</sub>".format(label),
                  u"<mono><strong>{:.4f} m</strong></mono>".format(Hz)],
-                [u"Pressão na válvula (P)",
+                [u"Pressão na {} (P)".format(ponto_pmin),
                  u"<mono>{:.4f} + ({:.4f}) − {:.4f}</mono>".format(res["Ht"], Hz, Hf),
                  u"<mono><strong>{:.4f} mca</strong></mono>".format(P)],
                 [u"Vazão real (Q)",
@@ -316,7 +316,7 @@ def _html_secao_bomba(res, eta, eta_dec, pot_cv, pot_kw):
     return tab + eq + subtitulo + tab_op
 
 
-def _html_resumo(res, Pmin, pot_cv, pot_kw):
+def _html_resumo(res, Pmin, pot_cv, pot_kw, ponto_pmin=u"válvula"):
 
     def _row(label, valor, unidade=u""):
         return u"""<div class="resumo-row">
@@ -332,9 +332,10 @@ def _html_resumo(res, Pmin, pot_cv, pot_kw):
             <div class="resumo-card-body">{corpo}</div>
         </div>""".format(tag=tag, titulo=titulo, corpo=corpo)
 
+    _label_p = u"Pressão na {}".format(ponto_pmin)
     st1 = _status_badge(res["p_hid01"], Pmin, 100.0)
     c1 = (
-        _row(u"Pressão na válvula", u"{:.4f}".format(res["p_hid01"]), u"mca") +
+        _row(_label_p, u"{:.4f}".format(res["p_hid01"]), u"mca") +
         _row(u"Vazão real", u"{:.2f}".format(res["Q_h01"]), u"L/min") +
         _row(u"Σhf percurso", u"{:.4f}".format(res["Hf_Hid01"]), u"mca") +
         u'<hr class="resumo-divider">' +
@@ -343,7 +344,7 @@ def _html_resumo(res, Pmin, pot_cv, pot_kw):
 
     st2 = _status_badge(res["p_hid02"], Pmin, 100.0)
     c2 = (
-        _row(u"Pressão na válvula", u"{:.4f}".format(res["p_hid02"]), u"mca") +
+        _row(_label_p, u"{:.4f}".format(res["p_hid02"]), u"mca") +
         _row(u"Vazão real", u"{:.2f}".format(res["Q_h02"]), u"L/min") +
         _row(u"Σhf percurso", u"{:.4f}".format(res["Hf_Hid02"]), u"mca") +
         u'<hr class="resumo-divider">' +
@@ -765,19 +766,26 @@ def build_corpo_hidrantes(res, dados_sistema, Z_RTI, Z_HID01, Z_HID02,
     Pmin    = dados_sistema["pressao_min"]
     eta_dec = eta / 100.0
 
+    _Dm_m = cache_hid_Dm if cache_hid_Dm is not None else (
+        dados_sistema["mangueira_dn"] / 1000.0 if Hm_mangueira > 0 else None
+    )
+    # Ponto onde P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg é de fato calculada:
+    # se não há mangueira/esguicho (Hm=0) ou Hesg>0 (Pmin referenciado na
+    # válvula, perda do esguicho já explícita), o ponto é a válvula; caso
+    # contrário (mangueira ativa e Hesg=0) a subtração de Hm desloca o ponto
+    # calculado para a entrada do esguicho.
+    ponto_pmin = u"válvula" if (_Dm_m is None or Hesg > 0) else u"entrada do esguicho"
+
     s1 = _html_secao_dados(dados_sistema, valor_sistema, calculo_escolha,
                            Qs_lmin, Qs_m3s, Qt_lmin, Qt_m3s, Pmin, C_HW)
     s2 = _html_secao_elevacoes(Z_RTI, Z_HID01, Z_HID02, Hz_H1, Hz_H2)
     s3 = _html_secao_trechos(res["hf"], C_HW)
     s4 = _html_secao_hmt(res, Hm_mangueira, Hesg, Pmin)
-    s5 = _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin)
+    s5 = _html_secao_hidrantes(res, Hz_H1, Hz_H2, Pmin, ponto_pmin)
     s6 = _html_secao_bomba(res, eta, eta_dec, pot_cv, pot_kw)
-    sr = _html_resumo(res, Pmin, pot_cv, pot_kw)
+    sr = _html_resumo(res, Pmin, pot_cv, pot_kw, ponto_pmin)
 
     secao_mangueira = u""
-    _Dm_m = cache_hid_Dm if cache_hid_Dm is not None else (
-        dados_sistema["mangueira_dn"] / 1000.0 if Hm_mangueira > 0 else None
-    )
     if _Dm_m is not None:
         import math as _math
         _f_val  = 0.022
@@ -820,15 +828,26 @@ def build_corpo_hidrantes(res, dados_sistema, Z_RTI, Z_HID01, Z_HID02,
             ]
         )
 
+        _nota_demanda = u""
+        if Hesg <= 0:
+            _nota_demanda = (
+                u'<p class="nota">Modelo de demanda fixa: adota-se o par normativo '
+                u"do esguicho regulável (Q = {qs} L/min a P = {pmin} mca na entrada "
+                u"do esguicho), de modo que a pressão requerida do esguicho já está "
+                u"incorporada em Pmin e Hesg = 0 na cadeia de energia. As vazões "
+                u"reais de operação serão iguais ou superiores às normativas.</p>"
+            ).format(qs=Qs_lmin, pmin=Pmin)
+
         hm_formula = (
             tab_params
             + _formula(
-                u"Hm = (2 × f × Lm) / (g × π² × Dm⁵) × Q²<br>"
-                u"Hm = (2 × {f} × {Lm}) / ({g} × {pi2:.6f} × {Dm5:.4e}) × Q²".format(
+                u"Hm = (8 × f × Lm) / (g × π² × Dm⁵) × Q²<br>"
+                u"Hm = (8 × {f} × {Lm}) / ({g} × {pi2:.6f} × {Dm5:.4e}) × Q²".format(
                     f=_f_val, Lm=_Lm_val, g=_g_val, pi2=pi2, Dm5=Dm5)
             )
             + u'<h3 class="sub-secao">Hm por hidrante (Q real convergido)</h3>'
             + tab_hm
+            + _nota_demanda
         )
         secao_mangueira = _secao(u"3", u"Perda de Carga na Mangueira (Darcy-Weisbach)", hm_formula)
         s3_num = u"4"; s4_num = u"5"; s5_num = u"6"; s6_num = u"7"

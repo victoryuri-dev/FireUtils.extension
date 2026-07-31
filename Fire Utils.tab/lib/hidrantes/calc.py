@@ -78,8 +78,14 @@ def calc_hf_trecho(elems_data, Q_m3s, C, label):
 
 
 def calc_hf_mangueira(Q_m3s, Dm_m):
-    """Perda de carga na mangueira por Darcy-Weisbach."""
-    return (2.0 * _f * _Lm) / (_g * (math.pi ** 2) * (Dm_m ** 5)) * (Q_m3s ** 2)
+    """
+    Perda de carga na mangueira por Darcy-Weisbach, em função da vazão.
+
+    Dedução: hf = f·(L/D)·(V²/2g), com V = Q/A = 4Q/(π·D²)
+      → V² = 16·Q² / (π²·D⁴)
+      → hf = f·L/D × 16·Q² / (2g·π²·D⁴) = 8·f·L·Q² / (g·π²·D⁵)
+    """
+    return (8.0 * _f * _Lm) / (_g * (math.pi ** 2) * (Dm_m ** 5)) * (Q_m3s ** 2)
 
 
 def calc_pressao(Ht, Hz, Hf_percurso):
@@ -90,6 +96,20 @@ def calc_pressao(Ht, Hz, Hf_percurso):
 def calc_potencia(Qt_m3s, Ht, eta_decimal):
     """Potência da bomba em cv."""
     return (1000.0 * Qt_m3s * Ht) / (75.0 * eta_decimal)
+
+
+def hesg_mca(q_lmin, k=None, d_mm=None, cd=0.97):
+    """
+    Pressao requerida no esguicho (mca), para uso quando Pmin e referenciada
+    na valvula do hidrante (pmin_ref = "valvula") e a perda no esguicho
+    regulavel precisa ser somada explicitamente na cadeia de energia.
+
+    k    : fator de vazao de catalogo do esguicho regulavel (Q = K*sqrt(P)).
+    d_mm : diametro do requinte, para jato solido (Q = 0,2087*cd*d^2*sqrt(H)).
+    """
+    if k:
+        return (q_lmin / float(k)) ** 2
+    return (q_lmin / (0.2087 * cd * float(d_mm) ** 2)) ** 2
 
 
 # ===========================================================================
@@ -111,7 +131,7 @@ def calcular_rede(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
     Sequência de cálculo (ordem física da rede):
       1. Q1 = Q2 = Qs_lmin → Qt = Q1 + Q2
       2. Hazen-Williams em cada trecho com as vazões especificadas
-      3. Darcy-Weisbach na mangueira de cada hidrante
+      3. Darcy-Weisbach na mangueira de cada hidrante: Hm = (8fLm)/(gπ²Dm⁵) × Q²
       4. Energia de cada ramal: E_i = hf_ramal_i + Hm_i + Hesg − ΔZ_i
       5. Ramal governante: argmax(E1, E2) → determina a HMT mínima da bomba
       6. HMT: Ht = Pmin + Hf_tronco + E_gov
@@ -219,6 +239,13 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     """
     Extrai L, D, Leq e acessórios agrupados de uma lista de elementos Revit.
     Recebe as funções helper como parâmetro para manter este módulo sem imports Revit.
+
+    Acessórios são agrupados por (nome do tipo, diâmetro nominal) — nunca apenas
+    pelo nome — pois um mesmo tipo de acessório (ex.: "Tê") pode ocorrer em
+    diâmetros diferentes dentro do mesmo trecho, cada um com Leq unitário próprio.
+    Dentro de cada grupo, le_unit é a média exata dos valores acumulados
+    (leq_tot_grupo / qtd_grupo), garantindo por construção que
+    qtd × le_unit == leq_tot em toda linha exibida no memorial.
     """
     from Autodesk.Revit.DB.Plumbing import Pipe
     from Autodesk.Revit.DB import FamilyInstance
@@ -233,17 +260,25 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             leq = get_leq_fn(elem)
             Leq += leq
             if leq > 0:
-                nome = get_nome_fn(elem)
-                if nome in aces_raw:
-                    aces_raw[nome]["qtd"]     += 1
-                    aces_raw[nome]["leq_tot"] += leq
+                nome  = get_nome_fn(elem)
+                dn_mm = int(round(get_diametro_fn(elem) * 1000.0))
+                chave = (nome, dn_mm)
+                if chave in aces_raw:
+                    aces_raw[chave]["qtd"]     += 1
+                    aces_raw[chave]["leq_tot"] += leq
                 else:
-                    aces_raw[nome] = {"qtd": 1, "leq_unit": leq, "leq_tot": leq}
+                    aces_raw[chave] = {"qtd": 1, "leq_tot": leq, "nome": nome, "dn_mm": dn_mm}
 
-    acessorios = [
-        {"nome": n, "qtd": v["qtd"], "leq_unit": v["leq_unit"], "leq_tot": v["leq_tot"]}
-        for n, v in aces_raw.items()
-    ]
+    acessorios = []
+    for v in aces_raw.values():
+        leq_unit = v["leq_tot"] / float(v["qtd"])  # média exata: qtd*leq_unit == leq_tot sempre
+        assert abs(v["qtd"] * leq_unit - v["leq_tot"]) < 0.001
+        acessorios.append({
+            "nome":     u"{} DN{}".format(v["nome"], v["dn_mm"]),
+            "qtd":      v["qtd"],
+            "leq_unit": leq_unit,
+            "leq_tot":  v["leq_tot"],
+        })
 
     return {
         "L":          L,
