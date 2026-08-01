@@ -329,7 +329,7 @@ def occupancy_forms(estado, usar_legado=False):
     """
     Exibe o formulário de seleção de ocupação.
 
-    estado      : dict retornado por estados.get_estado() — obrigatório.
+    estado      : dict retornado por normas.get_estado() — obrigatório.
     usar_legado : se True, força o dropdown simples em vez do WPF.
     Retorna o código da ocupação selecionada (str) ou encerra o script.
     """

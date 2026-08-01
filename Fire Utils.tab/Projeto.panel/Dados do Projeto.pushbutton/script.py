@@ -65,7 +65,7 @@ def _salvar_projeto(projeto_dir, identificador, estado_nome, uf, ocupacao_princi
 def _carregar_estado(uf):
     """Carrega o dict do estado a partir da sigla. Retorna None se não encontrado."""
     try:
-        from estados import get_estado
+        from normas import get_estado
         return get_estado(uf)
     except Exception:
         return None

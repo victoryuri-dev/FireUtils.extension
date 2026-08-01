@@ -93,7 +93,7 @@ def exigir_projeto_e_estado(doc, forms, script):
         script.exit()
 
     # 3 — carregar dados normativos
-    from estados import get_estado
+    from normas import get_estado
     estado = get_estado(uf)
     if not estado:
         forms.alert(

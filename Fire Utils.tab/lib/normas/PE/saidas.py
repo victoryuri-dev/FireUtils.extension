@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-estados/PE.py — Fire Utils
-Dados normativos de Pernambuco — CBMPE.
+normas/PE/saidas.py — Fire Utils
+Dados normativos de saídas de emergência de Pernambuco — CBMPE.
 
 Normas de referência:
   - Classificação de ocupações : NT-018 CBMPE
@@ -53,7 +53,7 @@ def _dist(sd_su, sd_ms, cd_su, cd_ms):
 # ESTADO
 # =============================================================================
 
-ESTADO = {
+DADOS_SAIDAS = {
 
     # -------------------------------------------------------------------------
     # Metadados

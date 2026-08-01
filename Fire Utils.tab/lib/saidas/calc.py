@@ -117,7 +117,7 @@ def calcular_saidas(rooms_data, nome_terreo=None, estado=None):
     """
     rooms_data  : list de dicts {nivel, nome, grupo, area, pop}
     nome_terreo : nome do pavimento térreo (string)
-    estado      : dict do estado (de estados.get_estado); se None usa IT 11 CBMSP padrão
+    estado      : dict do estado (de normas.get_estado); se None usa IT 11 CBMSP padrão
 
     Retorna dict com as três seções normativas:
 

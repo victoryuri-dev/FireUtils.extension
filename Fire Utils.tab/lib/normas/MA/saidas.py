@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-estados/MA.py — Fire Utils
-Dados normativos do Maranhão — CBM-MA.
+normas/MA/saidas.py — Fire Utils
+Dados normativos de saídas de emergência do Maranhão — CBM-MA.
 
 Normas de referência:
   - Ocupações / taxa populacional : NT-01/2021 CBM-MA  (+ IT 11 CBMSP adaptada)
@@ -34,7 +34,7 @@ def _dist(sd_su, sd_ms, cd_su, cd_ms):
 # ESTADO
 # =============================================================================
 
-ESTADO = {
+DADOS_SAIDAS = {
 
     # -------------------------------------------------------------------------
     # Metadados

@@ -14,7 +14,11 @@ import datetime
 # ===========================================================================
 # Constantes
 # ===========================================================================
-C_HW = 120
+# C_HW nao existe mais como constante fixa aqui: o coeficiente de Hazen-Williams
+# e um parametro normativo (Tabela 1) e vem do perfil ativo
+# (hidrantes.norm_profiles) via script.py. _f, _g e _Lm sao constantes fisicas
+# / geometricas internas da formula de Darcy-Weisbach da mangueira, nao valores
+# normativos por estado - permanecem aqui.
 _f   = 0.022
 _g   = 9.81
 _Lm  = 30.0
@@ -110,6 +114,28 @@ def hesg_mca(q_lmin, k=None, d_mm=None, cd=0.97):
     if k:
         return (q_lmin / float(k)) ** 2
     return (q_lmin / (0.2087 * cd * float(d_mm) ** 2)) ** 2
+
+
+def verificar_equilibrio_no(E1, E2, limite):
+    """
+    Verifica o equilibrio de pressoes requeridas no no de derivacao entre os
+    dois ramais mais desfavoraveis (referencia normativa: limite recebido do
+    perfil ativo, ex. NT 22 item 5.8.15).
+
+    No modelo de demanda fixa, o desequilibrio entre os ramais e:
+        desequilibrio = abs(E1 - E2)
+    onde E1/E2 sao as energias dos ramais ja calculadas por calcular_rede().
+
+    Retorna dict com desequilibrio, limite, margem (limite - desequilibrio,
+    negativa se reprovado) e atende (bool).
+    """
+    desequilibrio = abs(E1 - E2)
+    return {
+        u"desequilibrio": desequilibrio,
+        u"limite":        limite,
+        u"margem":        limite - desequilibrio,
+        u"atende":        desequilibrio <= limite,
+    }
 
 
 # ===========================================================================

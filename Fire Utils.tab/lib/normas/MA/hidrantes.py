@@ -1,0 +1,97 @@
+# -*- coding: utf-8 -*-
+"""
+normas/MA/hidrantes.py — Fire Utils
+Dados normativos de dimensionamento de hidrantes do Maranhão — CBM-MA.
+
+Norma de referência: NT 22/2021 - CBMMA
+
+Todo parametro normativo usado pelo motor de calculo e pelas verificacoes do
+memorial (Pmin, Qmin, limites de velocidade, ponto de referencia de Pmin,
+coeficiente de Hazen-Williams, numero de hidrantes simultaneos, tolerancia de
+equilibrio no no de derivacao etc.) vive aqui - nunca hardcoded no motor
+(hidrantes/calc.py) ou no script de apresentacao (Dimensionar Hidrantes).
+"""
+
+# Import absoluto obrigatorio: este arquivo se chama "hidrantes.py" (mesmo
+# nome do pacote de nivel superior lib/hidrantes/). Sem absolute_import, o
+# Python 2 / IronPython resolve "from hidrantes.db import ..." como import
+# relativo primeiro, conflita consigo mesmo e lanca
+# "ImportError: No module named db".
+from __future__ import absolute_import
+from hidrantes.db import SISTEMAS_HIDRANTE
+
+
+def _tipos_de_db():
+    """
+    Deriva a secao 'tipos' (Tabela 2) a partir de hidrantes/db.py, que continua
+    sendo a fonte unica desses dados (usada tambem por Classificar Sistema e
+    hidrantes/forms.py). Isso evita duplicar/hardcodar os mesmos valores em
+    dois lugares - aqui apenas renomeamos as chaves para o vocabulario da
+    Tabela 2 (q_min/p_min/mang_dn/mang_comp) usado pelas verificacoes.
+    """
+    tipos = {}
+    for tipo_num, dados in SISTEMAS_HIDRANTE.items():
+        tipos[tipo_num] = {
+            u"descricao":   dados[u"descricao"],
+            u"esguicho_dn": dados[u"esguicho_dn"],
+            u"variantes": [
+                {
+                    u"mang_dn":   v[u"mangueira_dn"],
+                    u"mang_comp": v[u"mangueira_comp"],
+                    u"q_min":     v[u"vazao_min"],
+                    u"p_min":     v[u"pressao_min"],
+                }
+                for v in dados[u"variantes"]
+            ],
+        }
+    return tipos
+
+
+DADOS_HIDRANTES = {
+    u"norma": u"NT 22/2021 - CBMMA",
+
+    # Ponto de medicao do par Q/Pmin da Tabela 2:
+    #   "valvula"  - Pmin e Qmin sao referenciados na valvula do hidrante
+    #                (redacao da NT 22); Hesg e calculado explicitamente
+    #                (hesg_mca) e somado na cadeia de energia.
+    #   "esguicho" - o par Q/Pmin ja e definido na entrada do esguicho
+    #                regulavel; Hesg = 0 (perda ja incorporada em Pmin).
+    u"pmin_ref": u"valvula",
+    u"pmin_ref_desc": u"na valvula do hidrante",
+
+    u"hidrantes_simultaneos": 2,
+    u"hidrantes_simultaneos_ref": u"NT 22 itens 5.8.3 / 5.8.8",
+
+    # Tabela 2 - Tipos de sistema (derivada de hidrantes/db.py)
+    u"tipos": _tipos_de_db(),
+    u"tipos_ref": u"NT 22 Tabela 2",
+
+    u"p_max_esguicho": 100.0,
+    u"p_max_esguicho_ref": u"NT 22 item 5.8.9",
+
+    u"v_max_tubulacao": 5.0,
+    u"v_max_tubulacao_ref": u"NT 22 item 5.8.13",
+
+    u"v_max_succao_positiva": 3.0,
+    u"v_max_succao_negativa": 2.0,
+    u"v_max_succao_ref": u"NT 22 item 5.8.12",
+
+    u"equilibrio_no_max": 0.50,
+    u"equilibrio_no_max_ref": u"NT 22 item 5.8.15",
+
+    u"governante_ref": u"NT 22 item 5.8.4 (menor pressao dinamica na saida)",
+
+    # Tabela 1 - Coeficiente de Hazen-Williams por material
+    u"hazen_c": {
+        u"galvanizado":       120,
+        u"aco_preto_molhado": 120,
+        u"ff_sem_revest":     100,
+        u"ff_revest_cimento": 140,
+        u"plastico":          150,
+        u"cobre":             150,
+    },
+    u"hazen_c_ref": u"NT 22 Tabela 1",
+
+    u"npsh_fator_vazao": 1.5,
+    u"npsh_fator_vazao_ref": u"NT 22 item 5.8.16",
+}

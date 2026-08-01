@@ -88,7 +88,7 @@ def set_occupancy(rooms, occupancy_value, estado):
     """
     Grava ocupação, taxa populacional e população nos ambientes informados.
 
-    estado : dict retornado por estados.get_estado(). Se fornecido, os dados
+    estado : dict retornado por normas.get_estado(). Se fornecido, os dados
              são lidos de estado["tabela"] e estado["ocupacoes"].
              Se None, usa o banco fixo IT 11 CBMSP (fallback).
     """
