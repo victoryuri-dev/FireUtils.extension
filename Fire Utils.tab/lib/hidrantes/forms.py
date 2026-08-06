@@ -16,8 +16,8 @@ from System.Windows import (
     ResizeMode, WindowStartupLocation
 )
 from System.Windows.Controls import (
-    Grid, StackPanel, Label, ComboBox, ComboBoxItem,
-    Button, DataGrid, DataGridTextColumn, ScrollViewer,
+    Grid, StackPanel, Label, ComboBox, ComboBoxItem, TextBox, CheckBox,
+    Button, DataGrid, DataGridTextColumn, ScrollViewer, Border,
     Orientation, DataGridSelectionMode, DataGridSelectionUnit
 )
 from System.Windows import GridLength, GridUnitType
@@ -26,6 +26,7 @@ from System.Collections.ObjectModel import ObservableCollection
 from System import String
 
 from hidrantes.db import SISTEMAS_HIDRANTE, get_todos_tipos
+from hidrantes import custom as custom_store
 
 
 # ---------------------------------------------------------------------------
@@ -71,17 +72,27 @@ def _build_rows():
 # ---------------------------------------------------------------------------
 class HydrantSystemForm(Window):
 
-    def __init__(self):
+    def __init__(self, custom_inicial=None):
         self.Title  = "Fire Utils – Tipo de Sistema de Hidrante (NT 22)"
-        self.Width  = 780
-        self.Height = 460
+        self.Width  = 800
+        self.Height = 620
         self.ResizeMode = ResizeMode.CanResize
         self.WindowStartupLocation = WindowStartupLocation.CenterScreen
 
         self.selected_tipo     = None
         self.selected_variante = None
 
+        # Valores personalizados já salvos neste projeto (ou None)
+        self._custom_inicial = custom_inicial
+
         self._build_ui()
+
+        # Se o projeto já tem valores personalizados salvos, pré-carrega os
+        # campos e deixa o modo personalizado ligado — o usuário pode
+        # reclassificar quantas vezes quiser sem redigitar.
+        if custom_inicial:
+            self._preencher_custom(custom_inicial)
+            self._chk_custom.IsChecked = True
 
     # ------------------------------------------------------------------
     def _build_ui(self):
@@ -129,8 +140,11 @@ class HydrantSystemForm(Window):
         self._lbl_sel = Label()
         self._lbl_sel.Content  = "Nenhum tipo selecionado."
         self._lbl_sel.FontSize = 11
-        self._lbl_sel.Margin   = Thickness(0, 0, 0, 10)
+        self._lbl_sel.Margin   = Thickness(0, 0, 0, 6)
         root.Children.Add(self._lbl_sel)
+
+        # Bloco de valores personalizados
+        root.Children.Add(self._build_custom_panel())
 
         # Botões
         btn_panel = StackPanel()
@@ -157,6 +171,113 @@ class HydrantSystemForm(Window):
         self.Content = root
 
     # ------------------------------------------------------------------
+    # Painel de valores personalizados
+    # ------------------------------------------------------------------
+    def _build_custom_panel(self):
+        box = Border()
+        box.BorderBrush     = SolidColorBrush(Color.FromRgb(170, 170, 170))
+        box.BorderThickness = Thickness(1)
+        box.Padding         = Thickness(10)
+        box.Margin          = Thickness(0, 0, 0, 10)
+
+        painel = StackPanel()
+
+        self._chk_custom = CheckBox()
+        self._chk_custom.Content    = u"Usar valores personalizados (fora da Tabela 2)"
+        self._chk_custom.FontWeight = System_FontWeights_Bold()
+        self._chk_custom.Margin     = Thickness(0, 0, 0, 8)
+        self._chk_custom.Checked   += self._on_custom_toggle
+        self._chk_custom.Unchecked += self._on_custom_toggle
+        painel.Children.Add(self._chk_custom)
+
+        padrao = custom_store.default_custom()
+
+        # Linha 1 — descrição + expedições
+        linha1 = StackPanel()
+        linha1.Orientation = Orientation.Horizontal
+        linha1.Margin      = Thickness(0, 0, 0, 6)
+
+        campo_desc, self._txt_descricao = _campo_texto(
+            u"Descrição", 330, padrao[u"descricao"])
+        linha1.Children.Add(campo_desc)
+
+        campo_exp = StackPanel()
+        campo_exp.Margin = Thickness(0, 0, 10, 0)
+        lbl_exp = Label()
+        lbl_exp.Content  = u"Expedições"
+        lbl_exp.FontSize = 11
+        lbl_exp.Padding  = Thickness(0, 0, 0, 2)
+        campo_exp.Children.Add(lbl_exp)
+
+        self._cmb_expedicoes = ComboBox()
+        self._cmb_expedicoes.Width = 130
+        for opcao in (u"Simples", u"Duplo"):
+            item = ComboBoxItem()
+            item.Content = opcao
+            self._cmb_expedicoes.Items.Add(item)
+        self._cmb_expedicoes.SelectedIndex = 0
+        campo_exp.Children.Add(self._cmb_expedicoes)
+        linha1.Children.Add(campo_exp)
+
+        painel.Children.Add(linha1)
+
+        # Linha 2 — campos numéricos
+        linha2 = StackPanel()
+        linha2.Orientation = Orientation.Horizontal
+
+        self._txt_numericos = {}
+        for chave, rotulo in custom_store.CAMPOS_NUMERICOS:
+            campo, txt = _campo_texto(
+                custom_store.ROTULOS_CURTOS.get(chave, rotulo),
+                128, u"{:g}".format(padrao[chave]))
+            self._txt_numericos[chave] = txt
+            linha2.Children.Add(campo)
+
+        painel.Children.Add(linha2)
+
+        self._campos_custom = (
+            [self._txt_descricao, self._cmb_expedicoes] +
+            list(self._txt_numericos.values())
+        )
+        self._set_custom_enabled(False)
+
+        box.Child = painel
+        return box
+
+    def _set_custom_enabled(self, ativo):
+        for c in self._campos_custom:
+            c.IsEnabled = ativo
+
+    def _on_custom_toggle(self, sender, args):
+        ativo = bool(self._chk_custom.IsChecked)
+        self._set_custom_enabled(ativo)
+        if ativo:
+            # Modo personalizado ignora a seleção da Tabela 2
+            self._grid.SelectedItem = None
+            self._lbl_sel.Content = u"Modo personalizado: os valores da tabela serão ignorados."
+        else:
+            self._lbl_sel.Content = u"Nenhum tipo selecionado."
+
+    def _preencher_custom(self, dados):
+        d = custom_store.normalizar(dados)
+        self._txt_descricao.Text = d[u"descricao"]
+        for chave, _ in custom_store.CAMPOS_NUMERICOS:
+            self._txt_numericos[chave].Text = u"{:g}".format(d[chave])
+        idx = 1 if d[u"expedicoes"].lower().startswith(u"dup") else 0
+        self._cmb_expedicoes.SelectedIndex = idx
+
+    def _ler_custom(self):
+        """Lê os campos do painel personalizado como dict cru (strings)."""
+        dados = {
+            u"descricao":  self._txt_descricao.Text,
+            u"expedicoes": self._cmb_expedicoes.SelectedItem.Content
+                           if self._cmb_expedicoes.SelectedItem else u"Simples",
+        }
+        for chave, _ in custom_store.CAMPOS_NUMERICOS:
+            dados[chave] = self._txt_numericos[chave].Text.strip().replace(",", ".")
+        return dados
+
+    # ------------------------------------------------------------------
     def _on_grid_selection(self, sender, args):
         row = self._grid.SelectedItem
         if row is None:
@@ -164,6 +285,11 @@ class HydrantSystemForm(Window):
             self.selected_tipo     = None
             self.selected_variante = None
             return
+
+        # Escolher uma linha da tabela desliga o modo personalizado
+        chk = getattr(self, "_chk_custom", None)
+        if chk is not None and chk.IsChecked:
+            chk.IsChecked = False
 
         tipo = int(row.Tipo)
         dados = SISTEMAS_HIDRANTE[tipo]
@@ -190,8 +316,19 @@ class HydrantSystemForm(Window):
 
     # ------------------------------------------------------------------
     def _on_confirm(self, sender, args):
+        if self._chk_custom.IsChecked:
+            erros = custom_store.validar(self._ler_custom())
+            if erros:
+                alert(u"Corrija os valores personalizados:\n\n– {}".format(
+                    u"\n– ".join(erros)))
+                return
+            self.DialogResult = True
+            self.Close()
+            return
+
         if self.selected_tipo is None:
-            alert("Selecione um tipo de sistema antes de confirmar.")
+            alert(u"Selecione um tipo de sistema na tabela ou marque "
+                  u"'Usar valores personalizados'.")
             return
         self.DialogResult = True
         self.Close()
@@ -199,6 +336,7 @@ class HydrantSystemForm(Window):
     def _on_cancel(self, sender, args):
         self.selected_tipo     = None
         self.selected_variante = None
+        self._cancelado        = True
         self.DialogResult = False
         self.Close()
 
@@ -206,19 +344,56 @@ class HydrantSystemForm(Window):
     def get_result(self):
         """
         Retorna dict com os dados do sistema escolhido, ou None se cancelado.
+
+        Tabela 2:
         {
+            "custom": False,
             "tipo": int,
             "variante_idx": int,
-            "dados": dict   # variante completa de SISTEMAS_HIDRANTE
+            "dados": dict,      # variante completa de SISTEMAS_HIDRANTE
+            "descricao": unicode,
+        }
+
+        Personalizado:
+        {
+            "custom": True,
+            "tipo": None,
+            "variante_idx": 0,
+            "custom_dados": dict,   # vocabulário de hidrantes/custom.py
+            "dados": dict,          # mesmas chaves de SISTEMAS_HIDRANTE
+            "descricao": unicode,
         }
         """
+        if getattr(self, "_cancelado", False):
+            return None
+
+        if self._chk_custom.IsChecked:
+            d = custom_store.normalizar(self._ler_custom())
+            return {
+                "custom":       True,
+                "tipo":         None,
+                "variante_idx": 0,
+                "custom_dados": d,
+                "dados": {
+                    "mangueira_dn":   d[u"mang_dn"],
+                    "mangueira_comp": d[u"mang_comp"],
+                    "num_expedicoes": d[u"expedicoes"],
+                    "vazao_min":      d[u"q_min"],
+                    "pressao_min":    d[u"p_min"],
+                    "esguicho_dn":    d[u"esguicho_dn"],
+                },
+                "descricao": d[u"descricao"],
+            }
+
         if self.selected_tipo is None:
             return None
         dados = SISTEMAS_HIDRANTE[self.selected_tipo]
         return {
+            "custom":       False,
             "tipo":         self.selected_tipo,
             "variante_idx": self.selected_variante,
             "dados":        dados["variantes"][self.selected_variante],
+            "descricao":    dados["descricao"],
         }
 
 
@@ -229,6 +404,27 @@ def _make_binding(path):
     from System.Windows.Data import Binding
     b = Binding(path)
     return b
+
+
+def _campo_texto(rotulo, largura, valor_inicial=u""):
+    """Retorna (container, TextBox) com um rótulo acima da caixa de texto."""
+    campo = StackPanel()
+    campo.Margin = Thickness(0, 0, 10, 0)
+
+    lbl = Label()
+    lbl.Content  = rotulo
+    lbl.FontSize = 11
+    lbl.Padding  = Thickness(0, 0, 0, 2)
+    campo.Children.Add(lbl)
+
+    txt = TextBox()
+    txt.Width   = largura
+    txt.Height  = 22
+    txt.Text    = custom_store._txt(valor_inicial)
+    txt.Padding = Thickness(3, 2, 3, 2)
+    campo.Children.Add(txt)
+
+    return campo, txt
 
 def System_FontWeights_Bold():
     from System.Windows import FontWeights
@@ -257,11 +453,17 @@ def alert(msg):
 # ---------------------------------------------------------------------------
 # Função pública de uso no script principal
 # ---------------------------------------------------------------------------
-def show_system_selection_form():
+def show_system_selection_form(custom_inicial=None):
     """
     Abre o formulário de seleção de tipo de sistema.
-    Retorna dict com {tipo, variante_idx, dados} ou None se cancelado.
+
+    custom_inicial: dict de valores personalizados já salvos no projeto
+                    (hidrantes.custom.load_custom) — pré-carrega os campos
+                    e liga o modo personalizado.
+
+    Retorna o dict descrito em HydrantSystemForm.get_result(), ou None se
+    cancelado.
     """
-    form = HydrantSystemForm()
+    form = HydrantSystemForm(custom_inicial=custom_inicial)
     form.ShowDialog()
     return form.get_result()

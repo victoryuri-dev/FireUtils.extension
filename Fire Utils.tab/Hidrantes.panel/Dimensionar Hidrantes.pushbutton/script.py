@@ -30,6 +30,7 @@ from hidrantes.calc import (
     _f, _g, _Lm,
 )
 from hidrantes.norm_profiles import get_profile, req
+from hidrantes import custom as custom_store
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 P_TRECHO           = u"FireUtils - Trecho"
@@ -139,6 +140,12 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
     equilibrio_ref  = req(perfil, u"equilibrio_no_max_ref")
     governante_ref  = req(perfil, u"governante_ref")
     hazen_c_ref     = req(perfil, u"hazen_c_ref")
+
+    # Sistema personalizado: os valores Q/P/DN/comprimento não vêm da Tabela 2,
+    # então o memorial não pode citá-la como referência deles.
+    if custom_store.is_custom(valor_sistema):
+        tipos_ref = u"valores definidos pelo usuário (fora da {})".format(
+            req(perfil, u"tipos_ref"))
 
     v_max_succao = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
 
@@ -570,26 +577,41 @@ calculo_escolha = forms.SelectFromList.show(
 if not calculo_escolha: script.exit()
 
 valor_sistema = param_sistema.AsString()
-try:    tipo_num = int(valor_sistema.split()[1])
-except:
-    forms.alert(u"Não foi possível interpretar o tipo.", title="Fire Utils", warn_icon=True)
-    script.exit()
 
-variante_idx = 0
-if u"Var." in valor_sistema:
-    try:    variante_idx = ord(valor_sistema.split(u"Var.")[1].strip()[0]) - 65
-    except: variante_idx = 0
+if custom_store.is_custom(valor_sistema):
+    # Sistema classificado com valores personalizados (fora da Tabela 2).
+    # Os valores vêm do JSON salvo no próprio projeto, não do perfil normativo.
+    _custom = custom_store.load_custom(doc)
+    if not _custom:
+        forms.alert(
+            u"O projeto está classificado como sistema personalizado, mas os "
+            u"valores não foram encontrados.\n\nExecute "
+            u"'Classificar Sistema de Hidrante' novamente.",
+            title="Fire Utils", warn_icon=True)
+        script.exit()
+    dados_sistema = custom_store.para_dados_sistema(_custom)
+    variante_idx  = 0
+else:
+    try:    tipo_num = int(valor_sistema.split()[1])
+    except:
+        forms.alert(u"Não foi possível interpretar o tipo.", title="Fire Utils", warn_icon=True)
+        script.exit()
 
-_tipo_perfil = req(perfil, u"tipos").get(tipo_num)
-if _tipo_perfil is None:
-    forms.alert(
-        u"O perfil normativo '{}' não define o Tipo {} de sistema de hidrante.".format(
-            perfil.get(u"norma"), tipo_num),
-        title="Fire Utils", warn_icon=True)
-    script.exit()
+    variante_idx = 0
+    if u"Var." in valor_sistema:
+        try:    variante_idx = ord(valor_sistema.split(u"Var.")[1].strip()[0]) - 65
+        except: variante_idx = 0
 
-dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
-dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
+    _tipo_perfil = req(perfil, u"tipos").get(tipo_num)
+    if _tipo_perfil is None:
+        forms.alert(
+            u"O perfil normativo '{}' não define o Tipo {} de sistema de hidrante.".format(
+                perfil.get(u"norma"), tipo_num),
+            title="Fire Utils", warn_icon=True)
+        script.exit()
+
+    dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
+    dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
 Qs_lmin = dados_sistema["q_min"]
 Qs_m3s  = Qs_lmin / 60000.0
 Pmin    = dados_sistema["p_min"]

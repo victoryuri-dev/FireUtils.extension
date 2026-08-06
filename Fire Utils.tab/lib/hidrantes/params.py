@@ -5,6 +5,7 @@ Cria e vincula os parâmetros necessários para o dimensionamento de hidrantes:
 
 Project Information:
   - FireUtils - Tipo de Sistema de Hidrante  (texto)
+  - FireUtils - Sistema Personalizado        (texto/JSON com valores custom)
 
 Shared Parameters (categorias alvo definidas abaixo):
   Tubulações:
@@ -103,6 +104,13 @@ PARAMS_CONFIG = [
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 
+# Guarda, em JSON, os valores personalizados do sistema (quando o usuário opta
+# por valores fora da Tabela 2). Fica no próprio projeto para permitir
+# reclassificar quantas vezes for preciso sem redigitar.
+PROJECT_INFO_CUSTOM_PARAM = u"FireUtils - Sistema Personalizado"
+
+PROJECT_INFO_PARAMS = [PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -183,17 +191,17 @@ def _bind_param(doc, definition, categorias_bic, instancia, grupo_ui_str):
     return True, "criado"
 
 
-def _create_project_info_definition(group):
+def _create_project_info_definition(group, nome=None):
     """Garante que a definição do parâmetro de ProjectInfo existe no arquivo."""
-    return _get_or_create_definition(group, PROJECT_INFO_PARAM, "Text", "Text")
+    return _get_or_create_definition(group, nome or PROJECT_INFO_PARAM, "Text", "Text")
 
 
 def _bind_project_info_param(doc, defn):
-    """Vincula o parâmetro de Tipo de Sistema à categoria ProjectInformation."""
+    """Vincula um parâmetro de texto à categoria ProjectInformation."""
     # Já vinculado?
     it = doc.ParameterBindings.ForwardIterator()
     while it.MoveNext():
-        if it.Key.Name == PROJECT_INFO_PARAM:
+        if it.Key.Name == defn.Name:
             return False, "já existe"
 
     cat_set = CategorySet()
@@ -241,7 +249,10 @@ def create_hydrant_params(doc, sp_folder=None):
         )
         definicoes.append((cfg, defn))
 
-    pi_defn = _create_project_info_definition(group)
+    pi_defns = [
+        (nome, _create_project_info_definition(group, nome))
+        for nome in PROJECT_INFO_PARAMS
+    ]
 
     # --- Etapa 2: vinculação ao documento (dentro de transação) ---
     log = []
@@ -255,8 +266,9 @@ def create_hydrant_params(doc, sp_folder=None):
             )
             log.append((cfg["nome"], status))
 
-        ok, status = _bind_project_info_param(doc, pi_defn)
-        log.append((PROJECT_INFO_PARAM, status))
+        for nome, pi_defn in pi_defns:
+            ok, status = _bind_project_info_param(doc, pi_defn)
+            log.append((nome, status))
 
         t.Commit()
 
