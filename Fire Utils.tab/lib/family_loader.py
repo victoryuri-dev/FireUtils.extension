@@ -141,3 +141,34 @@ def carregar_familias(doc, entradas):
             erros.append((u"(transação)", str(e)))
 
     return carregadas, ja_existentes, erros
+
+
+def obter_symbol_para_posicionar(doc, nome_familia):
+    """
+    Retorna o primeiro FamilySymbol (tipo) da família `nome_familia`, já
+    carregada em `doc`, garantindo que esteja ativo — pronto para uso em
+    uidoc.PromptForFamilyInstancePlacement(). Retorna None se a família ou
+    algum tipo não for encontrado.
+    """
+    familia = next(
+        (f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
+         if f.Name == nome_familia),
+        None
+    )
+    if familia is None:
+        return None
+
+    simbolo = next(
+        (doc.GetElement(sid) for sid in familia.GetFamilySymbolIds()),
+        None
+    )
+    if simbolo is None:
+        return None
+
+    if not simbolo.IsActive:
+        with Transaction(doc, u"FireUtils - Ativar tipo") as t:
+            t.Start()
+            simbolo.Activate()
+            t.Commit()
+
+    return simbolo

@@ -9,9 +9,6 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Cache de miniaturas de famílias (gerado localmente, não versionar)
-Fire Utils.tab/lib/family_library/.thumb_cache/
-
 # Configurações e estado local do Claude Code (inclui worktrees internos)
 .claude/
 
