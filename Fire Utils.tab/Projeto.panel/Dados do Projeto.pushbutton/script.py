@@ -39,7 +39,7 @@ def _carregar_projeto(projeto_dir):
 
 
 def _salvar_projeto(projeto_dir, identificador, estado_nome, uf, ocupacao_principal,
-                    area_construida, area_terreno):
+                    area_construida, area_terreno, sync_token):
     dados = {
         u"identificador":       identificador,
         u"estado":              estado_nome,
@@ -56,10 +56,23 @@ def _salvar_projeto(projeto_dir, identificador, estado_nome, uf, ocupacao_princi
     except Exception:
         arquivo = {}
     arquivo[u"dados_projeto"] = dados
+    if sync_token:
+        arquivo[u"sync"] = {u"token": sync_token}
+    else:
+        arquivo.pop(u"sync", None)
     with io.open(path, u"w", encoding=u"utf-8") as f:
         json.dump(arquivo, f, ensure_ascii=False, indent=2)
     _salvar_ponteiro(projeto_dir)
     return path
+
+
+def _carregar_token(projeto_dir):
+    """Retorna o token de sincronização salvo, ou string vazia."""
+    try:
+        from sync import token_atual
+        return token_atual(projeto_dir) or u""
+    except Exception:
+        return u""
 
 
 def _carregar_estado(uf):
@@ -283,6 +296,28 @@ def _form_wpf(projeto_dir):
     _preencher_cb_ocup(opcoes_ocup, preselect=existente.get(u"ocupacao_principal"))
     campos.Children.Add(cb_ocup)
 
+    # ---- Separador 3 ------------------------------------------------------
+    sep3 = SWC.Separator()
+    sep3.Margin = SW.Thickness(0, 12, 0, 12)
+    campos.Children.Add(sep3)
+
+    # ---- Token de sincronização (integração com o site) -------------------
+    campos.Children.Add(_label(u"Token de sincronização (site → Revit)"))
+    txt_token = SWC.TextBox()
+    txt_token.Text       = _carregar_token(projeto_dir)
+    txt_token.FontSize   = 12
+    txt_token.Padding    = SW.Thickness(8, 6, 8, 6)
+    txt_token.Background = COR_BRANCO
+    campos.Children.Add(txt_token)
+
+    dica_token = SWC.TextBlock()
+    dica_token.Text         = u"Copie no site, na tela do projeto (\"Integração Revit\"). Deixe em branco para não sincronizar."
+    dica_token.FontSize     = 10
+    dica_token.Foreground   = COR_LABEL
+    dica_token.TextWrapping = SW.TextWrapping.Wrap
+    dica_token.Margin       = SW.Thickness(0, 4, 0, 0)
+    campos.Children.Add(dica_token)
+
     card.Child = campos
     root.Children.Add(card)
 
@@ -337,6 +372,7 @@ def _form_wpf(projeto_dir):
         idx_e  = cb_estado.SelectedIndex
         idx_o  = cb_ocup.SelectedIndex
         opcoes = _ocup_state[0]
+        token  = txt_token.Text.strip()
 
         if not nome:
             forms.alert(u"Informe o nome do projeto.", title=u"Fire Utils")
@@ -354,7 +390,7 @@ def _form_wpf(projeto_dir):
         area_terreno       = _parse_area(txt_area_terr.Text)
 
         resultado[0] = (nome, estado_sel[u"nome"], estado_sel[u"uf"],
-                        ocupacao_principal, area_construida, area_terreno)
+                        ocupacao_principal, area_construida, area_terreno, token)
         win.Close()
 
     cb_estado.SelectionChanged += SWC.SelectionChangedEventHandler(on_estado_changed)
@@ -380,11 +416,11 @@ except Exception as ex:
 if not resultado:
     script.exit()
 
-identificador, estado_nome, uf, ocupacao_principal, area_construida, area_terreno = resultado
+identificador, estado_nome, uf, ocupacao_principal, area_construida, area_terreno, sync_token = resultado
 
 try:
     path = _salvar_projeto(projeto_dir, identificador, estado_nome, uf,
-                           ocupacao_principal, area_construida, area_terreno)
+                           ocupacao_principal, area_construida, area_terreno, sync_token)
 except Exception as ex:
     forms.alert(u"Erro ao salvar dados: {}".format(ex), title=u"Fire Utils", warn_icon=True)
     script.exit()
@@ -399,5 +435,6 @@ if area_construida is not None:
     output.print_md(u"| Área construída    | {} m² |".format(area_construida))
 if area_terreno is not None:
     output.print_md(u"| Área do terreno    | {} m² |".format(area_terreno))
+output.print_md(u"| Sincronização Revit | {} |".format(u"Ativa" if sync_token else u"Desativada"))
 output.print_md(u"")
 output.print_md(u"_Arquivo:_ `{}`".format(path))

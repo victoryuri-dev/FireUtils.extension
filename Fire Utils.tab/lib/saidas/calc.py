@@ -10,6 +10,8 @@ import json
 import os
 import io
 
+from sync import enviar as enviar_sync
+
 UP          = 0.55   # metros por unidade de passagem
 LARG_MIN_AD = 1.20   # largura mínima padrão para acessos e descargas (m)
 LARG_MIN_ER = 1.20   # largura mínima padrão para escadas e rampas (m)
@@ -273,6 +275,8 @@ def salvar_cache_se_import(se_import, projeto_dir=None):
     with io.open(path, u"w", encoding=u"utf-8") as f:
         json.dump(arquivo, f, ensure_ascii=False, indent=2)
     _salvar_ponteiro_projeto(projeto_dir)
+
+    enviar_sync(u"saidas_emergencia", se_import, projeto_dir)
 
 
 def carregar_cache_se_import(projeto_dir=None):

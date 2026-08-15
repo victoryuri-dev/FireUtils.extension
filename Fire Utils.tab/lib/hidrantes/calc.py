@@ -11,6 +11,8 @@ import os
 import io
 import datetime
 
+from sync import enviar as enviar_sync
+
 # ===========================================================================
 # Constantes
 # ===========================================================================
@@ -333,6 +335,9 @@ def salvar_cache(payload, projeto_dir=None):
     with io.open(path, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
     _salvar_ponteiro_projeto(projeto_dir)
+
+    enviar_sync(u"hidrantes", payload, projeto_dir)
+
     return path
 
 
