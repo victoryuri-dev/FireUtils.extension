@@ -21,7 +21,7 @@ from Autodesk.Revit.DB import (
 )
 
 from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
-from sync import enviar as enviar_sync
+from sync import enviar as enviar_sync, config_sync
 
 _CACHE_NOME = u"firedata.json"
 
@@ -149,6 +149,7 @@ def salvar_cache(itens, projeto_dir):
     with io.open(path, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
-    enviar_sync(u"extintores", payload, projeto_dir)
+    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
+    enviar_sync(u"extintores", payload, projeto_dir, estruturaId=estrutura_id)
 
     return path

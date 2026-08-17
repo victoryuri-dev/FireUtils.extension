@@ -10,7 +10,7 @@ import json
 import os
 import io
 
-from sync import enviar as enviar_sync
+from sync import enviar as enviar_sync, config_sync
 
 UP          = 0.55   # metros por unidade de passagem
 LARG_MIN_AD = 1.20   # largura mínima padrão para acessos e descargas (m)
@@ -276,7 +276,8 @@ def salvar_cache_se_import(se_import, projeto_dir=None):
         json.dump(arquivo, f, ensure_ascii=False, indent=2)
     _salvar_ponteiro_projeto(projeto_dir)
 
-    enviar_sync(u"saidas_emergencia", se_import, projeto_dir)
+    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
+    enviar_sync(u"saidas_emergencia", se_import, projeto_dir, estruturaId=estrutura_id)
 
 
 def carregar_cache_se_import(projeto_dir=None):

@@ -120,21 +120,31 @@ def _post_json(url, corpo):
         return None, u"Resposta inválida do servidor."
 
 
-def enviar(medida, payload, projeto_dir):
+def enviar(medida, payload, projeto_dir, estruturaId=None):
     """Envia `payload` pra Edge Function revit-sync, best-effort.
 
+    `estruturaId` é obrigatório pro site pra 'extintores' e
+    'saidas_emergencia' (o site resolve a estrutura por esse id, não mais
+    por nome) — passe o valor salvo em config_sync(projeto_dir). Pra
+    'hidrantes' não deve ser passado: é a única medida que fica geral,
+    compartilhada entre todas as estruturas do projeto.
+
     Nunca lança exceção nem retorna nada útil pro chamador — qualquer
-    falha (sem token configurado, sem rede, timeout, erro do servidor) é
-    silenciosamente ignorada, porque o firedata.json local já foi gravado
-    antes desta chamada e continua sendo a fonte de verdade offline.
+    falha (sem token configurado, sem rede, timeout, erro do servidor,
+    estruturaId desatualizado) é silenciosamente ignorada, porque o
+    firedata.json local já foi gravado antes desta chamada e continua
+    sendo a fonte de verdade offline.
     """
     if medida not in _MEDIDAS_VALIDAS:
         return
     token = config_sync(projeto_dir).get(u"token")
     if not token:
         return
+    corpo = {u"token": token, u"medida": medida, u"payload": payload}
+    if estruturaId:
+        corpo[u"estruturaId"] = estruturaId
     try:
-        _post_json(_SYNC_URL, {u"token": token, u"medida": medida, u"payload": payload})
+        _post_json(_SYNC_URL, corpo)
     except Exception:
         pass
 
