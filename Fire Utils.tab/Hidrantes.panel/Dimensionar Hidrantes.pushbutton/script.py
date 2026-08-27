@@ -588,12 +588,14 @@ if erros_z:
                 title="Fire Utils", warn_icon=True)
     script.exit()
 
-# Condição de sucção — determinada automaticamente pela cota entre a RTI e o
-# trecho de sucção da bomba, nunca perguntada ao usuário:
-#   RTI acima da sucção (ΔZ > 0)      → sucção positiva (afogada, favorável)
-#   RTI no mesmo nível ou abaixo      → sucção negativa (bomba "puxa" a água) — mais restritiva
+# Condição de sucção — determinada automaticamente pela cota entre a RTI
+# (tomada de água) e a sucção da bomba, nunca perguntada ao usuário:
+#   Tomada de água NO NÍVEL ou ACIMA da sucção da bomba (ΔZ >= 0) → positiva
+#   Tomada de água ABAIXO da sucção da bomba (ΔZ < 0)             → negativa
+# Tolerância de 1 mm só para não classificar como negativa por ruído de
+# arredondamento quando as duas cotas são, na prática, iguais.
 Hz_succao = cotas["z_rti"] - cotas["z_succao"]
-succao = u"positiva" if Hz_succao > 0.05 else u"negativa"
+succao = u"negativa" if Hz_succao < -0.001 else u"positiva"
 
 # --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
 trechos_data = {
