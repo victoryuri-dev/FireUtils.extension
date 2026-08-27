@@ -5,13 +5,13 @@ Configuração inicial do sistema de hidrantes no projeto.
 
 Fluxo:
   1. Criar e vincular os Shared Parameters no projeto
-  2. Abrir formulário de seleção do Tipo de Sistema (Tabela 2 NT 22) ou de
-     valores personalizados (fora da tabela)
-  3. Selecionar o método de cálculo (Válvula do Hidrante / Ponta do
-     Esguicho Regulável) — por enquanto só registrado; o motor de cálculo
-     ('Dimensionar Hidrantes') ainda usa sempre o método da marcha com
-     Fator K, independente dessa escolha
-  4. Salvar tudo no Project Information — inclusive os valores
+  2. Abrir formulário único de classificação (hidrantes/forms.py): tipo de
+     sistema (Tabela 2 NT 22) ou valores personalizados, e método de
+     cálculo (Válvula do Hidrante / Ponta do Esguicho Regulável) — este
+     último por enquanto só registrado; o motor de cálculo ('Dimensionar
+     Hidrantes') ainda usa sempre o método da marcha com Fator K,
+     independente dessa escolha
+  3. Salvar tudo no Project Information — inclusive os valores
      personalizados (JSON), que ficam guardados no projeto para permitir
      reclassificar quantas vezes for preciso sem redigitar
 """
@@ -55,29 +55,35 @@ except Exception as e:
     script.exit()
 
 # ===========================================================================
-# ETAPA 2 — Selecionar tipo de sistema
+# ETAPA 2 — Selecionar tipo de sistema e método de cálculo
 # ===========================================================================
 output.print_md("---")
-output.print_md("### Etapa 2 — Tipo de Sistema")
+output.print_md("### Etapa 2 — Tipo de Sistema e Método de Cálculo")
 
-# Valores personalizados já salvos neste projeto (se houver) pré-carregam o
-# formulário, permitindo reclassificar sem redigitar tudo de novo.
+# Valores personalizados e método de cálculo já salvos neste projeto (se
+# houver) pré-carregam o formulário, permitindo reclassificar sem
+# redigitar/reselecionar tudo de novo.
 custom_salvo = custom_store.load_custom(doc)
 if custom_salvo:
     output.print_md(u"ℹ Valores personalizados encontrados no projeto — "
                     u"formulário pré-carregado.")
 
-resultado = show_system_selection_form(custom_inicial=custom_salvo)
+metodo_param_atual = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
+metodo_salvo = metodo_param_atual.AsString() if metodo_param_atual else None
+
+resultado = show_system_selection_form(custom_inicial=custom_salvo,
+                                       metodo_inicial=metodo_salvo)
 
 if resultado is None:
     output.print_md(u"⚠ Seleção cancelada pelo usuário.")
     script.exit()
 
-tipo      = resultado["tipo"]
-variante  = resultado["variante_idx"]
-dados     = resultado["dados"]
-descricao = resultado["descricao"]
-eh_custom = resultado["custom"]
+tipo           = resultado["tipo"]
+variante       = resultado["variante_idx"]
+dados          = resultado["dados"]
+descricao      = resultado["descricao"]
+eh_custom      = resultado["custom"]
+metodo_calculo = resultado["metodo_calculo"]
 
 if eh_custom:
     valor_param = custom_store.descrever(resultado["custom_dados"])
@@ -95,41 +101,17 @@ else:
     )
 
 output.print_md(u"✔ Selecionado: **{}**".format(valor_param))
-
-# ===========================================================================
-# ETAPA 3 — Selecionar método de cálculo
-# ===========================================================================
-output.print_md("---")
-output.print_md("### Etapa 3 — Método de Cálculo")
-
-METODOS_CALCULO = [u"Válvula do Hidrante", u"Ponta do Esguicho Regulável"]
-
-metodo_param_atual = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
-metodo_salvo = metodo_param_atual.AsString() if metodo_param_atual else None
-if metodo_salvo:
-    output.print_md(u"ℹ Método salvo atualmente neste projeto: **{}**".format(metodo_salvo))
-
-metodo_calculo = forms.SelectFromList.show(
-    METODOS_CALCULO,
-    title=u"Fire Utils — Método de Cálculo",
-    prompt=u"Selecione o método de cálculo do sistema de hidrantes:",
-    multiselect=False
-)
-if not metodo_calculo:
-    output.print_md(u"⚠ Seleção cancelada pelo usuário.")
-    script.exit()
-
-output.print_md(u"✔ Método selecionado: **{}**".format(metodo_calculo))
+output.print_md(u"✔ Método de cálculo: **{}**".format(metodo_calculo))
 output.print_md(
-    u"\nℹ _Por enquanto este valor é apenas registrado — o motor de cálculo "
+    u"\nℹ _Por enquanto o método de cálculo é apenas registrado — o motor "
     u"usado em **Dimensionar Hidrantes** ainda aplica sempre o método da "
     u"marcha com Fator K, independente da escolha acima._")
 
 # ===========================================================================
-# ETAPA 4 — Salvar no Project Information
+# ETAPA 3 — Salvar no Project Information
 # ===========================================================================
 output.print_md("---")
-output.print_md("### Etapa 4 — Project Information")
+output.print_md("### Etapa 3 — Project Information")
 
 pi = doc.ProjectInformation
 

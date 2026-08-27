@@ -28,6 +28,11 @@ from System import String
 from hidrantes.db import SISTEMAS_HIDRANTE, get_todos_tipos
 from hidrantes import custom as custom_store
 
+# Opções de método de cálculo — por enquanto só registradas junto com a
+# classificação; o motor de cálculo (hidrantes/calc.py) ainda não usa esse
+# valor, sempre aplica o método da marcha com Fator K.
+METODOS_CALCULO = [u"Válvula do Hidrante", u"Ponta do Esguicho Regulável"]
+
 
 # ---------------------------------------------------------------------------
 # Modelo de linha para o DataGrid
@@ -72,10 +77,10 @@ def _build_rows():
 # ---------------------------------------------------------------------------
 class HydrantSystemForm(Window):
 
-    def __init__(self, custom_inicial=None):
+    def __init__(self, custom_inicial=None, metodo_inicial=None):
         self.Title  = "Fire Utils – Tipo de Sistema de Hidrante (NT 22)"
         self.Width  = 800
-        self.Height = 620
+        self.Height = 680
         self.ResizeMode = ResizeMode.CanResize
         self.WindowStartupLocation = WindowStartupLocation.CenterScreen
 
@@ -93,6 +98,10 @@ class HydrantSystemForm(Window):
         if custom_inicial:
             self._preencher_custom(custom_inicial)
             self._chk_custom.IsChecked = True
+
+        # Método de cálculo já salvo neste projeto (ou None → 1ª opção)
+        if metodo_inicial in METODOS_CALCULO:
+            self._cmb_metodo.SelectedIndex = METODOS_CALCULO.index(metodo_inicial)
 
     # ------------------------------------------------------------------
     def _build_ui(self):
@@ -145,6 +154,9 @@ class HydrantSystemForm(Window):
 
         # Bloco de valores personalizados
         root.Children.Add(self._build_custom_panel())
+
+        # Bloco de método de cálculo
+        root.Children.Add(self._build_metodo_panel())
 
         # Botões
         btn_panel = StackPanel()
@@ -240,6 +252,38 @@ class HydrantSystemForm(Window):
             list(self._txt_numericos.values())
         )
         self._set_custom_enabled(False)
+
+        box.Child = painel
+        return box
+
+    # ------------------------------------------------------------------
+    # Painel de método de cálculo
+    # ------------------------------------------------------------------
+    def _build_metodo_panel(self):
+        box = Border()
+        box.BorderBrush     = SolidColorBrush(Color.FromRgb(170, 170, 170))
+        box.BorderThickness = Thickness(1)
+        box.Padding         = Thickness(10)
+        box.Margin          = Thickness(0, 0, 0, 10)
+
+        painel = StackPanel()
+        painel.Orientation = Orientation.Horizontal
+
+        lbl = Label()
+        lbl.Content     = u"Método de Cálculo"
+        lbl.FontWeight  = System_FontWeights_Bold()
+        lbl.VerticalContentAlignment = VerticalAlignment.Center
+        lbl.Margin      = Thickness(0, 0, 10, 0)
+        painel.Children.Add(lbl)
+
+        self._cmb_metodo = ComboBox()
+        self._cmb_metodo.Width = 260
+        for opcao in METODOS_CALCULO:
+            item = ComboBoxItem()
+            item.Content = opcao
+            self._cmb_metodo.Items.Add(item)
+        self._cmb_metodo.SelectedIndex = 0
+        painel.Children.Add(self._cmb_metodo)
 
         box.Child = painel
         return box
@@ -352,6 +396,7 @@ class HydrantSystemForm(Window):
             "variante_idx": int,
             "dados": dict,      # variante completa de SISTEMAS_HIDRANTE
             "descricao": unicode,
+            "metodo_calculo": unicode,   # um de METODOS_CALCULO
         }
 
         Personalizado:
@@ -362,10 +407,14 @@ class HydrantSystemForm(Window):
             "custom_dados": dict,   # vocabulário de hidrantes/custom.py
             "dados": dict,          # mesmas chaves de SISTEMAS_HIDRANTE
             "descricao": unicode,
+            "metodo_calculo": unicode,   # um de METODOS_CALCULO
         }
         """
         if getattr(self, "_cancelado", False):
             return None
+
+        metodo_calculo = (self._cmb_metodo.SelectedItem.Content
+                          if self._cmb_metodo.SelectedItem else METODOS_CALCULO[0])
 
         if self._chk_custom.IsChecked:
             d = custom_store.normalizar(self._ler_custom())
@@ -383,6 +432,7 @@ class HydrantSystemForm(Window):
                     "esguicho_dn":    d[u"esguicho_dn"],
                 },
                 "descricao": d[u"descricao"],
+                "metodo_calculo": metodo_calculo,
             }
 
         if self.selected_tipo is None:
@@ -394,6 +444,7 @@ class HydrantSystemForm(Window):
             "variante_idx": self.selected_variante,
             "dados":        dados["variantes"][self.selected_variante],
             "descricao":    dados["descricao"],
+            "metodo_calculo": metodo_calculo,
         }
 
 
@@ -453,17 +504,19 @@ def alert(msg):
 # ---------------------------------------------------------------------------
 # Função pública de uso no script principal
 # ---------------------------------------------------------------------------
-def show_system_selection_form(custom_inicial=None):
+def show_system_selection_form(custom_inicial=None, metodo_inicial=None):
     """
     Abre o formulário de seleção de tipo de sistema.
 
     custom_inicial: dict de valores personalizados já salvos no projeto
                     (hidrantes.custom.load_custom) — pré-carrega os campos
                     e liga o modo personalizado.
+    metodo_inicial: método de cálculo já salvo no projeto (um de
+                    METODOS_CALCULO) — pré-seleciona o combo.
 
     Retorna o dict descrito em HydrantSystemForm.get_result(), ou None se
     cancelado.
     """
-    form = HydrantSystemForm(custom_inicial=custom_inicial)
+    form = HydrantSystemForm(custom_inicial=custom_inicial, metodo_inicial=metodo_inicial)
     form.ShowDialog()
     return form.get_result()
