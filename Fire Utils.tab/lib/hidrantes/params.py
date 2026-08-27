@@ -109,7 +109,15 @@ PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 # reclassificar quantas vezes for preciso sem redigitar.
 PROJECT_INFO_CUSTOM_PARAM = u"FireUtils - Sistema Personalizado"
 
-PROJECT_INFO_PARAMS = [PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM]
+# Guarda a escolha de método de cálculo (Válvula do Hidrante / Ponta do
+# Esguicho Regulável), feita em "Classificar Sistema". Por enquanto é só
+# um registro — o motor de cálculo (hidrantes/calc.py) ainda não usa esse
+# valor; ele sempre aplica o método da marcha com Fator K.
+PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
+
+PROJECT_INFO_PARAMS = [
+    PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM, PROJECT_INFO_METODO_PARAM,
+]
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,11 @@ Fluxo:
   1. Criar e vincular os Shared Parameters no projeto
   2. Abrir formulário de seleção do Tipo de Sistema (Tabela 2 NT 22) ou de
      valores personalizados (fora da tabela)
-  3. Salvar o tipo escolhido no Project Information — inclusive os valores
+  3. Selecionar o método de cálculo (Válvula do Hidrante / Ponta do
+     Esguicho Regulável) — por enquanto só registrado; o motor de cálculo
+     ('Dimensionar Hidrantes') ainda usa sempre o método da marcha com
+     Fator K, independente dessa escolha
+  4. Salvar tudo no Project Information — inclusive os valores
      personalizados (JSON), que ficam guardados no projeto para permitir
      reclassificar quantas vezes for preciso sem redigitar
 """
@@ -19,7 +23,9 @@ clr.AddReference("RevitAPIUI")
 from Autodesk.Revit.DB import Transaction
 from pyrevit import forms, script
 
-from hidrantes.params import create_hydrant_params, PROJECT_INFO_PARAM
+from hidrantes.params import (
+    create_hydrant_params, PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
+)
 from hidrantes.forms import show_system_selection_form
 from hidrantes.db import SISTEMAS_HIDRANTE
 from hidrantes import custom as custom_store
@@ -91,10 +97,39 @@ else:
 output.print_md(u"✔ Selecionado: **{}**".format(valor_param))
 
 # ===========================================================================
-# ETAPA 3 — Salvar no Project Information
+# ETAPA 3 — Selecionar método de cálculo
 # ===========================================================================
 output.print_md("---")
-output.print_md("### Etapa 3 — Project Information")
+output.print_md("### Etapa 3 — Método de Cálculo")
+
+METODOS_CALCULO = [u"Válvula do Hidrante", u"Ponta do Esguicho Regulável"]
+
+metodo_param_atual = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
+metodo_salvo = metodo_param_atual.AsString() if metodo_param_atual else None
+if metodo_salvo:
+    output.print_md(u"ℹ Método salvo atualmente neste projeto: **{}**".format(metodo_salvo))
+
+metodo_calculo = forms.SelectFromList.show(
+    METODOS_CALCULO,
+    title=u"Fire Utils — Método de Cálculo",
+    prompt=u"Selecione o método de cálculo do sistema de hidrantes:",
+    multiselect=False
+)
+if not metodo_calculo:
+    output.print_md(u"⚠ Seleção cancelada pelo usuário.")
+    script.exit()
+
+output.print_md(u"✔ Método selecionado: **{}**".format(metodo_calculo))
+output.print_md(
+    u"\nℹ _Por enquanto este valor é apenas registrado — o motor de cálculo "
+    u"usado em **Dimensionar Hidrantes** ainda aplica sempre o método da "
+    u"marcha com Fator K, independente da escolha acima._")
+
+# ===========================================================================
+# ETAPA 4 — Salvar no Project Information
+# ===========================================================================
+output.print_md("---")
+output.print_md("### Etapa 4 — Project Information")
 
 pi = doc.ProjectInformation
 
@@ -109,6 +144,16 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
             output.print_md(
                 u"⚠ Parâmetro '{}' não encontrado. "
                 u"Reabra o projeto e execute novamente.".format(PROJECT_INFO_PARAM)
+            )
+
+        param_metodo = pi.LookupParameter(PROJECT_INFO_METODO_PARAM)
+        if param_metodo and not param_metodo.IsReadOnly:
+            param_metodo.Set(metodo_calculo)
+            output.print_md(u"✔ Método de cálculo salvo em Project Information.")
+        else:
+            output.print_md(
+                u"⚠ Parâmetro '{}' não encontrado. "
+                u"Reabra o projeto e execute novamente.".format(PROJECT_INFO_METODO_PARAM)
             )
 
         # Valores personalizados ficam gravados no projeto (JSON) para poder
@@ -136,6 +181,7 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
 output.print_md("---")
 output.print_md(u"### ✔ Classificação concluída")
 output.print_md(u"**Sistema:** {}".format(valor_param))
+output.print_md(u"**Método de cálculo:** {}".format(metodo_calculo))
 output.print_md(u"**Descrição:** {}".format(descricao))
 output.print_md(u"**Vazão mín.:** {} L/min".format(dados["vazao_min"]))
 output.print_md(u"**Pressão mín.:** {} mca".format(dados["pressao_min"]))
