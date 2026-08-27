@@ -345,36 +345,45 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
         float(Pmin), j["t3"]["J"], _fmt_dh(dH["t3"]), res["P_PA1"]))
     output.print_md(u"")
 
-    # 7.2 — HD02 ao Ponto A, com Fator K
-    output.print_md(u"### 7.2 Trecho HD02 ao Ponto A — ajuste pelo Fator K")
+    # 7.2 — HD02 ao Ponto A
+    output.print_md(u"### 7.2 Trecho HD02 ao Ponto A")
     _tabelas_trecho(j["t4"])
-    output.print_md(u"Pressão necessária no Ponto A pelo ramal do HD02 (com a vazão "
-                    u"final Q_hd02 = {:.2f} L/min):".format(res["Q_hd02"]))
+    _tabela_hazen(j["t4"], v_max_tubo)
+    output.print_md(u"**Pressão necessária no Ponto A pelo ramal do HD02** (com a vazão "
+                    u"normativa Q = {:g} L/min, mesma vazão usada no ramal do HD01):".format(
+                        Qs_lmin))
     output.print_md(u"P_PA = P_hd02 + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
         float(Pmin), j["t4"]["J"], _fmt_dh(dH["t4"]), res["P_PA2"]))
     output.print_md(u"")
+
+    # 7.3 — Ponto A e vazões finais pelo Fator K (sem ciclo)
+    output.print_md(u"### 7.3 Pressão no Ponto A e Vazões Finais (Fator K)")
     output.print_md(u"**Pressão adotada no Ponto A = maior pressão calculada entre os "
                     u"dois trechos:** P_PA = max({:.4f}; {:.4f}) = **{:.4f} mca** "
                     u"(ramal governante: **{}**)".format(
                         res["P_PA1"], res["P_PA2"], res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
-    output.print_md(u"Com o Ponto A nessa pressão, o hidrante mais favorável recebe "
-                    u"pressão acima da mínima e a vazão é ajustada por Q = K·√P. "
-                    u"Como a perda J depende da vazão, o cálculo é repetido até a "
-                    u"vazão estabilizar:")
+    output.print_md(u"Com o Ponto A nessa pressão, a pressão real em cada hidrante é "
+                    u"P_hd = P_PA − J ∓ ∆H (o ramal governante retorna, por construção, "
+                    u"exatamente a Pmin):")
     output.print_md(u"")
-    output.print_md(u"| Ciclo | Q_hd02 (L/min) | J (mca) | P_hd02 (mca) | Q_hd02 = K·√P (L/min) |")
-    output.print_md(u"|---|---|---|---|---|")
-    for h in res["historico"]:
-        output.print_md(u"| {} | {:.2f} | {:.4f} | {:.4f} | {:.2f} |".format(
-            h["ciclo"], h["Q_hd02"], h["J_hd02"], h["P_hd02"], h["Q_hd02_novo"]))
-    if res["convergiu"]:
-        output.print_md(u"{} Convergiu em {} ciclo(s).".format(SIM_OK, res["iteracoes"]))
-    else:
-        output.print_md(u"{} **Não convergiu em {} ciclos — revisar a rede.**".format(
-            SIM_X, res["iteracoes"]))
+    output.print_md(u"P_hd01 = {:.4f} {} {:.4f} {} = **{:.4f} mca**".format(
+        res["P_PA"], u"−", j["t3"]["J"], _fmt_dh(-dH["t3"]), res["P_hd01"]))
+    output.print_md(u"P_hd02 = {:.4f} {} {:.4f} {} = **{:.4f} mca**".format(
+        res["P_PA"], u"−", j["t4"]["J"], _fmt_dh(-dH["t4"]), res["P_hd02"]))
     output.print_md(u"")
-    _tabela_hazen(j["t4"], v_max_tubo)
+    output.print_md(u"A vazão final de cada hidrante é obtida direto pelo Fator K já "
+                    u"calculado (**sem novo ciclo, sem recalcular K** — J não é "
+                    u"refeito): **Q = K·√P**")
+    output.print_md(u"")
+    output.print_md(u"Q_hd01 = {:.4f} · √({:.4f} / {}) = **{:.2f} L/min**".format(
+        K, res["P_hd01"], MCA_POR_BAR, res["Q_hd01"]))
+    output.print_md(u"Q_hd02 = {:.4f} · √({:.4f} / {}) = **{:.2f} L/min**".format(
+        K, res["P_hd02"], MCA_POR_BAR, res["Q_hd02"]))
+    output.print_md(u"")
+    output.print_md(u"**Qt = Q_hd01 + Q_hd02 = {:.2f} + {:.2f} = {:.2f} L/min**".format(
+        res["Q_hd01"], res["Q_hd02"], res["Qt"]))
+    output.print_md(u"")
     output.print_md(u"**Pressões e vazões resultantes nos hidrantes:**")
     output.print_md(u"| Hidrante | P (mca) | Q (L/min) | Verificação (Q {} {:g} L/min) |".format(
         SIM_GE, Qs_lmin))
@@ -386,8 +395,8 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
         output.print_md(u"| {} | {:.4f} | {:.2f} | {} |".format(lbl, p, q, qv))
     output.print_md(u"")
 
-    # 7.3 — Ponto A à descarga da bomba
-    output.print_md(u"### 7.3 Trecho do Ponto A à Descarga da Bomba")
+    # 7.4 — Ponto A à descarga da bomba
+    output.print_md(u"### 7.4 Trecho do Ponto A à Descarga da Bomba")
     output.print_md(u"Nesse trecho a vazão a ser considerada é a soma das vazões dos dois "
                     u"hidrantes em funcionamento, e a pressão inicial é a maior pressão "
                     u"calculada entre os dois trechos anteriores:")
@@ -402,7 +411,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # 7.4 — sucção
-    output.print_md(u"### 7.4 Trecho de Sucção (RTI à Bomba)")
+    output.print_md(u"### 7.5 Trecho de Sucção (RTI à Bomba)")
     output.print_md(u"A pressão a ser utilizada agora é a encontrada no trecho anterior "
                     u"(Ponto A à descarga da bomba). Aqui utiliza-se para o cálculo de "
                     u"Jun também a vazão total Qt = {:.2f} L/min.".format(res["Qt"]))
