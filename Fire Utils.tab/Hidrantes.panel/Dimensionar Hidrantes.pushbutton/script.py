@@ -372,9 +372,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"P_hd02 = {:.4f} {} {:.4f} {} = **{:.4f} mca**".format(
         res["P_PA"], u"−", j["t4"]["J"], _fmt_dh(-dH["t4"]), res["P_hd02"]))
     output.print_md(u"")
-    output.print_md(u"A vazão final de cada hidrante é obtida direto pelo Fator K já "
-                    u"calculado (**sem novo ciclo, sem recalcular K** — J não é "
-                    u"refeito): **Q = K·√P**")
+    output.print_md(u"**Q = K·√P**")
     output.print_md(u"")
     output.print_md(u"Q_hd01 = {:.4f} · √({:.4f} / {}) = **{:.2f} L/min**".format(
         K, res["P_hd01"], MCA_POR_BAR, res["Q_hd01"]))
