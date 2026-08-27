@@ -25,7 +25,9 @@ de Hidrantes"):
      Ltotal(D) = L(D) + Leq(D).
   6. Perda de carga por Hazen-Williams, por trecho e por diâmetro:
        Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87   [m/m]
-       (Q em L/min, D = diâmetro interno em mm)
+       (Q em L/min, D = diâmetro NOMINAL (DN) em mm — não o diâmetro
+       interno real do tubo; ex.: DN 65 usa D=65 mm mesmo que o
+       diâmetro interno medido seja 68,8 mm)
        J   = Ltotal · Jun                            [mca]
   7. Cotas altimétricas: ΔH = Hi − Hf (ponto inicial e final do trecho,
      na direção da marcha de cálculo).
@@ -101,7 +103,8 @@ def calc_jun(q_lmin, c, d_mm):
     """
     Perda de carga unitária por Hazen-Williams [m/m]:
         Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87
-    Q em L/min; D = diâmetro interno em mm; C adimensional.
+    Q em L/min; D = diâmetro NOMINAL (DN) em mm (não o diâmetro interno
+    real); C adimensional.
     """
     if q_lmin <= 0 or d_mm <= 0:
         return 0.0
@@ -282,9 +285,11 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
 
 def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_nome_fn):
     """
-    Extrai os dados de um trecho AGRUPADOS POR DIÂMETRO INTERNO, como exige o
-    passo a passo: um mesmo trecho pode ter variações de diâmetro, e cada
-    diâmetro precisa de somatória própria (Ltotal(D) = L(D) + Leq(D)).
+    Extrai os dados de um trecho AGRUPADOS POR DIÂMETRO NOMINAL (DN), como
+    exige o passo a passo: um mesmo trecho pode ter variações de diâmetro, e
+    cada diâmetro precisa de somatória própria (Ltotal(D) = L(D) + Leq(D)).
+    "d_mm" nos segmentos abaixo é sempre o DN (get_diametro_fn deve
+    retornar o diâmetro nominal do elemento, não o interno real).
 
     Recebe as funções helper como parâmetro para manter este módulo sem
     imports Revit. Retorna:

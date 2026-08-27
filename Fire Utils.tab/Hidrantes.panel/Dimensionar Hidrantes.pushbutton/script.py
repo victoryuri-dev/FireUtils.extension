@@ -74,10 +74,19 @@ def get_comprimento(pipe):
     except: return 0.0
 
 def get_diametro(pipe):
+    """
+    Diâmetro NOMINAL (DN) do elemento — não o diâmetro interno real medido
+    pelo schedule/material. Ex.: um tubo DN 65 pode ter diâmetro interno
+    de 68,8 mm; o cálculo (Jun, J, V) usa o nominal, como no dimensionamento
+    de referência. RBS_PIPE_DIAMETER_PARAM é o parâmetro "Diâmetro" do tubo
+    (o tamanho nominal da lista de segmentos/tipos de tubo do Revit).
+    """
     try:
-        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
-        if p and p.AsDouble() > 0: return to_m(p.AsDouble())
         p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
+        if p and p.AsDouble() > 0: return to_m(p.AsDouble())
+        # Fallback: elemento sem "Diâmetro" nominal (ex.: acessório atípico)
+        # usa o diâmetro interno, melhor que nada.
+        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
         return to_m(p.AsDouble()) if p else 0.065
     except: return 0.065
 
@@ -131,7 +140,7 @@ def _tabelas_trecho(jt):
     equivalentes: Ltotal = L + Leq, por diâmetro).
     """
     output.print_md(u"**Quantitativo de tubulação por diâmetro**")
-    output.print_md(u"| D interno (mm) | Nº tubos | L (m) | Leq (m) | **Ltotal = L + Leq (m)** |")
+    output.print_md(u"| DN nominal (mm) | Nº tubos | L (m) | Leq (m) | **Ltotal = L + Leq (m)** |")
     output.print_md(u"|---|---|---|---|---|")
     for s in jt["segmentos"]:
         output.print_md(u"| {:.1f} | {} | {:.4f} | {:.4f} | **{:.4f}** |".format(
@@ -154,7 +163,7 @@ def _tabelas_trecho(jt):
 def _tabela_hazen(jt, v_limite):
     """Tabela de Jun/J/V por diâmetro de um trecho."""
     output.print_md(u"**Perda de carga (Hazen-Williams) — Q = {:.2f} L/min**".format(jt["Q_lmin"]))
-    output.print_md(u"| D (mm) | Ltotal (m) | Jun (m/m) | J = Ltotal·Jun (mca) | V = 21,22·Q/D² (m/s) | Verificação (V {} {:.1f}) |".format(
+    output.print_md(u"| DN (mm) | Ltotal (m) | Jun (m/m) | J = Ltotal·Jun (mca) | V = 21,22·Q/D² (m/s) | Verificação (V {} {:.1f}) |".format(
         SIM_LE, v_limite))
     output.print_md(u"|---|---|---|---|---|---|")
     for s in jt["segmentos"]:
@@ -315,7 +324,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
                     u"do Ponto A aos hidrantes só Q)")
     output.print_md(u"  - **C**: coeficiente de rugosidade, adimensional ({} para "
                     u"galvanizado)".format(C_HW))
-    output.print_md(u"  - **D**: diâmetro interno da tubulação, em mm")
+    output.print_md(u"  - **D**: diâmetro nominal (DN) da tubulação, em mm")
     output.print_md(u"- Perda de carga do trecho: **J = Ltotal · Jun** [mca], somada por "
                     u"diâmetro")
     output.print_md(u"- Velocidade: **V = 21,22 · Q / D²** [m/s]")
@@ -410,7 +419,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"**V = 21,22 · Q / D²** — limites máximos recomendados: {:.1f} m/s "
                     u"(sucção {}), {:.1f} m/s (trecho de descarga) — {} / {}.".format(
                         v_max_succao, succao, v_max_tubo, v_max_suc_ref, v_max_tubo_ref))
-    output.print_md(u"| Trecho | D (mm) | Q (L/min) | V (m/s) | Limite (m/s) | Verificação |")
+    output.print_md(u"| Trecho | DN (mm) | Q (L/min) | V (m/s) | Limite (m/s) | Verificação |")
     output.print_md(u"|---|---|---|---|---|---|")
     _rotulos = {"t1": u"Sucção", "t2": u"Bomba ao Ponto A",
                 "t3": u"Ponto A ao HD01", "t4": u"Ponto A ao HD02"}
