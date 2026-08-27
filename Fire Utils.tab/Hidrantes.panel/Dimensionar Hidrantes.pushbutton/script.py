@@ -131,9 +131,71 @@ def _fmt_dh(dh):
     """ΔH com sinal explícito para as equações da marcha (J ± ΔH)."""
     return (u"+ {:.4f}" if dh >= 0 else u"− {:.4f}").format(abs(dh))
 
-def _md_cell(texto):
-    """Escapa '|' para usar texto livre dentro de célula de tabela markdown."""
-    return (texto or u"").replace(u"|", u"\\|")
+# IronPython 2.7 (engine do pyRevit) tem 'unicode'; CPython 3 não.
+try:
+    _txt = unicode
+except NameError:
+    _txt = str
+
+
+def _esc(valor):
+    """Escapa o texto de uma célula para HTML."""
+    return (_txt(valor).replace(u"&", u"&amp;")
+                       .replace(u"<", u"&lt;")
+                       .replace(u">", u"&gt;"))
+
+
+def _cel(valor):
+    """Prepara uma célula: escapa HTML e converte **negrito** do markdown."""
+    partes = _esc(valor).split(u"**")
+    if len(partes) % 2 == 0:          # marcação desbalanceada — deixa literal
+        return _esc(valor)
+    return u"".join(p if i % 2 == 0 else u"<b>" + p + u"</b>"
+                    for i, p in enumerate(partes))
+
+
+def _tabela(colunas, linhas, alinhas=None, titulo=None):
+    """
+    Emite uma tabela como um único bloco HTML no output do pyRevit.
+
+    Tabelas em markdown saíam desformatadas: cada print_md() vira um bloco
+    isolado (as colunas não compartilham largura) e o tema do output window
+    pinta um fundo escuro nelas. Aqui a tabela vai inteira de uma vez, com
+    fundo transparente e herdando a cor do texto do tema — só linhas de
+    grade discretas separando as células.
+
+    colunas: lista de cabeçalhos.
+    linhas:  lista de listas (uma por linha), já formatadas como texto.
+    alinhas: alinhamento por coluna ("left"/"right"/"center"); por padrão a
+             primeira coluna fica à esquerda e as demais à direita (números).
+    """
+    if alinhas is None:
+        alinhas = [u"left"] + [u"right"] * (len(colunas) - 1)
+
+    borda_h = u"border-bottom:1px solid rgba(128,128,128,0.55);"
+    borda_l = u"border-bottom:1px solid rgba(128,128,128,0.2);"
+    pad     = u"padding:5px 14px 5px 0;"
+
+    html = [u"<table style='border-collapse:collapse;background:transparent;",
+            u"color:inherit;margin:6px 0 12px 0;font-size:inherit;'>"]
+    if titulo:
+        html.append(u"<caption style='caption-side:top;text-align:left;"
+                    u"padding:0 0 4px 0;font-weight:bold;'>{}</caption>".format(
+                        _cel(titulo)))
+    html.append(u"<tr>")
+    for col, ali in zip(colunas, alinhas):
+        html.append(u"<th style='{}{}text-align:{};font-weight:bold;'>{}</th>".format(
+            pad, borda_h, ali, _cel(col)))
+    html.append(u"</tr>")
+    for linha in linhas:
+        html.append(u"<tr>")
+        for val, ali in zip(linha, alinhas):
+            html.append(u"<td style='{}{}text-align:{};'>{}</td>".format(
+                pad, borda_l, ali, _cel(val)))
+        html.append(u"</tr>")
+    html.append(u"</table>")
+    output.print_html(u"".join(html))
+
 
 def _tabelas_trecho(jt):
     """
@@ -141,38 +203,50 @@ def _tabelas_trecho(jt):
     antes do cálculo de cada trecho (levantamento dos comprimentos
     equivalentes: Ltotal = L + Leq, por diâmetro).
     """
-    output.print_md(u"**Quantitativo de tubulação por diâmetro**")
-    output.print_md(u"| DN nominal (mm) | Nº tubos | L (m) | Leq (m) | **Ltotal = L + Leq (m)** |")
-    output.print_md(u"|---|---|---|---|---|")
-    for s in jt["segmentos"]:
-        output.print_md(u"| {:.1f} | {} | {:.4f} | {:.4f} | **{:.4f}** |".format(
-            s["d_mm"], s["n_tubos"], s["L"], s["Leq"], s["Ltotal"]))
-    output.print_md(u"")
+    _tabela(
+        [u"DN nominal (mm)", u"Nº tubos", u"L (m)", u"Leq (m)",
+         u"Ltotal = L + Leq (m)"],
+        [[u"{:.1f}".format(s["d_mm"]), u"{}".format(s["n_tubos"]),
+          u"{:.4f}".format(s["L"]), u"{:.4f}".format(s["Leq"]),
+          u"**{:.4f}**".format(s["Ltotal"])]
+         for s in jt["segmentos"]],
+        titulo=u"Quantitativo de tubulação por diâmetro")
 
-    tem_aces = any(s["acessorios"] for s in jt["segmentos"])
-    output.print_md(u"**Conexões e acessórios por diâmetro (comprimentos equivalentes)**")
-    if tem_aces:
-        output.print_md(u"| Conexão / acessório | DN (mm) | Qtd | Leq unitário (m) | Leq total (m) |")
-        output.print_md(u"|---|---|---|---|---|")
-        for s in jt["segmentos"]:
-            for a in s["acessorios"]:
-                output.print_md(u"| {} | {:.1f} | {} | {:.4f} | {:.4f} |".format(
-                    a["nome"], s["d_mm"], a["qtd"], a["leq_unit"], a["leq_tot"]))
+    linhas_aces = [
+        [a["nome"], u"{:.1f}".format(s["d_mm"]), u"{}".format(a["qtd"]),
+         u"{:.4f}".format(a["leq_unit"]), u"{:.4f}".format(a["leq_tot"])]
+        for s in jt["segmentos"] for a in s["acessorios"]
+    ]
+    if linhas_aces:
+        _tabela([u"Conexão / acessório", u"DN (mm)", u"Qtd",
+                 u"Leq unitário (m)", u"Leq total (m)"],
+                linhas_aces,
+                titulo=u"Conexões e acessórios por diâmetro "
+                       u"(comprimentos equivalentes)")
     else:
-        output.print_md(u"*Nenhuma conexão com comprimento equivalente cadastrado neste trecho.*")
-    output.print_md(u"")
+        output.print_md(u"**Conexões e acessórios por diâmetro "
+                        u"(comprimentos equivalentes)**")
+        output.print_md(u"*Nenhuma conexão com comprimento equivalente "
+                        u"cadastrado neste trecho.*")
+        output.print_md(u"")
+
 
 def _tabela_hazen(jt, v_limite):
     """Tabela de Jun/J/V por diâmetro de um trecho."""
-    output.print_md(u"**Perda de carga (Hazen-Williams) — Q = {:.2f} L/min**".format(jt["Q_lmin"]))
-    output.print_md(u"| DN (mm) | Ltotal (m) | Jun (m/m) | J = Ltotal·Jun (mca) | V = 21,22·Q/D² (m/s) | Verificação (V {} {:.1f}) |".format(
-        SIM_LE, v_limite))
-    output.print_md(u"|---|---|---|---|---|---|")
+    linhas = []
     for s in jt["segmentos"]:
         vv = (u"{} {:.3f}".format(SIM_OK, s["V"]) if s["V"] <= v_limite
               else u"{} {:.3f} > {:.1f}".format(SIM_X, s["V"], v_limite))
-        output.print_md(u"| {:.1f} | {:.4f} | {:.6f} | {:.4f} | {:.3f} | {} |".format(
-            s["d_mm"], s["Ltotal"], s["Jun"], s["J"], s["V"], vv))
+        linhas.append([u"{:.1f}".format(s["d_mm"]), u"{:.4f}".format(s["Ltotal"]),
+                       u"{:.6f}".format(s["Jun"]), u"{:.4f}".format(s["J"]),
+                       u"{:.3f}".format(s["V"]), vv])
+    _tabela([u"DN (mm)", u"Ltotal (m)", u"Jun (m/m)", u"J = Ltotal·Jun (mca)",
+             u"V = 21,22·Q/D² (m/s)",
+             u"Verificação (V {} {:.1f})".format(SIM_LE, v_limite)],
+            linhas,
+            alinhas=[u"right", u"right", u"right", u"right", u"right", u"left"],
+            titulo=u"Perda de carga (Hazen-Williams) — Q = {:.2f} L/min".format(
+                jt["Q_lmin"]))
     output.print_md(u"**J do trecho (soma dos diâmetros) = {:.4f} mca**".format(jt["J"]))
     output.print_md(u"")
 
@@ -233,28 +307,33 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
 
     # ── Vazão e pressão de projeto ────────────────────────────────────────
     sec(u"Definição da Vazão e da Pressão de Projeto")
-    output.print_md(u"| Parâmetro | Valor | Referência |")
-    output.print_md(u"|---|---|---|")
-    output.print_md(u"| Norma aplicada | **{}** | — |".format(norma))
-    output.print_md(u"| Classificação do sistema | **{}** | {} |".format(
-        _md_cell(valor_sistema), tipos_ref))
-    output.print_md(u"| Método de cálculo | **{}** | — |".format(metodo))
-    output.print_md(u"| Ponto de aplicação de Q e Pmin | **{}** | método de cálculo |".format(
-        ponto_ref))
-    output.print_md(u"| Vazão por hidrante (Q) | **{:g} L/min** | {} |".format(Qs_lmin, tipos_ref))
-    output.print_md(u"| Hidrantes simultâneos (n) | **{}** | {} |".format(hidr_simult, hidr_simult_ref))
-    output.print_md(u"| Pressão residual mínima (Pmin) | **{:g} mca = {:.4f} bar** | {} |".format(
-        Pmin, float(Pmin) / MCA_POR_BAR, tipos_ref))
-    output.print_md(u"| Coef. Hazen-Williams (C) | **{}** | {} — aço/ferro galvanizado |".format(
-        C_HW, hazen_c_ref))
-    output.print_md(u"| Esguicho — DN | {:g} mm | {} |".format(dados_sistema["esguicho_dn"], tipos_ref))
-    output.print_md(u"| Mangueira — DN / comprimento | {:g} mm / {:.1f} m | {} |".format(
-        dados_sistema["mang_dn"], dados_sistema["mang_comp"], tipos_ref))
-    output.print_md(u"| Velocidade máx. — recalque/descarga | {:.1f} m/s | {} |".format(
-        v_max_tubo, v_max_tubo_ref))
-    output.print_md(u"| Velocidade máx. — sucção ({}) | {:.1f} m/s | {} |".format(
-        succao, v_max_succao, v_max_suc_ref))
-    output.print_md(u"")
+    _tabela(
+        [u"Parâmetro", u"Valor", u"Referência"],
+        [
+            [u"Norma aplicada", u"**{}**".format(norma), u"—"],
+            [u"Classificação do sistema", u"**{}**".format(valor_sistema), tipos_ref],
+            [u"Método de cálculo", u"**{}**".format(metodo), u"—"],
+            [u"Ponto de aplicação de Q e Pmin", u"**{}**".format(ponto_ref),
+             u"método de cálculo"],
+            [u"Vazão por hidrante (Q)", u"**{:g} L/min**".format(Qs_lmin), tipos_ref],
+            [u"Hidrantes simultâneos (n)", u"**{}**".format(hidr_simult),
+             hidr_simult_ref],
+            [u"Pressão residual mínima (Pmin)",
+             u"**{:g} mca = {:.4f} bar**".format(Pmin, float(Pmin) / MCA_POR_BAR),
+             tipos_ref],
+            [u"Coef. Hazen-Williams (C)", u"**{}**".format(C_HW),
+             u"{} — aço/ferro galvanizado".format(hazen_c_ref)],
+            [u"Esguicho — DN",
+             u"{:g} mm".format(dados_sistema["esguicho_dn"]), tipos_ref],
+            [u"Mangueira — DN / comprimento",
+             u"{:g} mm / {:.1f} m".format(dados_sistema["mang_dn"],
+                                          dados_sistema["mang_comp"]), tipos_ref],
+            [u"Velocidade máx. — recalque/descarga",
+             u"{:.1f} m/s".format(v_max_tubo), v_max_tubo_ref],
+            [u"Velocidade máx. — sucção ({})".format(succao),
+             u"{:.1f} m/s".format(v_max_succao), v_max_suc_ref],
+        ],
+        alinhas=[u"left", u"left", u"left"])
 
     # ── 2. Hidrantes mais desfavoráveis ───────────────────────────────────
     sec(u"Identificação dos Hidrantes Mais Desfavoráveis em "
@@ -273,13 +352,13 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
                     u"há a separação das vazões que vão rumo aos hidrantes desfavoráveis "
                     u"considerados.")
     output.print_md(u"")
-    output.print_md(u"| Trecho | Percurso | Vazão de cálculo |")
-    output.print_md(u"|---|---|---|")
-    output.print_md(u"| Sucção | RTI → Bomba | Qt |")
-    output.print_md(u"| Recalque — Bomba ao Ponto A | Bomba → Ponto A | Qt |")
-    output.print_md(u"| Recalque — Ponto A ao HD01 | Ponto A → HD01 | Q_hd01 |")
-    output.print_md(u"| Recalque — Ponto A ao HD02 | Ponto A → HD02 | Q_hd02 |")
-    output.print_md(u"")
+    _tabela(
+        [u"Trecho", u"Percurso", u"Vazão de cálculo"],
+        [[u"Sucção", u"RTI → Bomba", u"Qt"],
+         [u"Recalque — Bomba ao Ponto A", u"Bomba → Ponto A", u"Qt"],
+         [u"Recalque — Ponto A ao HD01", u"Ponto A → HD01", u"Q_hd01"],
+         [u"Recalque — Ponto A ao HD02", u"Ponto A → HD02", u"Q_hd02"]],
+        alinhas=[u"left", u"left", u"left"])
 
     # ── Esguicho e mangueira / válvula (só no método do esguicho) ─────────
     if esguicho:
@@ -312,11 +391,10 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
         output.print_md(u"Para o hidrante mais desfavorável, com a vazão normativa "
                         u"Q = {:g} L/min:".format(Qs_lmin))
         output.print_md(u"")
-        output.print_md(u"| Grandeza | Valor |")
-        output.print_md(u"|---|---|")
-        output.print_md(u"| Perda no esguicho (= Pmin) | **{:g} mca** |".format(Pmin))
-        output.print_md(u"| Jm — perda na mangueira | **{:.4f} mca** |".format(_ref["Jm"]))
-        output.print_md(u"| V — velocidade na mangueira | **{:.4f} m/s** |".format(_ref["V"]))
+        _tabela([u"Grandeza", u"Valor"],
+                [[u"Perda no esguicho (= Pmin)", u"**{:g} mca**".format(Pmin)],
+                 [u"Jm — perda na mangueira", u"**{:.4f} mca**".format(_ref["Jm"])],
+                 [u"V — velocidade na mangueira", u"**{:.4f} m/s**".format(_ref["V"])]])
         output.print_md(u"")
 
         sec(u"Perda de Carga na Válvula do Hidrante")
@@ -372,28 +450,24 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
 
     # ── 5. Cotas altimétricas ─────────────────────────────────────────────
     sec(u"Cotas Altimétricas")
-    output.print_md(u"| Ponto | Cota H (m) |")
-    output.print_md(u"|---|---|")
-    output.print_md(u"| RTI (reservatório) | **{:.4f}** |".format(cotas["z_rti"]))
-    output.print_md(u"| Sucção (entrada da bomba) | **{:.4f}** |".format(cotas["z_succao"]))
-    output.print_md(u"| Descarga da bomba | **{:.4f}** |".format(cotas["z_recalque"]))
-    output.print_md(u"| Ponto A (distribuição) | **{:.4f}** |".format(cotas["z_ponto_a"]))
-    output.print_md(u"| HD01 (mais desfavorável) | **{:.4f}** |".format(cotas["z_hd01"]))
-    output.print_md(u"| HD02 (2º mais desfavorável) | **{:.4f}** |".format(cotas["z_hd02"]))
-    output.print_md(u"")
+    _tabela([u"Ponto", u"Cota H (m)"],
+            [[u"RTI (reservatório)", u"**{:.4f}**".format(cotas["z_rti"])],
+             [u"Sucção (entrada da bomba)", u"**{:.4f}**".format(cotas["z_succao"])],
+             [u"Descarga da bomba", u"**{:.4f}**".format(cotas["z_recalque"])],
+             [u"Ponto A (distribuição)", u"**{:.4f}**".format(cotas["z_ponto_a"])],
+             [u"HD01 (mais desfavorável)", u"**{:.4f}**".format(cotas["z_hd01"])],
+             [u"HD02 (2º mais desfavorável)", u"**{:.4f}**".format(cotas["z_hd02"])]])
     output.print_md(u"**∆H = Hi − Hf** (posição dos pontos inicial e final de cada trecho, "
                     u"na direção da marcha de cálculo):")
-    output.print_md(u"| Trecho | Hi (m) | Hf (m) | ∆H (m) |")
-    output.print_md(u"|---|---|---|---|")
-    output.print_md(u"| HD01 ao Ponto A | {:.4f} | {:.4f} | **{:.4f}** |".format(
-        cotas["z_hd01"], cotas["z_ponto_a"], dH["t3"]))
-    output.print_md(u"| HD02 ao Ponto A | {:.4f} | {:.4f} | **{:.4f}** |".format(
-        cotas["z_hd02"], cotas["z_ponto_a"], dH["t4"]))
-    output.print_md(u"| Ponto A à descarga da bomba | {:.4f} | {:.4f} | **{:.4f}** |".format(
-        cotas["z_ponto_a"], cotas["z_recalque"], dH["t2"]))
-    output.print_md(u"| Sucção (Bomba à RTI) | {:.4f} | {:.4f} | **{:.4f}** |".format(
-        cotas["z_succao"], cotas["z_rti"], dH["t1"]))
-    output.print_md(u"")
+    _tabela([u"Trecho", u"Hi (m)", u"Hf (m)", u"∆H (m)"],
+            [[u"HD01 ao Ponto A", u"{:.4f}".format(cotas["z_hd01"]),
+              u"{:.4f}".format(cotas["z_ponto_a"]), u"**{:.4f}**".format(dH["t3"])],
+             [u"HD02 ao Ponto A", u"{:.4f}".format(cotas["z_hd02"]),
+              u"{:.4f}".format(cotas["z_ponto_a"]), u"**{:.4f}**".format(dH["t4"])],
+             [u"Ponto A à descarga da bomba", u"{:.4f}".format(cotas["z_ponto_a"]),
+              u"{:.4f}".format(cotas["z_recalque"]), u"**{:.4f}**".format(dH["t2"])],
+             [u"Sucção (Bomba à RTI)", u"{:.4f}".format(cotas["z_succao"]),
+              u"{:.4f}".format(cotas["z_rti"]), u"**{:.4f}**".format(dH["t1"])]])
     output.print_md(
         u"**Condição de sucção ({}):** determinada pela cota entre a RTI e a "
         u"entrada de sucção da bomba (H_RTI − H_sucção = {:.4f} m) — "
@@ -485,33 +559,32 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
                         u"favoráveis. A pressão no esguicho sai de "
                         u"**P_esg = P_hd − Jm − Jvalv**:")
         output.print_md(u"")
-        output.print_md(u"| Hidrante | Q (L/min) | V mangueira (m/s) | Jm (mca) | "
-                        u"Jvalv (mca) | P_válvula (mca) | **P_esguicho (mca)** |")
-        output.print_md(u"|---|---|---|---|---|---|---|")
-        for lbl, e in [(u"HD01", esg["hd01"]), (u"HD02", esg["hd02"])]:
-            output.print_md(u"| {} | {:.2f} | {:.4f} | {:.4f} | {:.4f} | {:.4f} | "
-                            u"**{:.4f}** |".format(
-                                lbl, e["Q_lmin"], e["V"], e["Jm"], e["Jvalv"],
-                                e["P_valv"], e["P_esg"]))
-        output.print_md(u"")
+        _tabela([u"Hidrante", u"Q (L/min)", u"V mangueira (m/s)", u"Jm (mca)",
+                 u"Jvalv (mca)", u"P_válvula (mca)", u"P_esguicho (mca)"],
+                [[lbl, u"{:.2f}".format(e["Q_lmin"]), u"{:.4f}".format(e["V"]),
+                  u"{:.4f}".format(e["Jm"]), u"{:.4f}".format(e["Jvalv"]),
+                  u"{:.4f}".format(e["P_valv"]), u"**{:.4f}**".format(e["P_esg"])]
+                 for lbl, e in [(u"HD01", esg["hd01"]), (u"HD02", esg["hd02"])]])
 
-    output.print_md(u"**Pressões e vazões resultantes nos hidrantes:**")
     _col_p = u"P esguicho (mca)" if esguicho else u"P válvula (mca)"
-    output.print_md(u"| Hidrante | {} | Q (L/min) | Verificação (P {} {:g} mca e "
-                    u"Q {} {:g} L/min) |".format(_col_p, SIM_GE, Pmin, SIM_GE, Qs_lmin))
-    output.print_md(u"|---|---|---|---|")
     if esguicho:
         _linhas = [(u"HD01", esg["hd01"]["P_esg"], res["Q_hd01"]),
                    (u"HD02", esg["hd02"]["P_esg"], res["Q_hd02"])]
     else:
         _linhas = [(u"HD01", res["P_hd01"], res["Q_hd01"]),
                    (u"HD02", res["P_hd02"], res["Q_hd02"])]
+    _rows = []
     for lbl, p, q in _linhas:
         _ok = (p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01)
         ver = (u"{} atende".format(SIM_OK) if _ok
                else u"{} NÃO atende".format(SIM_X))
-        output.print_md(u"| {} | {:.4f} | {:.2f} | {} |".format(lbl, p, q, ver))
-    output.print_md(u"")
+        _rows.append([lbl, u"{:.4f}".format(p), u"{:.2f}".format(q), ver])
+    _tabela([u"Hidrante", _col_p, u"Q (L/min)",
+             u"Verificação (P {} {:g} mca e Q {} {:g} L/min)".format(
+                 SIM_GE, Pmin, SIM_GE, Qs_lmin)],
+            _rows,
+            alinhas=[u"left", u"right", u"right", u"left"],
+            titulo=u"Pressões e vazões resultantes nos hidrantes")
 
     # Ponto A à descarga da bomba
     output.print_md(u"### {}.4 Trecho do Ponto A à Descarga da Bomba".format(n7))
@@ -546,11 +619,10 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"**V = 21,22 · Q / D²** — limites máximos recomendados: {:.1f} m/s "
                     u"(sucção {}), {:.1f} m/s (trecho de descarga) — {} / {}.".format(
                         v_max_succao, succao, v_max_tubo, v_max_suc_ref, v_max_tubo_ref))
-    output.print_md(u"| Trecho | DN (mm) | Q (L/min) | V (m/s) | Limite (m/s) | Verificação |")
-    output.print_md(u"|---|---|---|---|---|---|")
     _rotulos = {"t1": u"Sucção", "t2": u"Bomba ao Ponto A",
                 "t3": u"Ponto A ao HD01", "t4": u"Ponto A ao HD02"}
     velocidade_ok = True
+    _rows_v = []
     for key in ["t1", "t2", "t3", "t4"]:
         lim = v_max_succao if key == "t1" else v_max_tubo
         for s in j[key]["segmentos"]:
@@ -558,8 +630,13 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
             if not ok:
                 velocidade_ok = False
             vv = u"{} atende".format(SIM_OK) if ok else u"{} NÃO atende".format(SIM_X)
-            output.print_md(u"| {} | {:.1f} | {:.2f} | {:.3f} | {:.1f} | {} |".format(
-                _rotulos[key], s["d_mm"], j[key]["Q_lmin"], s["V"], lim, vv))
+            _rows_v.append([_rotulos[key], u"{:.1f}".format(s["d_mm"]),
+                            u"{:.2f}".format(j[key]["Q_lmin"]),
+                            u"{:.3f}".format(s["V"]), u"{:.1f}".format(lim), vv])
+    _tabela([u"Trecho", u"DN (mm)", u"Q (L/min)", u"V (m/s)", u"Limite (m/s)",
+             u"Verificação"],
+            _rows_v,
+            alinhas=[u"left", u"right", u"right", u"right", u"right", u"left"])
     if not velocidade_ok:
         output.print_md(u"")
         output.print_md(u"> {} **Velocidade acima do limite:** aumentar o diâmetro da "
@@ -571,13 +648,11 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     sec(u"Demanda do Sistema")
     output.print_md(u"Concluídos os cálculos e verificações, o sistema possui a demanda de:")
     output.print_md(u"")
-    output.print_md(u"| Grandeza | Valor |")
-    output.print_md(u"|---|---|")
-    output.print_md(u"| **Q = Qt** | **{:.2f} L/min = {:.4f} m³/h** |".format(
-        res["Qt"], res["Qt"] * 60.0 / 1000.0))
-    output.print_md(u"| **P = P_RTI** | **{:.4f} mca = {:.4f} bar** |".format(
-        res["P_RTI"], res["P_RTI"] / MCA_POR_BAR))
-    output.print_md(u"")
+    _tabela([u"Grandeza", u"Valor"],
+            [[u"**Q = Qt**", u"**{:.2f} L/min = {:.4f} m³/h**".format(
+                res["Qt"], res["Qt"] * 60.0 / 1000.0)],
+             [u"**P = P_RTI**", u"**{:.4f} mca = {:.4f} bar**".format(
+                 res["P_RTI"], res["P_RTI"] / MCA_POR_BAR)]])
 
     # ── 10. Bomba ─────────────────────────────────────────────────────────
     sec(u"Dimensionamento da Bomba de Recalque")
@@ -586,13 +661,15 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"**Fórmula:** P_cv = (1000 × Qt × Ht) / (75 × η), com Qt em m³/s "
                     u"e Ht = P_RTI.")
     output.print_md(u"")
-    output.print_md(u"| Parâmetro | Símbolo | Valor |")
-    output.print_md(u"|---|---|---|")
-    output.print_md(u"| Vazão total de projeto | Qt | **{:.2f} L/min = {:.6f} m³/s = {:.4f} m³/h** |".format(
-        res["Qt"], Qt_m3s, res["Qt"] * 60.0 / 1000.0))
-    output.print_md(u"| Altura manométrica (demanda) | Ht = P_RTI | **{:.4f} mca** |".format(res["P_RTI"]))
-    output.print_md(u"| Eficiência global | η | **{:.0f}% = {:.2f}** |".format(eta, eta_dec))
-    output.print_md(u"")
+    _tabela([u"Parâmetro", u"Símbolo", u"Valor"],
+            [[u"Vazão total de projeto", u"Qt",
+              u"**{:.2f} L/min = {:.6f} m³/s = {:.4f} m³/h**".format(
+                  res["Qt"], Qt_m3s, res["Qt"] * 60.0 / 1000.0)],
+             [u"Altura manométrica (demanda)", u"Ht = P_RTI",
+              u"**{:.4f} mca**".format(res["P_RTI"])],
+             [u"Eficiência global", u"η",
+              u"**{:.0f}% = {:.2f}**".format(eta, eta_dec)]],
+            alinhas=[u"left", u"left", u"left"])
     output.print_md(u"P_cv = (1000 × {:.6f} × {:.4f}) / (75 × {:.2f}) = {:.4f} / {:.4f}".format(
         Qt_m3s, res["P_RTI"], eta_dec,
         1000.0 * Qt_m3s * res["P_RTI"], 75.0 * eta_dec))
