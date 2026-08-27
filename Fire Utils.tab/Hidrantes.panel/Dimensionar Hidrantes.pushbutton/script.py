@@ -29,8 +29,10 @@ except ImportError:
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
     calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
-    MCA_POR_BAR,
+    MCA_POR_BAR, METODO_VALVULA, METODOS_CALCULO,
+    F_DARCY, K_VALVULA, COEF_JM, G,
 )
+from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req
 from hidrantes import custom as custom_store
 
@@ -197,14 +199,28 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
 
     v_max_succao = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
 
-    K  = res["K"]
-    dH = res["dH"]
-    j  = res["j"]
+    K        = res["K"]
+    dH       = res["dH"]
+    j        = res["j"]
+    metodo   = res["metodo"]
+    esguicho = res["esguicho"]
+    esg      = res["esg"]
+
+    # Ponto de aplicação do par normativo (Q, Pmin), conforme o método
+    ponto_ref = u"ponta do esguicho" if esguicho else u"válvula do hidrante"
+
+    # Numeração dinâmica de seções: o método do esguicho acrescenta as
+    # seções de perda na mangueira e na válvula antes do Fator K.
+    _sec = {"n": 0}
+    def sec(titulo):
+        _sec["n"] += 1
+        output.print_md(u"## {}. {}".format(_sec["n"], titulo))
+        return _sec["n"]
 
     # ── Cabeçalho ─────────────────────────────────────────────────────────
     output.print_md(u"# Memorial de Cálculo — Dimensionamento Hidráulico de Hidrantes")
-    output.print_md(u"**Sistema:** {} | **Método:** marcha (passo a passo) com Fator K | "
-                    u"**Norma:** {} | *{}*".format(valor_sistema, norma, timestamp))
+    output.print_md(u"**Sistema:** {} | **Método:** {} | **Norma:** {} | *{}*".format(
+        valor_sistema, metodo, norma, timestamp))
     output.print_md(u"---")
 
     if perfil.get(u"_uf_efetiva") != perfil.get(u"_uf_solicitada"):
@@ -215,13 +231,16 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
                 perfil.get(u"_uf_solicitada"), perfil.get(u"_uf_efetiva"), norma))
         output.print_md(u"")
 
-    # ── 1. Vazão e pressão de projeto ─────────────────────────────────────
-    output.print_md(u"## 1. Definição da Vazão e da Pressão de Projeto")
+    # ── Vazão e pressão de projeto ────────────────────────────────────────
+    sec(u"Definição da Vazão e da Pressão de Projeto")
     output.print_md(u"| Parâmetro | Valor | Referência |")
     output.print_md(u"|---|---|---|")
     output.print_md(u"| Norma aplicada | **{}** | — |".format(norma))
     output.print_md(u"| Classificação do sistema | **{}** | {} |".format(
         _md_cell(valor_sistema), tipos_ref))
+    output.print_md(u"| Método de cálculo | **{}** | — |".format(metodo))
+    output.print_md(u"| Ponto de aplicação de Q e Pmin | **{}** | método de cálculo |".format(
+        ponto_ref))
     output.print_md(u"| Vazão por hidrante (Q) | **{:g} L/min** | {} |".format(Qs_lmin, tipos_ref))
     output.print_md(u"| Hidrantes simultâneos (n) | **{}** | {} |".format(hidr_simult, hidr_simult_ref))
     output.print_md(u"| Pressão residual mínima (Pmin) | **{:g} mca = {:.4f} bar** | {} |".format(
@@ -238,8 +257,8 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 2. Hidrantes mais desfavoráveis ───────────────────────────────────
-    output.print_md(u"## 2. Identificação dos Hidrantes Mais Desfavoráveis em "
-                    u"Funcionamento Simultâneo")
+    sec(u"Identificação dos Hidrantes Mais Desfavoráveis em "
+        u"Funcionamento Simultâneo")
     output.print_md(u"O cenário de cálculo representa a condição mais crítica de operação "
                     u"do sistema: os **{} hidrantes mais desfavoráveis em funcionamento "
                     u"simultâneo**, ou seja, aquela que resulta na maior demanda de vazão "
@@ -248,7 +267,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 3. Identificação dos trechos ──────────────────────────────────────
-    output.print_md(u"## 3. Identificação dos Trechos")
+    sec(u"Identificação dos Trechos")
     output.print_md(u"Para fins de organização e como facilitador de cálculo, a tubulação "
                     u"é dividida em trechos. O **Ponto A** é o ponto de distribuição onde "
                     u"há a separação das vazões que vão rumo aos hidrantes desfavoráveis "
@@ -262,20 +281,87 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"| Recalque — Ponto A ao HD02 | Ponto A → HD02 | Q_hd02 |")
     output.print_md(u"")
 
-    # ── 4. Fator K ────────────────────────────────────────────────────────
-    output.print_md(u"## 4. Cálculo do Fator K")
-    output.print_md(u"Calculado **apenas no hidrante mais desfavorável**, com a vazão e a "
-                    u"pressão normativas:")
+    # ── Esguicho e mangueira / válvula (só no método do esguicho) ─────────
+    if esguicho:
+        _ref     = esg["ref"]
+        _dm_mm   = esg["mang_dn_mm"]
+        _lm      = esg["mang_comp_m"]
+        _dm_m    = float(_dm_mm) / 1000.0
+
+        sec(u"Perda de Carga no Esguicho e na Mangueira")
+        output.print_md(u"A perda de carga no esguicho é igual à **pressão mínima exigida "
+                        u"em projeto (Pmin = {:g} mca)**, aplicada na ponta do esguicho.".format(Pmin))
+        output.print_md(u"")
+        output.print_md(u"A perda de carga na mangueira é dada pela equação de "
+                        u"**Darcy-Weisbach**:")
+        output.print_md(u"")
+        output.print_md(u"**Jm = {:g}·f·Lm / (g·π²·Dm⁵) · Q²**".format(COEF_JM))
+        output.print_md(u"")
+        output.print_md(u"Onde:")
+        output.print_md(u"- **Jm** — Perda de carga na mangueira, em mca")
+        output.print_md(u"- **f** = {:g}".format(F_DARCY))
+        output.print_md(u"- **Lm** — Comprimento da mangueira = {:g} m".format(_lm))
+        output.print_md(u"- **g** = {:g} m/s²".format(G))
+        output.print_md(u"- **Dm** — Diâmetro da mangueira = {:g} mm = {:.4f} m".format(
+            _dm_mm, _dm_m))
+        output.print_md(u"")
+        output.print_md(u"Em seguida calcula-se a velocidade do fluido na mangueira:")
+        output.print_md(u"")
+        output.print_md(u"**V = 21,22 · Q / Dm²**")
+        output.print_md(u"")
+        output.print_md(u"Para o hidrante mais desfavorável, com a vazão normativa "
+                        u"Q = {:g} L/min:".format(Qs_lmin))
+        output.print_md(u"")
+        output.print_md(u"| Grandeza | Valor |")
+        output.print_md(u"|---|---|")
+        output.print_md(u"| Perda no esguicho (= Pmin) | **{:g} mca** |".format(Pmin))
+        output.print_md(u"| Jm — perda na mangueira | **{:.4f} mca** |".format(_ref["Jm"]))
+        output.print_md(u"| V — velocidade na mangueira | **{:.4f} m/s** |".format(_ref["V"]))
+        output.print_md(u"")
+
+        sec(u"Perda de Carga na Válvula do Hidrante")
+        output.print_md(u"Com a velocidade do fluido na mangueira, calcula-se a perda de "
+                        u"carga na válvula angular do hidrante:")
+        output.print_md(u"")
+        output.print_md(u"**Jvalv = K · V² / (2g)**")
+        output.print_md(u"")
+        output.print_md(u"Onde:")
+        output.print_md(u"- **Jvalv** — Perda de carga na válvula, em mca")
+        output.print_md(u"- **K** — Fator K da válvula, adotado como **{:g}** no "
+                        u"dimensionamento".format(K_VALVULA))
+        output.print_md(u"- **V** — Velocidade do fluido na mangueira, em m/s")
+        output.print_md(u"- **g** = {:g} m/s²".format(G))
+        output.print_md(u"")
+        output.print_md(u"Jvalv = {:g} · {:.4f}² / (2 · {:g}) = **{:.4f} mca**".format(
+            K_VALVULA, _ref["V"], G, _ref["Jvalv"]))
+        output.print_md(u"")
+
+    # ── Fator K ───────────────────────────────────────────────────────────
+    sec(u"Cálculo do Fator K")
+    output.print_md(u"Calculado **apenas no hidrante mais desfavorável**, com a vazão "
+                    u"normativa e a pressão na válvula do hidrante:")
     output.print_md(u"")
     output.print_md(u"**K = Q / √P**")
     output.print_md(u"")
     output.print_md(u"Onde:")
     output.print_md(u"- **K** — Coeficiente de escoamento ou de vazão, em L/min/bar^0,5")
     output.print_md(u"- **Q** — Vazão do hidrante, em L/min")
-    output.print_md(u"- **P** — Pressão no hidrante, em bar (1 bar = {} mca)".format(MCA_POR_BAR))
+    output.print_md(u"- **P** — Pressão na válvula do hidrante, em bar "
+                    u"(1 bar = {} mca)".format(MCA_POR_BAR))
     output.print_md(u"")
-    output.print_md(u"K = {:g} / √({:g} / {}) = {:g} / √{:.4f} = **{:.4f} L/min/bar^0,5**".format(
-        Qs_lmin, Pmin, MCA_POR_BAR, Qs_lmin, float(Pmin) / MCA_POR_BAR, K))
+    P_ref = res["P_valv_ref"]
+    if esguicho:
+        output.print_md(u"Como o par normativo está referido à ponta do esguicho, a "
+                        u"pressão na válvula soma as perdas da mangueira e da válvula:")
+        output.print_md(u"")
+        output.print_md(u"P = Pmin + Jm + Jvalv = {:g} + {:.4f} + {:.4f} = "
+                        u"**{:.4f} mca**".format(
+                            Pmin, esg["ref"]["Jm"], esg["ref"]["Jvalv"], P_ref))
+        output.print_md(u"")
+    output.print_md(u"K = {:g} / √({:.4f} / {}) = {:g} / √{:.4f} = "
+                    u"**{:.4f} L/min/bar^0,5**".format(
+                        Qs_lmin, P_ref, MCA_POR_BAR, Qs_lmin,
+                        P_ref / MCA_POR_BAR, K))
     output.print_md(u"")
     output.print_md(u"Esse cálculo se faz necessário para realizar corretamente o "
                     u"equilíbrio hidráulico entre o primeiro e o segundo hidrante: o "
@@ -285,7 +371,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 5. Cotas altimétricas ─────────────────────────────────────────────
-    output.print_md(u"## 5. Cotas Altimétricas")
+    sec(u"Cotas Altimétricas")
     output.print_md(u"| Ponto | Cota H (m) |")
     output.print_md(u"|---|---|")
     output.print_md(u"| RTI (reservatório) | **{:.4f}** |".format(cotas["z_rti"]))
@@ -315,7 +401,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 6. Fórmulas da marcha ─────────────────────────────────────────────
-    output.print_md(u"## 6. Fórmulas Utilizadas")
+    sec(u"Fórmulas Utilizadas")
     output.print_md(u"- Comprimento total por trecho/diâmetro: **Ltotal = L + Leq** "
                     u"(L = comprimento real; Leq = comprimento equivalente das conexões)")
     output.print_md(u"- Perda de carga unitária (Hazen-Williams): "
@@ -328,44 +414,53 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"- Perda de carga do trecho: **J = Ltotal · Jun** [mca], somada por "
                     u"diâmetro")
     output.print_md(u"- Velocidade: **V = 21,22 · Q / D²** [m/s]")
+    if esguicho:
+        output.print_md(u"- Perda na mangueira (Darcy-Weisbach): "
+                        u"**Jm = {:g}·f·Lm/(g·π²·Dm⁵)·Q²** [mca]".format(COEF_JM))
+        output.print_md(u"- Perda na válvula angular: **Jvalv = K·V²/(2g)** [mca], "
+                        u"com K = {:g}".format(K_VALVULA))
+        output.print_md(u"- Esguicho → válvula: **P_valv = Pmin + Jm + Jvalv**")
     output.print_md(u"- Marcha de pressões: **P = P_anterior + J ± ∆H**")
     output.print_md(u"- Ajuste do hidrante favorável: **Q = K·√P** (P em bar)")
     output.print_md(u"")
 
-    # ── 7. Cálculo por trecho (marcha) ────────────────────────────────────
-    output.print_md(u"## 7. Cálculo Trecho a Trecho")
+    # ── Cálculo por trecho (marcha) ───────────────────────────────────────
+    n7 = sec(u"Cálculo Trecho a Trecho")
     output.print_md(u"")
 
-    # 7.1 — HD01 ao Ponto A
-    output.print_md(u"### 7.1 Trecho HD01 ao Ponto A")
+    _P_ref_lbl = u"P_valv" if esguicho else u"P_hd01"
+
+    # HD01 ao Ponto A
+    output.print_md(u"### {}.1 Trecho HD01 ao Ponto A".format(n7))
     _tabelas_trecho(j["t3"])
     _tabela_hazen(j["t3"], v_max_tubo)
     output.print_md(u"**Pressão necessária no Ponto A pelo ramal do HD01:**")
-    output.print_md(u"P_PA = P_hd01 + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        float(Pmin), j["t3"]["J"], _fmt_dh(dH["t3"]), res["P_PA1"]))
+    output.print_md(u"P_PA = {} + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+        _P_ref_lbl, P_ref, j["t3"]["J"], _fmt_dh(dH["t3"]), res["P_PA1"]))
     output.print_md(u"")
 
-    # 7.2 — HD02 ao Ponto A
-    output.print_md(u"### 7.2 Trecho HD02 ao Ponto A")
+    # HD02 ao Ponto A
+    output.print_md(u"### {}.2 Trecho HD02 ao Ponto A".format(n7))
     _tabelas_trecho(j["t4"])
     _tabela_hazen(j["t4"], v_max_tubo)
     output.print_md(u"**Pressão necessária no Ponto A pelo ramal do HD02** (com a vazão "
                     u"normativa Q = {:g} L/min, mesma vazão usada no ramal do HD01):".format(
                         Qs_lmin))
-    output.print_md(u"P_PA = P_hd02 + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        float(Pmin), j["t4"]["J"], _fmt_dh(dH["t4"]), res["P_PA2"]))
+    output.print_md(u"P_PA = {} + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+        _P_ref_lbl.replace(u"hd01", u"hd02"), P_ref, j["t4"]["J"],
+        _fmt_dh(dH["t4"]), res["P_PA2"]))
     output.print_md(u"")
 
-    # 7.3 — Ponto A e vazões finais pelo Fator K (sem ciclo)
-    output.print_md(u"### 7.3 Pressão no Ponto A e Vazões Finais (Fator K)")
+    # Ponto A e vazões finais pelo Fator K (sem ciclo)
+    output.print_md(u"### {}.3 Pressão no Ponto A e Vazões Finais (Fator K)".format(n7))
     output.print_md(u"**Pressão adotada no Ponto A = maior pressão calculada entre os "
                     u"dois trechos:** P_PA = max({:.4f}; {:.4f}) = **{:.4f} mca** "
                     u"(ramal governante: **{}**)".format(
                         res["P_PA1"], res["P_PA2"], res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
-    output.print_md(u"Com o Ponto A nessa pressão, a pressão real em cada hidrante é "
-                    u"P_hd = P_PA − J ∓ ∆H (o ramal governante retorna, por construção, "
-                    u"exatamente a Pmin):")
+    output.print_md(u"Com o Ponto A nessa pressão, a pressão na válvula de cada hidrante "
+                    u"é P_hd = P_PA − J ∓ ∆H (o ramal governante retorna, por construção, "
+                    u"exatamente à pressão de referência):")
     output.print_md(u"")
     output.print_md(u"P_hd01 = {:.4f} {} {:.4f} {} = **{:.4f} mca**".format(
         res["P_PA"], u"−", j["t3"]["J"], _fmt_dh(-dH["t3"]), res["P_hd01"]))
@@ -382,19 +477,44 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"**Qt = Q_hd01 + Q_hd02 = {:.2f} + {:.2f} = {:.2f} L/min**".format(
         res["Q_hd01"], res["Q_hd02"], res["Qt"]))
     output.print_md(u"")
+
+    if esguicho:
+        output.print_md(u"Com a vazão final de cada hidrante, recalculam-se a velocidade "
+                        u"na mangueira e a perda na válvula angular — valores que aumentam "
+                        u"conforme o traçado hidráulico caminha em direção aos pontos mais "
+                        u"favoráveis. A pressão no esguicho sai de "
+                        u"**P_esg = P_hd − Jm − Jvalv**:")
+        output.print_md(u"")
+        output.print_md(u"| Hidrante | Q (L/min) | V mangueira (m/s) | Jm (mca) | "
+                        u"Jvalv (mca) | P_válvula (mca) | **P_esguicho (mca)** |")
+        output.print_md(u"|---|---|---|---|---|---|---|")
+        for lbl, e in [(u"HD01", esg["hd01"]), (u"HD02", esg["hd02"])]:
+            output.print_md(u"| {} | {:.2f} | {:.4f} | {:.4f} | {:.4f} | {:.4f} | "
+                            u"**{:.4f}** |".format(
+                                lbl, e["Q_lmin"], e["V"], e["Jm"], e["Jvalv"],
+                                e["P_valv"], e["P_esg"]))
+        output.print_md(u"")
+
     output.print_md(u"**Pressões e vazões resultantes nos hidrantes:**")
-    output.print_md(u"| Hidrante | P (mca) | Q (L/min) | Verificação (Q {} {:g} L/min) |".format(
-        SIM_GE, Qs_lmin))
+    _col_p = u"P esguicho (mca)" if esguicho else u"P válvula (mca)"
+    output.print_md(u"| Hidrante | {} | Q (L/min) | Verificação (P {} {:g} mca e "
+                    u"Q {} {:g} L/min) |".format(_col_p, SIM_GE, Pmin, SIM_GE, Qs_lmin))
     output.print_md(u"|---|---|---|---|")
-    for lbl, p, q in [(u"HD01", res["P_hd01"], res["Q_hd01"]),
-                      (u"HD02", res["P_hd02"], res["Q_hd02"])]:
-        qv = (u"{} {:.2f}".format(SIM_OK, q) if q >= float(Qs_lmin) - 0.01
-              else u"{} {:.2f} < {:g}".format(SIM_X, q, Qs_lmin))
-        output.print_md(u"| {} | {:.4f} | {:.2f} | {} |".format(lbl, p, q, qv))
+    if esguicho:
+        _linhas = [(u"HD01", esg["hd01"]["P_esg"], res["Q_hd01"]),
+                   (u"HD02", esg["hd02"]["P_esg"], res["Q_hd02"])]
+    else:
+        _linhas = [(u"HD01", res["P_hd01"], res["Q_hd01"]),
+                   (u"HD02", res["P_hd02"], res["Q_hd02"])]
+    for lbl, p, q in _linhas:
+        _ok = (p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01)
+        ver = (u"{} atende".format(SIM_OK) if _ok
+               else u"{} NÃO atende".format(SIM_X))
+        output.print_md(u"| {} | {:.4f} | {:.2f} | {} |".format(lbl, p, q, ver))
     output.print_md(u"")
 
-    # 7.4 — Ponto A à descarga da bomba
-    output.print_md(u"### 7.4 Trecho do Ponto A à Descarga da Bomba")
+    # Ponto A à descarga da bomba
+    output.print_md(u"### {}.4 Trecho do Ponto A à Descarga da Bomba".format(n7))
     output.print_md(u"Nesse trecho a vazão a ser considerada é a soma das vazões dos dois "
                     u"hidrantes em funcionamento, e a pressão inicial é a maior pressão "
                     u"calculada entre os dois trechos anteriores:")
@@ -409,7 +529,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # 7.4 — sucção
-    output.print_md(u"### 7.5 Trecho de Sucção (RTI à Bomba)")
+    output.print_md(u"### {}.5 Trecho de Sucção (RTI à Bomba)".format(n7))
     output.print_md(u"A pressão a ser utilizada agora é a encontrada no trecho anterior "
                     u"(Ponto A à descarga da bomba). Aqui utiliza-se para o cálculo de "
                     u"Jun também a vazão total Qt = {:.2f} L/min.".format(res["Qt"]))
@@ -422,7 +542,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 8. Verificação de velocidades (resumo) ────────────────────────────
-    output.print_md(u"## 8. Verificação da Velocidade de Escoamento")
+    sec(u"Verificação da Velocidade de Escoamento")
     output.print_md(u"**V = 21,22 · Q / D²** — limites máximos recomendados: {:.1f} m/s "
                     u"(sucção {}), {:.1f} m/s (trecho de descarga) — {} / {}.".format(
                         v_max_succao, succao, v_max_tubo, v_max_suc_ref, v_max_tubo_ref))
@@ -448,7 +568,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 9. Demanda do sistema ─────────────────────────────────────────────
-    output.print_md(u"## 9. Demanda do Sistema")
+    sec(u"Demanda do Sistema")
     output.print_md(u"Concluídos os cálculos e verificações, o sistema possui a demanda de:")
     output.print_md(u"")
     output.print_md(u"| Grandeza | Valor |")
@@ -460,7 +580,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     # ── 10. Bomba ─────────────────────────────────────────────────────────
-    output.print_md(u"## 10. Dimensionamento da Bomba de Recalque")
+    sec(u"Dimensionamento da Bomba de Recalque")
     Qt_m3s  = res["Qt"] / 60000.0
     eta_dec = eta / 100.0
     output.print_md(u"**Fórmula:** P_cv = (1000 × Qt × Ht) / (75 × η), com Qt em m³/s "
@@ -546,6 +666,21 @@ Qs_lmin = dados_sistema["q_min"]
 Pmin    = dados_sistema["p_min"]
 C_HW    = req(perfil, u"hazen_c")[u"galvanizado"]
 
+# --- Etapa 1b: método de cálculo (define ONDE Qs/Pmin se aplicam) ---
+# Gravado por "Classificar Sistema". Projetos classificados antes desse
+# parâmetro existir caem no método da válvula (comportamento anterior).
+_param_metodo = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
+metodo_calculo = _param_metodo.AsString() if _param_metodo else None
+if metodo_calculo not in METODOS_CALCULO:
+    if metodo_calculo:
+        forms.alert(
+            u"Método de cálculo desconhecido no projeto:\n'{}'\n\n"
+            u"Execute 'Classificar Sistema de Hidrante' novamente.".format(
+                metodo_calculo),
+            title="Fire Utils", warn_icon=True)
+        script.exit()
+    metodo_calculo = METODO_VALVULA
+
 # --- Etapa 2: captura de elementos ---
 TRECHOS = [u"RTI - Bomba", u"Bomba - Ponto A", u"Ponto A - Hid 01", u"Ponto A - Hid 02"]
 trechos_elems = {t: [] for t in TRECHOS}
@@ -612,7 +747,10 @@ trechos_data = {
     "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome),
 }
 
-res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas)
+res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
+                    metodo=metodo_calculo,
+                    mang_dn_mm=dados_sistema["mang_dn"],
+                    mang_comp_m=dados_sistema["mang_comp"])
 
 # --- Etapa 5: eficiência e potência da bomba ---
 eta_str = forms.ask_for_string(
@@ -648,7 +786,7 @@ payload_hid = {
     "res":           res,
     "dados_sistema": dados_sistema,
     "valor_sistema": valor_sistema,
-    "metodo":        u"marcha_fator_k",
+    "metodo":        metodo_calculo,
     "cotas":         cotas,
     "Hz_succao":     Hz_succao,
     "succao":        succao,

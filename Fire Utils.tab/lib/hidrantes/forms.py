@@ -28,10 +28,10 @@ from System import String
 from hidrantes.db import SISTEMAS_HIDRANTE, get_todos_tipos
 from hidrantes import custom as custom_store
 
-# Opções de método de cálculo — por enquanto só registradas junto com a
-# classificação; o motor de cálculo (hidrantes/calc.py) ainda não usa esse
-# valor, sempre aplica o método da marcha com Fator K.
-METODOS_CALCULO = [u"Válvula do Hidrante", u"Ponta do Esguicho Regulável"]
+# Opções de método de cálculo — a lista canônica vive no motor (calc.py),
+# que é quem interpreta a escolha para saber onde o par normativo (Q, Pmin)
+# se aplica: na válvula do hidrante ou na ponta do esguicho regulável.
+from hidrantes.calc import METODOS_CALCULO
 
 
 # ---------------------------------------------------------------------------

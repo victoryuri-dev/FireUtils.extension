@@ -17,8 +17,17 @@ de Hidrantes"):
        T2 = Bomba → Ponto A
        T3 = Ponto A → HD01
        T4 = Ponto A → HD02
-  4. Fator K calculado APENAS do par normativo (Q, Pmin) do hidrante mais
-     desfavorável:  K = Q / √P , com P em bar (1 bar = 10,1971 mca).
+  4. O método de cálculo (definido em "Classificar Sistema") diz ONDE o par
+     normativo (Q, Pmin) se aplica:
+       - "Válvula do Hidrante": na válvula. P de referência = Pmin.
+       - "Ponta do Esguicho Regulável": na ponta do esguicho. Entre o
+         esguicho e a válvula entram a mangueira e a válvula angular:
+           Jm    = 2·f·Lm/(g·π²·Dm⁵)·Q²   (Darcy-Weisbach, f = 0,022)
+           V     = 21,22·Q/Dm²             (velocidade na mangueira)
+           Jvalv = K_v·V²/(2g)             (válvula angular, K_v = 5)
+           P de referência (na válvula) = Pmin + Jm + Jvalv
+     Fator K calculado APENAS no hidrante mais desfavorável, com esse P de
+     referência:  K = Q / √P , com P em bar (1 bar = 10,1971 mca).
      O hidrante mais favorável (HD02) recebe pressão maior e portanto
      vazão maior:  Q_hd02 = K·√P_hd02.
   5. Comprimentos equivalentes somados POR TRECHO E POR DIÂMETRO:
@@ -57,8 +66,31 @@ from sync import enviar as enviar_sync
 # Conversão de unidades de pressão usada pelo Fator K (1 bar = 10,1971 mca).
 MCA_POR_BAR = 10.1971
 
+# Constantes do trecho esguicho → mangueira → válvula (método "Ponta do
+# Esguicho Regulável"). O coeficiente 2 da fórmula de Jm é o adotado no
+# documento de referência do escritório.
+F_DARCY     = 0.022   # fator de atrito da mangueira
+G           = 9.81    # aceleração da gravidade, m/s²
+K_VALVULA   = 5.0     # coef. de perda localizada da válvula angular
+COEF_JM     = 2.0     # coeficiente da fórmula de Jm (documento de referência)
+
+# Métodos de cálculo — a escolha é feita em "Classificar Sistema" e define
+# ONDE o par normativo (Q, Pmin) é aplicado:
+#   Válvula do Hidrante        → Q e Pmin na válvula (não há mangueira no cálculo)
+#   Ponta do Esguicho Regulável → Q e Pmin na ponta do esguicho; a marcha
+#                                 sobe pelo esguicho → mangueira (Jm) →
+#                                 válvula (Jvalv) antes de seguir pela rede
+METODO_VALVULA  = u"Válvula do Hidrante"
+METODO_ESGUICHO = u"Ponta do Esguicho Regulável"
+METODOS_CALCULO = [METODO_VALVULA, METODO_ESGUICHO]
+
 _CACHE_NOME    = u"firedata.json"
 _LAST_PROJ_TXT = u"fireutils_last_project.txt"
+
+
+def eh_metodo_esguicho(metodo):
+    """True se o método de cálculo referencia o par normativo no esguicho."""
+    return (metodo or u"").strip() == METODO_ESGUICHO
 
 
 def _cache_path(projeto_dir=None):
@@ -127,6 +159,73 @@ def calc_potencia(qt_m3s, ht_mca, eta_decimal):
 
 
 # ===========================================================================
+# ESGUICHO → MANGUEIRA → VÁLVULA (método "Ponta do Esguicho Regulável")
+# ===========================================================================
+
+def calc_jm_mangueira(q_lmin, lm_m, dm_m, f=F_DARCY):
+    """
+    Perda de carga na mangueira (Darcy-Weisbach), na forma do documento
+    de referência:
+
+        Jm = 2·f·Lm / (g·π²·Dm⁵) · Q²
+
+    Q é convertida de L/min para m³/s; Lm e Dm em metros (a fórmula só
+    fecha dimensionalmente em SI).
+    """
+    if lm_m <= 0 or dm_m <= 0:
+        return 0.0
+    q_m3s = float(q_lmin) / 60000.0
+    return ((COEF_JM * f * float(lm_m))
+            / (G * (math.pi ** 2) * (float(dm_m) ** 5))
+            * (q_m3s ** 2))
+
+
+def calc_jvalv(v_ms, k_valv=K_VALVULA):
+    """
+    Perda de carga localizada na válvula angular do hidrante:
+        Jvalv = K · v² / (2g)
+    v = velocidade do fluido na mangueira [m/s]; K = 5 (adotado em projeto).
+    """
+    return float(k_valv) * (float(v_ms) ** 2) / (2.0 * G)
+
+
+def calc_cadeia_esguicho(q_lmin, mang_dn_mm, mang_comp_m, p_valv_mca=None,
+                         p_esg_mca=None):
+    """
+    Resolve o trecho entre a ponta do esguicho e a válvula do hidrante.
+
+        Jm    = 2·f·Lm/(g·π²·Dm⁵)·Q²      (perda na mangueira)
+        V     = 21,22·Q/Dm²                (velocidade na mangueira)
+        Jvalv = K·V²/(2g)                  (perda na válvula angular)
+        P_valv = P_esg + Jm + Jvalv        (marcha esguicho → válvula)
+
+    Informe p_esg_mca para subir do esguicho até a válvula (dimensionamento
+    do hidrante governante), ou p_valv_mca para descer da válvula até o
+    esguicho (demais hidrantes, cuja vazão já saiu do Fator K).
+    """
+    dm_m  = float(mang_dn_mm) / 1000.0
+    jm    = calc_jm_mangueira(q_lmin, mang_comp_m, dm_m)
+    v     = calc_velocidade(q_lmin, mang_dn_mm)
+    jvalv = calc_jvalv(v)
+
+    if p_esg_mca is not None:
+        p_esg  = float(p_esg_mca)
+        p_valv = p_esg + jm + jvalv
+    else:
+        p_valv = float(p_valv_mca)
+        p_esg  = p_valv - jm - jvalv
+
+    return {
+        "Q_lmin": q_lmin,
+        "Jm":     jm,
+        "V":      v,
+        "Jvalv":  jvalv,
+        "P_esg":  p_esg,
+        "P_valv": p_valv,
+    }
+
+
+# ===========================================================================
 # PERDA DE CARGA DE UM TRECHO (por diâmetro)
 # ===========================================================================
 
@@ -169,7 +268,8 @@ def calc_j_trecho(trecho_data, q_lmin, c, label=u""):
 # RESOLUÇÃO DA REDE — MÉTODO DA MARCHA COM FATOR K
 # ===========================================================================
 
-def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas):
+def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
+                  metodo=METODO_VALVULA, mang_dn_mm=None, mang_comp_m=None):
     """
     Resolve a rede de 2 hidrantes em paralelo pelo método da marcha.
     PASSO ÚNICO — sem iteração, sem recalcular o Fator K.
@@ -180,28 +280,45 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas):
     Qs_lmin, Pmin: par normativo do hidrante mais desfavorável (L/min, mca).
     C: coeficiente de Hazen-Williams.
     cotas: {"z_rti","z_hd01","z_hd02","z_ponto_a","z_recalque","z_succao"} em m.
+    metodo: METODO_VALVULA ou METODO_ESGUICHO — define onde (Qs, Pmin) se
+        aplicam. No método do esguicho, mang_dn_mm e mang_comp_m são
+        obrigatórios (mangueira entre o esguicho e a válvula).
 
     Sequência:
-      1. K = Q/√P do par normativo (calculado só no hidrante mais desfavorável).
-      2. Hazen-Williams nos dois ramais, ambos com a vazão normativa Qs
+      1. Ponto de referência do par normativo:
+         - Válvula:  P_valv_ref = Pmin (não há mangueira no cálculo).
+         - Esguicho: Pmin está na ponta do esguicho; sobe-se até a válvula
+             Jm    = 2·f·Lm/(g·π²·Dm⁵)·Qs²
+             V     = 21,22·Qs/Dm²        Jvalv = K·V²/(2g)
+             P_valv_ref = Pmin + Jm + Jvalv
+      2. K = Qs/√P_valv_ref — calculado só no hidrante mais desfavorável;
+         é ele que dá a vazão dos demais hidrantes.
+      3. Hazen-Williams nos dois ramais, ambos com a vazão normativa Qs
          (uma única passada — J_i não é recalculado depois):
-           P_PA(ramal i) = Pmin + J_i ± ΔH_i
-      3. Ponto A adota a MAIOR pressão requerida entre os ramais — o ramal
-         dessa pressão é o governante:
-           P_PA = max(P_PA1, P_PA2)
-      4. Pressão real em cada hidrante, com o Ponto A na pressão adotada
-         (o ramal governante fica, por construção, com P_hd = Pmin):
+           P_PA(ramal i) = P_valv_ref + J_i ± ΔH_i
+      4. Ponto A adota a MAIOR pressão requerida entre os ramais — o ramal
+         dessa pressão é o governante:  P_PA = max(P_PA1, P_PA2)
+      5. Pressão na válvula de cada hidrante (o governante fica, por
+         construção, com P_valv = P_valv_ref):
            P_hd_i = P_PA − J_i ∓ ΔH_i
-      5. Vazão final de cada hidrante pelo Fator K, já conhecido — sem
-         refazer Hazen-Williams:
-           Q_hd_i = K·√P_hd_i
+      6. Vazão final de cada hidrante pelo Fator K:  Q_hd_i = K·√P_hd_i
          Qt = Q_hd01 + Q_hd02
-      6. Qt segue para o tronco: P_SB  = P_PA + J(T2, Qt) ± ΔH_t2
+         No método do esguicho, Jm/V/Jvalv de cada hidrante são então
+         recalculados com a vazão final (crescem em direção aos pontos
+         mais favoráveis) e a pressão no esguicho sai de
+           P_esg_i = P_hd_i − Jm_i − Jvalv_i.
+      7. Qt segue para o tronco: P_SB  = P_PA + J(T2, Qt) ± ΔH_t2
                                   P_RTI = P_SB + J(T1, Qt) ± ΔH_t1
-      7. Demanda final: Q = Qt, P = P_RTI.
+      8. Demanda final: Q = Qt, P = P_RTI.
     """
     Qs   = float(Qs_lmin)
     Pmin = float(Pmin)
+
+    esguicho = eh_metodo_esguicho(metodo)
+    if esguicho and not (mang_dn_mm and mang_comp_m):
+        raise ValueError(
+            u"O método '{}' exige o DN e o comprimento da mangueira.".format(
+                METODO_ESGUICHO))
 
     # ΔH = Hi − Hf por trecho, na direção da marcha de cálculo:
     #   T3/T4: hidrante → Ponto A    T2: Ponto A → saída da bomba (recalque)
@@ -213,28 +330,54 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas):
         "t1": cotas["z_succao"] - cotas["z_rti"],
     }
 
-    K = calc_fator_k(Qs, Pmin)
+    # Ponto de referência do par normativo, na válvula do hidrante governante
+    if esguicho:
+        # Pmin está na ponta do esguicho: sobe esguicho → mangueira → válvula
+        esg_ref = calc_cadeia_esguicho(Qs, mang_dn_mm, mang_comp_m,
+                                       p_esg_mca=Pmin)
+        P_valv_ref = esg_ref["P_valv"]
+    else:
+        esg_ref = None
+        P_valv_ref = Pmin
+
+    K = calc_fator_k(Qs, P_valv_ref)
 
     # Ramais HD01 e HD02, ambos com a vazão normativa — passada única
     j3 = calc_j_trecho(trechos_data["t3"], Qs, C, u"Trecho HD01 ao Ponto A")
     j4 = calc_j_trecho(trechos_data["t4"], Qs, C, u"Trecho HD02 ao Ponto A")
 
-    # Pressão requerida no Ponto A por cada ramal (com Pmin no hidrante)
-    P_PA1 = Pmin + j3["J"] + dH["t3"]
-    P_PA2 = Pmin + j4["J"] + dH["t4"]
+    # Pressão requerida no Ponto A por cada ramal
+    P_PA1 = P_valv_ref + j3["J"] + dH["t3"]
+    P_PA2 = P_valv_ref + j4["J"] + dH["t4"]
     P_PA  = max(P_PA1, P_PA2)
 
-    # Pressão real em cada hidrante com o Ponto A na pressão adotada. O ramal
-    # governante fica exatamente em Pmin (é dele que P_PA foi derivada).
+    # Pressão na válvula de cada hidrante com o Ponto A na pressão adotada.
+    # O ramal governante fica exatamente em P_valv_ref (é dele que P_PA veio).
     P_hd01 = P_PA - j3["J"] - dH["t3"]
     P_hd02 = P_PA - j4["J"] - dH["t4"]
 
     # Vazão final de cada hidrante pelo Fator K — J não é recalculado; o
     # ramal governante retorna à vazão normativa Qs por construção
-    # (K·√Pmin = Qs, já que K foi definido a partir desse mesmo par).
+    # (K·√P_valv_ref = Qs, já que K foi definido a partir desse mesmo par).
     Q1 = vazao_por_k(K, P_hd01)
     Q2 = vazao_por_k(K, P_hd02)
     Qt = Q1 + Q2
+
+    # Método do esguicho: com a vazão final de cada hidrante, refaz-se a
+    # cadeia válvula → mangueira → esguicho (valores crescem em direção aos
+    # pontos mais favoráveis). No governante, P_esg volta a ser Pmin.
+    if esguicho:
+        esg = {
+            "hd01": calc_cadeia_esguicho(Q1, mang_dn_mm, mang_comp_m,
+                                         p_valv_mca=P_hd01),
+            "hd02": calc_cadeia_esguicho(Q2, mang_dn_mm, mang_comp_m,
+                                         p_valv_mca=P_hd02),
+            "ref":  esg_ref,
+            "mang_dn_mm":  mang_dn_mm,
+            "mang_comp_m": mang_comp_m,
+        }
+    else:
+        esg = None
 
     # Trecho Ponto A à descarga da bomba, com Qt e a maior pressão do Ponto A
     j2 = calc_j_trecho(trechos_data["t2"], Qt, C, u"Trecho Bomba ao Ponto A")
@@ -247,7 +390,11 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas):
     hid_governa = u"HD01" if P_PA1 >= P_PA2 else u"HD02"
 
     return {
+        "metodo":     metodo,
+        "esguicho":   esguicho,
         "K":          K,
+        "P_valv_ref": P_valv_ref,
+        "esg":        esg,
         "dH":         dH,
         "j":          {"t1": j1, "t2": j2, "t3": j3, "t4": j4},
         "Q_hd01":     Q1,
