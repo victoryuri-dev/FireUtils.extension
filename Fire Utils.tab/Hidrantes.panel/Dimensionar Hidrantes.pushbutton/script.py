@@ -213,14 +213,14 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"| Norma aplicada | **{}** | — |".format(norma))
     output.print_md(u"| Classificação do sistema | **{}** | {} |".format(
         _md_cell(valor_sistema), tipos_ref))
-    output.print_md(u"| Vazão por hidrante (Q) | **{} L/min** | {} |".format(Qs_lmin, tipos_ref))
+    output.print_md(u"| Vazão por hidrante (Q) | **{:g} L/min** | {} |".format(Qs_lmin, tipos_ref))
     output.print_md(u"| Hidrantes simultâneos (n) | **{}** | {} |".format(hidr_simult, hidr_simult_ref))
-    output.print_md(u"| Pressão residual mínima (Pmin) | **{} mca = {:.4f} bar** | {} |".format(
+    output.print_md(u"| Pressão residual mínima (Pmin) | **{:g} mca = {:.4f} bar** | {} |".format(
         Pmin, float(Pmin) / MCA_POR_BAR, tipos_ref))
     output.print_md(u"| Coef. Hazen-Williams (C) | **{}** | {} — aço/ferro galvanizado |".format(
         C_HW, hazen_c_ref))
-    output.print_md(u"| Esguicho — DN | {} mm | {} |".format(dados_sistema["esguicho_dn"], tipos_ref))
-    output.print_md(u"| Mangueira — DN / comprimento | {} mm / {:.1f} m | {} |".format(
+    output.print_md(u"| Esguicho — DN | {:g} mm | {} |".format(dados_sistema["esguicho_dn"], tipos_ref))
+    output.print_md(u"| Mangueira — DN / comprimento | {:g} mm / {:.1f} m | {} |".format(
         dados_sistema["mang_dn"], dados_sistema["mang_comp"], tipos_ref))
     output.print_md(u"| Velocidade máx. — recalque/descarga | {:.1f} m/s | {} |".format(
         v_max_tubo, v_max_tubo_ref))
@@ -265,7 +265,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"- **Q** — Vazão do hidrante, em L/min")
     output.print_md(u"- **P** — Pressão no hidrante, em bar (1 bar = {} mca)".format(MCA_POR_BAR))
     output.print_md(u"")
-    output.print_md(u"K = {} / √({} / {}) = {} / √{:.4f} = **{:.4f} L/min/bar^0,5**".format(
+    output.print_md(u"K = {:g} / √({:g} / {}) = {:g} / √{:.4f} = **{:.4f} L/min/bar^0,5**".format(
         Qs_lmin, Pmin, MCA_POR_BAR, Qs_lmin, float(Pmin) / MCA_POR_BAR, K))
     output.print_md(u"")
     output.print_md(u"Esse cálculo se faz necessário para realizar corretamente o "
@@ -367,13 +367,13 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"")
     _tabela_hazen(j["t4"], v_max_tubo)
     output.print_md(u"**Pressões e vazões resultantes nos hidrantes:**")
-    output.print_md(u"| Hidrante | P (mca) | Q (L/min) | Verificação (Q {} {} L/min) |".format(
+    output.print_md(u"| Hidrante | P (mca) | Q (L/min) | Verificação (Q {} {:g} L/min) |".format(
         SIM_GE, Qs_lmin))
     output.print_md(u"|---|---|---|---|")
     for lbl, p, q in [(u"HD01", res["P_hd01"], res["Q_hd01"]),
                       (u"HD02", res["P_hd02"], res["Q_hd02"])]:
         qv = (u"{} {:.2f}".format(SIM_OK, q) if q >= float(Qs_lmin) - 0.01
-              else u"{} {:.2f} < {}".format(SIM_X, q, Qs_lmin))
+              else u"{} {:.2f} < {:g}".format(SIM_X, q, Qs_lmin))
         output.print_md(u"| {} | {:.4f} | {:.2f} | {} |".format(lbl, p, q, qv))
     output.print_md(u"")
 
@@ -517,6 +517,14 @@ else:
 
     dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
     dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
+
+# A Tabela 2 (hidrantes/db.py) guarda esses valores como int. O IronPython
+# 2.7 do Revit (diferente do CPython) lança ValueError em "{:.1f}".format(x)
+# quando x é int — então normalizamos tudo para float aqui, no único ponto
+# de entrada dos dois caminhos (Tabela 2 e personalizado; este último já
+# vem normalizado de custom_store, mas o float() abaixo é inofensivo).
+for _chave in (u"q_min", u"p_min", u"mang_dn", u"mang_comp", u"esguicho_dn"):
+    dados_sistema[_chave] = float(dados_sistema[_chave])
 
 Qs_lmin = dados_sistema["q_min"]
 Pmin    = dados_sistema["p_min"]
