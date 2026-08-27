@@ -2,9 +2,11 @@
 """
 script.py — Fire Utils · Dimensionar Hidrantes
 Dimensionamento hidráulico pelo MÉTODO DA MARCHA (passo a passo):
-HID-01 → Ponto A → Saída da Bomba → RTI, com ajuste da vazão do hidrante
+HD01 → Ponto A → Descarga da Bomba → RTI, com ajuste da vazão do hidrante
 mais favorável pelo Fator K. Imprime o memorial de cálculo no output do
 pyRevit e salva cache para os demais botões.
+(Nos elementos do Revit os identificadores gravados por 'Mapear Trechos'
+continuam sendo "HID-01"/"HID-02"; no memorial a nomenclatura é HD01/HD02.)
 """
 
 import clr
@@ -123,9 +125,13 @@ def _md_cell(texto):
     return (texto or u"").replace(u"|", u"\\|")
 
 def _tabelas_trecho(jt):
-    """Tabelas de tubulação e conexões por diâmetro de um trecho (passo 5)."""
-    output.print_md(u"**Tubulação por diâmetro**")
-    output.print_md(u"| D interno (mm) | Nº tubos | L real (m) | Σle conexões (m) | **Ltotal = L + Σle (m)** |")
+    """
+    Tabelas de tubulação e de conexões/acessórios por diâmetro, exibidas
+    antes do cálculo de cada trecho (levantamento dos comprimentos
+    equivalentes: Ltotal = L + Leq, por diâmetro).
+    """
+    output.print_md(u"**Quantitativo de tubulação por diâmetro**")
+    output.print_md(u"| D interno (mm) | Nº tubos | L (m) | Leq (m) | **Ltotal = L + Leq (m)** |")
     output.print_md(u"|---|---|---|---|---|")
     for s in jt["segmentos"]:
         output.print_md(u"| {:.1f} | {} | {:.4f} | {:.4f} | **{:.4f}** |".format(
@@ -133,9 +139,9 @@ def _tabelas_trecho(jt):
     output.print_md(u"")
 
     tem_aces = any(s["acessorios"] for s in jt["segmentos"])
-    output.print_md(u"**Conexões e acessórios (comprimentos equivalentes)**")
+    output.print_md(u"**Conexões e acessórios por diâmetro (comprimentos equivalentes)**")
     if tem_aces:
-        output.print_md(u"| Conexão / acessório | DN (mm) | Qtd | le unit (m) | Σle (m) |")
+        output.print_md(u"| Conexão / acessório | DN (mm) | Qtd | Leq unitário (m) | Leq total (m) |")
         output.print_md(u"|---|---|---|---|---|")
         for s in jt["segmentos"]:
             for a in s["acessorios"]:
@@ -146,7 +152,7 @@ def _tabelas_trecho(jt):
     output.print_md(u"")
 
 def _tabela_hazen(jt, v_limite):
-    """Tabela de Jun/J/V por diâmetro de um trecho (passos 6 e 9)."""
+    """Tabela de Jun/J/V por diâmetro de um trecho."""
     output.print_md(u"**Perda de carga (Hazen-Williams) — Q = {:.2f} L/min**".format(jt["Q_lmin"]))
     output.print_md(u"| D (mm) | Ltotal (m) | Jun (m/m) | J = Ltotal·Jun (mca) | V = 21,22·Q/D² (m/s) | Verificação (V {} {:.1f}) |".format(
         SIM_LE, v_limite))
@@ -156,7 +162,7 @@ def _tabela_hazen(jt, v_limite):
               else u"{} {:.3f} > {:.1f}".format(SIM_X, s["V"], v_limite))
         output.print_md(u"| {:.1f} | {:.4f} | {:.6f} | {:.4f} | {:.3f} | {} |".format(
             s["d_mm"], s["Ltotal"], s["Jun"], s["J"], s["V"], vv))
-    output.print_md(u"**ΣJ do trecho = {:.4f} mca**".format(jt["J"]))
+    output.print_md(u"**J do trecho (soma dos diâmetros) = {:.4f} mca**".format(jt["J"]))
     output.print_md(u"")
 
 def print_memorial_calculo(res, dados_sistema, valor_sistema,
@@ -222,116 +228,137 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
         succao, v_max_succao, v_max_suc_ref))
     output.print_md(u"")
 
-    # ── 2. Hidrantes mais desfavoráveis e trechos ─────────────────────────
-    output.print_md(u"## 2. Hidrantes Mais Desfavoráveis e Identificação dos Trechos")
-    output.print_md(u"O cenário de cálculo representa a condição mais crítica de operação: "
-                    u"os **{} hidrantes mais desfavoráveis em funcionamento simultâneo** "
-                    u"(maior demanda de vazão associada às maiores perdas de carga e ao "
-                    u"maior desnível geométrico).".format(hidr_simult))
+    # ── 2. Hidrantes mais desfavoráveis ───────────────────────────────────
+    output.print_md(u"## 2. Identificação dos Hidrantes Mais Desfavoráveis em "
+                    u"Funcionamento Simultâneo")
+    output.print_md(u"O cenário de cálculo representa a condição mais crítica de operação "
+                    u"do sistema: os **{} hidrantes mais desfavoráveis em funcionamento "
+                    u"simultâneo**, ou seja, aquela que resulta na maior demanda de vazão "
+                    u"total associada às maiores perdas de carga e ao maior desnível "
+                    u"geométrico.".format(hidr_simult))
     output.print_md(u"")
-    output.print_md(u"A tubulação é dividida em trechos. O **Ponto A** é o ponto de "
-                    u"distribuição onde as vazões dos hidrantes considerados se separam.")
+
+    # ── 3. Identificação dos trechos ──────────────────────────────────────
+    output.print_md(u"## 3. Identificação dos Trechos")
+    output.print_md(u"Para fins de organização e como facilitador de cálculo, a tubulação "
+                    u"é dividida em trechos. O **Ponto A** é o ponto de distribuição onde "
+                    u"há a separação das vazões que vão rumo aos hidrantes desfavoráveis "
+                    u"considerados.")
     output.print_md(u"")
     output.print_md(u"| Trecho | Percurso | Vazão de cálculo |")
     output.print_md(u"|---|---|---|")
-    output.print_md(u"| T1 — Sucção | RTI → Bomba | Qt |")
-    output.print_md(u"| T2 — Recalque | Bomba → Ponto A | Qt |")
-    output.print_md(u"| T3 — Ramal | Ponto A → HID-01 | Q₁ |")
-    output.print_md(u"| T4 — Ramal | Ponto A → HID-02 | Q₂ |")
+    output.print_md(u"| Sucção | RTI → Bomba | Qt |")
+    output.print_md(u"| Recalque — Bomba ao Ponto A | Bomba → Ponto A | Qt |")
+    output.print_md(u"| Recalque — Ponto A ao HD01 | Ponto A → HD01 | Q_hd01 |")
+    output.print_md(u"| Recalque — Ponto A ao HD02 | Ponto A → HD02 | Q_hd02 |")
     output.print_md(u"")
 
-    # ── 3. Fator K ────────────────────────────────────────────────────────
-    output.print_md(u"## 3. Fator K")
-    output.print_md(u"Calculado **apenas no hidrante mais desfavorável**, com o par "
-                    u"normativo de vazão e pressão:")
+    # ── 4. Fator K ────────────────────────────────────────────────────────
+    output.print_md(u"## 4. Cálculo do Fator K")
+    output.print_md(u"Calculado **apenas no hidrante mais desfavorável**, com a vazão e a "
+                    u"pressão normativas:")
     output.print_md(u"")
-    output.print_md(u"**K = Q / √P**  (Q em L/min; P em bar; 1 bar = {} mca)".format(MCA_POR_BAR))
+    output.print_md(u"**K = Q / √P**")
+    output.print_md(u"")
+    output.print_md(u"Onde:")
+    output.print_md(u"- **K** — Coeficiente de escoamento ou de vazão, em L/min/bar^0,5")
+    output.print_md(u"- **Q** — Vazão do hidrante, em L/min")
+    output.print_md(u"- **P** — Pressão no hidrante, em bar (1 bar = {} mca)".format(MCA_POR_BAR))
     output.print_md(u"")
     output.print_md(u"K = {} / √({} / {}) = {} / √{:.4f} = **{:.4f} L/min/bar^0,5**".format(
         Qs_lmin, Pmin, MCA_POR_BAR, Qs_lmin, float(Pmin) / MCA_POR_BAR, K))
     output.print_md(u"")
-    output.print_md(u"O segundo hidrante, por estar em posição mais favorável, terá pressão "
-                    u"maior e, consequentemente, vazão maior — esse ajuste é feito pelo "
-                    u"Fator K: **Q₂ = K·√P_hd02**.")
+    output.print_md(u"Esse cálculo se faz necessário para realizar corretamente o "
+                    u"equilíbrio hidráulico entre o primeiro e o segundo hidrante: o "
+                    u"segundo hidrante, por estar numa posição mais favorável, terá maior "
+                    u"pressão e, consequentemente, maior vazão — esse ajuste é feito pelo "
+                    u"Fator K: **Q_hd02 = K·√P_hd02**.")
     output.print_md(u"")
 
-    # ── 4. Cotas altimétricas ─────────────────────────────────────────────
-    output.print_md(u"## 4. Cotas Altimétricas")
-    output.print_md(u"| Ponto | Cota Z (m) |")
+    # ── 5. Cotas altimétricas ─────────────────────────────────────────────
+    output.print_md(u"## 5. Cotas Altimétricas")
+    output.print_md(u"| Ponto | Cota H (m) |")
     output.print_md(u"|---|---|")
     output.print_md(u"| RTI (reservatório) | **{:.4f}** |".format(cotas["z_rti"]))
     output.print_md(u"| Sucção (entrada da bomba) | **{:.4f}** |".format(cotas["z_succao"]))
-    output.print_md(u"| Recalque (saída da bomba) | **{:.4f}** |".format(cotas["z_recalque"]))
-    output.print_md(u"| Ponto A (derivação) | **{:.4f}** |".format(cotas["z_ponto_a"]))
-    output.print_md(u"| HID-01 (mais desfavorável) | **{:.4f}** |".format(cotas["z_hd01"]))
-    output.print_md(u"| HID-02 (2º mais desfavorável) | **{:.4f}** |".format(cotas["z_hd02"]))
+    output.print_md(u"| Descarga da bomba | **{:.4f}** |".format(cotas["z_recalque"]))
+    output.print_md(u"| Ponto A (distribuição) | **{:.4f}** |".format(cotas["z_ponto_a"]))
+    output.print_md(u"| HD01 (mais desfavorável) | **{:.4f}** |".format(cotas["z_hd01"]))
+    output.print_md(u"| HD02 (2º mais desfavorável) | **{:.4f}** |".format(cotas["z_hd02"]))
     output.print_md(u"")
-    output.print_md(u"**ΔH = Hi − Hf** (ponto inicial e final de cada trecho, na direção "
-                    u"da marcha de cálculo):")
-    output.print_md(u"| Trecho (marcha) | Hi (m) | Hf (m) | ΔH (m) |")
+    output.print_md(u"**∆H = Hi − Hf** (posição dos pontos inicial e final de cada trecho, "
+                    u"na direção da marcha de cálculo):")
+    output.print_md(u"| Trecho | Hi (m) | Hf (m) | ∆H (m) |")
     output.print_md(u"|---|---|---|---|")
-    output.print_md(u"| HID-01 → Ponto A | {:.4f} | {:.4f} | **{:.4f}** |".format(
+    output.print_md(u"| HD01 ao Ponto A | {:.4f} | {:.4f} | **{:.4f}** |".format(
         cotas["z_hd01"], cotas["z_ponto_a"], dH["t3"]))
-    output.print_md(u"| HID-02 → Ponto A | {:.4f} | {:.4f} | **{:.4f}** |".format(
+    output.print_md(u"| HD02 ao Ponto A | {:.4f} | {:.4f} | **{:.4f}** |".format(
         cotas["z_hd02"], cotas["z_ponto_a"], dH["t4"]))
-    output.print_md(u"| Ponto A → Saída da bomba | {:.4f} | {:.4f} | **{:.4f}** |".format(
+    output.print_md(u"| Ponto A à descarga da bomba | {:.4f} | {:.4f} | **{:.4f}** |".format(
         cotas["z_ponto_a"], cotas["z_recalque"], dH["t2"]))
-    output.print_md(u"| Sucção → RTI | {:.4f} | {:.4f} | **{:.4f}** |".format(
+    output.print_md(u"| Sucção (Bomba à RTI) | {:.4f} | {:.4f} | **{:.4f}** |".format(
         cotas["z_succao"], cotas["z_rti"], dH["t1"]))
     output.print_md(u"")
     output.print_md(
         u"**Condição de sucção ({}):** determinada pela cota entre a RTI e a "
-        u"entrada de sucção da bomba (Z_RTI − Z_sucção = {:.4f} m) — "
+        u"entrada de sucção da bomba (H_RTI − H_sucção = {:.4f} m) — "
         u"**sucção {}**.".format(v_max_suc_ref, Hz_succao, succao))
     output.print_md(u"")
 
-    # ── 5. Fórmulas da marcha ─────────────────────────────────────────────
-    output.print_md(u"## 5. Fórmulas Utilizadas")
-    output.print_md(u"- Comprimento total por trecho/diâmetro: **Ltotal = L + Σle**")
-    output.print_md(u"- Hazen-Williams (perda unitária): **Jun = 605·10⁴ · Q^1,85 · "
-                    u"C^−1,85 · D^−4,87** [m/m] (Q em L/min, D interno em mm)")
-    output.print_md(u"- Perda do trecho: **J = Ltotal · Jun** [mca], somada por diâmetro")
+    # ── 6. Fórmulas da marcha ─────────────────────────────────────────────
+    output.print_md(u"## 6. Fórmulas Utilizadas")
+    output.print_md(u"- Comprimento total por trecho/diâmetro: **Ltotal = L + Leq** "
+                    u"(L = comprimento real; Leq = comprimento equivalente das conexões)")
+    output.print_md(u"- Perda de carga unitária (Hazen-Williams): "
+                    u"**Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87** [m/m]")
+    output.print_md(u"  - **Q**: vazão no trecho, em L/min (da sucção ao Ponto A é Qt; "
+                    u"do Ponto A aos hidrantes só Q)")
+    output.print_md(u"  - **C**: coeficiente de rugosidade, adimensional ({} para "
+                    u"galvanizado)".format(C_HW))
+    output.print_md(u"  - **D**: diâmetro interno da tubulação, em mm")
+    output.print_md(u"- Perda de carga do trecho: **J = Ltotal · Jun** [mca], somada por "
+                    u"diâmetro")
     output.print_md(u"- Velocidade: **V = 21,22 · Q / D²** [m/s]")
-    output.print_md(u"- Marcha de pressões: **P_fim = P_início + J ± ΔH**")
+    output.print_md(u"- Marcha de pressões: **P = P_anterior + J ± ∆H**")
     output.print_md(u"- Ajuste do hidrante favorável: **Q = K·√P** (P em bar)")
     output.print_md(u"")
 
-    # ── 6. Cálculo por trecho (marcha) ────────────────────────────────────
-    output.print_md(u"## 6. Cálculo Trecho a Trecho")
+    # ── 7. Cálculo por trecho (marcha) ────────────────────────────────────
+    output.print_md(u"## 7. Cálculo Trecho a Trecho")
     output.print_md(u"")
 
-    # 6.1 — T3: HID-01 → Ponto A
-    output.print_md(u"### 6.1 Trecho HID-01 → Ponto A (T3)")
+    # 7.1 — HD01 ao Ponto A
+    output.print_md(u"### 7.1 Trecho HD01 ao Ponto A")
     _tabelas_trecho(j["t3"])
     _tabela_hazen(j["t3"], v_max_tubo)
-    output.print_md(u"**Pressão requerida no Ponto A pelo ramal do HID-01:**")
-    output.print_md(u"P_PA(1) = P_hd01 + J ± ΔH = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        float(Pmin), j["t3"]["J"], _fmt_dh(dH["t3"]), res["P_A1"]))
+    output.print_md(u"**Pressão necessária no Ponto A pelo ramal do HD01:**")
+    output.print_md(u"P_PA = P_hd01 + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+        float(Pmin), j["t3"]["J"], _fmt_dh(dH["t3"]), res["P_PA1"]))
     output.print_md(u"")
 
-    # 6.2 — T4: HID-02 → Ponto A, com Fator K
-    output.print_md(u"### 6.2 Trecho HID-02 → Ponto A (T4) — ajuste pelo Fator K")
+    # 7.2 — HD02 ao Ponto A, com Fator K
+    output.print_md(u"### 7.2 Trecho HD02 ao Ponto A — ajuste pelo Fator K")
     _tabelas_trecho(j["t4"])
-    output.print_md(u"Pressão requerida no Ponto A pelo ramal do HID-02 (com a vazão "
-                    u"final Q₂ = {:.2f} L/min):".format(res["Q_h02"]))
-    output.print_md(u"P_PA(2) = P_hd02,min + J ± ΔH = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        float(Pmin), j["t4"]["J"], _fmt_dh(dH["t4"]), res["P_A2"]))
+    output.print_md(u"Pressão necessária no Ponto A pelo ramal do HD02 (com a vazão "
+                    u"final Q_hd02 = {:.2f} L/min):".format(res["Q_hd02"]))
+    output.print_md(u"P_PA = P_hd02 + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+        float(Pmin), j["t4"]["J"], _fmt_dh(dH["t4"]), res["P_PA2"]))
     output.print_md(u"")
-    output.print_md(u"**Pressão adotada no Ponto A = maior entre os ramais:** "
-                    u"P_PA = max({:.4f}; {:.4f}) = **{:.4f} mca** "
+    output.print_md(u"**Pressão adotada no Ponto A = maior pressão calculada entre os "
+                    u"dois trechos:** P_PA = max({:.4f}; {:.4f}) = **{:.4f} mca** "
                     u"(ramal governante: **{}**)".format(
-                        res["P_A1"], res["P_A2"], res["P_A"], res["hid_governa"]))
+                        res["P_PA1"], res["P_PA2"], res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
     output.print_md(u"Com o Ponto A nessa pressão, o hidrante mais favorável recebe "
                     u"pressão acima da mínima e a vazão é ajustada por Q = K·√P. "
                     u"Como a perda J depende da vazão, o cálculo é repetido até a "
                     u"vazão estabilizar:")
     output.print_md(u"")
-    output.print_md(u"| Ciclo | Q₂ (L/min) | J(T4) (mca) | P_hd02 (mca) | Q₂ = K·√P (L/min) |")
+    output.print_md(u"| Ciclo | Q_hd02 (L/min) | J (mca) | P_hd02 (mca) | Q_hd02 = K·√P (L/min) |")
     output.print_md(u"|---|---|---|---|---|")
     for h in res["historico"]:
         output.print_md(u"| {} | {:.2f} | {:.4f} | {:.4f} | {:.2f} |".format(
-            h["ciclo"], h["Q2"], h["J4"], h["P_hd02"], h["Q2_novo"]))
+            h["ciclo"], h["Q_hd02"], h["J_hd02"], h["P_hd02"], h["Q_hd02_novo"]))
     if res["convergiu"]:
         output.print_md(u"{} Convergiu em {} ciclo(s).".format(SIM_OK, res["iteracoes"]))
     else:
@@ -343,46 +370,50 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output.print_md(u"| Hidrante | P (mca) | Q (L/min) | Verificação (Q {} {} L/min) |".format(
         SIM_GE, Qs_lmin))
     output.print_md(u"|---|---|---|---|")
-    for lbl, p, q in [(u"HID-01", res["P_hd01"], res["Q_h01"]),
-                      (u"HID-02", res["P_hd02"], res["Q_h02"])]:
+    for lbl, p, q in [(u"HD01", res["P_hd01"], res["Q_hd01"]),
+                      (u"HD02", res["P_hd02"], res["Q_hd02"])]:
         qv = (u"{} {:.2f}".format(SIM_OK, q) if q >= float(Qs_lmin) - 0.01
               else u"{} {:.2f} < {}".format(SIM_X, q, Qs_lmin))
         output.print_md(u"| {} | {:.4f} | {:.2f} | {} |".format(lbl, p, q, qv))
     output.print_md(u"")
 
-    # 6.3 — T2: Ponto A → saída da bomba
-    output.print_md(u"### 6.3 Trecho Ponto A → Descarga da Bomba (T2)")
-    output.print_md(u"Vazão de cálculo = soma das vazões dos dois hidrantes em funcionamento:")
+    # 7.3 — Ponto A à descarga da bomba
+    output.print_md(u"### 7.3 Trecho do Ponto A à Descarga da Bomba")
+    output.print_md(u"Nesse trecho a vazão a ser considerada é a soma das vazões dos dois "
+                    u"hidrantes em funcionamento, e a pressão inicial é a maior pressão "
+                    u"calculada entre os dois trechos anteriores:")
     output.print_md(u"**Qt = Q_hd01 + Q_hd02 = {:.2f} + {:.2f} = {:.2f} L/min**".format(
-        res["Q_h01"], res["Q_h02"], res["Qt"]))
+        res["Q_hd01"], res["Q_hd02"], res["Qt"]))
     output.print_md(u"")
     _tabelas_trecho(j["t2"])
     _tabela_hazen(j["t2"], v_max_tubo)
     output.print_md(u"**Pressão na saída da bomba:**")
-    output.print_md(u"P_SB = P_PA + J ± ΔH = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        res["P_A"], j["t2"]["J"], _fmt_dh(dH["t2"]), res["P_SB"]))
+    output.print_md(u"P_SB = P_PA + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+        res["P_PA"], j["t2"]["J"], _fmt_dh(dH["t2"]), res["P_SB"]))
     output.print_md(u"")
 
-    # 6.4 — T1: sucção
-    output.print_md(u"### 6.4 Trecho de Sucção RTI → Bomba (T1)")
-    output.print_md(u"Também com a vazão total Qt = {:.2f} L/min. A pressão de partida é "
-                    u"a encontrada no trecho anterior (P_SB).".format(res["Qt"]))
+    # 7.4 — sucção
+    output.print_md(u"### 7.4 Trecho de Sucção (RTI à Bomba)")
+    output.print_md(u"A pressão a ser utilizada agora é a encontrada no trecho anterior "
+                    u"(Ponto A à descarga da bomba). Aqui utiliza-se para o cálculo de "
+                    u"Jun também a vazão total Qt = {:.2f} L/min.".format(res["Qt"]))
     output.print_md(u"")
     _tabelas_trecho(j["t1"])
     _tabela_hazen(j["t1"], v_max_succao)
     output.print_md(u"**Pressão de demanda referida à RTI:**")
-    output.print_md(u"P_RTI = P_SB + J ± ΔH = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+    output.print_md(u"P_RTI = P_SB + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
         res["P_SB"], j["t1"]["J"], _fmt_dh(dH["t1"]), res["P_RTI"]))
     output.print_md(u"")
 
-    # ── 7. Verificação de velocidades (resumo) ────────────────────────────
-    output.print_md(u"## 7. Verificação das Velocidades de Escoamento")
-    output.print_md(u"Limites: {:.1f} m/s (sucção {}), {:.1f} m/s (recalque/descarga) — {} / {}.".format(
-        v_max_succao, succao, v_max_tubo, v_max_suc_ref, v_max_tubo_ref))
+    # ── 8. Verificação de velocidades (resumo) ────────────────────────────
+    output.print_md(u"## 8. Verificação da Velocidade de Escoamento")
+    output.print_md(u"**V = 21,22 · Q / D²** — limites máximos recomendados: {:.1f} m/s "
+                    u"(sucção {}), {:.1f} m/s (trecho de descarga) — {} / {}.".format(
+                        v_max_succao, succao, v_max_tubo, v_max_suc_ref, v_max_tubo_ref))
     output.print_md(u"| Trecho | D (mm) | Q (L/min) | V (m/s) | Limite (m/s) | Verificação |")
     output.print_md(u"|---|---|---|---|---|---|")
-    _rotulos = {"t1": u"T1 — Sucção", "t2": u"T2 — Bomba → Ponto A",
-                "t3": u"T3 — Ponto A → HID-01", "t4": u"T4 — Ponto A → HID-02"}
+    _rotulos = {"t1": u"Sucção", "t2": u"Bomba ao Ponto A",
+                "t3": u"Ponto A ao HD01", "t4": u"Ponto A ao HD02"}
     velocidade_ok = True
     for key in ["t1", "t2", "t3", "t4"]:
         lim = v_max_succao if key == "t1" else v_max_tubo
@@ -400,8 +431,8 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
                         u"verificação até atender.".format(SIM_X))
     output.print_md(u"")
 
-    # ── 8. Demanda do sistema ─────────────────────────────────────────────
-    output.print_md(u"## 8. Demanda do Sistema")
+    # ── 9. Demanda do sistema ─────────────────────────────────────────────
+    output.print_md(u"## 9. Demanda do Sistema")
     output.print_md(u"Concluídos os cálculos e verificações, o sistema possui a demanda de:")
     output.print_md(u"")
     output.print_md(u"| Grandeza | Valor |")
@@ -412,8 +443,8 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
         res["P_RTI"], res["P_RTI"] / MCA_POR_BAR))
     output.print_md(u"")
 
-    # ── 9. Bomba ──────────────────────────────────────────────────────────
-    output.print_md(u"## 9. Dimensionamento da Bomba de Recalque")
+    # ── 10. Bomba ─────────────────────────────────────────────────────────
+    output.print_md(u"## 10. Dimensionamento da Bomba de Recalque")
     Qt_m3s  = res["Qt"] / 60000.0
     eta_dec = eta / 100.0
     output.print_md(u"**Fórmula:** P_cv = (1000 × Qt × Ht) / (75 × η), com Qt em m³/s "

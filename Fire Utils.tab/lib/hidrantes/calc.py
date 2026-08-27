@@ -10,17 +10,17 @@ de Hidrantes"):
   1. Vazão (Q) e pressão residual mínima (Pmin) de projeto vêm da norma
      vigente (perfil normativo ativo / Tabela 2).
   2. Cenário de cálculo: os 2 hidrantes mais desfavoráveis em funcionamento
-     simultâneo (HID-01 = mais desfavorável, HID-02 = 2º mais desfavorável).
+     simultâneo (HD01 = mais desfavorável, HD02 = 2º mais desfavorável).
   3. Trechos: Sucção (RTI → Bomba) e Recalque, subdividido no Ponto A
      (ponto de distribuição onde as vazões dos hidrantes se separam):
-       T1 = RTI → Bomba (sucção)
+       T1 = Sucção: RTI → Bomba
        T2 = Bomba → Ponto A
-       T3 = Ponto A → HID-01
-       T4 = Ponto A → HID-02
+       T3 = Ponto A → HD01
+       T4 = Ponto A → HD02
   4. Fator K calculado APENAS do par normativo (Q, Pmin) do hidrante mais
      desfavorável:  K = Q / √P , com P em bar (1 bar = 10,1971 mca).
-     O hidrante mais favorável (HID-02) recebe pressão maior e portanto
-     vazão maior:  Q₂ = K·√P_hd02.
+     O hidrante mais favorável (HD02) recebe pressão maior e portanto
+     vazão maior:  Q_hd02 = K·√P_hd02.
   5. Comprimentos equivalentes somados POR TRECHO E POR DIÂMETRO:
      Ltotal(D) = L(D) + Leq(D).
   6. Perda de carga por Hazen-Williams, por trecho e por diâmetro:
@@ -30,10 +30,10 @@ de Hidrantes"):
   7. Cotas altimétricas: ΔH = Hi − Hf (ponto inicial e final do trecho,
      na direção da marcha de cálculo).
   8. Marcha de pressões (do hidrante mais desfavorável até a RTI):
-       P_PA  = P_hd01 + J(T3) ± ΔH
-       P_SB  = P_PA   + J(T2) ± ΔH   (Qt = Q₁ + Q₂; P_PA = maior pressão
-                                      requerida no Ponto A entre os ramais)
-       P_RTI = P_SB   + J(T1) ± ΔH   (também com Qt)
+       P_PA  = P_hd01 + J ± ΔH
+       P_SB  = P_PA   + J ± ΔH   (Qt = Q_hd01 + Q_hd02; P_PA = maior pressão
+                                  requerida no Ponto A entre os ramais)
+       P_RTI = P_SB   + J ± ΔH   (também com Qt)
   9. Verificação de velocidade por trecho/diâmetro:
        V = 21,22 · Q / D²   [m/s]
      Limites: 2,0 m/s (sucção negativa), 3,0 m/s (sucção positiva),
@@ -172,8 +172,8 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
     Resolve a rede de 2 hidrantes em paralelo pelo método da marcha.
 
     trechos_data: {"t1","t2","t3","t4"} — dicts de extrair_trecho().
-        t1 = RTI → Bomba (sucção)     t2 = Bomba → Ponto A
-        t3 = Ponto A → HID-01         t4 = Ponto A → HID-02
+        t1 = Sucção: RTI → Bomba      t2 = Bomba → Ponto A
+        t3 = Ponto A → HD01           t4 = Ponto A → HD02
     Qs_lmin, Pmin: par normativo do hidrante mais desfavorável (L/min, mca).
     C: coeficiente de Hazen-Williams.
     cotas: {"z_rti","z_hd01","z_hd02","z_ponto_a","z_recalque","z_succao"} em m.
@@ -181,13 +181,13 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
     Sequência:
       1. K = Q/√P do par normativo (calculado só no hidrante mais desfavorável).
       2. Ramais (marcha hidrante → Ponto A, ΔH = Hi − Hf):
-           P_A(ramal i) = Pmin + J_i ± ΔH_i
+           P_PA(ramal i) = Pmin + J_i ± ΔH_i
          A pressão no Ponto A é a MAIOR requerida entre os ramais; o ramal
          governante opera com o par normativo, o outro recebe o excedente:
-           P_hd_i = P_A − J_i ∓ ΔH_i   →   Q_i = K·√P_hd_i  (≥ Q normativa)
-         Como J_i depende de Q_i, itera-se até a vazão estabilizar.
-      3. Qt = Q₁ + Q₂;  P_SB  = P_A  + J(T2, Qt) ± ΔH_t2
-      4.               P_RTI = P_SB + J(T1, Qt) ± ΔH_t1
+           P_hd_i = P_PA − J_i ∓ ΔH_i   →   Q_hd_i = K·√P_hd_i  (≥ Q normativa)
+         Como J_i depende de Q_hd_i, itera-se até a vazão estabilizar.
+      3. Qt = Q_hd01 + Q_hd02;  P_SB  = P_PA + J(T2, Qt) ± ΔH_t2
+      4.                        P_RTI = P_SB + J(T1, Qt) ± ΔH_t1
       5. Demanda final: Q = Qt, P = P_RTI.
     """
     Qs   = float(Qs_lmin)
@@ -211,29 +211,29 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
     convergiu = False
 
     for ciclo in range(1, max_iter + 1):
-        j3 = calc_j_trecho(trechos_data["t3"], Q1, C, u"Ponto A → HID-01")
-        j4 = calc_j_trecho(trechos_data["t4"], Q2, C, u"Ponto A → HID-02")
+        j3 = calc_j_trecho(trechos_data["t3"], Q1, C, u"Trecho HD01 ao Ponto A")
+        j4 = calc_j_trecho(trechos_data["t4"], Q2, C, u"Trecho HD02 ao Ponto A")
 
         # Pressão requerida no Ponto A por cada ramal (com Pmin no hidrante)
-        P_A1 = Pmin + j3["J"] + dH["t3"]
-        P_A2 = Pmin + j4["J"] + dH["t4"]
-        P_A  = max(P_A1, P_A2)
+        P_PA1 = Pmin + j3["J"] + dH["t3"]
+        P_PA2 = Pmin + j4["J"] + dH["t4"]
+        P_PA  = max(P_PA1, P_PA2)
 
         # Pressão real em cada hidrante com o Ponto A na maior das duas
-        P_hd01 = P_A - j3["J"] - dH["t3"]
-        P_hd02 = P_A - j4["J"] - dH["t4"]
+        P_hd01 = P_PA - j3["J"] - dH["t3"]
+        P_hd02 = P_PA - j4["J"] - dH["t4"]
 
         # Ajuste de vazão pelo Fator K (o governante volta à vazão normativa)
         Q1_novo = max(Qs, vazao_por_k(K, P_hd01))
         Q2_novo = max(Qs, vazao_por_k(K, P_hd02))
 
         historico.append({
-            "ciclo":  ciclo,
-            "Q1":     Q1,      "Q2":     Q2,
-            "J3":     j3["J"], "J4":     j4["J"],
-            "P_A1":   P_A1,    "P_A2":   P_A2,   "P_A": P_A,
-            "P_hd01": P_hd01,  "P_hd02": P_hd02,
-            "Q1_novo": Q1_novo, "Q2_novo": Q2_novo,
+            "ciclo":   ciclo,
+            "Q_hd01":  Q1,       "Q_hd02":  Q2,
+            "J_hd01":  j3["J"],  "J_hd02":  j4["J"],
+            "P_PA1":   P_PA1,    "P_PA2":   P_PA2,   "P_PA": P_PA,
+            "P_hd01":  P_hd01,   "P_hd02":  P_hd02,
+            "Q_hd01_novo": Q1_novo, "Q_hd02_novo": Q2_novo,
         })
 
         estabilizou = (abs(Q1_novo - Q1) < tol_lmin and
@@ -243,27 +243,27 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
             convergiu = True
             break
 
-    # Trecho Bomba → Ponto A com a vazão total e a maior pressão do Ponto A
+    # Trecho Ponto A à descarga da bomba, com Qt e a maior pressão do Ponto A
     Qt = Q1 + Q2
-    j2 = calc_j_trecho(trechos_data["t2"], Qt, C, u"Bomba → Ponto A")
-    P_SB = P_A + j2["J"] + dH["t2"]
+    j2 = calc_j_trecho(trechos_data["t2"], Qt, C, u"Trecho Bomba ao Ponto A")
+    P_SB = P_PA + j2["J"] + dH["t2"]
 
     # Trecho de sucção (também com Qt); P_RTI é a demanda final de pressão
-    j1 = calc_j_trecho(trechos_data["t1"], Qt, C, u"RTI → Bomba")
+    j1 = calc_j_trecho(trechos_data["t1"], Qt, C, u"Trecho de Sucção (RTI à Bomba)")
     P_RTI = P_SB + j1["J"] + dH["t1"]
 
-    hid_governa = u"HID-01" if P_A1 >= P_A2 else u"HID-02"
+    hid_governa = u"HD01" if P_PA1 >= P_PA2 else u"HD02"
 
     return {
         "K":          K,
         "dH":         dH,
         "j":          {"t1": j1, "t2": j2, "t3": j3, "t4": j4},
-        "Q_h01":      Q1,
-        "Q_h02":      Q2,
+        "Q_hd01":     Q1,
+        "Q_hd02":     Q2,
         "Qt":         Qt,
-        "P_A1":       P_A1,
-        "P_A2":       P_A2,
-        "P_A":        P_A,
+        "P_PA1":      P_PA1,
+        "P_PA2":      P_PA2,
+        "P_PA":       P_PA,
         "P_hd01":     P_hd01,
         "P_hd02":     P_hd02,
         "P_SB":       P_SB,
