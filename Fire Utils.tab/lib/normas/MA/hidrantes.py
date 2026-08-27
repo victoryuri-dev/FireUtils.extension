@@ -50,15 +50,6 @@ def _tipos_de_db():
 DADOS_HIDRANTES = {
     u"norma": u"NT 22/2021 - CBMMA",
 
-    # Ponto de medicao do par Q/Pmin da Tabela 2:
-    #   "valvula"  - Pmin e Qmin sao referenciados na valvula do hidrante
-    #                (redacao da NT 22); Hesg e calculado explicitamente
-    #                (hesg_mca) e somado na cadeia de energia.
-    #   "esguicho" - o par Q/Pmin ja e definido na entrada do esguicho
-    #                regulavel; Hesg = 0 (perda ja incorporada em Pmin).
-    u"pmin_ref": u"valvula",
-    u"pmin_ref_desc": u"na valvula do hidrante",
-
     u"hidrantes_simultaneos": 2,
     u"hidrantes_simultaneos_ref": u"NT 22 itens 5.8.3 / 5.8.8",
 
@@ -66,20 +57,12 @@ DADOS_HIDRANTES = {
     u"tipos": _tipos_de_db(),
     u"tipos_ref": u"NT 22 Tabela 2",
 
-    u"p_max_esguicho": 100.0,
-    u"p_max_esguicho_ref": u"NT 22 item 5.8.9",
-
     u"v_max_tubulacao": 5.0,
     u"v_max_tubulacao_ref": u"NT 22 item 5.8.13",
 
     u"v_max_succao_positiva": 3.0,
     u"v_max_succao_negativa": 2.0,
     u"v_max_succao_ref": u"NT 22 item 5.8.12",
-
-    u"equilibrio_no_max": 0.50,
-    u"equilibrio_no_max_ref": u"NT 22 item 5.8.15",
-
-    u"governante_ref": u"NT 22 item 5.8.4 (menor pressao dinamica na saida)",
 
     # Tabela 1 - Coeficiente de Hazen-Williams por material
     u"hazen_c": {
@@ -91,7 +74,4 @@ DADOS_HIDRANTES = {
         u"cobre":             150,
     },
     u"hazen_c_ref": u"NT 22 Tabela 1",
-
-    u"npsh_fator_vazao": 1.5,
-    u"npsh_fator_vazao_ref": u"NT 22 item 5.8.16",
 }

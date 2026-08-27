@@ -12,7 +12,7 @@ Uso:
     from hidrantes.norm_profiles import get_profile, req
 
     perfil = get_profile(sigla_estado)   # default "MA" se a UF nao tiver dominio hidrantes
-    pmin_ref = req(perfil, u"pmin_ref")  # erro claro se a chave nao existir
+    c_ref = req(perfil, u"hazen_c_ref")  # erro claro se a chave nao existir
 """
 
 import copy
