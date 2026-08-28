@@ -46,6 +46,17 @@ SHARED_PARAM_FILENAME = "FireUtils_SharedParams.txt"
 
 GROUP_NAME  = "Fire Utils – Hidrantes"
 
+def _categorias_equipamento():
+    """Categorias onde RTI/bomba podem estar modeladas: equipamento
+    mecanico (bomba) e, para a RTI, tanto equipamento quanto peca
+    hidrossanitaria (Plumbing Fixtures - reservatorios costumam vir
+    nessa categoria). OST_PlumbingEquipment nem sempre existe (varia por
+    versao/instalacao do Revit) - getattr com fallback evita
+    AttributeError na importacao do modulo."""
+    nomes = ("OST_MechanicalEquipment", "OST_PlumbingEquipment", "OST_PlumbingFixtures")
+    return [c for c in (getattr(BuiltInCategory, n, None) for n in nomes) if c is not None]
+
+
 # Parâmetros e suas configurações
 #   (nome, tipo_spec_novo, tipo_param_legado, categoria_builtin_list)
 PARAMS_CONFIG = [
@@ -89,6 +100,10 @@ PARAMS_CONFIG = [
         "grupo_ui":   "PG_DATA",
     },
     {
+        # Tambem vai em RTI/bomba (Mechanical/Plumbing Equipment): "Mapear
+        # Trechos" marca essas familias com Identificador = "RTI"/"Bomba",
+        # para o "Dimensionar Hidrantes" achar o elemento direto (sem
+        # precisar percorrer a rede) e ler a cota do conector real dele.
         "nome":       u"FireUtils - Identificador",
         "tipo_novo":  "Text",
         "tipo_legado": "Text",
@@ -96,7 +111,7 @@ PARAMS_CONFIG = [
             BuiltInCategory.OST_PipeCurves,
             BuiltInCategory.OST_PipeFitting,
             BuiltInCategory.OST_PipeAccessory,
-        ],
+        ] + _categorias_equipamento(),
         "instancia":  True,
         "grupo_ui":   "PG_DATA",
     },

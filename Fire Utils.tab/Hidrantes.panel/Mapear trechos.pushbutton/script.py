@@ -57,7 +57,8 @@ def get_conectores(elem):
 _CATS_EQUIPAMENTO = None
 def eh_equipamento(elem):
     """True se `elem` for um equipamento (bomba, RTI, etc.) - categoria
-    Mechanical/Plumbing Equipment. Esses elementos tem lados fisicamente
+    Mechanical/Plumbing Equipment ou Peca Hidrossanitaria (a RTI costuma
+    vir como Plumbing Fixture). Esses elementos tem lados fisicamente
     distintos (ex.: succao x recalque de uma bomba) e NAO devem ser
     atravessados como se fossem uma conexao/te qualquer: entrar por um
     conector e sair por outro conector do mesmo equipamento salta
@@ -65,7 +66,8 @@ def eh_equipamento(elem):
     global _CATS_EQUIPAMENTO
     if _CATS_EQUIPAMENTO is None:
         _CATS_EQUIPAMENTO = set()
-        for bic_nome in ("OST_MechanicalEquipment", "OST_PlumbingEquipment"):
+        for bic_nome in ("OST_MechanicalEquipment", "OST_PlumbingEquipment",
+                         "OST_PlumbingFixtures"):
             bic = getattr(BuiltInCategory, bic_nome, None)
             if bic is not None:
                 _CATS_EQUIPAMENTO.add(int(bic))
@@ -222,16 +224,6 @@ def seleciona(msg_alert, msg_pick, filtro):
         output.print_md(u"Selecao cancelada.")
         script.exit()
 
-def seleciona_opcional(msg_alert, msg_pick, filtro):
-    """Como `seleciona`, mas retorna None em vez de encerrar o script
-    se a selecao for cancelada (ex.: usuario clica fora de um elemento)."""
-    forms.alert(msg_alert, title="Fire Utils")
-    try:
-        ref = uidoc.Selection.PickObject(ObjectType.Element, filtro, msg_pick)
-        return doc.GetElement(ref.ElementId)
-    except:
-        return None
-
 # ===========================================================================
 # 0 — Garante parâmetros
 # ===========================================================================
@@ -304,15 +296,10 @@ output.print_md(u"HID-01: ID **{}** | HID-02: ID **{}**".format(eid_h1, eid_h2))
 output.print_md("---")
 output.print_md("### 2 - Selecionar RTI e Bomba")
 
-rti = seleciona_opcional(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
+rti = seleciona(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
+output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
 
-tubo_rti = None
-if rti:
-    output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
-    tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
-else:
-    output.print_md(u"Nenhuma RTI selecionada.")
-
+tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
 if not tubo_rti:
     tubo_rti = seleciona(
         u"Nao foi possivel identificar o tubo de saida da RTI.\n"
@@ -421,28 +408,24 @@ cont = {}
 with Transaction(doc, "FireUtils - Mapear Trechos") as t:
     t.Start()
     try:
+        # RTI e bomba - marcados direto na propria familia, para o
+        # "Dimensionar Hidrantes" achar o elemento sem precisar percorrer
+        # a rede e ler a cota do conector real dele.
+        set_param(rti, P_IDENTIFICADOR, u"RTI")
+        set_param(bomba, P_IDENTIFICADOR, u"Bomba")
+
         # Sucção
         for eid in ids_succao:
             elem = doc.GetElement(ElementId(eid))
-            if not elem: continue
-            if eid == eid_rti:
+            if elem:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
-                set_param(elem, P_IDENTIFICADOR, u"RTI")
-            elif eid == eid_bomba:
-                set_param(elem, P_TRECHO, u"RTI - Bomba")
-                set_param(elem, P_IDENTIFICADOR, u"Succao")
-            else:
-                set_param(elem, P_TRECHO, u"RTI - Bomba")
-            cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
+                cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
 
         # Recalque comum
         for eid in ids_rec_comum:
             elem = doc.GetElement(ElementId(eid))
             if not elem: continue
-            if eid == eid_rec:
-                set_param(elem, P_TRECHO, u"Bomba - Ponto A")
-                set_param(elem, P_IDENTIFICADOR, u"Recalque")
-            elif eid == ponto_a_id:
+            if eid == ponto_a_id:
                 set_param(elem, P_TRECHO, u"Bomba - Ponto A")
                 set_param(elem, P_IDENTIFICADOR, u"Ponto A")
             else:
