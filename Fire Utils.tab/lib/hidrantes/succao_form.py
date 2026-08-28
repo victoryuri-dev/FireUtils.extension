@@ -229,7 +229,7 @@ class SuccaoForm(Window):
 
         # Os botões ficam no rodapé, fora da área rolável, para não sumirem
         # quando a lista de campos passa da altura máxima da janela.
-        Dock.SetDock(botoes, Dock.Bottom)
+        DockPanel.SetDock(botoes, Dock.Bottom)
         moldura.Children.Add(botoes)
 
         rolagem = ScrollViewer()
