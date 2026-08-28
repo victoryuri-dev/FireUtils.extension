@@ -46,6 +46,10 @@ from hidrantes.calc import (
     calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
 )
+from hidrantes.memorial import (
+    imprimir_bloqueio_velocidade, imprimir_bloqueio_hidrante,
+    imprimir_resumo_dimensionamento,
+)
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req, opt
 from hidrantes import custom as custom_store
@@ -55,16 +59,6 @@ from hidrantes import npshd as npshd_calc
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 P_TRECHO           = u"FireUtils - Trecho"
 P_IDENTIFICADOR    = u"FireUtils - Identificador"
-
-# Simbolos de saida no output window do pyRevit (janela de output do pyRevit
-# roda em unicode e normalmente exibe ✓/✗/≤ sem problema). Se algum ambiente
-# nao renderizar esses caracteres, mude _ASCII_FALLBACK para True aqui -
-# unico lugar do arquivo que define esses simbolos.
-_ASCII_FALLBACK = False
-if _ASCII_FALLBACK:
-    SIM_OK, SIM_X, SIM_LE, SIM_GE = u"OK", u"X", u"<=", u">="
-else:
-    SIM_OK, SIM_X, SIM_LE, SIM_GE = u"✓", u"✗", u"≤", u"≥"
 
 # IronPython 2.7 (engine do pyRevit) tem 'unicode'; CPython 3 não.
 try:
@@ -501,20 +495,7 @@ def _para_por_velocidade(j, limite, nome_trecho):
     falhas = [s for s in j["segmentos"] if s["V"] > limite + 1e-9]
     if not falhas:
         return
-    output.print_md(u"---")
-    output.print_md(u"## {} Velocidade acima do limite — {}".format(SIM_X, nome_trecho))
-    output.print_md(u"Vazão do trecho: **{:.2f} L/min**. Limite normativo: **{:.1f} m/s**.".format(
-        j["Q_lmin"], limite))
-    output.print_md(u"")
-    output.print_md(u"| DN (mm) | V (m/s) | Limite (m/s) |")
-    output.print_md(u"|---|---|---|")
-    for s in falhas:
-        output.print_md(u"| {:.1f} | {:.3f} | {:.1f} |".format(s["d_mm"], s["V"], limite))
-    output.print_md(u"")
-    output.print_md(
-        u"**Correção necessária:** aumente o diâmetro nominal do(s) tubo(s) acima nesse "
-        u"trecho (ou reduza a vazão, se possível) até a velocidade ficar dentro do limite "
-        u"normativo. Ajuste o traçado no Revit e execute 'Dimensionar Hidrantes' novamente.")
+    imprimir_bloqueio_velocidade(output, nome_trecho, j, limite, falhas)
     forms.alert(
         u"Dimensionamento interrompido: velocidade acima do limite em\n'{}'.\n\n"
         u"Aumente o diâmetro desse trecho e execute 'Dimensionar Hidrantes' novamente.\n\n"
@@ -525,18 +506,7 @@ def _para_por_velocidade(j, limite, nome_trecho):
 def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
         return
-    output.print_md(u"---")
-    output.print_md(u"## {} {} não atende a norma".format(SIM_X, label))
-    output.print_md(u"{} obtida: **{:.4f} mca** (mínimo exigido: **{:.4f} mca**)".format(
-        p_ref_desc[0].upper() + p_ref_desc[1:], p, Pmin))
-    output.print_md(u"Vazão obtida: **{:.2f} L/min** (mínimo exigido: **{:.2f} L/min**)".format(
-        q, Qs_lmin))
-    output.print_md(u"")
-    output.print_md(
-        u"**Correção necessária:** revise o diâmetro/traçado do trecho {} — perda de "
-        u"carga ou desnível elevados estão reduzindo a pressão disponível abaixo do "
-        u"mínimo exigido pela norma. Ajuste no Revit e execute 'Dimensionar Hidrantes' "
-        u"novamente.".format(trecho_desc))
+    imprimir_bloqueio_hidrante(output, label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
     forms.alert(
         u"Dimensionamento interrompido: {} não atende a pressão/vazão mínima exigida "
         u"pela norma.\n\nRevise o diâmetro/traçado do trecho {} e execute "
@@ -575,55 +545,11 @@ pot_kw  = pot_cv / 1.36
 # Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
 # completo agora é o botão separado "Memorial de Cálculo")
 # ===========================================================================
-output.print_md(u"# Fire Utils - Dimensionamento de Hidrantes")
-output.print_md(u"**Sistema:** {} | **Método:** {} | **Norma:** {}".format(
-    valor_sistema, metodo_calculo, req(perfil, u"norma")))
-output.print_md(u"---")
-
-output.print_md(u"## 1. Velocidade nos Trechos")
-output.print_md(u"| Trecho | DN (mm) | Q (L/min) | V (m/s) | Limite (m/s) | Verificação |")
-output.print_md(u"|---|---|---|---|---|---|")
-for _nome, _j, _limite in (
-    (u"Sucção (RTI → Bomba)",         res["j"]["t1"], v_max_succao),
-    (u"Recalque (Bomba → Ponto A)",   res["j"]["t2"], v_max_tubo),
-    (u"Ponto A → HD01",               res["j"]["t3"], v_max_tubo),
-    (u"Ponto A → HD02",               res["j"]["t4"], v_max_tubo),
-):
-    for _s in _j["segmentos"]:
-        output.print_md(u"| {} | {:.1f} | {:.2f} | {:.3f} | {:.1f} | {} atende |".format(
-            _nome, _s["d_mm"], _j["Q_lmin"], _s["V"], _limite, SIM_OK))
-output.print_md(u"")
-
-output.print_md(u"## 2. Pressão e Vazão nos Hidrantes Mais Desfavoráveis")
-output.print_md(u"| Hidrante | {} (mca) | Q (L/min) | Mínimo exigido | Verificação |".format(
-    p_ref_desc[0].upper() + p_ref_desc[1:]))
-output.print_md(u"|---|---|---|---|---|")
-output.print_md(u"| HD01 | {:.4f} | {:.2f} | {:.4f} mca / {:.2f} L/min | {} atende |".format(
-    p_hd01_ref, res["Q_hd01"], Pmin, Qs_lmin, SIM_OK))
-output.print_md(u"| HD02 | {:.4f} | {:.2f} | {:.4f} mca / {:.2f} L/min | {} atende |".format(
-    p_hd02_ref, res["Q_hd02"], Pmin, Qs_lmin, SIM_OK))
-output.print_md(u"")
-
-output.print_md(u"## 3. Demanda do Sistema")
-output.print_md(u"Vazão total (Qt): **{:.2f} L/min = {:.4f} m³/h**".format(
-    res["Qt"], res["Qt"] * 60.0 / 1000.0))
-output.print_md(u"Altura manométrica total (HMT = P_RTI): **{:.4f} mca**".format(res["P_RTI"]))
-output.print_md(u"")
-
-output.print_md(u"## 4. Requisitos da Bomba de Recalque")
-output.print_md(u"| Parâmetro | Valor |")
-output.print_md(u"|---|---|")
-output.print_md(u"| Vazão de projeto (Qt) | {:.2f} L/min = {:.4f} m³/h |".format(
-    res["Qt"], res["Qt"] * 60.0 / 1000.0))
-output.print_md(u"| Altura manométrica (Ht) | {:.4f} mca |".format(res["P_RTI"]))
-output.print_md(u"| Eficiência global (η) | {:.0f}% |".format(eta))
-output.print_md(u"| **Potência mínima** | **{:.2f} cv = {:.2f} kW** |".format(pot_cv, pot_kw))
-output.print_md(u"")
-
-output.print_md(u"---")
-output.print_md(u"*Dimensionamento concluído — todas as verificações atendem a norma.*")
-output.print_md(u"*Para o memorial de cálculo completo (passo a passo), execute "
-                u"'Memorial de Cálculo'.*")
+imprimir_resumo_dimensionamento(
+    output, res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
+    v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
+    Pmin, Qs_lmin, eta, pot_cv, pot_kw,
+)
 
 # --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
 import datetime
