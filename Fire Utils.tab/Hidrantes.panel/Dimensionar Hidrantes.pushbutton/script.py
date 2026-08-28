@@ -168,9 +168,21 @@ def _sub(texto):
     return _SUB_RE.sub(lambda m: u"{}<sub>{}</sub>".format(m.group(1), m.group(2)), texto)
 
 
+# Variáveis sem underscore que também devem usar subscrito: Jun, Ltotal, Leq, Pmin
+# Padrão: J + un, L + total, L + eq, P + min (mantém a primeira letra normal)
+_COMPOUND_VARS_RE = _re.compile(
+    u"\\b(J(?=un\\b)|L(?=total\\b|eq\\b)|P(?=min\\b))"
+    u"(un|total|eq|min)\\b")
+
+def _format_compound_vars(texto):
+    """Formata variáveis compostas sem underscore como subscrito: Jun→J_un, etc."""
+    return _COMPOUND_VARS_RE.sub(
+        lambda m: u"{}<sub>{}</sub>".format(m.group(1), m.group(2)), texto)
+
+
 def _inline(valor):
     """Escapa HTML e converte **negrito** / *itálico* / ^expoente / _subscrito."""
-    t = _sub(_sup(_esc(valor)))
+    t = _format_compound_vars(_sub(_sup(_esc(valor))))
     partes = t.split(u"**")
     if len(partes) % 2 == 1:          # só converte se estiver balanceado
         t = u"".join(p if i % 2 == 0 else u"<b>" + p + u"</b>"
