@@ -46,7 +46,6 @@ from hidrantes.calc import calc_j_trecho
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 P_TRECHO           = u"FireUtils - Trecho"
 P_IDENTIFICADOR    = u"FireUtils - Identificador"
-P_COTA             = u"FireUtils - Cota"
 
 # Simbolos de saida no output window do pyRevit (janela de output do pyRevit
 # roda em unicode e normalmente exibe ✓/✗/≤ sem problema). Se algum ambiente
@@ -130,22 +129,6 @@ def get_z(elem, modo="mid"):
     if bbox:
         return (to_m(bbox.Min.Z) + to_m(bbox.Max.Z)) / 2.0
     return None
-
-def get_cota(elem, modo="mid"):
-    """
-    Cota (Z, em metros) de um ponto da marcha. Para RTI/Succao/Recalque,
-    usa em primeiro lugar a cota do conector real da RTI/bomba, gravada
-    pelo 'Mapear Trechos' em FireUtils - Cota — mais precisa que estimar
-    pela geometria do tubo marcado (vertical/horizontal, ver get_z).
-    Cai em get_z(modo) quando o parametro nao existe ou esta vazio
-    (projeto mapeado antes desse parametro existir).
-    """
-    try:
-        p = elem.LookupParameter(P_COTA)
-        if p and p.HasValue:
-            return p.AsDouble()
-    except: pass
-    return get_z(elem, modo=modo)
 
 
 # ===========================================================================
@@ -1176,9 +1159,9 @@ if erros:
 
 # --- Etapa 3: cotas altimétricas de todos os pontos da marcha ---
 cotas = {
-    "z_rti":      get_cota(ident_map[u"RTI"],      modo="auto"),
-    "z_succao":   get_cota(ident_map[u"Succao"],   modo="auto"),
-    "z_recalque": get_cota(ident_map[u"Recalque"], modo="auto"),
+    "z_rti":      get_z(ident_map[u"RTI"],      modo="auto"),
+    "z_succao":   get_z(ident_map[u"Succao"],   modo="auto"),
+    "z_recalque": get_z(ident_map[u"Recalque"], modo="auto"),
     "z_ponto_a":  get_z(ident_map[u"Ponto A"]),
     "z_hd01":     get_z(hid_map[u"HID-01"]),
     "z_hd02":     get_z(hid_map[u"HID-02"]),

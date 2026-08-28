@@ -15,12 +15,6 @@ Shared Parameters (categorias alvo definidas abaixo):
     - FireUtils - ID Hidrante                 (texto)
     - FireUtils - Pressao                     (número)   [mca]
     - FireUtils - Vazao                       (número)   [m³/min]
-
-  Tubos/conexões/acessórios (mapeamento de trechos - "Mapear Trechos"):
-    - FireUtils - Trecho                      (texto)
-    - FireUtils - Identificador               (texto)
-    - FireUtils - Cota                        (número)   [m] - cota do
-      conector real de RTI/bomba, nos elementos RTI/Succao/Recalque
 """
 
 import clr
@@ -98,22 +92,6 @@ PARAMS_CONFIG = [
         "nome":       u"FireUtils - Identificador",
         "tipo_novo":  "Text",
         "tipo_legado": "Text",
-        "categorias": [
-            BuiltInCategory.OST_PipeCurves,
-            BuiltInCategory.OST_PipeFitting,
-            BuiltInCategory.OST_PipeAccessory,
-        ],
-        "instancia":  True,
-        "grupo_ui":   "PG_DATA",
-    },
-    {
-        # Cota (Z, em metros) do conector real de RTI/bomba que originou o
-        # elemento identificado (RTI/Succao/Recalque) - gravada pelo
-        # "Mapear Trechos" para o "Dimensionar Hidrantes" usar direto, em
-        # vez de estimar a cota pela geometria do tubo marcado.
-        "nome":       u"FireUtils - Cota",
-        "tipo_novo":  "Number",
-        "tipo_legado": "Number",
         "categorias": [
             BuiltInCategory.OST_PipeCurves,
             BuiltInCategory.OST_PipeFitting,

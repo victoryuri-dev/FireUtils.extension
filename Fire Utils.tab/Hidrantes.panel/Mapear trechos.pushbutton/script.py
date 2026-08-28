@@ -30,7 +30,6 @@ from hidrantes.params import create_hydrant_params
 
 P_TRECHO        = u"FireUtils - Trecho"
 P_IDENTIFICADOR = u"FireUtils - Identificador"
-P_COTA          = u"FireUtils - Cota"
 
 doc    = __revit__.ActiveUIDocument.Document
 uidoc  = __revit__.ActiveUIDocument
@@ -115,20 +114,6 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
                         visitados.add(vid)
                         fila.append(viz)
             except: continue
-    return None
-
-def get_cota_conector(elem, direcoes):
-    """Cota (Z, em metros) do primeiro conector nativo e conectado de
-    `elem` (RTI ou bomba) cuja Direction esteja em `direcoes`. Essa e a
-    cota real do ponto onde o equipamento se conecta a rede - mais precisa
-    que estimar pela geometria do tubo marcado (vertical/horizontal).
-    Retorna None se nao houver conector nessa direcao conectado."""
-    for conn in get_conectores(elem):
-        try:
-            if conn.Direction not in direcoes: continue
-            if not conn.IsConnected: continue
-            return to_m(conn.Origin.Z)
-        except: continue
     return None
 
 def get_lt(pipe):
@@ -276,16 +261,12 @@ with Transaction(doc, "FireUtils - Reset Mapeamento") as _t:
         for _elem in _todos:
             _p_trecho = _elem.LookupParameter(P_TRECHO)
             _p_ident  = _elem.LookupParameter(P_IDENTIFICADOR)
-            _p_cota   = _elem.LookupParameter(P_COTA)
             _alterou  = False
             if _p_trecho and not _p_trecho.IsReadOnly and _p_trecho.AsString():
                 _p_trecho.Set(u"")
                 _alterou = True
             if _p_ident and not _p_ident.IsReadOnly and _p_ident.AsString():
                 _p_ident.Set(u"")
-                _alterou = True
-            if _p_cota and not _p_cota.IsReadOnly and _p_cota.HasValue:
-                _p_cota.Set(0.0)
                 _alterou = True
             if _alterou:
                 _resetados += 1
@@ -364,19 +345,6 @@ eid_rec   = get_id(tubo_rec)
 
 output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
     eid_rti, eid_bomba, eid_rec
-))
-
-# Cota real dos conectores de RTI/bomba - gravada em "FireUtils - Cota" no
-# passo 6 para o "Dimensionar Hidrantes" usar direto, em vez de estimar a
-# cota pela geometria do tubo marcado (vertical/horizontal).
-cota_rti      = get_cota_conector(rti, (FlowDirectionType.Out,)) if rti else None
-cota_succao   = get_cota_conector(bomba, (FlowDirectionType.In,))
-cota_recalque = get_cota_conector(bomba, (FlowDirectionType.Out,))
-
-output.print_md(u"Cota RTI: {} | Cota succao: {} | Cota recalque: {}".format(
-    u"{:.4f} m".format(cota_rti) if cota_rti is not None else u"n/d",
-    u"{:.4f} m".format(cota_succao) if cota_succao is not None else u"n/d",
-    u"{:.4f} m".format(cota_recalque) if cota_recalque is not None else u"n/d",
 ))
 
 # ===========================================================================
@@ -460,13 +428,9 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
             if eid == eid_rti:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
                 set_param(elem, P_IDENTIFICADOR, u"RTI")
-                if cota_rti is not None:
-                    set_param(elem, P_COTA, cota_rti)
             elif eid == eid_bomba:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
                 set_param(elem, P_IDENTIFICADOR, u"Succao")
-                if cota_succao is not None:
-                    set_param(elem, P_COTA, cota_succao)
             else:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
             cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
@@ -478,8 +442,6 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
             if eid == eid_rec:
                 set_param(elem, P_TRECHO, u"Bomba - Ponto A")
                 set_param(elem, P_IDENTIFICADOR, u"Recalque")
-                if cota_recalque is not None:
-                    set_param(elem, P_COTA, cota_recalque)
             elif eid == ponto_a_id:
                 set_param(elem, P_TRECHO, u"Bomba - Ponto A")
                 set_param(elem, P_IDENTIFICADOR, u"Ponto A")
