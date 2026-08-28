@@ -332,7 +332,7 @@ def _frac(num, den):
                 _inline(num), _inline(den))
 
 
-def _formula(expr, definicoes=None):
+def _formula(expr, definicoes=None, desenvolvimento=None):
     """
     Emite uma equação em destaque (fórmula literal, sem números), no formato:
 
@@ -343,9 +343,13 @@ def _formula(expr, definicoes=None):
         Leq: Comprimento equivalente das conexões e acessórios.
 
     definicoes: lista de (símbolo, descrição); quando omitida, só a equação.
+    desenvolvimento: lista de linhas (texto ou fórmula) mostrando de onde a
+        equação acima vem — a dedução, não só o resultado final; quando
+        omitida, a equação aparece sem o bloco "Desenvolvimento".
     """
     html = [u"<div class='fu-eq'>{}</div>".format(_inline(expr))]
     _formula_onde(html, definicoes)
+    _formula_dev(html, desenvolvimento)
     output.print_html(u"".join(html))
 
 
@@ -361,7 +365,20 @@ def _formula_onde(html, definicoes):
     html.append(u"</div>")
 
 
-def _formula_frac(lhs, num, den, depois=u"", sufixo=u"", definicoes=None):
+def _formula_dev(html, desenvolvimento):
+    """Acrescenta o bloco 'Desenvolvimento:' — a dedução da fórmula, passo a
+    passo, a partir do princípio físico geral de onde ela vem. Usado tanto
+    por _formula() quanto por _formula_frac()."""
+    if not desenvolvimento:
+        return
+    html.append(u"<div class='fu-eq-dev'><p class='fu-eq-dev-lbl'>Desenvolvimento:</p>")
+    for linha in desenvolvimento:
+        html.append(u"<p class='fu-eq-dev-p'>{}</p>".format(_inline(linha)))
+    html.append(u"</div>")
+
+
+def _formula_frac(lhs, num, den, depois=u"", sufixo=u"", definicoes=None,
+                  desenvolvimento=None):
     """
     Como _formula(), mas para uma equação cujo lado direito é uma fração —
     renderiza numerador sobre denominador (com linha), em vez de
@@ -377,6 +394,7 @@ def _formula_frac(lhs, num, den, depois=u"", sufixo=u"", definicoes=None):
         corpo += u"   {}".format(_inline(sufixo))
     html = [u"<div class='fu-eq'>{}</div>".format(corpo)]
     _formula_onde(html, definicoes)
+    _formula_dev(html, desenvolvimento)
     output.print_html(u"".join(html))
 
 
@@ -476,6 +494,12 @@ def _css(cor_texto, cor_borda, cor_fundo, cor_suave, cor_acento):
 .fu-memorial .fu-eq-onde {{ margin:2px 0 22px 21px; }}
 .fu-memorial .fu-eq-onde-lbl {{ margin:8px 0 4px 0 !important; font-weight:bold; }}
 .fu-memorial .fu-eq-def {{ margin:3px 0 !important; }}
+.fu-memorial .fu-eq-dev {{ margin:2px 0 22px 21px; padding:8px 12px;
+                           border-left:2px solid {suave}; }}
+.fu-memorial .fu-eq-dev-lbl {{ margin:0 0 4px 0 !important; font-weight:bold;
+                               font-style:normal; }}
+.fu-memorial .fu-eq-dev-p {{ margin:3px 0 !important; font-style:italic;
+                             opacity:.85; }}
 .fu-memorial .fu-bloco {{ margin:0 0 30px 0; }}
 """.format(txt=cor_texto, borda=cor_borda, fundo=cor_fundo, suave=cor_suave,
            acento=cor_acento)
@@ -831,7 +855,15 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     output.print_md(u"**{}) Comprimento total da tubulação**, somado por diâmetro:".format(prox()))
     _formula(u"Ltotal = L + Leq",
              [(u"L", u"Comprimento real da tubulação"),
-              (u"Leq", u"Comprimento equivalente das conexões e acessórios do trecho")])
+              (u"Leq", u"Comprimento equivalente das conexões e acessórios do trecho")],
+             desenvolvimento=[
+                 u"Uma conexão ou acessório (curva, tê, registro etc.) causa uma perda de "
+                 u"carga localizada que, na prática, equivale à perda distribuída de um "
+                 u"comprimento adicional de tubo reto do mesmo diâmetro — o comprimento "
+                 u"equivalente (Leq), tabelado por tipo de peça.",
+                 u"Somando esse comprimento fictício ao comprimento real, toda a perda do "
+                 u"trecho (distribuída + localizada) é obtida com uma única aplicação de "
+                 u"Hazen-Williams sobre Ltotal, em vez de calcular cada conexão à parte."])
 
     output.print_md(u"**{}) Perda de carga**, por Hazen-Williams, também por diâmetro:".format(prox()))
     _formula(u"Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87   [m/m]",
@@ -839,9 +871,21 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
               (u"Q", u"Vazão no trecho, em L/min"),
               (u"C", u"Coeficiente de rugosidade, adimensional — {} para "
                      u"aço/ferro galvanizado".format(C_HW)),
-              (u"D", u"Diâmetro nominal (DN) da tubulação, em mm")])
+              (u"D", u"Diâmetro nominal (DN) da tubulação, em mm")],
+             desenvolvimento=[
+                 u"Parte-se da equação de Hazen-Williams na forma vazão×diâmetro×perda "
+                 u"unitária: Q = 0,2785 · C · D^2,63 · J^0,54 (Q em m³/s, D em m, J em m/m).",
+                 u"Isolando J: J = Q^(1/0,54) · C^(−1/0,54) · D^(−2,63/0,54) / 0,2785^(1/0,54) "
+                 u"— com 1/0,54 ≈ 1,85 e 2,63/0,54 ≈ 4,87, os expoentes da fórmula.",
+                 u"Convertendo Q de m³/s para L/min e D de m para mm — as unidades práticas "
+                 u"do memorial — a constante se ajusta para o valor adotado, 605·10⁴, "
+                 u"resultando em Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87."])
     _formula(u"J = Ltotal · Jun   [mca]",
-             [(u"J", u"Perda de carga do trecho — soma dos diâmetros")])
+             [(u"J", u"Perda de carga do trecho — soma dos diâmetros")],
+             desenvolvimento=[
+                 u"Jun já é a perda de carga por metro de tubulação (m/m); multiplicando "
+                 u"pelo comprimento total do trecho (Ltotal) obtém-se a perda de carga "
+                 u"absoluta do trecho, em mca."])
 
     output.print_md(u"**{}) Velocidade de escoamento**, verificada contra o limite do "
                     u"trecho:".format(prox()))
@@ -849,7 +893,13 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                  definicoes=[(u"V", u"Velocidade de escoamento"),
                             (u"Limite", u"{:.1f} m/s no recalque/descarga; {:.1f} m/s "
                                        u"na sucção {}".format(
-                                           v_max_tubo, v_max_succao, succao))])
+                                           v_max_tubo, v_max_succao, succao))],
+                 desenvolvimento=[
+                     u"Da equação da continuidade, V = Q/A, com A = π·D²/4 (área da seção "
+                     u"circular do tubo): V = 4·Q/(π·D²).",
+                     u"Convertendo Q de L/min para m³/s (÷60000) e D de mm para m (÷1000), e "
+                     u"agrupando as constantes, chega-se ao fator prático 21,22: "
+                     u"V = 21,22 · Q / D², com Q em L/min, D em mm e V em m/s."])
 
     if esguicho:
         output.print_md(u"**{}) Esguicho, mangueira e válvula do hidrante** — como o par "
@@ -862,15 +912,43 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                                 (u"f", u"Fator de atrito = {:g}".format(F_DARCY)),
                                 (u"Lm", u"Comprimento da mangueira, em m"),
                                 (u"g", u"Aceleração da gravidade = {:g} m/s²".format(G)),
-                                (u"Dm", u"Diâmetro da mangueira, em m")])
+                                (u"Dm", u"Diâmetro da mangueira, em m")],
+                     desenvolvimento=[
+                         u"Parte-se de Darcy-Weisbach: Jm = f · (Lm/Dm) · (Vm²/2g), com Vm a "
+                         u"velocidade média na mangueira.",
+                         u"Pela continuidade, Vm = 4·Q/(π·Dm²) — Q é a vazão INDIVIDUAL de "
+                         u"cada hidrante, nunca Qt nem Qt/2, já que cada mangueira tem sua "
+                         u"própria vazão, que pode divergir da do outro hidrante depois do "
+                         u"equilíbrio hidráulico.",
+                         u"Substituindo Vm em Darcy-Weisbach: Jm = f·(Lm/Dm)·(16·Q²/(π²·Dm⁴·2g)) "
+                         u"= {:g}·f·Lm/(g·π²·Dm⁵) · Q² — a forma fechada usada aqui.".format(COEF_JM)])
         _formula_frac(u"V", u"21,22 · Q", u"Dm²", sufixo=u"[m/s]",
-                     definicoes=[(u"V", u"Velocidade do fluido na mangueira")])
+                     definicoes=[(u"V", u"Velocidade do fluido na mangueira")],
+                     desenvolvimento=[
+                         u"Mesma dedução da velocidade de escoamento mostrada acima "
+                         u"(continuidade, V = 4Q/(πD²)), agora aplicada ao diâmetro da "
+                         u"mangueira (Dm) em vez do diâmetro da tubulação."])
         _formula_frac(u"Jvalv", u"K · V²", u"2g", sufixo=u"[mca]",
                      definicoes=[(u"Jvalv", u"Perda de carga na válvula angular do hidrante"),
-                                (u"K", u"Fator K da válvula, adotado = {:g}".format(K_VALVULA))])
+                                (u"K", u"Fator K da válvula, adotado = {:g}".format(K_VALVULA))],
+                     desenvolvimento=[
+                         u"Forma clássica de perda de carga localizada (\"perda menor\") em "
+                         u"válvulas e conexões: h_L = K · V²/(2g), onde K é um coeficiente "
+                         u"empírico que depende da geometria/abertura do dispositivo e V é a "
+                         u"velocidade média do fluido através dele.",
+                         u"Aqui V é a velocidade na mangueira calculada acima, já que o "
+                         u"diâmetro de passagem da válvula angular acompanha o diâmetro da "
+                         u"mangueira; K = {:g} é o valor adotado em projeto para válvulas "
+                         u"angulares de hidrante.".format(K_VALVULA)])
         _formula(u"P_valv = Pmin + Jm + Jvalv",
                  [(u"P_valv", u"Pressão na válvula do hidrante, soma das perdas "
-                              u"entre o esguicho e a válvula")])
+                              u"entre o esguicho e a válvula")],
+                 desenvolvimento=[
+                     u"Da equação de energia (Bernoulli) entre a ponta do esguicho e a "
+                     u"válvula: a pressão no ponto mais próximo da bomba (a válvula) é a do "
+                     u"ponto mais distante (o esguicho, onde vale Pmin) somada a tudo que se "
+                     u"perde no caminho — aqui, a perda na mangueira (Jm) e na própria "
+                     u"válvula (Jvalv)."])
 
     output.print_md(u"**{}) Fator K**, calculado **somente no 1º hidrante mais "
                     u"desfavorável**, a partir do par normativo:".format(prox()))
@@ -878,7 +956,17 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                  definicoes=[(u"K", u"Fator de vazão (coeficiente de escoamento) do hidrante"),
                             (u"Q", u"Vazão normativa do hidrante mais desfavorável, em L/min"),
                             (u"P", u"{}, em bar (1 bar = {} mca)".format(
-                                _p_ref_desc, MCA_POR_BAR))])
+                                _p_ref_desc, MCA_POR_BAR))],
+                 desenvolvimento=[
+                     u"Vem da equação geral de descarga por orifício/bocal pressurizado — a "
+                     u"mesma que rege esguichos e válvulas de hidrante: a vazão é "
+                     u"proporcional à raiz quadrada da pressão disponível, Q = K·√P, onde K "
+                     u"reúne a área efetiva de passagem, o coeficiente de descarga do "
+                     u"dispositivo e as constantes de conversão de unidade.",
+                     u"Como K é uma característica geométrica do dispositivo — não muda com "
+                     u"a pressão — basta isolá-lo a partir do par normativo (Q, P) do "
+                     u"hidrante mais desfavorável, K = Q/√P, para reaproveitá-lo nos demais "
+                     u"hidrantes idênticos da rede."])
     output.print_md(u"Esse K, uma vez calculado, é reaproveitado para achar a vazão dos "
                     u"demais hidrantes: **Q = K·√P**.")
     output.print_md(u"")
@@ -889,7 +977,16 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
               (u"P_ref", u"Pressão de referência do hidrante — Pmin ou P_valv, "
                         u"conforme o método"),
               (u"J", u"Perda de carga do ramal (hidrante → Ponto A)"),
-              (u"∆H", u"Desnível geométrico do trecho (Hi − Hf)")])
+              (u"∆H", u"Desnível geométrico do trecho (Hi − Hf)")],
+             desenvolvimento=[
+                 u"Da equação de energia (Bernoulli) entre dois pontos de uma tubulação, em "
+                 u"termos de carga (mca): a pressão no ponto a montante (mais perto da "
+                 u"bomba) é igual à pressão no ponto a jusante (mais perto do hidrante) "
+                 u"somada à perda de carga entre eles e à diferença de cota — "
+                 u"P_montante = P_jusante + J + (z_jusante − z_montante).",
+                 u"Como ∆H é definido no memorial como Hi − Hf (ponto inicial menos final, "
+                 u"na direção da marcha), essa diferença de cota entra com sinal + ou − "
+                 u"conforme o trecho sobe ou desce — daí o \"±\" na fórmula."])
     output.print_md(u"A pressão adotada no Ponto A é a **maior** entre os ramais "
                     u"calculados — o ramal dessa pressão é o **ramal governante**.")
     output.print_md(u"")
@@ -898,16 +995,29 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     _formula(u"P_hd = P_PA − J ∓ ∆H",
              [(u"P_hd", u"Pressão resultante em cada hidrante — marcha inversa, "
                        u"partindo do Ponto A (o ramal governante retorna "
-                       u"exatamente à pressão de referência)")])
+                       u"exatamente à pressão de referência)")],
+             desenvolvimento=[
+                 u"Mesma equação de energia usada em P_PA, aplicada agora no sentido "
+                 u"inverso da marcha — do Ponto A (pressão já conhecida) de volta a cada "
+                 u"hidrante — por isso os sinais de J e ∆H se invertem."])
     _formula(u"Q = K · √P",
              [(u"Q", u"Vazão final de cada hidrante, a partir do Fator K e de P_hd"),
-              (u"Qt", u"Vazão total = soma das vazões dos hidrantes (Qt = ΣQ)")])
+              (u"Qt", u"Vazão total = soma das vazões dos hidrantes (Qt = ΣQ)")],
+             desenvolvimento=[
+                 u"Mesma relação Q = K·√P já deduzida para o Fator K, aqui usada no sentido "
+                 u"inverso: com o Fator K fixo e a pressão disponível em cada hidrante "
+                 u"(P_hd), obtém-se a vazão final de cada um."])
 
     output.print_md(u"**{}) Marcha de pressões** até a bomba e a RTI, agora com a "
                     u"vazão total Qt:".format(prox()))
     _formula(u"P = P_anterior + J ± ∆H",
              [(u"P", u"Pressão no ponto seguinte — aplicada do Ponto A até a saída "
-                    u"da bomba, e da saída da bomba até a RTI (passando pela sucção)")])
+                    u"da bomba, e da saída da bomba até a RTI (passando pela sucção)")],
+             desenvolvimento=[
+                 u"Generalização da mesma equação de energia (Bernoulli) usada em P_PA e "
+                 u"P_hd, aplicada agora aos trechos entre o Ponto A e a bomba, e entre a "
+                 u"bomba e a RTI — sempre \"pressão do próximo ponto = pressão atual + "
+                 u"perda de carga ± diferença de cota\"."])
 
     # ── Cálculo por trecho (marcha) ───────────────────────────────────────
     n7 = sec(u"Cálculo Trecho a Trecho")
