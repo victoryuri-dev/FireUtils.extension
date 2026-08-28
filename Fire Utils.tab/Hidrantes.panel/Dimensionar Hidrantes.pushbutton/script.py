@@ -1253,7 +1253,12 @@ for elem in FilteredElementCollector(doc, doc.ActiveView.Id).WhereElementIsNotEl
     t = get_trecho(elem)
     if t in trechos_elems: trechos_elems[t].append(elem)
     i = get_identificador(elem)
-    if i: ident_map[i] = elem
+    # So Pipe ou FamilyInstance sao alvos legitimos de "Mapear Trechos" -
+    # ignora qualquer outro elemento que porventura carregue o mesmo
+    # texto no parametro (ex.: elemento auxiliar de categoria "Linha de
+    # centro"), pra nao pegar o elemento errado por engano.
+    if i and isinstance(elem, (Pipe, FamilyInstance)):
+        ident_map[i] = elem
     if isinstance(elem, FamilyInstance):
         try:
             p = elem.LookupParameter(u"FireUtils - Identificador")
