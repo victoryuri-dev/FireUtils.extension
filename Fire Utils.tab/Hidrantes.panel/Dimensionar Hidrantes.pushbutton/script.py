@@ -19,8 +19,10 @@ import re as _re
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
+    FlowDirectionType, ConnectorType,
     LocationCurve, LocationPoint, UnitUtils,
 )
+from Autodesk.Revit.DB.Plumbing import Pipe
 from pyrevit import forms, script
 
 try:
@@ -73,7 +75,9 @@ def get_trecho(elem):
 def get_identificador(elem):
     try:
         p = elem.LookupParameter(P_IDENTIFICADOR)
-        return p.AsString() if p else None
+        if not p or not p.HasValue: return None
+        valor = p.AsString()
+        return valor.strip() if valor else None
     except: return None
 
 def get_comprimento(pipe):
@@ -129,6 +133,128 @@ def get_z(elem, modo="mid"):
     if bbox:
         return (to_m(bbox.Min.Z) + to_m(bbox.Max.Z)) / 2.0
     return None
+
+# ===========================================================================
+# COTAS DE RTI/SUCCAO/RECALQUE/HIDRANTE — ao vivo, pelos conectores nativos
+# ===========================================================================
+# RTI e bomba sao marcadas pelo "Mapear Trechos" com FireUtils -
+# Identificador = "RTI"/"Bomba", direto na propria familia - igual ja
+# acontece com HID-01/HID-02 na valvula do hidrante. Com o elemento
+# certo em maos (achado pela tag, sem percorrer a rede), a cota e so
+# ler o conector nativo dele. Nada e gravado; recalculado a cada execucao.
+
+def get_conectores(elem):
+    try:
+        if hasattr(elem, 'ConnectorManager'):
+            return list(elem.ConnectorManager.Connectors)
+        mep = elem.MEPModel
+        if mep and mep.ConnectorManager:
+            return list(mep.ConnectorManager.Connectors)
+    except: pass
+    return []
+
+def get_cota_conector(elem, direcoes=None):
+    """Cota (Z, em metros) de um conector nativo e conectado de `elem`.
+    Se `direcoes` for informado (RTI/bomba), usa o primeiro conector com
+    essa Direction; senao (valvula do hidrante), prioriza um conector
+    conectado e cai no primeiro conector que existir. None se nao
+    encontrar - sem nenhum fallback por geometria."""
+    conns = get_conectores(elem)
+    if direcoes is not None:
+        for conn in conns:
+            try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
+                if conn.Direction not in direcoes: continue
+                if not conn.IsConnected: continue
+                return to_m(conn.Origin.Z)
+            except: continue
+        return None
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if conn.IsConnected:
+                return to_m(conn.Origin.Z)
+        except: continue
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            return to_m(conn.Origin.Z)
+        except: continue
+    return None
+
+def get_cota_rti(elem):
+    """Cota da RTI: acha a ponta solta de `elem` (o elemento marcado
+    "RTI" pelo "Mapear Trechos" - familia da RTI ou, no fallback manual,
+    o proprio tubo) e le a elevacao dela. Ponta solta = conector fisico
+    (nao Logical) que nao esta conectado a nada - o mesmo criterio tanto
+    para a familia quanto para o tubo, sem tentar adivinhar Direction.
+    None se nao achar nenhuma ponta solta."""
+    cm = None
+    if hasattr(elem, "ConnectorManager") and elem.ConnectorManager:
+        cm = elem.ConnectorManager
+    elif hasattr(elem, "MEPModel") and elem.MEPModel and elem.MEPModel.ConnectorManager:
+        cm = elem.MEPModel.ConnectorManager
+    if not cm:
+        return None
+    for conn in cm.Connectors:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected:
+                return to_m(conn.Origin.Z)
+        except: continue
+    return None
+
+def diagnostico_conectores(elem):
+    """Linhas com id/tipo/categoria de `elem` e Direction/IsConnected/Z de
+    cada conector dele - usado so para montar o alerta quando uma cota
+    nao e lida, pra mostrar exatamente por que (em vez de um "nao foi
+    possivel" generico). Nao usa get_conectores (que engole excecoes) -
+    aqui o erro real, se houver, aparece no alerta."""
+    linhas = []
+    try:    id_txt = u"{}".format(elem.Id)
+    except: id_txt = u"?"
+    try:    tipo = type(elem).__name__
+    except: tipo = u"?"
+    try:    eh_pipe = isinstance(elem, Pipe)
+    except Exception as e: eh_pipe = u"erro ({})".format(e)
+    try:    cat = elem.Category.Name if elem.Category else u"(sem categoria)"
+    except: cat = u"?"
+    try:    tem_cm = hasattr(elem, "ConnectorManager")
+    except: tem_cm = u"?"
+    linhas.append(u"    Id={} tipo={} isinstance(Pipe)={}".format(id_txt, tipo, eh_pipe))
+    linhas.append(u"    categoria={} hasattr(ConnectorManager)={}".format(cat, tem_cm))
+
+    conns = None
+    erro = None
+    try:
+        cm = elem.ConnectorManager if hasattr(elem, "ConnectorManager") else None
+        linhas.append(u"    elem.ConnectorManager = {}".format(cm))
+        if cm is not None:
+            conns = list(cm.Connectors)
+        else:
+            mep = elem.MEPModel
+            if mep and mep.ConnectorManager:
+                conns = list(mep.ConnectorManager.Connectors)
+    except Exception as e:
+        erro = e
+
+    if erro is not None:
+        linhas.append(u"    erro ao ler ConnectorManager: {}".format(erro))
+        return linhas
+    if not conns:
+        linhas.append(u"    ConnectorManager nao encontrou nenhum conector")
+        return linhas
+
+    for i, conn in enumerate(conns):
+        try:    direcao = conn.Direction
+        except: direcao = u"?"
+        try:    conectado = conn.IsConnected
+        except: conectado = u"?"
+        try:    z = u"{:.4f} m".format(to_m(conn.Origin.Z))
+        except: z = u"?"
+        linhas.append(u"    {}. Direction={} IsConnected={} Z={}".format(
+            i + 1, direcao, conectado, z))
+    return linhas
 
 
 # ===========================================================================
@@ -1133,11 +1259,16 @@ TRECHOS = [u"RTI - Bomba", u"Bomba - Ponto A", u"Ponto A - Hid 01", u"Ponto A - 
 trechos_elems = {t: [] for t in TRECHOS}
 ident_map = {}; hid_map = {}
 
-for elem in FilteredElementCollector(doc, doc.ActiveView.Id).WhereElementIsNotElementType().ToElements():
+for elem in FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements():
     t = get_trecho(elem)
     if t in trechos_elems: trechos_elems[t].append(elem)
     i = get_identificador(elem)
-    if i: ident_map[i] = elem
+    # So Pipe ou FamilyInstance sao alvos legitimos de "Mapear Trechos" -
+    # ignora qualquer outro elemento que porventura carregue o mesmo
+    # texto no parametro (ex.: elemento auxiliar de categoria "Linha de
+    # centro"), pra nao pegar o elemento errado por engano.
+    if i and isinstance(elem, (Pipe, FamilyInstance)):
+        ident_map[i] = elem
     if isinstance(elem, FamilyInstance):
         try:
             p = elem.LookupParameter(u"FireUtils - Identificador")
@@ -1148,7 +1279,7 @@ for elem in FilteredElementCollector(doc, doc.ActiveView.Id).WhereElementIsNotEl
 erros = []
 for t in TRECHOS:
     if not trechos_elems[t]: erros.append(u"Trecho '{}' vazio".format(t))
-for i in [u"RTI", u"Succao", u"Recalque", u"Ponto A"]:
+for i in [u"RTI", u"Bomba", u"Ponto A"]:
     if i not in ident_map: erros.append(u"Identificador '{}' não encontrado".format(i))
 for h in [u"HID-01", u"HID-02"]:
     if h not in hid_map: erros.append(u"'{}' não encontrado".format(h))
@@ -1158,23 +1289,39 @@ if erros:
     script.exit()
 
 # --- Etapa 3: cotas altimétricas de todos os pontos da marcha ---
+# RTI e Bomba vêm do próprio ident_map (marcados direto na família pelo
+# "Mapear Trechos"): a cota é lida direto do conector nativo delas.
 cotas = {
-    "z_rti":      get_z(ident_map[u"RTI"],      modo="auto"),
-    "z_succao":   get_z(ident_map[u"Succao"],   modo="auto"),
-    "z_recalque": get_z(ident_map[u"Recalque"], modo="auto"),
+    "z_rti":      get_cota_rti(ident_map[u"RTI"]),
+    "z_succao":   get_cota_conector(ident_map[u"Bomba"], (FlowDirectionType.In,)),
+    "z_recalque": get_cota_conector(ident_map[u"Bomba"], (FlowDirectionType.Out,)),
     "z_ponto_a":  get_z(ident_map[u"Ponto A"]),
-    "z_hd01":     get_z(hid_map[u"HID-01"]),
-    "z_hd02":     get_z(hid_map[u"HID-02"]),
+    "z_hd01":     get_cota_conector(hid_map[u"HID-01"]),
+    "z_hd02":     get_cota_conector(hid_map[u"HID-02"]),
 }
 
 _nomes_cotas = {
     "z_rti": u"RTI", "z_succao": u"Sucção", "z_recalque": u"Recalque",
     "z_ponto_a": u"Ponto A", "z_hd01": u"HID-01", "z_hd02": u"HID-02",
 }
-erros_z = [_nomes_cotas[k] for k, z in cotas.items() if z is None]
-if erros_z:
-    forms.alert(u"Não foi possível ler a elevação de:\n{}".format(u"\n".join(erros_z)),
-                title="Fire Utils", warn_icon=True)
+# Elemento por tras de cada cota - so os lidos por conector (Ponto A usa
+# geometria, get_z, e nao entra aqui).
+_elem_cotas = {
+    "z_rti": ident_map.get(u"RTI"), "z_succao": ident_map.get(u"Bomba"),
+    "z_recalque": ident_map.get(u"Bomba"),
+    "z_hd01": hid_map.get(u"HID-01"), "z_hd02": hid_map.get(u"HID-02"),
+}
+_chaves_erro = [k for k, z in cotas.items() if z is None]
+if _chaves_erro:
+    detalhes = [u"Não foi possível ler a elevação de:"]
+    for k in _chaves_erro:
+        elem = _elem_cotas.get(k)
+        if elem is None:
+            detalhes.append(u"- {}".format(_nomes_cotas[k]))
+            continue
+        detalhes.append(u"- {} (elemento ID {}):".format(_nomes_cotas[k], elem.Id))
+        detalhes.extend(diagnostico_conectores(elem))
+    forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
     script.exit()
 
 # --- Etapa 3b: dados do NPSH disponível ---
