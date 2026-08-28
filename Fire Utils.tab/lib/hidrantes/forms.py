@@ -13,12 +13,13 @@ clr.AddReference("WindowsBase")
 
 from System.Windows import (
     Window, Thickness, HorizontalAlignment, VerticalAlignment,
-    ResizeMode, WindowStartupLocation
+    ResizeMode, WindowStartupLocation, TextWrapping
 )
 from System.Windows.Controls import (
     Grid, StackPanel, Label, ComboBox, ComboBoxItem, TextBox, CheckBox,
-    Button, DataGrid, DataGridTextColumn, ScrollViewer, Border,
-    Orientation, DataGridSelectionMode, DataGridSelectionUnit
+    Button, DataGrid, DataGridTextColumn, ScrollViewer, ScrollBarVisibility,
+    Border, Orientation, DataGridSelectionMode, DataGridSelectionUnit,
+    Expander, TextBlock, DockPanel, Dock
 )
 from System.Windows import GridLength, GridUnitType
 from System.Windows.Media import SolidColorBrush, Color
@@ -27,6 +28,8 @@ from System import String
 
 from hidrantes.db import SISTEMAS_HIDRANTE, get_todos_tipos
 from hidrantes import custom as custom_store
+from hidrantes import succao as succao_calc
+from hidrantes import npshd as npshd_calc
 
 # Opções de método de cálculo — a lista canônica vive no motor (calc.py),
 # que é quem interpreta a escolha para saber onde o par normativo (Q, Pmin)
@@ -77,7 +80,7 @@ def _build_rows():
 # ---------------------------------------------------------------------------
 class HydrantSystemForm(Window):
 
-    def __init__(self, custom_inicial=None, metodo_inicial=None):
+    def __init__(self, custom_inicial=None, metodo_inicial=None, succao_inicial=None):
         self.Title  = "Fire Utils – Tipo de Sistema de Hidrante (NT 22)"
         self.Width  = 800
         self.Height = 680
@@ -90,7 +93,7 @@ class HydrantSystemForm(Window):
         # Valores personalizados já salvos neste projeto (ou None)
         self._custom_inicial = custom_inicial
 
-        self._build_ui()
+        self._build_ui(succao_inicial)
 
         # Se o projeto já tem valores personalizados salvos, pré-carrega os
         # campos e deixa o modo personalizado ligado — o usuário pode
@@ -104,9 +107,12 @@ class HydrantSystemForm(Window):
             self._cmb_metodo.SelectedIndex = METODOS_CALCULO.index(metodo_inicial)
 
     # ------------------------------------------------------------------
-    def _build_ui(self):
+    def _build_ui(self, succao_inicial=None):
+        moldura = DockPanel()
+        moldura.LastChildFill = True
+        moldura.Margin = Thickness(14)
+
         root = StackPanel()
-        root.Margin = Thickness(14)
 
         # Título
         title = Label()
@@ -158,10 +164,17 @@ class HydrantSystemForm(Window):
         # Bloco de método de cálculo
         root.Children.Add(self._build_metodo_panel())
 
-        # Botões
+        # Configurações avançadas (hoje só o NPSH disponível) — colapsado por
+        # padrão, logo após o sistema personalizado.
+        root.Children.Add(self._build_avancado_panel(succao_inicial))
+
+        # Botões — fixos no rodapé, fora da área rolável, para não sumirem
+        # quando "Configurações Avançadas" está expandido e o conteúdo
+        # passa da altura da janela.
         btn_panel = StackPanel()
         btn_panel.Orientation = Orientation.Horizontal
         btn_panel.HorizontalAlignment = HorizontalAlignment.Right
+        btn_panel.Margin = Thickness(0, 10, 0, 0)
 
         btn_ok = Button()
         btn_ok.Content = "Confirmar"
@@ -178,9 +191,15 @@ class HydrantSystemForm(Window):
 
         btn_panel.Children.Add(btn_ok)
         btn_panel.Children.Add(btn_cancel)
-        root.Children.Add(btn_panel)
+        DockPanel.SetDock(btn_panel, Dock.Bottom)
+        moldura.Children.Add(btn_panel)
 
-        self.Content = root
+        rolagem = ScrollViewer()
+        rolagem.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        rolagem.Content = root
+        moldura.Children.Add(rolagem)
+
+        self.Content = moldura
 
     # ------------------------------------------------------------------
     # Painel de valores personalizados
@@ -288,6 +307,80 @@ class HydrantSystemForm(Window):
         box.Child = painel
         return box
 
+    # ------------------------------------------------------------------
+    # Configurações avançadas — NPSH disponível
+    # ------------------------------------------------------------------
+    def _build_avancado_panel(self, succao_inicial):
+        d = succao_calc.normalizar_dados(succao_inicial or {})
+
+        expander = Expander()
+        expander.Header      = u"Configurações Avançadas"
+        expander.FontWeight  = System_FontWeights_Bold()
+        expander.Margin      = Thickness(0, 0, 0, 10)
+        # Só abre sozinho quando já há algo salvo — o usuário não precisa
+        # entrar aqui em toda classificação de rotina.
+        expander.IsExpanded  = bool(d[u"npshr_m"])
+
+        raiz = StackPanel()
+        raiz.Margin = Thickness(10, 8, 10, 4)
+
+        sub = Label()
+        sub.Content    = u"NPSH"
+        sub.FontWeight = System_FontWeights_Bold()
+        sub.Margin     = Thickness(0, 0, 0, 2)
+        raiz.Children.Add(sub)
+
+        _nota(raiz,
+              u"Usado no cálculo do NPSH disponível, exigido só quando a "
+              u"condição de sucção resultar negativa. Altitude e temperatura "
+              u"já vêm com o valor usual — trocar só pelas opções das "
+              u"tabelas de referência.")
+
+        self._opc_altitude = [(alt, rot) for alt, _ha, rot
+                              in npshd_calc.opcoes_altitude()]
+        self._cmb_altitude = _combo(
+            raiz, u"Altitude do local (pressão atmosférica, Ha)",
+            self._opc_altitude,
+            d[u"altitude_m"] if d[u"altitude_m"] is not None
+            else npshd_calc.ALTITUDE_PADRAO)
+
+        self._opc_temperatura = [(t, rot) for t, _h, rot
+                                 in npshd_calc.opcoes_temperatura()]
+        self._cmb_temperatura = _combo(
+            raiz, u"Temperatura da água (pressão de vapor, Hvp)",
+            self._opc_temperatura,
+            d[u"temperatura_c"] if d[u"temperatura_c"] is not None
+            else npshd_calc.TEMPERATURA_PADRAO)
+
+        self._txt_npshr = _campo(
+            raiz, u"NPSH requerido pela bomba — NPSHr (mca)", d[u"npshr_m"],
+            u"Dado de catálogo do fabricante. Sem bomba definida ainda, "
+            u"deixe em branco: o memorial mostra o NPSHd e marca a "
+            u"comparação como pendente.")
+
+        expander.Content = raiz
+        return expander
+
+    def _ler_succao(self, erros):
+        """Lê o bloco de NPSH; acrescenta a erros quando o NPSHr digitado é
+        inválido, e sempre devolve o dict normalizado (com npshr_m=None
+        quando o campo está vazio ou inválido)."""
+        bruto = (self._txt_npshr.Text or u"").strip().replace(u",", u".")
+        npshr = None
+        if bruto:
+            try:
+                npshr = float(bruto)
+                if npshr <= 0:
+                    raise ValueError
+            except ValueError:
+                erros.append(u"'NPSH requerido pela bomba' deve ser um número maior que zero.")
+
+        return succao_calc.normalizar_dados({
+            u"altitude_m":    self._opc_altitude[self._cmb_altitude.SelectedIndex][0],
+            u"temperatura_c": self._opc_temperatura[self._cmb_temperatura.SelectedIndex][0],
+            u"npshr_m":       npshr,
+        })
+
     def _set_custom_enabled(self, ativo):
         for c in self._campos_custom:
             c.IsEnabled = ativo
@@ -360,6 +453,13 @@ class HydrantSystemForm(Window):
 
     # ------------------------------------------------------------------
     def _on_confirm(self, sender, args):
+        erros_succao = []
+        self._dados_succao = self._ler_succao(erros_succao)
+        if erros_succao:
+            alert(u"Corrija as Configurações Avançadas:\n\n– {}".format(
+                u"\n– ".join(erros_succao)))
+            return
+
         if self._chk_custom.IsChecked:
             erros = custom_store.validar(self._ler_custom())
             if erros:
@@ -397,6 +497,7 @@ class HydrantSystemForm(Window):
             "dados": dict,      # variante completa de SISTEMAS_HIDRANTE
             "descricao": unicode,
             "metodo_calculo": unicode,   # um de METODOS_CALCULO
+            "dados_succao": dict,        # Configurações Avançadas > NPSH
         }
 
         Personalizado:
@@ -408,6 +509,7 @@ class HydrantSystemForm(Window):
             "dados": dict,          # mesmas chaves de SISTEMAS_HIDRANTE
             "descricao": unicode,
             "metodo_calculo": unicode,   # um de METODOS_CALCULO
+            "dados_succao": dict,        # Configurações Avançadas > NPSH
         }
         """
         if getattr(self, "_cancelado", False):
@@ -415,6 +517,7 @@ class HydrantSystemForm(Window):
 
         metodo_calculo = (self._cmb_metodo.SelectedItem.Content
                           if self._cmb_metodo.SelectedItem else METODOS_CALCULO[0])
+        dados_succao = self._dados_succao
 
         if self._chk_custom.IsChecked:
             d = custom_store.normalizar(self._ler_custom())
@@ -433,6 +536,7 @@ class HydrantSystemForm(Window):
                 },
                 "descricao": d[u"descricao"],
                 "metodo_calculo": metodo_calculo,
+                "dados_succao": dados_succao,
             }
 
         if self.selected_tipo is None:
@@ -445,6 +549,7 @@ class HydrantSystemForm(Window):
             "dados":        dados["variantes"][self.selected_variante],
             "descricao":    dados["descricao"],
             "metodo_calculo": metodo_calculo,
+            "dados_succao": dados_succao,
         }
 
 
@@ -455,6 +560,64 @@ def _make_binding(path):
     from System.Windows.Data import Binding
     b = Binding(path)
     return b
+
+
+def _nota(painel, texto, recuo=0, base=10):
+    """Linha de observação em corpo menor, abaixo de um campo/bloco."""
+    bloco = TextBlock()
+    bloco.Text     = texto
+    bloco.FontSize = base
+    bloco.Opacity  = 0.7
+    bloco.TextWrapping = TextWrapping.Wrap
+    bloco.Margin   = Thickness(recuo, 0, 0, 10)
+    painel.Children.Add(bloco)
+    return bloco
+
+
+def _combo(painel, rotulo, opcoes, selecionado, dica=u""):
+    """
+    Combo de escolha entre linhas de tabela. opcoes: [(valor, rótulo)].
+    Usado onde o valor NÃO pode ser digitado livre — Ha e Hvp só valem se
+    vierem das tabelas de referência.
+    """
+    lbl = Label()
+    lbl.Content  = rotulo
+    lbl.FontSize = 11
+    lbl.Padding  = Thickness(0, 0, 0, 2)
+    painel.Children.Add(lbl)
+
+    cmb = ComboBox()
+    cmb.Height = 23
+    cmb.Margin = Thickness(0, 0, 0, 2)
+    for _valor, texto in opcoes:
+        item = ComboBoxItem()
+        item.Content = texto
+        cmb.Items.Add(item)
+    cmb.SelectedIndex = next(
+        (i for i, (v, _t) in enumerate(opcoes) if v == selecionado), 0)
+    painel.Children.Add(cmb)
+    if dica:
+        _nota(painel, dica)
+    return cmb
+
+
+def _campo(painel, rotulo, valor, dica=u""):
+    """Campo de texto simples com rótulo acima e nota opcional abaixo."""
+    lbl = Label()
+    lbl.Content  = rotulo
+    lbl.FontSize = 11
+    lbl.Padding  = Thickness(0, 0, 0, 2)
+    painel.Children.Add(lbl)
+
+    txt = TextBox()
+    txt.Height  = 23
+    txt.Padding = Thickness(3, 2, 3, 2)
+    txt.Margin  = Thickness(0, 0, 0, 2)
+    txt.Text    = u"" if valor is None else u"{:g}".format(valor)
+    painel.Children.Add(txt)
+    if dica:
+        _nota(painel, dica)
+    return txt
 
 
 def _campo_texto(rotulo, largura, valor_inicial=u""):
@@ -504,7 +667,8 @@ def alert(msg):
 # ---------------------------------------------------------------------------
 # Função pública de uso no script principal
 # ---------------------------------------------------------------------------
-def show_system_selection_form(custom_inicial=None, metodo_inicial=None):
+def show_system_selection_form(custom_inicial=None, metodo_inicial=None,
+                               succao_inicial=None):
     """
     Abre o formulário de seleção de tipo de sistema.
 
@@ -513,10 +677,15 @@ def show_system_selection_form(custom_inicial=None, metodo_inicial=None):
                     e liga o modo personalizado.
     metodo_inicial: método de cálculo já salvo no projeto (um de
                     METODOS_CALCULO) — pré-seleciona o combo.
+    succao_inicial: dict de dados de NPSH já salvos no projeto
+                    (hidrantes.succao.load_dados) — pré-carrega o bloco
+                    "Configurações Avançadas > NPSH".
 
     Retorna o dict descrito em HydrantSystemForm.get_result(), ou None se
     cancelado.
     """
-    form = HydrantSystemForm(custom_inicial=custom_inicial, metodo_inicial=metodo_inicial)
+    form = HydrantSystemForm(custom_inicial=custom_inicial,
+                             metodo_inicial=metodo_inicial,
+                             succao_inicial=succao_inicial)
     form.ShowDialog()
     return form.get_result()

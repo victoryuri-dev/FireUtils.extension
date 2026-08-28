@@ -6,11 +6,12 @@ Configuração inicial do sistema de hidrantes no projeto.
 Fluxo:
   1. Criar e vincular os Shared Parameters no projeto
   2. Abrir formulário único de classificação (hidrantes/forms.py): tipo de
-     sistema (Tabela 2 NT 22) ou valores personalizados, e método de
-     cálculo (Válvula do Hidrante / Ponta do Esguicho Regulável) — este
-     último por enquanto só registrado; o motor de cálculo ('Dimensionar
-     Hidrantes') ainda usa sempre o método da marcha com Fator K,
-     independente dessa escolha
+     sistema (Tabela 2 NT 22) ou valores personalizados, método de cálculo
+     (Válvula do Hidrante / Ponta do Esguicho Regulável) — este último por
+     enquanto só registrado; o motor de cálculo ('Dimensionar Hidrantes')
+     ainda usa sempre o método da marcha com Fator K, independente dessa
+     escolha — e, em "Configurações Avançadas > NPSH", os dados usados no
+     cálculo do NPSH disponível (altitude, temperatura, NPSHr da bomba)
   3. Salvar tudo no Project Information — inclusive os valores
      personalizados (JSON), que ficam guardados no projeto para permitir
      reclassificar quantas vezes for preciso sem redigitar
@@ -27,7 +28,6 @@ from hidrantes.params import (
     create_hydrant_params, PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
 )
 from hidrantes.forms import show_system_selection_form
-from hidrantes.succao_form import show_succao_form
 from hidrantes.db import SISTEMAS_HIDRANTE
 from hidrantes import custom as custom_store
 from hidrantes import succao as succao_calc
@@ -62,9 +62,9 @@ except Exception as e:
 output.print_md("---")
 output.print_md("### Etapa 2 — Tipo de Sistema e Método de Cálculo")
 
-# Valores personalizados e método de cálculo já salvos neste projeto (se
-# houver) pré-carregam o formulário, permitindo reclassificar sem
-# redigitar/reselecionar tudo de novo.
+# Valores personalizados, método de cálculo e dados de NPSH já salvos neste
+# projeto (se houver) pré-carregam o formulário, permitindo reclassificar
+# sem redigitar/reselecionar tudo de novo.
 custom_salvo = custom_store.load_custom(doc)
 if custom_salvo:
     output.print_md(u"ℹ Valores personalizados encontrados no projeto — "
@@ -73,8 +73,11 @@ if custom_salvo:
 metodo_param_atual = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
 metodo_salvo = metodo_param_atual.AsString() if metodo_param_atual else None
 
+succao_salvo = succao_calc.load_dados(doc)
+
 resultado = show_system_selection_form(custom_inicial=custom_salvo,
-                                       metodo_inicial=metodo_salvo)
+                                       metodo_inicial=metodo_salvo,
+                                       succao_inicial=succao_salvo)
 
 if resultado is None:
     output.print_md(u"⚠ Seleção cancelada pelo usuário.")
@@ -86,6 +89,7 @@ dados          = resultado["dados"]
 descricao      = resultado["descricao"]
 eh_custom      = resultado["custom"]
 metodo_calculo = resultado["metodo_calculo"]
+dados_succao   = resultado["dados_succao"]
 
 if eh_custom:
     valor_param = custom_store.descrever(resultado["custom_dados"])
@@ -108,34 +112,13 @@ output.print_md(
     u"\nℹ _Por enquanto o método de cálculo é apenas registrado — o motor "
     u"usado em **Dimensionar Hidrantes** ainda aplica sempre o método da "
     u"marcha com Fator K, independente da escolha acima._")
-
-# ===========================================================================
-# ETAPA 2b — Dados do NPSH disponível
-# ===========================================================================
-output.print_md("---")
-output.print_md(u"### Etapa 2b — NPSH Disponível")
-
-# A condição de sucção (positiva/negativa) é decidida em "Dimensionar
-# Hidrantes" pela diferença direta entre a cota da RTI e a cota de sucção da
-# bomba — não depende de dado nenhum daqui. Só entra aqui o que o cálculo do
-# NPSH disponível precisa e que não vem da geometria.
-succao_salvo = succao_calc.load_dados(doc)
-dados_succao = show_succao_form(dados_iniciais=succao_salvo)
-
-if dados_succao is None:
-    # Pular aqui não invalida a classificação — o cálculo do NPSH
-    # simplesmente roda com o que já estava salvo (ou com os padrões).
-    dados_succao = succao_salvo
-    output.print_md(u"⚠ Dados de NPSH não informados — será usado o que já "
-                    u"estava salvo no projeto.")
-else:
-    output.print_md(u"✔ Altitude do local: **{:g} m**".format(
-        dados_succao["altitude_m"]))
-    output.print_md(u"✔ Temperatura da água: **{:g} °C**".format(
-        dados_succao["temperatura_c"]))
-    output.print_md(u"✔ NPSHr da bomba: **{}**".format(
-        u"{:g} mca".format(dados_succao["npshr_m"])
-        if dados_succao["npshr_m"] is not None else u"não informado"))
+output.print_md(u"")
+output.print_md(u"**Configurações Avançadas › NPSH:**")
+output.print_md(u"✔ Altitude do local: **{:g} m**".format(dados_succao["altitude_m"]))
+output.print_md(u"✔ Temperatura da água: **{:g} °C**".format(dados_succao["temperatura_c"]))
+output.print_md(u"✔ NPSHr da bomba: **{}**".format(
+    u"{:g} mca".format(dados_succao["npshr_m"])
+    if dados_succao["npshr_m"] is not None else u"não informado"))
 
 # ===========================================================================
 # ETAPA 3 — Salvar no Project Information
@@ -177,9 +160,8 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
                 doc, resultado["custom_dados"])
             output.print_md(u"{} {}".format(u"✔" if ok_custom else u"⚠", msg_custom))
 
-        if dados_succao is not None:
-            ok_succao, msg_succao = succao_calc.save_dados(doc, dados_succao)
-            output.print_md(u"{} {}".format(u"✔" if ok_succao else u"⚠", msg_succao))
+        ok_succao, msg_succao = succao_calc.save_dados(doc, dados_succao)
+        output.print_md(u"{} {}".format(u"✔" if ok_succao else u"⚠", msg_succao))
 
         t.Commit()
     except Exception as e:
