@@ -4,22 +4,21 @@ npshd.py — Fire Utils · lib/hidrantes/
 
 NPSH disponível na tubulação de sucção.
 
-A verificação só é exigida quando a condição de sucção é NEGATIVA — quando o
-eixo do rotor fica acima do nível mínimo de água (nível X). Com sucção
-positiva/afogada a bomba não corre risco de cavitação por essa via e a rotina
-não roda.
+A verificação só é exigida quando a condição de sucção é NEGATIVA — quando a
+cota de sucção da bomba fica acima da cota da RTI (comparação direta das
+cotas altimétricas). Com sucção positiva/afogada a bomba não corre risco de
+cavitação por essa via e a rotina não roda.
 
     NPSHd = Ha − Hvp + Hs − Hf,s
 
-Na sucção negativa o nível de água está ABAIXO do eixo do rotor, então Hs é
+Na sucção negativa o nível de água está ABAIXO da sucção da bomba, então Hs é
 negativo e a fórmula operacional vira:
 
     NPSHd = Ha − Hvp − |Hs| − Hf,s
 
-|Hs| é medido até o NÍVEL X — o nível mínimo antes da formação de vórtice, e
-não o nível normal cheio do reservatório. É o mesmo |Hs| que a verificação da
-condição de sucção já calculou, reaproveitado aqui para os dois módulos não
-divergirem.
+|Hs| é a diferença entre a cota de sucção da bomba e a cota da RTI — o mesmo
+|Hs| que a verificação da condição de sucção já calculou, reaproveitado aqui
+para os dois módulos não divergirem.
 
 Hf,s sai do mesmo Hazen-Williams do resto do memorial, aplicado ao trecho de
 sucção, mas com a vazão majorada (Q_npsh = fator · Qt) — a majoração é
@@ -111,7 +110,8 @@ def calcular_npshd(altitude_m, temperatura_c, hs_abs_m, hf_s_mca,
     NPSH disponível na sucção.
 
     altitude_m/temperatura_c: linhas escolhidas nas tabelas de Ha e Hvp.
-    hs_abs_m: |Hs|, distância vertical entre o nível X e o eixo do rotor.
+    hs_abs_m: |Hs|, distância vertical entre a cota de sucção da bomba e a
+              cota da RTI.
     hf_s_mca: perda de carga no trecho de sucção, JÁ calculada com a vazão
               majorada.
     npshr_m:  NPSH requerido pela bomba (catálogo). None quando ainda não há

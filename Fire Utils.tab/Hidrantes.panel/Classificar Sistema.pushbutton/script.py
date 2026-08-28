@@ -110,38 +110,32 @@ output.print_md(
     u"marcha com Fator K, independente da escolha acima._")
 
 # ===========================================================================
-# ETAPA 2b — Dados do reservatório (condição de sucção pelo nível X)
+# ETAPA 2b — Dados do NPSH disponível
 # ===========================================================================
 output.print_md("---")
-output.print_md(u"### Etapa 2b — Condição de Sucção e NPSH")
+output.print_md(u"### Etapa 2b — NPSH Disponível")
 
-# Só o que não dá para ler da geometria: as cotas, o DN da sucção e o tipo de
-# tomada saem do modelo em "Dimensionar Hidrantes".
+# A condição de sucção (positiva/negativa) é decidida em "Dimensionar
+# Hidrantes" pela diferença direta entre a cota da RTI e a cota de sucção da
+# bomba — não depende de dado nenhum daqui. Só entra aqui o que o cálculo do
+# NPSH disponível precisa e que não vem da geometria.
 succao_salvo = succao_calc.load_dados(doc)
 dados_succao = show_succao_form(dados_iniciais=succao_salvo)
 
 if dados_succao is None:
-    # Pular aqui não invalida a classificação — a verificação do nível X
+    # Pular aqui não invalida a classificação — o cálculo do NPSH
     # simplesmente roda com o que já estava salvo (ou com os padrões).
     dados_succao = succao_salvo
-    output.print_md(u"⚠ Dados de sucção não informados — será usado o que já "
+    output.print_md(u"⚠ Dados de NPSH não informados — será usado o que já "
                     u"estava salvo no projeto.")
 else:
-    output.print_md(u"✔ Cota do fundo do reservatório: **{:g} m**".format(
-        dados_succao["cota_fundo_reservatorio"]))
-    if dados_succao["volume_total_m3"] is not None:
-        output.print_md(u"✔ Reservatório: **{:g} m³** em **{:g} m²** de planta".format(
-            dados_succao["volume_total_m3"], dados_succao["area_planta_m2"]))
-    else:
-        output.print_md(u"⚠ Volume/área não informados — a capacidade efetiva "
-                        u"não será calculada e a tolerância do critério de "
-                        u"sucção fica zerada (lado conservador).")
-    output.print_md(u"✔ Dispositivo antivórtice: **{}**".format(
-        u"sim" if dados_succao["possui_antivortice"] else u"não"))
-    output.print_md(u"✔ Poço de sucção: **{}**".format(
-        u"sim" if dados_succao["possui_poco_succao"] else u"não"))
-    output.print_md(u"✔ Tipo de tomada: **{}**".format(
-        dados_succao["tipo_tomada"] or u"detectar pela geometria do modelo"))
+    output.print_md(u"✔ Altitude do local: **{:g} m**".format(
+        dados_succao["altitude_m"]))
+    output.print_md(u"✔ Temperatura da água: **{:g} °C**".format(
+        dados_succao["temperatura_c"]))
+    output.print_md(u"✔ NPSHr da bomba: **{}**".format(
+        u"{:g} mca".format(dados_succao["npshr_m"])
+        if dados_succao["npshr_m"] is not None else u"não informado"))
 
 # ===========================================================================
 # ETAPA 3 — Salvar no Project Information

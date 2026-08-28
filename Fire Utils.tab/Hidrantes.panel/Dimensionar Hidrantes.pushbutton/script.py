@@ -16,7 +16,6 @@ clr.AddReference("RevitAPIUI")
 import os
 import io as _io
 import re as _re
-import math as _math
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
@@ -131,158 +130,6 @@ def get_z(elem, modo="mid"):
         return (to_m(bbox.Min.Z) + to_m(bbox.Max.Z)) / 2.0
     return None
 
-
-# ---------------------------------------------------------------------------
-# Geometria da tomada de sucção
-# ---------------------------------------------------------------------------
-# O tipo de tomada (lateral / superior / inferior) muda a verificação do nível
-# X — é ele que decide se o dispositivo antivórtice pode dispensar a dimensão
-# A. Em vez de perguntar ao usuário, ele é lido da própria
-# geometria do modelo: a inclinação do eixo do tubo da tomada e qual das suas
-# pontas está aberta para a água do reservatório.
-#
-# Ângulos entre o eixo do tubo e o plano horizontal que separam as três faixas.
-ANG_VERTICAL   = 60.0
-ANG_HORIZONTAL = 30.0
-
-
-def _ponto(elem):
-    """Ponto representativo do elemento, em coordenadas internas do Revit."""
-    loc = getattr(elem, "Location", None)
-    if isinstance(loc, LocationPoint):
-        return loc.Point
-    if isinstance(loc, LocationCurve):
-        return loc.Curve.Evaluate(0.5, True)
-    bbox = elem.get_BoundingBox(None)
-    if bbox:
-        return bbox.Min.Add(bbox.Max).Divide(2.0)
-    return None
-
-
-def get_orientacao(elem):
-    """
-    Orientação do eixo do elemento: "vertical", "horizontal" ou "inclinado",
-    com o ângulo em graus. (None, None) quando o elemento não tem eixo.
-    """
-    loc = getattr(elem, "Location", None)
-    if not isinstance(loc, LocationCurve):
-        return None, None
-
-    p0 = loc.Curve.GetEndPoint(0)
-    p1 = loc.Curve.GetEndPoint(1)
-    dz = abs(p1.Z - p0.Z)
-    dh = ((p1.X - p0.X) ** 2 + (p1.Y - p0.Y) ** 2) ** 0.5
-    if dz < 1e-9 and dh < 1e-9:
-        return None, None
-
-    ang = _math.degrees(_math.atan2(dz, dh))
-    if ang >= ANG_VERTICAL:
-        return u"vertical", ang
-    if ang <= ANG_HORIZONTAL:
-        return u"horizontal", ang
-    return u"inclinado", ang
-
-
-def _extremidade_aberta(elem):
-    """
-    "topo" ou "fundo" conforme a ponta SEM conexão do tubo — é ela que fica
-    aberta para a água do reservatório. None quando não dá para decidir
-    (nenhuma ponta livre, as duas livres, ou tubo sem desnível).
-    """
-    try:
-        conns = [c for c in elem.ConnectorManager.Connectors]
-    except Exception:
-        return None
-
-    livres = [c for c in conns if not c.IsConnected]
-    if len(conns) < 2 or len(livres) != 1:
-        return None
-
-    zs = [c.Origin.Z for c in conns]
-    if abs(max(zs) - min(zs)) < 1e-6:
-        return None
-
-    z_livre = livres[0].Origin.Z
-    return u"topo" if abs(z_livre - max(zs)) < abs(z_livre - min(zs)) else u"fundo"
-
-
-def detectar_tipo_tomada(elem_rti, candidatos=None):
-    """
-    Classifica a tomada de sucção pela geometria do modelo.
-
-    Tubo horizontal atravessa a parede do reservatório → tomada LATERAL
-    (Figuras B.1/B.2). Tubo vertical pode ser das duas formas restantes, e
-    quem separa é a ponta aberta: aberta em cima, o tubo desce a partir da
-    boca e sai pelo fundo → tomada INFERIOR; aberta embaixo, o
-    tubo mergulha no reservatório vindo de cima → tomada SUPERIOR.
-
-    Quando o elemento identificado como "RTI" não tem eixo próprio (uma
-    conexão ou acessório, por exemplo), usa o tubo do trecho de sucção mais
-    próximo dele.
-
-    Retorna dict com o tipo, o elemento usado, a orientação, o ângulo e a
-    confiança da leitura ("alta" quando a geometria decidiu sozinha).
-    """
-    elem_geo = elem_rti
-    orientacao, ang = get_orientacao(elem_rti)
-
-    if orientacao is None and candidatos:
-        origem = _ponto(elem_rti)
-        melhor, menor = None, None
-        for cand in candidatos:
-            o, _a = get_orientacao(cand)
-            p = _ponto(cand)
-            if o is None or p is None or origem is None:
-                continue
-            d = origem.DistanceTo(p)
-            if menor is None or d < menor:
-                melhor, menor = cand, d
-        if melhor is not None:
-            elem_geo = melhor
-            orientacao, ang = get_orientacao(melhor)
-
-    if orientacao is None:
-        return {u"tipo": succao_calc.TOMADA_SUPERIOR, u"elem": None,
-                u"orientacao": None, u"angulo": None, u"confianca": u"baixa",
-                u"base": u"não foi possível ler o eixo do tubo da tomada; "
-                         u"adotada tomada superior (a dimensão A sempre se "
-                         u"aplica), conferir manualmente"}
-
-    if orientacao == u"horizontal":
-        return {u"tipo": succao_calc.TOMADA_LATERAL, u"elem": elem_geo,
-                u"orientacao": orientacao, u"angulo": ang, u"confianca": u"alta",
-                u"base": u"tubo da tomada na horizontal ({:.1f}° com o plano "
-                         u"horizontal) — captação pela parede".format(ang)}
-
-    if orientacao == u"inclinado":
-        return {u"tipo": succao_calc.TOMADA_LATERAL, u"elem": elem_geo,
-                u"orientacao": orientacao, u"angulo": ang, u"confianca": u"baixa",
-                u"base": u"tubo da tomada inclinado ({:.1f}°), sem enquadrar "
-                         u"nas figuras do Anexo B; adotada tomada lateral (a "
-                         u"dimensão A sempre se aplica), conferir "
-                         u"manualmente".format(ang)}
-
-    aberta = _extremidade_aberta(elem_geo)
-    if aberta == u"topo":
-        return {u"tipo": succao_calc.TOMADA_INFERIOR, u"elem": elem_geo,
-                u"orientacao": orientacao, u"angulo": ang, u"confianca": u"alta",
-                u"base": u"tubo da tomada na vertical ({:.1f}°) com a boca "
-                         u"aberta na extremidade superior — captação pelo "
-                         u"fundo do reservatório".format(ang)}
-    if aberta == u"fundo":
-        return {u"tipo": succao_calc.TOMADA_SUPERIOR, u"elem": elem_geo,
-                u"orientacao": orientacao, u"angulo": ang, u"confianca": u"alta",
-                u"base": u"tubo da tomada na vertical ({:.1f}°) com a boca "
-                         u"aberta na extremidade inferior — captação por "
-                         u"cima".format(ang)}
-
-    return {u"tipo": succao_calc.TOMADA_SUPERIOR, u"elem": elem_geo,
-            u"orientacao": orientacao, u"angulo": ang, u"confianca": u"baixa",
-            u"base": u"tubo da tomada na vertical ({:.1f}°), mas as duas "
-                     u"pontas estão conectadas — não dá para distinguir "
-                     u"captação pelo fundo de captação por cima; adotada "
-                     u"tomada superior (a dimensão A sempre se aplica), "
-                     u"conferir manualmente".format(ang)}
 
 # ===========================================================================
 # MEMORIAL DE CÁLCULO — passo a passo (método da marcha)
@@ -617,96 +464,25 @@ def _passo_velocidade(jt, v_limite, letra):
             alinhas=[u"right", u"right", u"right", u"right", u"left"])
     output.print_md(u"")
 
-_TOMADA_DESC = {
-    u"lateral":  u"lateral — captação pela parede do reservatório",
-    u"superior": u"superior — captação por cima, tubo mergulhado",
-    u"inferior": u"inferior — captação pelo fundo do reservatório",
-}
-
-
-def _secao_condicao_succao(v, erro, succao, Hz_succao, perfil):
+def _secao_condicao_succao(v, perfil):
     """
-    Condição de sucção pelo nível X — o nível mínimo de água antes da
-    formação de vórtice. As citações de item/tabela saem do perfil normativo
-    do estado ativo; perfil que não as declara imprime o texto sem citação,
-    nunca com a citação de outra norma.
+    Condição de sucção pelo método direto e conservador: compara a cota da
+    RTI com a cota de sucção da bomba, ambas já mostradas em "Cotas
+    Altimétricas". Sem nível mínimo de água, dimensão de tomada ou tipo de
+    captação.
     """
-    if v is None:
-        output.print_md(
-            u"{} **Não foi possível verificar o nível X:** {}".format(SIM_X, erro))
-        output.print_md(
-            u"Na falta dessa verificação a condição de sucção caiu no critério "
-            u"geométrico simples — **sucção {}**, pelo desnível entre a cota da "
-            u"RTI e a da sucção da bomba (∆H = {:.4f} m). **Confira "
-            u"manualmente.**".format(succao, Hz_succao))
-        output.print_md(u"")
-        return
-
     output.print_md(
-        u"A condição de sucção não é dada pelo desnível direto entre a RTI e a "
-        u"bomba, e sim pela posição do eixo do rotor em relação ao **nível X** — "
-        u"o nível mínimo de água antes da formação de vórtice{}.".format(
-            ref(perfil, u"succao_ref")))
-
-    dim_ref = ref(perfil, u"succao_dimensoes_ref")
-    _tabela([u"Dado", u"Valor"],
-            [[u"Cota do fundo do reservatório", u"{:.4f} m".format(v[u"cota_fundo"])],
-             [u"Tipo de tomada de sucção",
-              u"**{}**".format(_TOMADA_DESC.get(v[u"tipo_tomada"], v[u"tipo_tomada"]))],
-             [u"Origem do tipo de tomada", v[u"origem_tomada"]],
-             [u"Cota da tomada de sucção", u"**{:.4f} m**".format(v[u"cota_tomada"])],
-             [u"Diâmetro do tubo de sucção", u"DN {:g} mm".format(v[u"dn_succao_mm"])],
-             [u"Dimensão A{}".format(dim_ref),
-              u"**{:.3f} m**".format(v[u"dimensao_A"])],
-             [u"Dimensão B{}".format(dim_ref),
-              u"{:.3f} m".format(v[u"dimensao_B_mm"] / 1000.0)],
-             [u"Cota do eixo do rotor da bomba",
-              u"**{:.4f} m**".format(v[u"cota_eixo_rotor"])]])
-
-    output.print_md(u"_{}._".format(v[u"observacao_A"]))
-    if v[u"possui_poco_succao"]:
-        output.print_md(u"_Reservatório com poço de sucção._")
-    if v.get(u"confianca_deteccao") == u"baixa":
-        output.print_md(
-            u"{} **A geometria do modelo não determinou o tipo de tomada com "
-            u"segurança** — foi adotado o tipo que sempre exige a dimensão A, "
-            u"o lado conservador. Confira e, se preciso, informe o tipo em "
-            u"'Classificar Sistema'.".format(SIM_X))
+        u"A condição de sucção é dada pela comparação direta entre a cota da "
+        u"RTI e a cota de sucção da bomba, já apresentadas em \"Cotas "
+        u"Altimétricas\":")
+    _formula(u"∆H_succao = cota_RTI − cota_succao",
+             [(u"cota_RTI", u"Cota da RTI (reservatório)"),
+              (u"cota_succao", u"Cota de sucção da bomba")])
+    output.print_md(u"∆H_succao = {:.4f} − {:.4f} = **{:.4f} m**".format(
+        v[u"cota_rti"], v[u"cota_succao_bomba"], v[u"dH"]))
     output.print_md(u"")
 
-    _formula(u"Nível X = cota da tomada de sucção + A",
-             [(u"Nível X", u"Nível mínimo de água antes da formação de vórtice"),
-              (u"A", u"Altura mínima de água acima da tomada, conforme o DN da sucção")])
-    output.print_md(u"Nível X = {:.4f} + {:.3f} = **{:.4f} m**".format(
-        v[u"cota_tomada"], v[u"dimensao_A"], v[u"nivel_X"]))
-    output.print_md(u"")
-
-    # O volume abaixo do nível X não é utilizável: é a capacidade efetiva que
-    # se compara com a reserva mínima exigida, não o volume total.
-    if v[u"capacidade_efetiva"] is not None:
-        output.print_md(u"**Capacidade efetiva da RTI**{} — o volume abaixo do "
-                        u"nível X não é utilizável:".format(
-                            ref(perfil, u"succao_capacidade_ref")))
-        _formula(u"V_efetiva = V_total − A_planta · (Nível X − cota do fundo)",
-                 [(u"V_efetiva", u"Capacidade efetiva do reservatório"),
-                  (u"V_total", u"Volume total do reservatório"),
-                  (u"A_planta", u"Área em planta do reservatório")])
-        _tabela([u"Parcela", u"Valor"],
-                [[u"Volume total do reservatório",
-                  u"{:.3f} m³".format(v[u"volume_total"])],
-                 [u"Área em planta", u"{:.3f} m²".format(v[u"area_planta"])],
-                 [u"Altura não utilizável (fundo ao nível X)",
-                  u"{:.4f} m".format(v[u"altura_nao_utilizavel"])],
-                 [u"Volume não utilizável",
-                  u"{:.3f} m³".format(v[u"volume_nao_utilizavel"])],
-                 [u"**Capacidade efetiva**",
-                  u"**{:.3f} m³**".format(v[u"capacidade_efetiva"])]])
-        output.print_md(u"{} É a **capacidade efetiva** — não o volume total — "
-                        u"que deve ser comparada com a reserva mínima "
-                        u"exigida{}.".format(SIM_OK, ref(perfil, u"succao_rti_min_ref")))
-        output.print_md(u"")
-
-    output.print_md(u"**Verificação**{}:".format(ref(perfil, u"succao_condicao_ref")))
+    output.print_md(u"**Verificação:**")
     output.print_md(v[u"justificativa"])
     output.print_md(u"")
 
@@ -733,11 +509,11 @@ def _secao_npshd(n, erro, v, j_succao, perfil, C_HW):
               (u"Ha", u"Pressão atmosférica local, em altura de coluna d'água"),
               (u"Hvp", u"Pressão de vapor da água na temperatura de operação"),
               (u"Hs", u"Altura estática de sucção — positiva com a bomba afogada, "
-                      u"negativa quando o eixo do rotor está acima da água"),
+                      u"negativa quando a sucção da bomba está acima da RTI"),
               (u"Hf_s", u"Perda de carga na tubulação de sucção, com a vazão majorada")])
 
-    output.print_md(u"Com o eixo do rotor acima do nível X, Hs é negativo e a "
-                    u"fórmula operacional fica:")
+    output.print_md(u"Com a sucção da bomba acima da cota da RTI, Hs é negativo "
+                    u"e a fórmula operacional fica:")
     _formula(u"NPSHd = Ha − Hvp − |Hs| − Hf_s")
 
     if erro:
@@ -746,13 +522,11 @@ def _secao_npshd(n, erro, v, j_succao, perfil, C_HW):
         output.print_md(u"")
         return
 
-    # |Hs| medido até o nível X, não até o nível normal cheio — é o mesmo
-    # valor que a verificação da condição de sucção já obteve.
-    output.print_md(u"**|Hs|** é medido até o **nível X**, não até o nível "
-                    u"normal cheio do reservatório:")
-    output.print_md(u"|Hs| = cota do eixo do rotor − Nível X = "
+    # |Hs| é a mesma elevação que a verificação da condição de sucção já
+    # obteve, direto das cotas da RTI e da sucção da bomba.
+    output.print_md(u"|Hs| = cota de sucção da bomba − cota da RTI = "
                     u"{:.4f} − {:.4f} = **{:.4f} m**".format(
-                        v[u"cota_eixo_rotor"], v[u"nivel_X"], n[u"Hs_abs"]))
+                        v[u"cota_succao_bomba"], v[u"cota_rti"], n[u"Hs_abs"]))
     output.print_md(u"")
 
     # A majoração da vazão vale só para esta verificação — o resto do memorial
@@ -776,7 +550,7 @@ def _secao_npshd(n, erro, v, j_succao, perfil, C_HW):
               u"{:.3f} mca".format(n[u"Ha"])],
              [u"Hvp — água a {:g} °C".format(n[u"temperatura_c"]),
               u"{:.3f} mca".format(n[u"Hvp"])],
-             [u"|Hs| — eixo do rotor acima do nível X",
+             [u"|Hs| — sucção da bomba acima da RTI",
               u"{:.3f} mca".format(n[u"Hs_abs"])],
              [u"Hf_s — perda na sucção com a vazão majorada",
               u"{:.3f} mca".format(n[u"Hf_s"])],
@@ -798,7 +572,7 @@ def _secao_npshd(n, erro, v, j_succao, perfil, C_HW):
 
 
 def _montar_memorial(res, dados_sistema, valor_sistema,
-                     cotas, succao, Hz_succao, verif_succao, erro_succao,
+                     cotas, succao, verif_succao,
                      verif_npshd, erro_npshd, j_succao_npsh,
                      Qs_lmin, Pmin, C_HW,
                      eta, pot_cv, pot_kw, timestamp, perfil):
@@ -913,13 +687,13 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
               u"{:.4f}".format(cotas["z_rti"]), u"**{:.4f}**".format(dH["t1"])]])
     output.print_md(u"")
 
-    # ── Condição de sucção pelo nível X ───────────────────────────────────
+    # ── Condição de sucção (diferença direta de cotas) ────────────────────
     sec(u"Verificação da Condição de Sucção")
-    _secao_condicao_succao(verif_succao, erro_succao, succao, Hz_succao, perfil)
+    _secao_condicao_succao(verif_succao, perfil)
 
     # A verificação de NPSH só é exigida na sucção negativa — com sucção
     # positiva a seção inteira sai do memorial.
-    if verif_succao is not None and verif_succao[u"exige_npsh"]:
+    if verif_succao[u"exige_npsh"]:
         sec(u"NPSH Disponível na Sucção")
         _secao_npshd(verif_npshd, erro_npshd, verif_succao, j_succao_npsh,
                      perfil, C_HW)
@@ -1247,7 +1021,7 @@ def _salvar_memorial(corpo, projeto_dir, nome_projeto):
 
 
 def print_memorial_calculo(res, dados_sistema, valor_sistema,
-                           cotas, succao, Hz_succao, verif_succao, erro_succao,
+                           cotas, succao, verif_succao,
                            verif_npshd, erro_npshd, j_succao_npsh,
                            Qs_lmin, Pmin, C_HW,
                            eta, pot_cv, pot_kw, timestamp, perfil,
@@ -1264,7 +1038,7 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
     output = doc_mem                      # as funções de montagem escrevem no buffer
     try:
         _montar_memorial(res, dados_sistema, valor_sistema,
-                         cotas, succao, Hz_succao, verif_succao, erro_succao,
+                         cotas, succao, verif_succao,
                          verif_npshd, erro_npshd, j_succao_npsh,
                          Qs_lmin, Pmin, C_HW,
                          eta, pot_cv, pot_kw, timestamp, perfil)
@@ -1412,37 +1186,10 @@ if erros_z:
                 title="Fire Utils", warn_icon=True)
     script.exit()
 
-# Desnível geométrico entre a tomada de água e a sucção da bomba. Continua
-# sendo usado no memorial e no cache, mas já NÃO decide sozinho a condição de
-# sucção — quem decide é a verificação pelo nível X, logo abaixo.
-Hz_succao = cotas["z_rti"] - cotas["z_succao"]
-
-# --- Etapa 3b: condição de sucção pelo NÍVEL X ---
-# O tipo de tomada sai da geometria do modelo (orientação do tubo da tomada e
-# qual das suas pontas está aberta para a água); os dados que não existem no
-# modelo — fundo, volume e área do reservatório, antivórtice, poço de sucção —
-# vêm do que ficou salvo no projeto por "Classificar Sistema".
+# --- Etapa 3b: dados do NPSH disponível ---
+# Só o que o cálculo de NPSH precisa e não vem da geometria — a condição de
+# sucção em si (positiva/negativa) é decidida abaixo, direto das cotas.
 dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
-
-deteccao_tomada = detectar_tipo_tomada(ident_map[u"RTI"],
-                                       trechos_elems[u"RTI - Bomba"])
-
-# Uma escolha manual salva no projeto tem precedência sobre a leitura da
-# geometria — o desenho nem sempre representa a tomada real.
-if dados_succao.get(u"tipo_tomada"):
-    tipo_tomada = dados_succao[u"tipo_tomada"]
-    origem_tomada = u"informado manualmente no projeto"
-else:
-    tipo_tomada = deteccao_tomada[u"tipo"]
-    origem_tomada = u"detectado da geometria: {}".format(deteccao_tomada[u"base"])
-
-# DN da sucção: o do próprio tubo da tomada quando a geometria o identificou;
-# senão o maior DN do trecho de sucção.
-dn_succao_mm = None
-if deteccao_tomada[u"elem"] is not None:
-    _d = get_diametro(deteccao_tomada[u"elem"])
-    if _d:
-        dn_succao_mm = _d * 1000.0
 
 # --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
 trechos_data = {
@@ -1452,58 +1199,30 @@ trechos_data = {
     "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome),
 }
 
-if dn_succao_mm is None and trechos_data["t1"]:
-    dn_succao_mm = max(s["d_mm"] for s in trechos_data["t1"])
-
 res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
                     metodo=metodo_calculo,
                     mang_dn_mm=dados_sistema["mang_dn"],
                     mang_comp_m=dados_sistema["mang_comp"])
 
-# Verificação pelo nível X — precisa da vazão total (Qt) resolvida acima, que
-# é a vazão nominal majorada do gatilho de NPSH.
-# A cota da tomada é a da RTI e a do eixo do rotor é a da sucção da bomba;
-# quando o DN da sucção cai fora da faixa tabelada a verificação não pode
-# ser feita e o memorial registra a pendência em vez de inventar um nível X.
-erro_succao = None
-try:
-    verif_succao = succao_calc.verificar_condicao_succao(
-        cota_tomada_succao      = cotas["z_rti"],
-        cota_eixo_rotor_bomba   = cotas["z_succao"],
-        dn_succao_mm            = dn_succao_mm,
-        tipo_tomada             = tipo_tomada,
-        cota_fundo_reservatorio = dados_succao[u"cota_fundo_reservatorio"],
-        possui_dispositivo_antivortice = dados_succao[u"possui_antivortice"],
-        possui_poco_succao      = dados_succao[u"possui_poco_succao"],
-        volume_total_m3         = dados_succao[u"volume_total_m3"],
-        area_planta_m2          = dados_succao[u"area_planta_m2"],
-        q_nominal_lmin          = res["Qt"],
-        tolerancia_max_m        = opt(perfil, u"succao_tolerancia_max",
-                                      succao_calc.TOLERANCIA_MAX_M),
-        fator_vazao_npsh        = opt(perfil, u"npshd_fator_vazao",
-                                      succao_calc.FATOR_VAZAO_NPSH),
-    )
-    # Só o resumo textual da detecção entra no dict — o elemento do Revit em
-    # deteccao_tomada["elem"] não é serializável no cache.
-    verif_succao[u"origem_tomada"]     = origem_tomada
-    verif_succao[u"orientacao_tubo"]   = deteccao_tomada[u"orientacao"]
-    verif_succao[u"angulo_tubo"]       = deteccao_tomada[u"angulo"]
-    verif_succao[u"confianca_deteccao"] = deteccao_tomada[u"confianca"]
-    succao = verif_succao[u"succao_simples"]
-except ValueError as _e:
-    # DN fora da faixa tabelada: sem nível X, cai no critério geométrico
-    # simples e o memorial pede a conferência manual.
-    erro_succao  = _txt(_e)
-    verif_succao = None
-    succao = u"negativa" if Hz_succao < -0.001 else u"positiva"
-    forms.alert(u"{}\n\nA condição de sucção foi classificada apenas pelo "
-                u"desnível geométrico — confira manualmente.".format(erro_succao),
-                title="Fire Utils", warn_icon=True)
+# Condição de sucção pelo método direto e conservador: compara a cota da RTI
+# com a cota de sucção da bomba, ambas já lidas em "Cotas Altimétricas". Não
+# depende de nível mínimo de água, dimensão de tomada, nem tipo de captação.
+# Precisa da vazão total (Qt) resolvida acima, que é a vazão nominal
+# majorada do gatilho de NPSH.
+verif_succao = succao_calc.verificar_condicao_succao(
+    cota_rti            = cotas["z_rti"],
+    cota_succao_bomba   = cotas["z_succao"],
+    q_nominal_lmin      = res["Qt"],
+    fator_vazao_npsh    = opt(perfil, u"npshd_fator_vazao",
+                              succao_calc.FATOR_VAZAO_NPSH),
+)
+succao = verif_succao[u"succao_simples"]
 
 # --- Etapa 4b: NPSH disponível (só quando a sucção é negativa) ---
-# Reaproveita o |Hs| da verificação acima — a distância entre o nível X e o
-# eixo do rotor — para os dois módulos não divergirem. A perda na sucção é
-# recalculada com a vazão majorada, que vale só para esta verificação.
+# Reaproveita o |Hs| da verificação acima — a diferença entre a cota de
+# sucção da bomba e a cota da RTI — para os dois módulos não divergirem. A
+# perda na sucção é recalculada com a vazão majorada, que vale só para esta
+# verificação.
 verif_npshd = None
 erro_npshd  = None
 j_succao_npsh = None
@@ -1520,7 +1239,7 @@ if verif_succao is not None and verif_succao[u"exige_npsh"]:
             temperatura_c = (dados_succao[u"temperatura_c"]
                              if dados_succao[u"temperatura_c"] is not None
                              else npshd_calc.TEMPERATURA_PADRAO),
-            hs_abs_m      = verif_succao[u"desnivel"],
+            hs_abs_m      = verif_succao[u"hs_abs"],
             hf_s_mca      = j_succao_npsh["J"],
             npshr_m       = dados_succao[u"npshr_m"],
         )
@@ -1551,7 +1270,7 @@ import datetime
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 print_memorial_calculo(
     res, dados_sistema, valor_sistema,
-    cotas, succao, Hz_succao, verif_succao, erro_succao,
+    cotas, succao, verif_succao,
     verif_npshd, erro_npshd, j_succao_npsh,
     Qs_lmin, Pmin, C_HW,
     eta, pot_cv, pot_kw, timestamp, perfil,
@@ -1565,7 +1284,6 @@ payload_hid = {
     "valor_sistema": valor_sistema,
     "metodo":        metodo_calculo,
     "cotas":         cotas,
-    "Hz_succao":     Hz_succao,
     "succao":        succao,
     "verif_succao":  verif_succao,
     "dados_succao":  dados_succao,
