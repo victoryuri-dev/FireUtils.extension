@@ -184,10 +184,6 @@ class FittingFilter(ISelectionFilter):
     def AllowElement(self, e): return isinstance(e, FamilyInstance)
     def AllowReference(self, r, p): return False
 
-class PipeOuAcessorioFilter(ISelectionFilter):
-    def AllowElement(self, e): return isinstance(e, (Pipe, FamilyInstance))
-    def AllowReference(self, r, p): return False
-
 def seleciona(msg_alert, msg_pick, filtro):
     forms.alert(msg_alert, title="Fire Utils")
     try:
@@ -208,341 +204,255 @@ def seleciona_opcional(msg_alert, msg_pick, filtro):
         return None
 
 # ===========================================================================
-# EXECUTAR_MAPEAMENTO — trava geral do mapeamento completo de trechos.
-# Deixe False para rodar so o diagnostico de conectores (RTI/bomba) abaixo,
-# sem tocar em nenhum parametro do modelo. Volte para True para religar o
-# mapeamento completo (secoes 0 a 6 mais abaixo).
-# ===========================================================================
-EXECUTAR_MAPEAMENTO = False
-
-# ===========================================================================
-# DIAGNOSTICO — Conectores nativos de RTI e Bomba
+# 0 — Garante parâmetros
 # ===========================================================================
 output.print_md("---")
-output.print_md("### Diagnostico - Conectores de RTI e Bomba")
-
-def descreve_conectores(elem, nome):
-    conns = get_conectores(elem)
-    linhas = [u"**{}** (ID {}): {} conector(es) encontrado(s)".format(nome, get_id(elem), len(conns))]
-    for i, conn in enumerate(conns):
-        try:
-            direcao = conn.Direction
-        except Exception as e:
-            direcao = u"erro ao ler Direction ({})".format(e)
-        linhas.append(u"{}. Direction = **{}**".format(i + 1, direcao))
-    return linhas
-
-rti   = seleciona(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
-bomba = seleciona(u"Selecione a bomba de incendio.",  u"Bomba de incendio",  FittingFilter())
-
-# --- RTI: entre os conectores nativos, filtra so os que estao de fato
-# ligados a algo (tubo, acessorio ou conexao) - conectores Bidirectional
-# "soltos" (sem nada plugado) nao contam. ---
-conectados_rti = []
-for conn in get_conectores(rti):
-    try:
-        if not conn.IsConnected: continue
-        for ref in conn.AllRefs:
-            conectados_rti.append((conn, ref.Owner))
-            break
-    except: continue
-
-linhas_rti = [u"**RTI** (ID {}): {} conector(es) conectado(s) a algo".format(get_id(rti), len(conectados_rti))]
-for i, (conn, viz) in enumerate(conectados_rti):
-    linhas_rti.append(u"{}. Direction = **{}** -> {} (ID {})".format(
-        i + 1, conn.Direction, type(viz).__name__, get_id(viz)
-    ))
-
-if len(conectados_rti) == 1:
-    elemento_rti_hidrante = conectados_rti[0][1]
-    linhas_rti.append(u"-> Unica conexao ativa: **{}** (ID {}).".format(
-        type(elemento_rti_hidrante).__name__, get_id(elemento_rti_hidrante)
-    ))
-elif len(conectados_rti) > 1:
-    elemento_rti_hidrante = seleciona(
-        u"A RTI tem mais de uma conexao ligada a algo.\n"
-        u"Selecione o tubo/acessorio/conexao que vai para o sistema de hidrante.",
-        u"Elemento que sai da RTI para o hidrante", PipeOuAcessorioFilter()
-    )
-    linhas_rti.append(u"-> Selecionado manualmente: **{}** (ID {}).".format(
-        type(elemento_rti_hidrante).__name__, get_id(elemento_rti_hidrante)
-    ))
-else:
-    elemento_rti_hidrante = None
-    linhas_rti.append(u"-> Nenhuma conexao da RTI esta ligada a algo.")
-
-linhas_bomba = descreve_conectores(bomba, u"Bomba")
-
-for linha in linhas_rti:
-    output.print_md(linha)
-output.print_md("")
-for linha in linhas_bomba:
-    output.print_md(linha)
-
-forms.alert(
-    u"\n".join(linhas_rti).replace(u"**", u"") + u"\n\n" +
-    u"\n".join(linhas_bomba).replace(u"**", u""),
-    title="Fire Utils - Diagnostico de Conectores"
-)
+output.print_md("### 0 - Verificando Parametros")
+try:
+    log = create_hydrant_params(doc)
+    for nome, status in log:
+        if status in ("criado", "atualizado"):
+            output.print_md(u"  [{}] {}".format(status, nome))
+    output.print_md(u"Parametros verificados.")
+except Exception as e:
+    forms.alert(u"Erro ao criar parametros:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
+    script.exit()
 
 # ===========================================================================
-# Mapeamento completo (INATIVO enquanto EXECUTAR_MAPEAMENTO = False)
+# 0b — Reset: limpa parâmetros FireUtils de todo o modelo
 # ===========================================================================
-if EXECUTAR_MAPEAMENTO:
-    # ===========================================================================
-    # 0 — Garante parâmetros
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 0 - Verificando Parametros")
+output.print_md("---")
+output.print_md("### 0b - Resetando mapeamento anterior")
+
+_todos = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements()
+_resetados = 0
+with Transaction(doc, "FireUtils - Reset Mapeamento") as _t:
+    _t.Start()
     try:
-        log = create_hydrant_params(doc)
-        for nome, status in log:
-            if status in ("criado", "atualizado"):
-                output.print_md(u"  [{}] {}".format(status, nome))
-        output.print_md(u"Parametros verificados.")
-    except Exception as e:
-        forms.alert(u"Erro ao criar parametros:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
-        script.exit()
-
-    # ===========================================================================
-    # 0b — Reset: limpa parâmetros FireUtils de todo o modelo
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 0b - Resetando mapeamento anterior")
-
-    _todos = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements()
-    _resetados = 0
-    with Transaction(doc, "FireUtils - Reset Mapeamento") as _t:
-        _t.Start()
-        try:
-            for _elem in _todos:
-                _p_trecho = _elem.LookupParameter(P_TRECHO)
-                _p_ident  = _elem.LookupParameter(P_IDENTIFICADOR)
-                _alterou  = False
-                if _p_trecho and not _p_trecho.IsReadOnly and _p_trecho.AsString():
-                    _p_trecho.Set(u"")
-                    _alterou = True
-                if _p_ident and not _p_ident.IsReadOnly and _p_ident.AsString():
-                    _p_ident.Set(u"")
-                    _alterou = True
-                if _alterou:
-                    _resetados += 1
-            _t.Commit()
-        except Exception as _e:
-            _t.RollBack()
-            forms.alert(u"Erro ao resetar mapeamento:\n{}".format(str(_e)),
-                        title="Fire Utils", warn_icon=True)
-            script.exit()
-
-    output.print_md(u"{} elemento(s) com parametros resetados.".format(_resetados))
-
-    # ===========================================================================
-    # 1 — Usuário seleciona os dois hidrantes mais desfavoráveis
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 1 - Selecionar Hidrantes Mais Desfavoraveis")
-
-    hid01 = seleciona(
-        u"Selecione o hidrante MAIS desfavoravel (HID-01).",
-        u"Clique no HID-01", FittingFilter()
-    )
-    hid02 = seleciona(
-        u"Selecione o SEGUNDO hidrante mais desfavoravel (HID-02).",
-        u"Clique no HID-02", FittingFilter()
-    )
-
-    eid_h1 = get_id(hid01)
-    eid_h2 = get_id(hid02)
-    output.print_md(u"HID-01: ID **{}** | HID-02: ID **{}**".format(eid_h1, eid_h2))
-
-    # ===========================================================================
-    # 2 — Seleciona RTI e Bomba (usa as conexões nativas de entrada/saída)
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 2 - Selecionar RTI e Bomba")
-
-    rti = seleciona_opcional(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
-
-    tubo_rti = None
-    if rti:
-        output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
-        tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
-    else:
-        output.print_md(u"Nenhuma RTI selecionada.")
-
-    if not tubo_rti:
-        tubo_rti = seleciona(
-            u"Nao foi possivel identificar o tubo de saida da RTI.\n"
-            u"Clique no tubo de saida da RTI.",
-            u"Tubo de saida da RTI", PipeFilter()
-        )
-
-    bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
-    output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
-
-    tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
-    if not tubo_bomba:
-        tubo_bomba = seleciona(
-            u"Nao foi possivel identificar automaticamente o tubo de entrada (succao) da bomba.\n"
-            u"Selecione o tubo que conecta na entrada da bomba.",
-            u"Tubo succao bomba", PipeFilter()
-        )
-
-    tubo_rec = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
-    if not tubo_rec:
-        tubo_rec = seleciona(
-            u"Nao foi possivel identificar automaticamente o tubo de saida (recalque) da bomba.\n"
-            u"Selecione o tubo que conecta na saida da bomba.",
-            u"Tubo recalque bomba", PipeFilter()
-        )
-
-    eid_rti   = get_id(tubo_rti)
-    eid_bomba = get_id(tubo_bomba)
-    eid_rec   = get_id(tubo_rec)
-
-    output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
-        eid_rti, eid_bomba, eid_rec
-    ))
-
-    # ===========================================================================
-    # 3 — BFS: sucção (RTI → Bomba)
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 3 - Mapeando Succao (RTI > Bomba)")
-
-    caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
-    if not caminho_succao:
-        reporta_quebra(visitados_succao, u"entrada da bomba (succao)")
-        forms.alert(u"Caminho nao encontrado entre saida RTI e entrada da bomba.",
+        for _elem in _todos:
+            _p_trecho = _elem.LookupParameter(P_TRECHO)
+            _p_ident  = _elem.LookupParameter(P_IDENTIFICADOR)
+            _alterou  = False
+            if _p_trecho and not _p_trecho.IsReadOnly and _p_trecho.AsString():
+                _p_trecho.Set(u"")
+                _alterou = True
+            if _p_ident and not _p_ident.IsReadOnly and _p_ident.AsString():
+                _p_ident.Set(u"")
+                _alterou = True
+            if _alterou:
+                _resetados += 1
+        _t.Commit()
+    except Exception as _e:
+        _t.RollBack()
+        forms.alert(u"Erro ao resetar mapeamento:\n{}".format(str(_e)),
                     title="Fire Utils", warn_icon=True)
         script.exit()
-    ids_succao = set(caminho_succao)
-    output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
 
-    # ===========================================================================
-    # 4 — BFS: recalque até HID-01 e HID-02
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 4 - Mapeando Recalque")
+output.print_md(u"{} elemento(s) com parametros resetados.".format(_resetados))
 
-    caminho_h1, visitados_h1 = bfs_ate(tubo_rec, eid_rec, eid_h1)
-    caminho_h2, visitados_h2 = bfs_ate(tubo_rec, eid_rec, eid_h2)
+# ===========================================================================
+# 1 — Usuário seleciona os dois hidrantes mais desfavoráveis
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 1 - Selecionar Hidrantes Mais Desfavoraveis")
 
-    if not caminho_h1:
-        reporta_quebra(visitados_h1, u"HID-01")
-        forms.alert(u"Caminho nao encontrado ate HID-01.", title="Fire Utils", warn_icon=True)
-        script.exit()
-    if not caminho_h2:
-        reporta_quebra(visitados_h2, u"HID-02")
-        forms.alert(u"Caminho nao encontrado ate HID-02.", title="Fire Utils", warn_icon=True)
-        script.exit()
+hid01 = seleciona(
+    u"Selecione o hidrante MAIS desfavoravel (HID-01).",
+    u"Clique no HID-01", FittingFilter()
+)
+hid02 = seleciona(
+    u"Selecione o SEGUNDO hidrante mais desfavoravel (HID-02).",
+    u"Clique no HID-02", FittingFilter()
+)
 
-    output.print_md(u"[debug] Caminho HID-01: {} elementos".format(len(caminho_h1)))
-    output.print_md(u"[debug] Caminho HID-02: {} elementos".format(len(caminho_h2)))
+eid_h1 = get_id(hid01)
+eid_h2 = get_id(hid02)
+output.print_md(u"HID-01: ID **{}** | HID-02: ID **{}**".format(eid_h1, eid_h2))
 
-    # ===========================================================================
-    # 5 — Ponto A (último elemento comum aos dois caminhos)
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 5 - Identificando Ponto A")
+# ===========================================================================
+# 2 — Seleciona RTI e Bomba (usa as conexões nativas de entrada/saída)
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 2 - Selecionar RTI e Bomba")
 
-    set_h2 = set(caminho_h2)
-    comuns  = [eid for eid in caminho_h1 if eid in set_h2]
+rti = seleciona_opcional(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
 
-    if not comuns:
-        forms.alert(u"Ponto A nao encontrado.", title="Fire Utils", warn_icon=True)
-        script.exit()
-
-    ponto_a_id = comuns[-1]
-    output.print_md(u"Ponto A: ID **{}**".format(ponto_a_id))
-
-    idx_a_h1 = caminho_h1.index(ponto_a_id)
-    idx_a_h2 = caminho_h2.index(ponto_a_id)
-
-    ids_rec_comum = set(caminho_h1[:idx_a_h1 + 1])  # Bomba → Ponto A (inclusive)
-    ids_ramal_h1  = set(caminho_h1[idx_a_h1 + 1:])  # Ponto A → HID-01
-    ids_ramal_h2  = set(caminho_h2[idx_a_h2 + 1:])  # Ponto A → HID-02
-
-    output.print_md(u"[debug] Rec. comum: {} | Ramal H1: {} | Ramal H2: {} elementos".format(
-        len(ids_rec_comum), len(ids_ramal_h1), len(ids_ramal_h2)
-    ))
-
-    # ===========================================================================
-    # 6 — Preenche parâmetros
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md("### 6 - Preenchendo Parametros")
-
-    cont = {}
-
-    with Transaction(doc, "FireUtils - Mapear Trechos") as t:
-        t.Start()
-        try:
-            # Sucção
-            for eid in ids_succao:
-                elem = doc.GetElement(ElementId(eid))
-                if not elem: continue
-                if eid == eid_rti:
-                    set_param(elem, P_TRECHO, u"RTI - Bomba")
-                    set_param(elem, P_IDENTIFICADOR, u"RTI")
-                elif eid == eid_bomba:
-                    set_param(elem, P_TRECHO, u"RTI - Bomba")
-                    set_param(elem, P_IDENTIFICADOR, u"Succao")
-                else:
-                    set_param(elem, P_TRECHO, u"RTI - Bomba")
-                cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
-
-            # Recalque comum
-            for eid in ids_rec_comum:
-                elem = doc.GetElement(ElementId(eid))
-                if not elem: continue
-                if eid == eid_rec:
-                    set_param(elem, P_TRECHO, u"Bomba - Ponto A")
-                    set_param(elem, P_IDENTIFICADOR, u"Recalque")
-                elif eid == ponto_a_id:
-                    set_param(elem, P_TRECHO, u"Bomba - Ponto A")
-                    set_param(elem, P_IDENTIFICADOR, u"Ponto A")
-                else:
-                    set_param(elem, P_TRECHO, u"Bomba - Ponto A")
-                cont[u"Bomba - Ponto A"] = cont.get(u"Bomba - Ponto A", 0) + 1
-
-            # Ramal HID-01
-            for eid in ids_ramal_h1:
-                elem = doc.GetElement(ElementId(eid))
-                if elem:
-                    set_param(elem, P_TRECHO, u"Ponto A - Hid 01")
-                    cont[u"Ponto A - Hid 01"] = cont.get(u"Ponto A - Hid 01", 0) + 1
-
-            # Ramal HID-02
-            for eid in ids_ramal_h2:
-                elem = doc.GetElement(ElementId(eid))
-                if elem:
-                    set_param(elem, P_TRECHO, u"Ponto A - Hid 02")
-                    cont[u"Ponto A - Hid 02"] = cont.get(u"Ponto A - Hid 02", 0) + 1
-
-            # HID-01 e HID-02
-            set_param(hid01, P_TRECHO, u"Ponto A - Hid 01")
-            set_param(hid01, P_IDENTIFICADOR, u"HID-01")
-            set_param(hid02, P_TRECHO, u"Ponto A - Hid 02")
-            set_param(hid02, P_IDENTIFICADOR, u"HID-02")
-
-            t.Commit()
-        except Exception as e:
-            t.RollBack()
-            forms.alert(u"Erro:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
-            script.exit()
-
-    # ===========================================================================
-    # Resumo
-    # ===========================================================================
-    output.print_md("---")
-    output.print_md(u"### Mapeamento concluido")
-    output.print_md(u"| Trecho | Elementos |")
-    output.print_md(u"|---|---|")
-    for trecho, qtd in sorted(cont.items()):
-        output.print_md(u"| {} | {} |".format(trecho, qtd))
-    output.print_md(u"\n_Proximo passo: Dimensionar Hidrantes._")
+tubo_rti = None
+if rti:
+    output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
+    tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
 else:
-    output.print_md("---")
-    output.print_md(u"_Mapeamento completo desativado (EXECUTAR_MAPEAMENTO = False). "
-                     u"So o diagnostico de conectores acima foi executado._")
+    output.print_md(u"Nenhuma RTI selecionada.")
+
+if not tubo_rti:
+    tubo_rti = seleciona(
+        u"Nao foi possivel identificar o tubo de saida da RTI.\n"
+        u"Clique no tubo de saida da RTI.",
+        u"Tubo de saida da RTI", PipeFilter()
+    )
+
+bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
+output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
+
+tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
+if not tubo_bomba:
+    tubo_bomba = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo de entrada (succao) da bomba.\n"
+        u"Selecione o tubo que conecta na entrada da bomba.",
+        u"Tubo succao bomba", PipeFilter()
+    )
+
+tubo_rec = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
+if not tubo_rec:
+    tubo_rec = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo de saida (recalque) da bomba.\n"
+        u"Selecione o tubo que conecta na saida da bomba.",
+        u"Tubo recalque bomba", PipeFilter()
+    )
+
+eid_rti   = get_id(tubo_rti)
+eid_bomba = get_id(tubo_bomba)
+eid_rec   = get_id(tubo_rec)
+
+output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
+    eid_rti, eid_bomba, eid_rec
+))
+
+# ===========================================================================
+# 3 — BFS: sucção (RTI → Bomba)
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 3 - Mapeando Succao (RTI > Bomba)")
+
+caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
+if not caminho_succao:
+    reporta_quebra(visitados_succao, u"entrada da bomba (succao)")
+    forms.alert(u"Caminho nao encontrado entre saida RTI e entrada da bomba.",
+                title="Fire Utils", warn_icon=True)
+    script.exit()
+ids_succao = set(caminho_succao)
+output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
+
+# ===========================================================================
+# 4 — BFS: recalque até HID-01 e HID-02
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 4 - Mapeando Recalque")
+
+caminho_h1, visitados_h1 = bfs_ate(tubo_rec, eid_rec, eid_h1)
+caminho_h2, visitados_h2 = bfs_ate(tubo_rec, eid_rec, eid_h2)
+
+if not caminho_h1:
+    reporta_quebra(visitados_h1, u"HID-01")
+    forms.alert(u"Caminho nao encontrado ate HID-01.", title="Fire Utils", warn_icon=True)
+    script.exit()
+if not caminho_h2:
+    reporta_quebra(visitados_h2, u"HID-02")
+    forms.alert(u"Caminho nao encontrado ate HID-02.", title="Fire Utils", warn_icon=True)
+    script.exit()
+
+output.print_md(u"[debug] Caminho HID-01: {} elementos".format(len(caminho_h1)))
+output.print_md(u"[debug] Caminho HID-02: {} elementos".format(len(caminho_h2)))
+
+# ===========================================================================
+# 5 — Ponto A (último elemento comum aos dois caminhos)
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 5 - Identificando Ponto A")
+
+set_h2 = set(caminho_h2)
+comuns  = [eid for eid in caminho_h1 if eid in set_h2]
+
+if not comuns:
+    forms.alert(u"Ponto A nao encontrado.", title="Fire Utils", warn_icon=True)
+    script.exit()
+
+ponto_a_id = comuns[-1]
+output.print_md(u"Ponto A: ID **{}**".format(ponto_a_id))
+
+idx_a_h1 = caminho_h1.index(ponto_a_id)
+idx_a_h2 = caminho_h2.index(ponto_a_id)
+
+ids_rec_comum = set(caminho_h1[:idx_a_h1 + 1])  # Bomba → Ponto A (inclusive)
+ids_ramal_h1  = set(caminho_h1[idx_a_h1 + 1:])  # Ponto A → HID-01
+ids_ramal_h2  = set(caminho_h2[idx_a_h2 + 1:])  # Ponto A → HID-02
+
+output.print_md(u"[debug] Rec. comum: {} | Ramal H1: {} | Ramal H2: {} elementos".format(
+    len(ids_rec_comum), len(ids_ramal_h1), len(ids_ramal_h2)
+))
+
+# ===========================================================================
+# 6 — Preenche parâmetros
+# ===========================================================================
+output.print_md("---")
+output.print_md("### 6 - Preenchendo Parametros")
+
+cont = {}
+
+with Transaction(doc, "FireUtils - Mapear Trechos") as t:
+    t.Start()
+    try:
+        # Sucção
+        for eid in ids_succao:
+            elem = doc.GetElement(ElementId(eid))
+            if not elem: continue
+            if eid == eid_rti:
+                set_param(elem, P_TRECHO, u"RTI - Bomba")
+                set_param(elem, P_IDENTIFICADOR, u"RTI")
+            elif eid == eid_bomba:
+                set_param(elem, P_TRECHO, u"RTI - Bomba")
+                set_param(elem, P_IDENTIFICADOR, u"Succao")
+            else:
+                set_param(elem, P_TRECHO, u"RTI - Bomba")
+            cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
+
+        # Recalque comum
+        for eid in ids_rec_comum:
+            elem = doc.GetElement(ElementId(eid))
+            if not elem: continue
+            if eid == eid_rec:
+                set_param(elem, P_TRECHO, u"Bomba - Ponto A")
+                set_param(elem, P_IDENTIFICADOR, u"Recalque")
+            elif eid == ponto_a_id:
+                set_param(elem, P_TRECHO, u"Bomba - Ponto A")
+                set_param(elem, P_IDENTIFICADOR, u"Ponto A")
+            else:
+                set_param(elem, P_TRECHO, u"Bomba - Ponto A")
+            cont[u"Bomba - Ponto A"] = cont.get(u"Bomba - Ponto A", 0) + 1
+
+        # Ramal HID-01
+        for eid in ids_ramal_h1:
+            elem = doc.GetElement(ElementId(eid))
+            if elem:
+                set_param(elem, P_TRECHO, u"Ponto A - Hid 01")
+                cont[u"Ponto A - Hid 01"] = cont.get(u"Ponto A - Hid 01", 0) + 1
+
+        # Ramal HID-02
+        for eid in ids_ramal_h2:
+            elem = doc.GetElement(ElementId(eid))
+            if elem:
+                set_param(elem, P_TRECHO, u"Ponto A - Hid 02")
+                cont[u"Ponto A - Hid 02"] = cont.get(u"Ponto A - Hid 02", 0) + 1
+
+        # HID-01 e HID-02
+        set_param(hid01, P_TRECHO, u"Ponto A - Hid 01")
+        set_param(hid01, P_IDENTIFICADOR, u"HID-01")
+        set_param(hid02, P_TRECHO, u"Ponto A - Hid 02")
+        set_param(hid02, P_IDENTIFICADOR, u"HID-02")
+
+        t.Commit()
+    except Exception as e:
+        t.RollBack()
+        forms.alert(u"Erro:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
+        script.exit()
+
+# ===========================================================================
+# Resumo
+# ===========================================================================
+output.print_md("---")
+output.print_md(u"### Mapeamento concluido")
+output.print_md(u"| Trecho | Elementos |")
+output.print_md(u"|---|---|")
+for trecho, qtd in sorted(cont.items()):
+    output.print_md(u"| {} | {} |".format(trecho, qtd))
+output.print_md(u"\n_Proximo passo: Dimensionar Hidrantes._")
