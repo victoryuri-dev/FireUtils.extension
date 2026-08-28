@@ -19,7 +19,7 @@ import re as _re
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
-    FlowDirectionType,
+    FlowDirectionType, ConnectorType,
     LocationCurve, LocationPoint, UnitUtils,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
@@ -75,7 +75,9 @@ def get_trecho(elem):
 def get_identificador(elem):
     try:
         p = elem.LookupParameter(P_IDENTIFICADOR)
-        return p.AsString() if p else None
+        if not p or not p.HasValue: return None
+        valor = p.AsString()
+        return valor.strip() if valor else None
     except: return None
 
 def get_comprimento(pipe):
@@ -161,6 +163,7 @@ def get_cota_conector(elem, direcoes=None):
     if direcoes is not None:
         for conn in conns:
             try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
                 if conn.Direction not in direcoes: continue
                 if not conn.IsConnected: continue
                 return to_m(conn.Origin.Z)
@@ -168,27 +171,34 @@ def get_cota_conector(elem, direcoes=None):
         return None
     for conn in conns:
         try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
             if conn.IsConnected:
                 return to_m(conn.Origin.Z)
         except: continue
     for conn in conns:
         try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
             return to_m(conn.Origin.Z)
         except: continue
     return None
 
 def get_cota_rti(elem):
-    """Cota da RTI: `elem` (ident_map["RTI"]) e a familia da RTI quando
-    ela foi detectada automaticamente no "Mapear Trechos" - nesse caso
-    le o conector Out conectado dela, igual a bomba. Quando a RTI nao
-    foi detectada (fallback manual: o usuario clicou no tubo de saida),
-    quem esta marcado como "RTI" e esse tubo, e a cota vem da ponta
-    solta dele - o conector que nao esta conectado em nada."""
-    cota = get_cota_conector(elem, (FlowDirectionType.Out,))
-    if cota is not None:
-        return cota
-    for conn in get_conectores(elem):
+    """Cota da RTI: acha a ponta solta de `elem` (o elemento marcado
+    "RTI" pelo "Mapear Trechos" - familia da RTI ou, no fallback manual,
+    o proprio tubo) e le a elevacao dela. Ponta solta = conector fisico
+    (nao Logical) que nao esta conectado a nada - o mesmo criterio tanto
+    para a familia quanto para o tubo, sem tentar adivinhar Direction.
+    None se nao achar nenhuma ponta solta."""
+    cm = None
+    if hasattr(elem, "ConnectorManager") and elem.ConnectorManager:
+        cm = elem.ConnectorManager
+    elif hasattr(elem, "MEPModel") and elem.MEPModel and elem.MEPModel.ConnectorManager:
+        cm = elem.MEPModel.ConnectorManager
+    if not cm:
+        return None
+    for conn in cm.Connectors:
         try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
             if not conn.IsConnected:
                 return to_m(conn.Origin.Z)
         except: continue
@@ -1249,7 +1259,7 @@ TRECHOS = [u"RTI - Bomba", u"Bomba - Ponto A", u"Ponto A - Hid 01", u"Ponto A - 
 trechos_elems = {t: [] for t in TRECHOS}
 ident_map = {}; hid_map = {}
 
-for elem in FilteredElementCollector(doc, doc.ActiveView.Id).WhereElementIsNotElementType().ToElements():
+for elem in FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements():
     t = get_trecho(elem)
     if t in trechos_elems: trechos_elems[t].append(elem)
     i = get_identificador(elem)
