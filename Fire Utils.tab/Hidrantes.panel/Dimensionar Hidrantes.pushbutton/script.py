@@ -46,9 +46,9 @@ from hidrantes.calc import (
     calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
 )
-from hidrantes.memorial import (
-    imprimir_bloqueio_velocidade, imprimir_bloqueio_hidrante,
-    imprimir_resumo_dimensionamento,
+from hidrantes.resultado_ui import (
+    mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
+    mostrar_resultado_ok,
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req, opt
@@ -495,24 +495,13 @@ def _para_por_velocidade(j, limite, nome_trecho):
     falhas = [s for s in j["segmentos"] if s["V"] > limite + 1e-9]
     if not falhas:
         return
-    imprimir_bloqueio_velocidade(output, nome_trecho, j, limite, falhas)
-    forms.alert(
-        u"Dimensionamento interrompido: velocidade acima do limite em\n'{}'.\n\n"
-        u"Aumente o diâmetro desse trecho e execute 'Dimensionar Hidrantes' novamente.\n\n"
-        u"Detalhes no output do pyRevit.".format(nome_trecho),
-        title=u"Fire Utils — Verificação não atendida", warn_icon=True)
+    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas)
     script.exit()
 
 def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
         return
-    imprimir_bloqueio_hidrante(output, label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
-    forms.alert(
-        u"Dimensionamento interrompido: {} não atende a pressão/vazão mínima exigida "
-        u"pela norma.\n\nRevise o diâmetro/traçado do trecho {} e execute "
-        u"'Dimensionar Hidrantes' novamente.\n\nDetalhes no output do pyRevit.".format(
-            label, trecho_desc),
-        title=u"Fire Utils — Verificação não atendida", warn_icon=True)
+    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
     script.exit()
 
 _para_por_velocidade(res["j"]["t3"], v_max_tubo, u"Ponto A → HD01")
@@ -545,8 +534,8 @@ pot_kw  = pot_cv / 1.36
 # Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
 # completo agora é o botão separado "Memorial de Cálculo")
 # ===========================================================================
-imprimir_resumo_dimensionamento(
-    output, res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
+mostrar_resultado_ok(
+    res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
     Pmin, Qs_lmin, eta, pot_cv, pot_kw,
 )
