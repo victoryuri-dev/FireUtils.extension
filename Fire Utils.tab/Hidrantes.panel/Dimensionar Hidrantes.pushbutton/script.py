@@ -998,8 +998,10 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     output.print_md(u"")
 
     output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD01:".format(prox()))
-    output.print_md(u"P_PA = {} + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        _P_ref_lbl, P_ref, j["t3"]["J"], _fmt_dh(dH["t3"]), res["P_PA1"]))
+    _formula(u"P_PA = {} + J ± ∆H".format(_P_ref_lbl))
+    _tabela([_P_ref_lbl + u" (mca)", u"J (mca)", u"∆H (m)", u"P_PA (mca)"],
+            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j["t3"]["J"]),
+              _fmt_dh(dH["t3"]), u"**{:.4f}**".format(res["P_PA1"])]])
     output.print_md(u"")
 
     # --- Trecho HD02 -------------------------------------------------------
@@ -1012,31 +1014,42 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     _passo_perda(j["t4"], C_HW, prox())
     _passo_velocidade(j["t4"], v_max_tubo, prox())
     output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD02:".format(prox()))
-    output.print_md(u"P_PA = {} + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        _P_ref_lbl, P_ref, j["t4"]["J"], _fmt_dh(dH["t4"]), res["P_PA2"]))
+    _formula(u"P_PA = {} + J ± ∆H".format(_P_ref_lbl))
+    _tabela([_P_ref_lbl + u" (mca)", u"J (mca)", u"∆H (m)", u"P_PA (mca)"],
+            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j["t4"]["J"]),
+              _fmt_dh(dH["t4"]), u"**{:.4f}**".format(res["P_PA2"])]])
     output.print_md(u"")
 
     # Ponto A e vazões finais pelo Fator K (sem ciclo)
     output.print_md(u"### {}.3 Pressão no Ponto A e Vazões Finais (Fator K)".format(n7))
     output.print_md(u"Pressão adotada no Ponto A = maior pressão calculada entre os "
-                    u"dois trechos: P_PA = max({:.4f}; {:.4f}) = **{:.4f} mca** "
-                    u"(ramal governante: **{}**)".format(
-                        res["P_PA1"], res["P_PA2"], res["P_PA"], res["hid_governa"]))
+                    u"dois trechos:")
+    _formula(u"P_PA = max(P_PA1; P_PA2)")
+    _tabela([u"Ramal", u"P_PA (mca)", u"Governante"],
+            [[u"HD01", u"{:.4f}".format(res["P_PA1"]),
+              SIM_OK if res["hid_governa"] == u"HD01" else u""],
+             [u"HD02", u"{:.4f}".format(res["P_PA2"]),
+              SIM_OK if res["hid_governa"] == u"HD02" else u""]],
+            alinhas=[u"left", u"right", u"left"])
+    output.print_md(u"P_PA adotado = **{:.4f} mca** (ramal governante: **{}**)".format(
+        res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
     output.print_md(u"Com o Ponto A nessa pressão, a pressão na válvula de cada hidrante "
                     u"vem da marcha inversa (o ramal governante retorna, por construção, "
                     u"exatamente à pressão de referência):")
     _formula(u"P_hd = P_PA − J ∓ ∆H")
-    output.print_md(u"P_hd01 = {:.4f} {} {:.4f} {} = **{:.4f} mca**".format(
-        res["P_PA"], u"−", j["t3"]["J"], _fmt_dh(-dH["t3"]), res["P_hd01"]))
-    output.print_md(u"P_hd02 = {:.4f} {} {:.4f} {} = **{:.4f} mca**".format(
-        res["P_PA"], u"−", j["t4"]["J"], _fmt_dh(-dH["t4"]), res["P_hd02"]))
+    _tabela([u"Hidrante", u"P_PA (mca)", u"J (mca)", u"∆H (m)", u"P_hd (mca)"],
+            [[u"HD01", u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t3"]["J"]),
+              _fmt_dh(-dH["t3"]), u"**{:.4f}**".format(res["P_hd01"])],
+             [u"HD02", u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t4"]["J"]),
+              _fmt_dh(-dH["t4"]), u"**{:.4f}**".format(res["P_hd02"])]])
     output.print_md(u"")
     _formula(u"Q = K · √P")
-    output.print_md(u"Q_hd01 = {:.4f} · √({:.4f} / {}) = **{:.2f} L/min**".format(
-        K, res["P_hd01"], MCA_POR_BAR, res["Q_hd01"]))
-    output.print_md(u"Q_hd02 = {:.4f} · √({:.4f} / {}) = **{:.2f} L/min**".format(
-        K, res["P_hd02"], MCA_POR_BAR, res["Q_hd02"]))
+    _tabela([u"Hidrante", u"K", u"P (bar)", u"Q (L/min)"],
+            [[u"HD01", u"{:.4f}".format(K), u"{:.4f}".format(res["P_hd01"] / MCA_POR_BAR),
+              u"**{:.2f}**".format(res["Q_hd01"])],
+             [u"HD02", u"{:.4f}".format(K), u"{:.4f}".format(res["P_hd02"] / MCA_POR_BAR),
+              u"**{:.2f}**".format(res["Q_hd02"])]])
     output.print_md(u"")
     output.print_md(u"**Qt = Q_hd01 + Q_hd02 = {:.2f} + {:.2f} = {:.2f} L/min**".format(
         res["Q_hd01"], res["Q_hd02"], res["Qt"]))
@@ -1088,8 +1101,10 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     _passo_perda(j["t2"], C_HW, prox())
     _passo_velocidade(j["t2"], v_max_tubo, prox())
     output.print_md(u"**{}) Pressão na saída da bomba**".format(prox()))
-    output.print_md(u"P_SB = P_PA + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        res["P_PA"], j["t2"]["J"], _fmt_dh(dH["t2"]), res["P_SB"]))
+    _formula(u"P_SB = P_PA + J ± ∆H")
+    _tabela([u"P_PA (mca)", u"J (mca)", u"∆H (m)", u"P_SB (mca)"],
+            [[u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t2"]["J"]),
+              _fmt_dh(dH["t2"]), u"**{:.4f}**".format(res["P_SB"])]])
     output.print_md(u"")
 
     # Sucção
@@ -1103,8 +1118,10 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     _passo_perda(j["t1"], C_HW, prox())
     _passo_velocidade(j["t1"], v_max_succao, prox())
     output.print_md(u"**{}) Pressão de demanda referida à RTI**".format(prox()))
-    output.print_md(u"P_RTI = P_SB + J ± ∆H = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
-        res["P_SB"], j["t1"]["J"], _fmt_dh(dH["t1"]), res["P_RTI"]))
+    _formula(u"P_RTI = P_SB + J ± ∆H")
+    _tabela([u"P_SB (mca)", u"J (mca)", u"∆H (m)", u"P_RTI (mca)"],
+            [[u"{:.4f}".format(res["P_SB"]), u"{:.4f}".format(j["t1"]["J"]),
+              _fmt_dh(dH["t1"]), u"**{:.4f}**".format(res["P_RTI"])]])
     output.print_md(u"")
 
     # ── Demanda do sistema ────────────────────────────────────────────────
