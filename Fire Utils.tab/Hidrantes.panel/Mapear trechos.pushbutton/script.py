@@ -184,6 +184,10 @@ class FittingFilter(ISelectionFilter):
     def AllowElement(self, e): return isinstance(e, FamilyInstance)
     def AllowReference(self, r, p): return False
 
+class PipeOuAcessorioFilter(ISelectionFilter):
+    def AllowElement(self, e): return isinstance(e, (Pipe, FamilyInstance))
+    def AllowReference(self, r, p): return False
+
 def seleciona(msg_alert, msg_pick, filtro):
     forms.alert(msg_alert, title="Fire Utils")
     try:
@@ -231,7 +235,42 @@ def descreve_conectores(elem, nome):
 rti   = seleciona(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
 bomba = seleciona(u"Selecione a bomba de incendio.",  u"Bomba de incendio",  FittingFilter())
 
-linhas_rti   = descreve_conectores(rti,   u"RTI")
+# --- RTI: entre os conectores nativos, filtra so os que estao de fato
+# ligados a algo (tubo, acessorio ou conexao) - conectores Bidirectional
+# "soltos" (sem nada plugado) nao contam. ---
+conectados_rti = []
+for conn in get_conectores(rti):
+    try:
+        if not conn.IsConnected: continue
+        for ref in conn.AllRefs:
+            conectados_rti.append((conn, ref.Owner))
+            break
+    except: continue
+
+linhas_rti = [u"**RTI** (ID {}): {} conector(es) conectado(s) a algo".format(get_id(rti), len(conectados_rti))]
+for i, (conn, viz) in enumerate(conectados_rti):
+    linhas_rti.append(u"{}. Direction = **{}** -> {} (ID {})".format(
+        i + 1, conn.Direction, type(viz).__name__, get_id(viz)
+    ))
+
+if len(conectados_rti) == 1:
+    elemento_rti_hidrante = conectados_rti[0][1]
+    linhas_rti.append(u"-> Unica conexao ativa: **{}** (ID {}).".format(
+        type(elemento_rti_hidrante).__name__, get_id(elemento_rti_hidrante)
+    ))
+elif len(conectados_rti) > 1:
+    elemento_rti_hidrante = seleciona(
+        u"A RTI tem mais de uma conexao ligada a algo.\n"
+        u"Selecione o tubo/acessorio/conexao que vai para o sistema de hidrante.",
+        u"Elemento que sai da RTI para o hidrante", PipeOuAcessorioFilter()
+    )
+    linhas_rti.append(u"-> Selecionado manualmente: **{}** (ID {}).".format(
+        type(elemento_rti_hidrante).__name__, get_id(elemento_rti_hidrante)
+    ))
+else:
+    elemento_rti_hidrante = None
+    linhas_rti.append(u"-> Nenhuma conexao da RTI esta ligada a algo.")
+
 linhas_bomba = descreve_conectores(bomba, u"Bomba")
 
 for linha in linhas_rti:
