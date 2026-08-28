@@ -11,7 +11,7 @@ clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance,
-    BuiltInParameter, Transaction, UnitUtils, ElementId,
+    BuiltInParameter, Transaction, UnitUtils, ElementId, FlowDirectionType,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
@@ -53,6 +53,21 @@ def get_conectores(elem):
             return list(mep.ConnectorManager.Connectors)
     except: pass
     return []
+
+def get_tubo_por_direcao(elem, direcoes):
+    """Percorre os conectores nativos de `elem` cuja Direction esteja em
+    `direcoes` (In/Out) e retorna o primeiro Pipe conectado a eles.
+    Retorna None se nao houver conector com essa direcao conectado a um tubo."""
+    for conn in get_conectores(elem):
+        try:
+            if conn.Direction not in direcoes: continue
+            if not conn.IsConnected: continue
+            for ref in conn.AllRefs:
+                owner = ref.Owner
+                if isinstance(owner, Pipe):
+                    return owner
+        except: continue
+    return None
 
 def get_lt(pipe):
     try:
@@ -223,20 +238,45 @@ eid_h2 = get_id(hid02)
 output.print_md(u"HID-01: ID **{}** | HID-02: ID **{}**".format(eid_h1, eid_h2))
 
 # ===========================================================================
-# 2 — Seleciona tubos de referência
+# 2 — Seleciona RTI e Bomba (usa as conexões nativas de entrada/saída)
 # ===========================================================================
 output.print_md("---")
-output.print_md("### 2 - Selecionar Tubos de Referencia")
+output.print_md("### 2 - Selecionar RTI e Bomba")
 
-tubo_rti   = seleciona(u"Selecione o tubo imediato de SAIDA da RTI.",   u"Tubo saida RTI",   PipeFilter())
-tubo_bomba = seleciona(u"Selecione o tubo imediato de ENTRADA da bomba (succao).", u"Tubo entrada bomba", PipeFilter())
-tubo_rec   = seleciona(u"Selecione o tubo imediato de SAIDA da bomba (recalque).", u"Tubo saida bomba",   PipeFilter())
+rti   = seleciona(u"Selecione o reservatorio (RTI).",     u"Reservatorio (RTI)",    FittingFilter())
+bomba = seleciona(u"Selecione a bomba de incendio.",      u"Bomba de incendio",     FittingFilter())
+
+output.print_md(u"RTI: ID **{}** | Bomba: ID **{}**".format(get_id(rti), get_id(bomba)))
+
+tubo_rti = get_tubo_por_direcao(rti, (FlowDirectionType.Out,))
+if not tubo_rti:
+    tubo_rti = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo conectado a RTI.\n"
+        u"Selecione o tubo que conecta na RTI.",
+        u"Tubo da RTI", PipeFilter()
+    )
+
+tubo_bomba = get_tubo_por_direcao(bomba, (FlowDirectionType.In,))
+if not tubo_bomba:
+    tubo_bomba = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo de entrada (succao) da bomba.\n"
+        u"Selecione o tubo que conecta na entrada da bomba.",
+        u"Tubo succao bomba", PipeFilter()
+    )
+
+tubo_rec = get_tubo_por_direcao(bomba, (FlowDirectionType.Out,))
+if not tubo_rec:
+    tubo_rec = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo de saida (recalque) da bomba.\n"
+        u"Selecione o tubo que conecta na saida da bomba.",
+        u"Tubo recalque bomba", PipeFilter()
+    )
 
 eid_rti   = get_id(tubo_rti)
 eid_bomba = get_id(tubo_bomba)
 eid_rec   = get_id(tubo_rec)
 
-output.print_md(u"Saida RTI: ID **{}** | Entrada bomba: ID **{}** | Saida bomba: ID **{}**".format(
+output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
     eid_rti, eid_bomba, eid_rec
 ))
 
