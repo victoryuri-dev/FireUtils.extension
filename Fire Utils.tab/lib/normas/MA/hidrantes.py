@@ -64,6 +64,25 @@ DADOS_HIDRANTES = {
     u"v_max_succao_negativa": 2.0,
     u"v_max_succao_ref": u"NT 22 item 5.8.12",
 
+    # -- Condicao de succao pelo nivel X --------------------------------
+    # As tabelas de dimensoes (A/B) e a mecanica do nivel X vivem em
+    # hidrantes/succao.py, por serem praticamente gerais entre normas; o que
+    # muda de estado para estado - e portanto mora aqui - sao os valores
+    # normativos e as citacoes exibidas no memorial.
+    u"succao_tolerancia_max": 2.0,
+
+    u"succao_ref":            u"NT 22 Anexo B.3",
+    u"succao_condicao_ref":   u"NT 22 item C.1.10",
+    u"succao_capacidade_ref": u"NT 22 item B.3.3",
+    u"succao_antivortice_ref": u"NT 22 itens B.3.5/B.3.6",
+    u"succao_dimensoes_ref":  u"NT 22 Tabela B.1",
+    u"succao_rti_min_ref":    u"NT 22 Tabela 3",
+
+    # -- NPSH disponivel (exigido quando a succao e negativa) ------------
+    # Majoracao normativa da vazao usada SO nesta verificacao.
+    u"npshd_fator_vazao": 1.5,
+    u"npshd_ref":         u"NT 22 item 5.8.16",
+
     # Tabela 1 - Coeficiente de Hazen-Williams por material
     u"hazen_c": {
         u"galvanizado":       120,

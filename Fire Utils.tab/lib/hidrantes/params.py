@@ -116,7 +116,7 @@ PROJECT_INFO_CUSTOM_PARAM = u"FireUtils - Sistema Personalizado"
 PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
 
 # Guarda, em JSON, os dados do reservatório que a verificação da condição de
-# sucção pelo nível X (NT 22, Anexo B.3) precisa e que não existem na
+# sucção pelo nível X e o NPSH disponível precisam e que não existem na
 # geometria: cota do fundo, volume total, área em planta, dispositivo
 # antivórtice, poço de sucção e — opcionalmente — o tipo de tomada, quando o
 # usuário quer sobrepor o que foi lido do modelo.

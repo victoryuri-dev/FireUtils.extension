@@ -73,6 +73,32 @@ def req(perfil, chave):
     return perfil[chave]
 
 
+def opt(perfil, chave, default=None):
+    """
+    Acessa uma chave OPCIONAL do perfil normativo ativo.
+
+    Ao contrario de req(), nao levanta erro quando a chave nao existe - e o
+    caminho para dados que variam de estado para estado e que nem todo perfil
+    precisa declarar, como as citacoes de item/tabela da norma. Perfil que nao
+    declara a citacao simplesmente nao a exibe, em vez de exibir a de outro
+    estado.
+    """
+    valor = perfil.get(chave, default)
+    return default if valor is None else valor
+
+
+def ref(perfil, chave):
+    """
+    Citacao normativa (item/tabela/figura) pronta para ir entre parenteses no
+    memorial: " (NT 22 item 5.8.16)". String vazia quando o perfil do estado
+    ativo nao declara essa citacao - o texto sai sem a referencia, nunca com a
+    referencia de outra norma.
+    """
+    valor = opt(perfil, chave, u"")
+    valor = (valor or u"").strip()
+    return u" ({})".format(valor) if valor else u""
+
+
 def lista_ufs_disponiveis():
     """Retorna a lista de siglas de UF com domínio 'hidrantes' cadastrado."""
     from normas import lista_estados

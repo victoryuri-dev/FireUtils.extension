@@ -113,7 +113,7 @@ output.print_md(
 # ETAPA 2b — Dados do reservatório (condição de sucção pelo nível X)
 # ===========================================================================
 output.print_md("---")
-output.print_md(u"### Etapa 2b — Condição de Sucção (Anexo B, NT 22)")
+output.print_md(u"### Etapa 2b — Condição de Sucção e NPSH")
 
 # Só o que não dá para ler da geometria: as cotas, o DN da sucção e o tipo de
 # tomada saem do modelo em "Dimensionar Hidrantes".
@@ -134,8 +134,8 @@ else:
             dados_succao["volume_total_m3"], dados_succao["area_planta_m2"]))
     else:
         output.print_md(u"⚠ Volume/área não informados — a capacidade efetiva "
-                        u"(B.3.3) não será calculada e a tolerância do item "
-                        u"C.1.10 fica zerada (lado conservador).")
+                        u"não será calculada e a tolerância do critério de "
+                        u"sucção fica zerada (lado conservador).")
     output.print_md(u"✔ Dispositivo antivórtice: **{}**".format(
         u"sim" if dados_succao["possui_antivortice"] else u"não"))
     output.print_md(u"✔ Poço de sucção: **{}**".format(
