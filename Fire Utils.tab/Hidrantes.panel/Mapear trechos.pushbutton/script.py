@@ -10,7 +10,7 @@ clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import (
-    FilteredElementCollector, FamilyInstance,
+    FilteredElementCollector, FamilyInstance, BuiltInCategory,
     BuiltInParameter, Transaction, UnitUtils, ElementId, FlowDirectionType,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
@@ -54,12 +54,36 @@ def get_conectores(elem):
     except: pass
     return []
 
+_CATS_EQUIPAMENTO = None
+def eh_equipamento(elem):
+    """True se `elem` for um equipamento (bomba, RTI, etc.) - categoria
+    Mechanical/Plumbing Equipment. Esses elementos tem lados fisicamente
+    distintos (ex.: succao x recalque de uma bomba) e NAO devem ser
+    atravessados como se fossem uma conexao/te qualquer: entrar por um
+    conector e sair por outro conector do mesmo equipamento salta
+    indevidamente de um trecho hidraulico para outro."""
+    global _CATS_EQUIPAMENTO
+    if _CATS_EQUIPAMENTO is None:
+        _CATS_EQUIPAMENTO = set()
+        for bic_nome in ("OST_MechanicalEquipment", "OST_PlumbingEquipment"):
+            bic = getattr(BuiltInCategory, bic_nome, None)
+            if bic is not None:
+                _CATS_EQUIPAMENTO.add(int(bic))
+    try:
+        cat = elem.Category
+        if not cat: return False
+        cat_id = cat.Id
+        cat_int = cat_id.Value if hasattr(cat_id, "Value") else cat_id.IntegerValue
+        return cat_int in _CATS_EQUIPAMENTO
+    except: return False
+
 def get_primeiro_tubo(elem_ini, direcoes_ini):
     """A partir dos conectores de `elem_ini` (RTI ou bomba) cuja Direction
     esteja em `direcoes_ini`, anda pela rede - pulando acessorios/conexoes
     que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
-    primeiro Pipe encontrado. Retorna None se a rede nao alcancar nenhum
-    tubo nessa direcao."""
+    primeiro Pipe encontrado. Nao atravessa outros equipamentos (ex.: uma
+    segunda bomba) pelo caminho. Retorna None se a rede nao alcancar
+    nenhum tubo nessa direcao."""
     eid_ini = get_id(elem_ini)
     visitados = set([eid_ini])
     fila = deque()
@@ -79,6 +103,7 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
         elem = fila.popleft()
         if isinstance(elem, Pipe):
             return elem
+        if eh_equipamento(elem): continue
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -115,13 +140,17 @@ def set_param(elem, nome, valor):
 def bfs_ate(elem_ini, eid_ini, eid_alvo):
     """BFS de elem_ini ate eid_alvo. Retorna (caminho, visitados).
     Se o alvo nao for alcancado, caminho vem vazio e visitados guarda
-    tudo que a busca conseguiu percorrer, para diagnostico da quebra."""
+    tudo que a busca conseguiu percorrer, para diagnostico da quebra.
+    Nao atravessa equipamentos (bombas, RTI etc.) encontrados pelo
+    caminho - ver eh_equipamento."""
     visitados = set([eid_ini])
     fila      = deque([(elem_ini, [eid_ini])])
     while fila:
         elem, caminho = fila.popleft()
         if get_id(elem) == eid_alvo:
             return caminho, visitados
+        if eh_equipamento(elem) and get_id(elem) != eid_ini:
+            continue
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
