@@ -124,10 +124,17 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="CATEGORIAS" FontSize="10" FontWeight="SemiBold"
                            Foreground="{StaticResource BrushText3}" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" x:Name="BtnAtualizar" Content="↻  Atualizar pasta"
-                        FontSize="10" Foreground="{StaticResource BrushAccent}"
-                        Background="Transparent" BorderThickness="0" Padding="0"
-                        Cursor="Hand" Click="on_atualizar_pasta"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="BtnGerarPreviews" Content="🖼  Gerar previews"
+                            FontSize="10" Foreground="{StaticResource BrushText2}"
+                            Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,14,0"
+                            Cursor="Hand" Click="on_gerar_previews"
+                            ToolTip="Gera as miniaturas das famílias que ainda não têm preview em cache (abre cada .rfa em segundo plano, pode demorar na primeira vez)."/>
+                    <Button x:Name="BtnAtualizar" Content="↻  Atualizar pasta"
+                            FontSize="10" Foreground="{StaticResource BrushAccent}"
+                            Background="Transparent" BorderThickness="0" Padding="0"
+                            Cursor="Hand" Click="on_atualizar_pasta"/>
+                </StackPanel>
             </Grid>
             <WrapPanel x:Name="TilesPanel" Orientation="Horizontal"/>
         </StackPanel>

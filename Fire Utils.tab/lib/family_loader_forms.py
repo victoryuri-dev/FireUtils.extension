@@ -30,6 +30,14 @@ XAML inválido etc.), o registro do painel falha silenciosamente em
 startup.py e o botão da faixa de opções cai para o formulário padrão do
 pyRevit (forms.SelectFromList), que já é funcional e testado — nesse caso a
 janela é modal.
+
+Preview (miniatura) das famílias: os cartões mostram a imagem nativa do
+Revit quando ela já está em cache (family_library/.previews/*.png, ver
+family_loader.py), lida direto do disco — leve e instantânea. O cache é
+gerado sob demanda pelo botão "Gerar previews" (nunca automaticamente),
+que abre cada .rfa como documento de família temporário via ExternalEvent
+pra extrair o preview e fecha sem salvar; famílias sem cache continuam
+mostrando o monograma de duas letras.
 """
 
 import os
@@ -50,7 +58,7 @@ from pyrevit import forms
 
 from family_loader import (
     listar_familias, listar_categorias, carregar_familias,
-    obter_symbol_para_posicionar,
+    obter_symbol_para_posicionar, preview_valido, gerar_previews_pendentes,
 )
 from family_loader_events import criar_fila_acoes
 
@@ -187,6 +195,11 @@ class PainelCarregadorFamilias(forms.WPFPanel):
         self.C_WHITE       = self.Resources[u"BrushWhite"]
         self.C_TRANSPARENT = SWM.Brushes.Transparent
 
+        # path -> BitmapImage já decodificado, pra não reler/redecodificar o
+        # .png do disco a cada _atualizar_lista() (ex.: a cada tecla digitada
+        # na busca). Limpo sempre que "Gerar previews" regenera algum cache.
+        self._cache_bitmaps_preview = {}
+
         logo_bitmap = _localizar_logo()
         if logo_bitmap is not None:
             self.LogoImage.Source = logo_bitmap
@@ -294,6 +307,15 @@ class PainelCarregadorFamilias(forms.WPFPanel):
             resultado.extend(entradas_categoria)
         return resultado
 
+    def _obter_bitmap_preview(self, entrada):
+        caminho_png = preview_valido(entrada)
+        if not caminho_png:
+            self._cache_bitmaps_preview.pop(entrada.path, None)
+            return None
+        if entrada.path not in self._cache_bitmaps_preview:
+            self._cache_bitmaps_preview[entrada.path] = _carregar_bitmap(caminho_png)
+        return self._cache_bitmaps_preview[entrada.path]
+
     def _criar_cartao_familia(self, entrada):
         selecionado = entrada.path in self.selecionadas_paths
 
@@ -318,14 +340,25 @@ class PainelCarregadorFamilias(forms.WPFPanel):
         icone_tile.ClipToBounds = True
         icone_tile.Background = self.C_ACCENT_TINT if selecionado else self.C_BG3
 
-        icone_txt = SWC.TextBlock()
-        icone_txt.Text = _monograma(entrada.name)
-        icone_txt.FontSize = 22
-        icone_txt.FontWeight = SW.FontWeights.Bold
-        icone_txt.Foreground = self.C_ACCENT if selecionado else self.C_TEXT3
-        icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
-        icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
-        icone_tile.Child = icone_txt
+        # Preview em cache (.previews/*.png, gerado pelo botão "Gerar
+        # previews") tem prioridade; sem cache, cai no monograma de sempre.
+        preview_bitmap = self._obter_bitmap_preview(entrada)
+
+        if preview_bitmap is not None:
+            icone_txt = None
+            imagem_preview = SWC.Image()
+            imagem_preview.Source = preview_bitmap
+            imagem_preview.Stretch = SWM.Stretch.UniformToFill
+            icone_tile.Child = imagem_preview
+        else:
+            icone_txt = SWC.TextBlock()
+            icone_txt.Text = _monograma(entrada.name)
+            icone_txt.FontSize = 22
+            icone_txt.FontWeight = SW.FontWeights.Bold
+            icone_txt.Foreground = self.C_ACCENT if selecionado else self.C_TEXT3
+            icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
+            icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
+            icone_tile.Child = icone_txt
 
         conteudo.Children.Add(icone_tile)
 
@@ -373,8 +406,12 @@ class PainelCarregadorFamilias(forms.WPFPanel):
 
             cartao.BorderBrush = self.C_ACCENT if novo_estado else self.C_BORDER
             cartao.BorderThickness = SW.Thickness(2 if novo_estado else 1)
-            icone_tile.Background = self.C_ACCENT_TINT if novo_estado else self.C_BG3
-            icone_txt.Foreground = self.C_ACCENT if novo_estado else self.C_TEXT3
+            if icone_txt is not None:
+                # Sem preview real (monograma): tile e texto acompanham a
+                # seleção. Com preview real, a imagem cobre o tile inteiro —
+                # a borda do cartão e o selo no canto já comunicam a seleção.
+                icone_tile.Background = self.C_ACCENT_TINT if novo_estado else self.C_BG3
+                icone_txt.Foreground = self.C_ACCENT if novo_estado else self.C_TEXT3
             badge.Visibility = SW.Visibility.Visible if novo_estado else SW.Visibility.Collapsed
             self._atualizar_status()
 
@@ -449,6 +486,43 @@ class PainelCarregadorFamilias(forms.WPFPanel):
 
         self._reconstruir_categorias()
         self._atualizar_lista()
+
+    def on_gerar_previews(self, sender, args):
+        entradas = list(self.todas_entradas)
+        pendentes = [e for e in entradas if preview_valido(e) is None]
+
+        if not pendentes:
+            forms.alert(
+                u"Todas as famílias já têm preview em cache.",
+                title=u"Fire Utils - Previews de Famílias",
+            )
+            return
+
+        def _acao(uiapp_exec):
+            app = uiapp_exec.Application
+
+            with forms.ProgressBar(
+                title=u"Gerando previews de famílias ({value} de {max_value})"
+            ) as pb:
+                def _progresso(indice, total, entrada):
+                    pb.max_value = total
+                    pb.update_progress(indice)
+
+                gerados, _ja_em_cache, erros = gerar_previews_pendentes(
+                    app, entradas, callback_progresso=_progresso
+                )
+
+            # Previews foram regeneradas em disco — descarta os bitmaps já
+            # decodificados em memória antes de reconstruir os cartões.
+            self._cache_bitmaps_preview.clear()
+            self._atualizar_lista()
+
+            resumo = u"{} preview(s) gerado(s).".format(gerados)
+            if erros:
+                resumo += u"\n{} falharam: {}".format(len(erros), u", ".join(erros))
+            forms.alert(resumo, title=u"Fire Utils - Previews de Famílias")
+
+        self.fila_acoes.enfileirar(_acao)
 
     def on_marcar_todos(self, sender, args):
         for entrada in self._entradas_filtradas():
