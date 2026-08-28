@@ -3,6 +3,7 @@ tooltip: Descricao do que o script faz
 author: Seu Nome
 layout:
   - Dimensionar Hidrantes
+  - Memorial de Calculo
   - Classificar Sistema
   - Mapear trechos
   - Inserir Valvula
