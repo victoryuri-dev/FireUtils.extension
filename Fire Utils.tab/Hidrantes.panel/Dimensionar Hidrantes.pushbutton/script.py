@@ -13,6 +13,10 @@ import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
+import os
+import io as _io
+import re as _re
+
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
     LocationCurve, LocationPoint, UnitUtils,
@@ -139,30 +143,123 @@ except NameError:
 
 
 def _esc(valor):
-    """Escapa o texto de uma célula para HTML."""
+    """Escapa o texto para HTML."""
     return (_txt(valor).replace(u"&", u"&amp;")
                        .replace(u"<", u"&lt;")
                        .replace(u">", u"&gt;"))
 
 
-def _cel(valor):
-    """Prepara uma célula: escapa HTML e converte **negrito** do markdown."""
-    partes = _esc(valor).split(u"**")
-    if len(partes) % 2 == 0:          # marcação desbalanceada — deixa literal
-        return _esc(valor)
-    return u"".join(p if i % 2 == 0 else u"<b>" + p + u"</b>"
-                    for i, p in enumerate(partes))
+def _inline(valor):
+    """Escapa HTML e converte **negrito** / *itálico* do markdown."""
+    t = _esc(valor)
+    partes = t.split(u"**")
+    if len(partes) % 2 == 1:          # só converte se estiver balanceado
+        t = u"".join(p if i % 2 == 0 else u"<b>" + p + u"</b>"
+                     for i, p in enumerate(partes))
+    partes = t.split(u"*")
+    if len(partes) % 2 == 1:
+        t = u"".join(p if i % 2 == 0 else u"<i>" + p + u"</i>"
+                     for i, p in enumerate(partes))
+    return t
+
+
+def _md_para_html(texto):
+    """Converte uma linha do markdown usado no memorial para HTML."""
+    t = (texto or u"").strip()
+    if not t:
+        return u""
+    if t == u"---":            return u"<hr>"
+    if t.startswith(u"### "):  return u"<h3>{}</h3>".format(_inline(t[4:]))
+    if t.startswith(u"## "):   return u"<h2>{}</h2>".format(_inline(t[3:]))
+    if t.startswith(u"# "):    return u"<h1>{}</h1>".format(_inline(t[2:]))
+    if t.startswith(u"> "):    return u"<blockquote>{}</blockquote>".format(_inline(t[2:]))
+    if t.startswith(u"- "):    return u"<li>{}</li>".format(_inline(t[2:]))
+    return u"<p>{}</p>".format(_inline(t))
+
+
+class _Memorial(object):
+    """
+    Acumula o memorial como HTML em vez de despejá-lo direto no console.
+
+    As funções que montam o memorial chamam output.print_md()/print_html();
+    trocando o 'output' global por uma instância desta classe, o mesmo código
+    monta um documento único — que depois é exibido no console com CSS
+    próprio e salvo como arquivo .html, formatado, fora do Revit.
+    """
+
+    def __init__(self):
+        self._partes = []
+
+    def print_md(self, texto):
+        html = _md_para_html(texto)
+        if html:
+            self._partes.append(html)
+
+    def print_html(self, html):
+        self._partes.append(html)
+
+    def corpo(self):
+        """HTML do memorial, com os itens de lista agrupados em <ul>."""
+        saida, lista = [], []
+        for parte in self._partes:
+            if parte.startswith(u"<li>"):
+                lista.append(parte)
+                continue
+            if lista:
+                saida.append(u"<ul>{}</ul>".format(u"".join(lista)))
+                lista = []
+            saida.append(parte)
+        if lista:
+            saida.append(u"<ul>{}</ul>".format(u"".join(lista)))
+        return u"".join(saida)
+
+
+def _css(cor_texto, cor_borda, cor_fundo, cor_suave):
+    """
+    Folha de estilo do memorial, com escopo em .fu-memorial.
+
+    Os !important são necessários no console do pyRevit: o tema dele traz
+    regras próprias para <table>/<th> (fundo escuro no cabeçalho, largura
+    de 100%) que sobrescreveriam o estilo daqui.
+    """
+    return u"""
+.fu-memorial {{ color:{txt}; line-height:1.65; }}
+.fu-memorial h1 {{ font-size:1.45em; margin:0 0 6px 0; }}
+.fu-memorial h2 {{ font-size:1.18em; margin:34px 0 12px 0; padding-top:14px;
+                   border-top:1px solid {suave}; }}
+.fu-memorial h3 {{ font-size:1.05em; margin:26px 0 10px 0; }}
+.fu-memorial p  {{ margin:10px 0; }}
+.fu-memorial ul {{ margin:10px 0 16px 0; padding-left:24px; }}
+.fu-memorial li {{ margin:4px 0; }}
+.fu-memorial hr {{ border:0; border-top:1px solid {suave}; margin:16px 0; }}
+.fu-memorial blockquote {{ margin:12px 0; padding:8px 14px;
+                           border-left:3px solid {borda}; }}
+.fu-memorial table {{ border-collapse:collapse !important; width:auto !important;
+                      background:transparent !important; margin:14px 0 22px 0 !important;
+                      font-size:inherit !important; }}
+.fu-memorial th, .fu-memorial td {{ border:1px solid {borda} !important;
+                                    background:{fundo} !important;
+                                    color:{txt} !important;
+                                    padding:7px 15px !important; }}
+.fu-memorial th {{ font-weight:bold !important; }}
+.fu-memorial caption {{ caption-side:top; text-align:left; font-weight:bold;
+                        padding:0 0 8px 0; }}
+""".format(txt=cor_texto, borda=cor_borda, fundo=cor_fundo, suave=cor_suave)
+
+
+# Console do pyRevit: herda a cor do tema (claro ou escuro), sem fundo.
+_CSS_CONSOLE = _css(u"inherit", u"rgba(128,128,128,0.6)", u"transparent",
+                    u"rgba(128,128,128,0.35)")
+# Arquivo .html: documento próprio, pensado para leitura e impressão.
+_CSS_ARQUIVO = _css(u"#1a1a1a", u"#9aa3ad", u"transparent", u"#d8dde2")
 
 
 def _tabela(colunas, linhas, alinhas=None, titulo=None):
     """
-    Emite uma tabela como um único bloco HTML no output do pyRevit.
+    Acrescenta uma tabela ao memorial.
 
-    Tabelas em markdown saíam desformatadas: cada print_md() vira um bloco
-    isolado (as colunas não compartilham largura) e o tema do output window
-    pinta um fundo escuro nelas. Aqui a tabela vai inteira de uma vez, com
-    fundo transparente e herdando a cor do texto do tema — só linhas de
-    grade discretas separando as células.
+    Bordas, espaçamento e fundo vêm da folha de estilo (_css); aqui só vai
+    o alinhamento de cada coluna, que é específico da tabela.
 
     colunas: lista de cabeçalhos.
     linhas:  lista de listas (uma por linha), já formatadas como texto.
@@ -172,26 +269,17 @@ def _tabela(colunas, linhas, alinhas=None, titulo=None):
     if alinhas is None:
         alinhas = [u"left"] + [u"right"] * (len(colunas) - 1)
 
-    borda_h = u"border-bottom:1px solid rgba(128,128,128,0.55);"
-    borda_l = u"border-bottom:1px solid rgba(128,128,128,0.2);"
-    pad     = u"padding:5px 14px 5px 0;"
-
-    html = [u"<table style='border-collapse:collapse;background:transparent;",
-            u"color:inherit;margin:6px 0 12px 0;font-size:inherit;'>"]
+    html = [u"<table>"]
     if titulo:
-        html.append(u"<caption style='caption-side:top;text-align:left;"
-                    u"padding:0 0 4px 0;font-weight:bold;'>{}</caption>".format(
-                        _cel(titulo)))
+        html.append(u"<caption>{}</caption>".format(_inline(titulo)))
     html.append(u"<tr>")
     for col, ali in zip(colunas, alinhas):
-        html.append(u"<th style='{}{}text-align:{};font-weight:bold;'>{}</th>".format(
-            pad, borda_h, ali, _cel(col)))
+        html.append(u"<th style='text-align:{}'>{}</th>".format(ali, _inline(col)))
     html.append(u"</tr>")
     for linha in linhas:
         html.append(u"<tr>")
         for val, ali in zip(linha, alinhas):
-            html.append(u"<td style='{}{}text-align:{};'>{}</td>".format(
-                pad, borda_l, ali, _cel(val)))
+            html.append(u"<td style='text-align:{}'>{}</td>".format(ali, _inline(val)))
         html.append(u"</tr>")
     html.append(u"</table>")
     output.print_html(u"".join(html))
@@ -257,10 +345,10 @@ def _passo_velocidade(jt, v_limite):
             linhas,
             alinhas=[u"right", u"right", u"right", u"right", u"left"])
 
-def print_memorial_calculo(res, dados_sistema, valor_sistema,
-                           cotas, succao, Hz_succao,
-                           Qs_lmin, Pmin, C_HW,
-                           eta, pot_cv, pot_kw, timestamp, perfil):
+def _montar_memorial(res, dados_sistema, valor_sistema,
+                     cotas, succao, Hz_succao,
+                     Qs_lmin, Pmin, C_HW,
+                     eta, pot_cv, pot_kw, timestamp, perfil):
     norma           = req(perfil, u"norma")
     hidr_simult     = req(perfil, u"hidrantes_simultaneos")
     v_max_tubo      = req(perfil, u"v_max_tubulacao")
@@ -644,8 +732,79 @@ def print_memorial_calculo(res, dados_sistema, valor_sistema,
         1000.0 * Qt_m3s * res["P_RTI"], 75.0 * eta_dec))
     output.print_md(u"**P_cv = {:.2f} cv  →  {:.2f} kW**".format(pot_cv, pot_kw))
     output.print_md(u"")
+
+
+def _salvar_memorial(corpo, projeto_dir, nome_projeto):
+    """
+    Grava o memorial como .html na pasta do projeto e abre no visualizador
+    padrão do sistema (janela fora do console do Revit). Retorna o caminho,
+    ou None se não foi possível gravar.
+    """
+    nome = _re.sub(u"[^A-Za-z0-9_. -]", u"_", _txt(nome_projeto or u"projeto"))
+    caminho = os.path.join(projeto_dir,
+                           u"Memorial de Calculo - Hidrantes - {}.html".format(nome))
+    documento = (
+        u"<!DOCTYPE html><html lang='pt-br'><head><meta charset='utf-8'>"
+        u"<title>Memorial de Cálculo — Hidrantes — {nome}</title><style>"
+        u"body{{background:#ffffff;margin:0;padding:38px 46px;"
+        u"font-family:'Segoe UI',Calibri,Arial,sans-serif;font-size:13.5px;}}"
+        u"@media print{{body{{padding:0;}} .fu-memorial h2{{page-break-after:avoid;}}"
+        u".fu-memorial table{{page-break-inside:avoid;}}}}"
+        u"{css}</style></head><body><div class='fu-memorial'>{corpo}</div>"
+        u"</body></html>"
+    ).format(nome=_esc(nome), css=_CSS_ARQUIVO, corpo=corpo)
+
+    try:
+        with _io.open(caminho, "w", encoding="utf-8") as f:
+            f.write(documento)
+    except Exception:
+        return None
+
+    try:
+        from System.Diagnostics import Process
+        Process.Start(caminho)
+    except Exception:
+        try:
+            os.startfile(caminho)
+        except Exception:
+            pass      # arquivo gravado; só não abriu sozinho
+    return caminho
+
+
+def print_memorial_calculo(res, dados_sistema, valor_sistema,
+                           cotas, succao, Hz_succao,
+                           Qs_lmin, Pmin, C_HW,
+                           eta, pot_cv, pot_kw, timestamp, perfil,
+                           projeto_dir=None, nome_projeto=None):
+    """
+    Monta o memorial uma única vez e o entrega em dois lugares: no console
+    do pyRevit (com folha de estilo própria, já que o tema do console
+    sobrescreveria as tabelas) e como arquivo .html na pasta do projeto,
+    aberto em janela separada.
+    """
+    global output
+    console = output
+    doc_mem = _Memorial()
+    output = doc_mem                      # as funções de montagem escrevem no buffer
+    try:
+        _montar_memorial(res, dados_sistema, valor_sistema,
+                         cotas, succao, Hz_succao,
+                         Qs_lmin, Pmin, C_HW,
+                         eta, pot_cv, pot_kw, timestamp, perfil)
+    finally:
+        output = console
+
+    corpo = doc_mem.corpo()
+    output.print_html(u"<style>{}</style><div class='fu-memorial'>{}</div>".format(
+        _CSS_CONSOLE, corpo))
+
+    caminho = _salvar_memorial(corpo, projeto_dir, nome_projeto) if projeto_dir else None
     output.print_md(u"---")
+    if caminho:
+        output.print_md(u"*Memorial salvo em* `{}` *— aberto em janela separada.*".format(
+            caminho))
     output.print_md(u"*Cache salvo em firedata.json (chave 'hidrantes').*")
+
 
 # ===========================================================================
 # MAIN
@@ -825,6 +984,7 @@ print_memorial_calculo(
     cotas, succao, Hz_succao,
     Qs_lmin, Pmin, C_HW,
     eta, pot_cv, pot_kw, timestamp, perfil,
+    projeto_dir=projeto_dir, nome_projeto=doc.Title,
 )
 
 # --- Etapa 7: salvar cache ---
