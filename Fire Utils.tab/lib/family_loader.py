@@ -17,20 +17,17 @@ código é necessária, o carregador varre a pasta automaticamente toda vez que
 import os
 import clr
 clr.AddReference("RevitAPI")
-clr.AddReference("System.Drawing")
 from Autodesk.Revit.DB import Transaction, Family, FilteredElementCollector
-from System.Drawing import Size
-from System.Drawing.Imaging import ImageFormat
 
 _LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 FAMILY_LIBRARY_DIR = os.path.join(_LIB_DIR, u"family_library")
 
 # Cache de previews (miniaturas .png) — espelha a estrutura de pastas da
 # biblioteca, trocando .rfa por .png (ex.: family_library/Hidrantes/X.rfa ->
-# family_library/.previews/Hidrantes/X.png). Gerado sob demanda pelo botão
-# "Gerar previews" do painel (abre cada .rfa como documento de família
-# temporário, extrai o preview nativo do Revit e fecha sem salvar) — nunca
-# automaticamente, pra manter a abertura do painel sempre instantânea.
+# family_library/.previews/Hidrantes/X.png). Adicionado manualmente (não há
+# geração automática): o gestor da biblioteca exporta/coloca o .png de cada
+# família nesse caminho espelhado e o catálogo passa a mostrá-lo no lugar do
+# monograma de duas letras.
 _PREVIEWS_DIRNAME = u".previews"
 PREVIEWS_DIR = os.path.join(FAMILY_LIBRARY_DIR, _PREVIEWS_DIRNAME)
 
@@ -138,88 +135,6 @@ def preview_valido(entrada):
     except OSError:
         return None
     return caminho_png
-
-
-def gerar_preview(app, entrada, tamanho_pixels=160):
-    """
-    Gera (ou regenera) o .png de preview de uma família a partir do .rfa,
-    sem tocar no projeto ativo: abre o arquivo como um documento de família
-    temporário (Application.OpenDocumentFile), extrai o preview nativo do
-    Revit (Family.GetPreviewImage — o mesmo que a caixa "Carregar Família"
-    do Revit mostra) e fecha o documento temporário sem salvar.
-
-    Precisa rodar num contexto de API válido (ex.: dentro da fila de
-    ExternalEvent do painel) — abrir/fechar documento é operação da API do
-    Revit, não pode ser chamada direto de um clique da UI modeless.
-
-    Retorna True se o .png foi gerado/atualizado com sucesso.
-    """
-    if not os.path.exists(entrada.path):
-        return False
-
-    caminho_png = caminho_preview(entrada)
-    pasta_destino = os.path.dirname(caminho_png)
-    if not os.path.isdir(pasta_destino):
-        try:
-            os.makedirs(pasta_destino)
-        except OSError:
-            pass
-
-    familia_doc = None
-    try:
-        familia_doc = app.OpenDocumentFile(entrada.path)
-        if familia_doc is None or not familia_doc.IsFamilyDocument:
-            return False
-
-        familia = familia_doc.OwnerFamily
-        if familia is None:
-            return False
-
-        bitmap_nativo = familia.GetPreviewImage(Size(tamanho_pixels, tamanho_pixels))
-        if bitmap_nativo is None:
-            return False
-
-        try:
-            bitmap_nativo.Save(caminho_png, ImageFormat.Png)
-        finally:
-            bitmap_nativo.Dispose()
-
-        return True
-    except Exception as ex:
-        print(u"[AVISO] Falha ao gerar preview de '{}': {}".format(entrada.name, ex))
-        return False
-    finally:
-        if familia_doc is not None:
-            try:
-                familia_doc.Close(False)
-            except Exception:
-                pass
-
-
-def gerar_previews_pendentes(app, entradas, tamanho_pixels=160, callback_progresso=None):
-    """
-    Gera o preview de todas as entradas que ainda não têm cache válido.
-    callback_progresso(indice, total, entrada), se informado, é chamado
-    antes de processar cada família (indice começa em 1) — usado pra
-    alimentar uma pyrevit.forms.ProgressBar.
-
-    Retorna (gerados, ja_em_cache, erros) — erros é uma lista de nomes.
-    """
-    pendentes = [e for e in entradas if preview_valido(e) is None]
-
-    gerados = 0
-    erros = []
-    total = len(pendentes)
-    for indice, entrada in enumerate(pendentes, start=1):
-        if callback_progresso is not None:
-            callback_progresso(indice, total, entrada)
-        if gerar_preview(app, entrada, tamanho_pixels=tamanho_pixels):
-            gerados += 1
-        else:
-            erros.append(entrada.name)
-
-    ja_em_cache = len(entradas) - total
-    return gerados, ja_em_cache, erros
 
 
 def carregar_familias(doc, entradas):
