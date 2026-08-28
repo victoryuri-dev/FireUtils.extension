@@ -213,20 +213,18 @@ def get_cota_conector(elem, direcoes):
 def get_cota_equipamento(tubo_marcado, direcoes):
     """Cota de RTI/succao/recalque: acha o equipamento (RTI/bomba) vizinho
     do tubo marcado e le a cota do seu conector real (Direction em
-    `direcoes`), sempre ao vivo. Cai no calculo por geometria do tubo
-    (get_z, modo 'auto') se o equipamento ou o conector nao forem
-    encontrados - ex.: RTI/bomba foi apagada e o trecho ficou orfao."""
+    `direcoes`), sempre ao vivo. Sem fallback por geometria - se o
+    equipamento ou o conector nao forem encontrados, retorna None e a
+    verificacao de cotas abaixo aponta o erro."""
     equip = encontrar_equipamento_vizinho(tubo_marcado)
-    if equip:
-        cota = get_cota_conector(equip, direcoes)
-        if cota is not None:
-            return cota
-    return get_z(tubo_marcado, modo="auto")
+    if not equip:
+        return None
+    return get_cota_conector(equip, direcoes)
 
 def get_cota_valvula(valvula):
     """Cota do hidrante: conector da propria valvula (prioriza um
-    conectado), ao vivo. Cai em get_z (bbox/LocationPoint) se a valvula
-    nao tiver nenhum conector."""
+    conectado). Sem fallback por geometria - se a valvula nao tiver
+    nenhum conector, retorna None e a verificacao de cotas aponta o erro."""
     conns = get_conectores(valvula)
     for conn in conns:
         try:
@@ -237,7 +235,7 @@ def get_cota_valvula(valvula):
         try:
             return to_m(conn.Origin.Z)
         except: continue
-    return get_z(valvula)
+    return None
 
 
 # ===========================================================================
