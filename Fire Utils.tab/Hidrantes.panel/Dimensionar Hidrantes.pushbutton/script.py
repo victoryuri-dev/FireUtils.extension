@@ -547,8 +547,8 @@ def _passo_ltotal(jt, letra):
                         u"cadastrado neste trecho.*")
         output.print_md(u"")
 
-    _tabela([u"DN (mm)", u"Nº tubos", u"L (m)", u"Leq (m)", u"Ltotal (m)"],
-            [[u"{:.1f}".format(s["d_mm"]), u"{}".format(s["n_tubos"]),
+    _tabela([u"DN (mm)", u"L (m)", u"Leq (m)", u"Ltotal (m)"],
+            [[u"{:.1f}".format(s["d_mm"]),
               u"{:.4f}".format(s["L"]), u"{:.4f}".format(s["Leq"]),
               u"**{:.4f}**".format(s["Ltotal"])]
              for s in jt["segmentos"]],
