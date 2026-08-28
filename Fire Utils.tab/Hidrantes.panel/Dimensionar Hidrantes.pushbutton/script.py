@@ -194,11 +194,38 @@ def get_cota_rti(elem):
     return None
 
 def diagnostico_conectores(elem):
-    """Linhas com Direction/IsConnected/Z de cada conector de `elem` -
-    usado so para montar o alerta quando uma cota nao e lida, pra mostrar
-    exatamente por que (em vez de um "nao foi possivel" generico)."""
+    """Linhas com tipo/categoria de `elem` e Direction/IsConnected/Z de
+    cada conector dele - usado so para montar o alerta quando uma cota
+    nao e lida, pra mostrar exatamente por que (em vez de um "nao foi
+    possivel" generico). Nao usa get_conectores (que engole excecoes) -
+    aqui o erro real, se houver, aparece no alerta."""
     linhas = []
-    for i, conn in enumerate(get_conectores(elem)):
+    try:    tipo = type(elem).__name__
+    except: tipo = u"?"
+    try:    cat = elem.Category.Name if elem.Category else u"(sem categoria)"
+    except: cat = u"?"
+    linhas.append(u"    tipo={} categoria={}".format(tipo, cat))
+
+    conns = None
+    erro = None
+    try:
+        if hasattr(elem, 'ConnectorManager') and elem.ConnectorManager:
+            conns = list(elem.ConnectorManager.Connectors)
+        else:
+            mep = elem.MEPModel
+            if mep and mep.ConnectorManager:
+                conns = list(mep.ConnectorManager.Connectors)
+    except Exception as e:
+        erro = e
+
+    if erro is not None:
+        linhas.append(u"    erro ao ler ConnectorManager: {}".format(erro))
+        return linhas
+    if not conns:
+        linhas.append(u"    ConnectorManager nao encontrou nenhum conector")
+        return linhas
+
+    for i, conn in enumerate(conns):
         try:    direcao = conn.Direction
         except: direcao = u"?"
         try:    conectado = conn.IsConnected
@@ -207,8 +234,6 @@ def diagnostico_conectores(elem):
         except: z = u"?"
         linhas.append(u"    {}. Direction={} IsConnected={} Z={}".format(
             i + 1, direcao, conectado, z))
-    if not linhas:
-        linhas.append(u"    (nenhum conector encontrado no elemento)")
     return linhas
 
 
