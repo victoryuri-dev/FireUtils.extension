@@ -16,9 +16,11 @@ clr.AddReference("RevitAPIUI")
 import os
 import io as _io
 import re as _re
+from collections import deque
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
+    BuiltInCategory, FlowDirectionType,
     LocationCurve, LocationPoint, UnitUtils,
 )
 from pyrevit import forms, script
@@ -129,6 +131,113 @@ def get_z(elem, modo="mid"):
     if bbox:
         return (to_m(bbox.Min.Z) + to_m(bbox.Max.Z)) / 2.0
     return None
+
+# ===========================================================================
+# COTAS DE RTI/SUCCAO/RECALQUE/HIDRANTE — ao vivo, pelos conectores nativos
+# ===========================================================================
+# Em vez de gravar a cota num parametro (que fica desatualizado se a
+# estrutura do sistema mudar mantendo os mesmos trechos mapeados), a cota
+# de RTI/succao/recalque e sempre lida na hora, direto do conector real do
+# equipamento (RTI/bomba) mais proximo do tubo identificado - e a cota do
+# hidrante vem do conector da propria valvula, nao do meio/bbox do bloco.
+
+def get_id(elem):
+    try:    return elem.Id.Value
+    except: return elem.Id.IntegerValue
+
+def get_conectores(elem):
+    try:
+        if hasattr(elem, 'ConnectorManager'):
+            return list(elem.ConnectorManager.Connectors)
+        mep = elem.MEPModel
+        if mep and mep.ConnectorManager:
+            return list(mep.ConnectorManager.Connectors)
+    except: pass
+    return []
+
+_CATS_EQUIPAMENTO = None
+def eh_equipamento(elem):
+    """True se `elem` for um equipamento (bomba, RTI etc.) - categoria
+    Mechanical/Plumbing Equipment."""
+    global _CATS_EQUIPAMENTO
+    if _CATS_EQUIPAMENTO is None:
+        _CATS_EQUIPAMENTO = set()
+        for bic_nome in ("OST_MechanicalEquipment", "OST_PlumbingEquipment"):
+            bic = getattr(BuiltInCategory, bic_nome, None)
+            if bic is not None:
+                _CATS_EQUIPAMENTO.add(int(bic))
+    try:
+        cat = elem.Category
+        if not cat: return False
+        cat_id = cat.Id
+        cat_int = cat_id.Value if hasattr(cat_id, "Value") else cat_id.IntegerValue
+        return cat_int in _CATS_EQUIPAMENTO
+    except: return False
+
+def encontrar_equipamento_vizinho(tubo_marcado):
+    """A partir do tubo identificado (RTI/Succao/Recalque), anda pela rede
+    - pulando fittings/valvulas - ate achar o equipamento (RTI ou bomba)
+    mais proximo. Como a busca e em largura, o equipamento fisicamente
+    adjacente ao tubo marcado e sempre encontrado antes de qualquer outro
+    mais distante na rede. Retorna None se nao encontrar nenhum."""
+    eid_ini = get_id(tubo_marcado)
+    visitados = set([eid_ini])
+    fila = deque([tubo_marcado])
+    while fila:
+        elem = fila.popleft()
+        if get_id(elem) != eid_ini and eh_equipamento(elem):
+            return elem
+        for conn in get_conectores(elem):
+            try:
+                if not conn.IsConnected: continue
+                for ref in conn.AllRefs:
+                    viz = ref.Owner
+                    vid = get_id(viz)
+                    if vid not in visitados:
+                        visitados.add(vid)
+                        fila.append(viz)
+            except: continue
+    return None
+
+def get_cota_conector(elem, direcoes):
+    """Cota (Z, em metros) do primeiro conector nativo e conectado de
+    `elem` cuja Direction esteja em `direcoes`. None se nao encontrar."""
+    for conn in get_conectores(elem):
+        try:
+            if conn.Direction not in direcoes: continue
+            if not conn.IsConnected: continue
+            return to_m(conn.Origin.Z)
+        except: continue
+    return None
+
+def get_cota_equipamento(tubo_marcado, direcoes):
+    """Cota de RTI/succao/recalque: acha o equipamento (RTI/bomba) vizinho
+    do tubo marcado e le a cota do seu conector real (Direction em
+    `direcoes`), sempre ao vivo. Cai no calculo por geometria do tubo
+    (get_z, modo 'auto') se o equipamento ou o conector nao forem
+    encontrados - ex.: RTI/bomba foi apagada e o trecho ficou orfao."""
+    equip = encontrar_equipamento_vizinho(tubo_marcado)
+    if equip:
+        cota = get_cota_conector(equip, direcoes)
+        if cota is not None:
+            return cota
+    return get_z(tubo_marcado, modo="auto")
+
+def get_cota_valvula(valvula):
+    """Cota do hidrante: conector da propria valvula (prioriza um
+    conectado), ao vivo. Cai em get_z (bbox/LocationPoint) se a valvula
+    nao tiver nenhum conector."""
+    conns = get_conectores(valvula)
+    for conn in conns:
+        try:
+            if conn.IsConnected:
+                return to_m(conn.Origin.Z)
+        except: continue
+    for conn in conns:
+        try:
+            return to_m(conn.Origin.Z)
+        except: continue
+    return get_z(valvula)
 
 
 # ===========================================================================
@@ -1159,12 +1268,12 @@ if erros:
 
 # --- Etapa 3: cotas altimétricas de todos os pontos da marcha ---
 cotas = {
-    "z_rti":      get_z(ident_map[u"RTI"],      modo="auto"),
-    "z_succao":   get_z(ident_map[u"Succao"],   modo="auto"),
-    "z_recalque": get_z(ident_map[u"Recalque"], modo="auto"),
+    "z_rti":      get_cota_equipamento(ident_map[u"RTI"],      (FlowDirectionType.Out,)),
+    "z_succao":   get_cota_equipamento(ident_map[u"Succao"],   (FlowDirectionType.In,)),
+    "z_recalque": get_cota_equipamento(ident_map[u"Recalque"], (FlowDirectionType.Out,)),
     "z_ponto_a":  get_z(ident_map[u"Ponto A"]),
-    "z_hd01":     get_z(hid_map[u"HID-01"]),
-    "z_hd02":     get_z(hid_map[u"HID-02"]),
+    "z_hd01":     get_cota_valvula(hid_map[u"HID-01"]),
+    "z_hd02":     get_cota_valvula(hid_map[u"HID-02"]),
 }
 
 _nomes_cotas = {
