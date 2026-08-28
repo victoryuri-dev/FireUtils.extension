@@ -7,23 +7,29 @@ categorias em destaque, cartões de família selecionáveis por clique e
 carregamento em lote no documento ativo.
 
 O layout estático (cores, grid, botões) vive em family_loader_forms.xaml e é
-carregado via pyrevit.forms.WPFWindow — só o conteúdo dinâmico (tiles de
+carregado via pyrevit.forms.WPFPanel — só o conteúdo dinâmico (tiles de
 categoria, cartões de família, que dependem dos dados da biblioteca) é
 montado aqui em código, dentro dos containers nomeados (x:Name) definidos no
 XAML.
 
-A janela é modeless (fica aberta sem travar o Revit) e é reaproveitada entre
-uma abertura e outra via cache de sessão do pyRevit (script.get_envvar) — um
-novo clique no botão só traz a janela existente para frente, sem reconstruir
-nada. Como a janela pode ficar aberta enquanto o usuário trabalha no Revit,
-qualquer ação que precise da API (carregar família) é despachada através de
-um ExternalEvent (family_loader_events.py), nunca chamada diretamente a
-partir de um clique.
+A janela é um Dockable Pane (painel de encaixe) da API do Revit: fica
+acoplada à interface do Revit (ou flutuando, se o usuário preferir) e não
+trava o app enquanto está aberta. Painéis de encaixe só podem ser
+registrados junto do Revit durante o startup do add-in — por isso o registro
+(forms.register_dockable_panel) acontece em startup.py, na raiz da extensão,
+e não aqui. Este módulo só define a classe do painel; o botão da faixa de
+opções (script.py) apenas mostra/esconde a instância já registrada.
+
+Como o painel pode ficar visível o tempo todo enquanto o usuário trabalha no
+Revit, qualquer ação que precise da API (carregar família) é despachada
+através de um ExternalEvent (family_loader_events.py), nunca chamada
+diretamente a partir de um clique.
 
 Se a interface XAML falhar por qualquer motivo (ambiente WPF divergente,
-XAML inválido etc.), o módulo cai automaticamente para o formulário padrão
-do pyRevit (forms.SelectFromList), que já é funcional e testado — nesse caso
-a janela volta a ser modal.
+XAML inválido etc.), o registro do painel falha silenciosamente em
+startup.py e o botão da faixa de opções cai para o formulário padrão do
+pyRevit (forms.SelectFromList), que já é funcional e testado — nesse caso a
+janela é modal.
 """
 
 import os
@@ -40,16 +46,13 @@ import System.Windows.Media.Imaging as SWMI
 import System.Windows.Input as SWI
 from System import Uri, UriKind
 
-from pyrevit import forms, script
+from pyrevit import forms
 
 from family_loader import (
     listar_familias, listar_categorias, carregar_familias,
     obter_symbol_para_posicionar,
 )
 from family_loader_events import criar_fila_acoes
-
-_CHAVE_JANELA = u"FireUtils_CarregadorFamilias_Janela"
-_CHAVE_FILA = u"FireUtils_CarregadorFamilias_Fila"
 
 _TODAS = u"Todas"
 
@@ -121,6 +124,16 @@ def _carregar_familias_silenciosamente(doc, entradas_selecionadas):
 # Fallback — formulário padrão do pyRevit (já testado e funcional)
 # ---------------------------------------------------------------------------
 def _mostrar_fallback(doc, entradas):
+    if not entradas:
+        forms.alert(
+            u"Nenhuma família encontrada na biblioteca.\n\n"
+            u"Coloque arquivos .rfa em subpastas de:\n"
+            u"Fire Utils.tab/lib/family_library/<Categoria>/",
+            title=u"Fire Utils - Carregador de Famílias",
+            warn_icon=True,
+        )
+        return
+
     grupos = {}
     for entrada in entradas:
         grupos.setdefault(entrada.category, []).append(entrada)
@@ -142,21 +155,25 @@ def _mostrar_fallback(doc, entradas):
 
 
 # ---------------------------------------------------------------------------
-# Interface — catálogo (modeless), layout em family_loader_forms.xaml
+# Interface — catálogo, layout em family_loader_forms.xaml, como Dockable
+# Pane (painel de encaixe) da API do Revit
 # ---------------------------------------------------------------------------
-class _JanelaCarregador(forms.WPFWindow):
+class PainelCarregadorFamilias(forms.WPFPanel):
 
-    def __init__(self, uiapp, entradas_iniciais):
-        forms.WPFWindow.__init__(self, _XAML_PATH)
+    panel_id = u"0ff990a6-98c0-4244-9e22-689d09941e47"
+    panel_source = _XAML_PATH
+    panel_title = u"Fire Utils — Carregador de Famílias"
 
-        self.uiapp = uiapp
-        self.todas_entradas = list(entradas_iniciais)
+    def __init__(self):
+        forms.WPFPanel.__init__(self)
+
+        self.todas_entradas = list(listar_familias())
         self.selecionadas_paths = {}   # path -> FamilyEntry
         self.categoria_atual = _TODAS
         self.tiles_categoria = {}      # categoria -> (icone_border, icone_txt, rotulo)
         self.fila_acoes = criar_fila_acoes()
 
-        # Brushes definidas em family_loader_forms.xaml (Window.Resources) —
+        # Brushes definidas em family_loader_forms.xaml (Page.Resources) —
         # reaproveitadas aqui para os tiles/cartões montados dinamicamente,
         # mantendo uma única fonte de verdade para a paleta de cores.
         self.C_BG2         = self.Resources[u"BrushBg2"]
@@ -375,9 +392,14 @@ class _JanelaCarregador(forms.WPFWindow):
 
         if not secoes:
             vazio = SWC.TextBlock()
-            vazio.Text = u"Nenhuma família encontrada com esse filtro."
+            vazio.Text = (
+                u"Nenhuma família encontrada na biblioteca."
+                if not self.todas_entradas
+                else u"Nenhuma família encontrada com esse filtro."
+            )
             vazio.Foreground = self.C_TEXT3
             vazio.FontSize = 12
+            vazio.TextWrapping = SW.TextWrapping.Wrap
             vazio.Margin = SW.Thickness(4, 20, 0, 0)
             self.ListaPanel.Children.Add(vazio)
         else:
@@ -440,13 +462,7 @@ class _JanelaCarregador(forms.WPFWindow):
         self._atualizar_lista()
 
     def on_fechar(self, sender, args):
-        self.Hide()
-
-    def on_closing(self, sender, args):
-        # Nunca fecha de verdade — só esconde, pra poder reaproveitar a
-        # mesma janela (com filtro/seleção intactos) na próxima abertura.
-        args.Cancel = True
-        self.Hide()
+        forms.close_dockable_panel(PainelCarregadorFamilias)
 
     def on_carregar(self, sender, args):
         if not self.selecionadas_paths:
@@ -481,7 +497,7 @@ class _JanelaCarregador(forms.WPFWindow):
             )
             nomes_prontos = set(carregadas) | set(ja_existentes)
 
-            self.Hide()
+            forms.close_dockable_panel(PainelCarregadorFamilias)
 
             for entrada in entradas_para_carregar:
                 if entrada.name not in nomes_prontos:
@@ -498,48 +514,34 @@ class _JanelaCarregador(forms.WPFWindow):
 
 
 # ---------------------------------------------------------------------------
-# Entrada pública
+# Entrada pública — chamada pelo botão da faixa de opções
 # ---------------------------------------------------------------------------
-def obter_ou_criar_janela(uiapp):
+def alternar_painel(uiapp):
     """
-    Mostra o Carregador de Famílias como janela modeless — fica aberta sem
-    travar o Revit, então você pode continuar clicando/editando o projeto com
-    ela aberta. Um novo clique no botão da faixa de opções só traz a mesma
-    janela para frente (com o filtro e a seleção de antes intactos), em vez
-    de abrir uma nova.
+    Mostra/esconde o Carregador de Famílias como Dockable Pane (painel de
+    encaixe) — fica acoplado à interface do Revit (ou flutuando) sem travar
+    o app, então dá pra continuar clicando/editando o projeto com ele
+    visível. Um novo clique no botão da faixa de opções alterna entre
+    mostrar e esconder o mesmo painel (com filtro/seleção intactos), em vez
+    de abrir uma nova janela.
+
+    Se o painel não foi registrado com sucesso no startup da extensão
+    (ambiente WPF divergente, XAML inválido etc.), cai para o formulário
+    padrão do pyRevit (forms.SelectFromList), modal, pontual.
     """
-    janela_existente = script.get_envvar(_CHAVE_JANELA)
-    if janela_existente is not None:
-        try:
-            janela_existente.Show()
-            janela_existente.Activate()
-            return
-        except Exception:
-            pass  # janela foi descartada por algum motivo; cria uma nova abaixo
-
-    entradas = listar_familias()
-    if not entradas:
-        forms.alert(
-            u"Nenhuma família encontrada na biblioteca.\n\n"
-            u"Coloque arquivos .rfa em subpastas de:\n"
-            u"Fire Utils.tab/lib/family_library/<Categoria>/",
-            title=u"Fire Utils - Carregador de Famílias",
-            warn_icon=True,
-        )
-        return
-
-    try:
-        janela = _JanelaCarregador(uiapp, entradas)
-    except Exception as ex:
+    if not forms.is_registered_dockable_panel(PainelCarregadorFamilias):
         print(
-            u"[AVISO] Interface XAML do Carregador de Famílias falhou "
-            u"({}), usando formulário padrão do pyRevit (modal).".format(ex)
+            u"[AVISO] Dockable Pane do Carregador de Famílias não foi "
+            u"registrado no startup da extensão; usando formulário padrão "
+            u"do pyRevit (modal)."
         )
         uidoc_ativo = uiapp.ActiveUIDocument
         if uidoc_ativo is not None:
-            _mostrar_fallback(uidoc_ativo.Document, entradas)
+            _mostrar_fallback(uidoc_ativo.Document, listar_familias())
         return
 
-    script.set_envvar(_CHAVE_JANELA, janela)
-    script.set_envvar(_CHAVE_FILA, janela.fila_acoes)
-    janela.Show()
+    painel = forms.get_dockable_panel(PainelCarregadorFamilias)
+    if painel.IsShown():
+        painel.Hide()
+    else:
+        painel.Show()

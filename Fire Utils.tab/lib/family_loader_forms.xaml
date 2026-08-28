@@ -1,15 +1,14 @@
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Fire Utils — Carregador de Famílias"
-        Width="760" Height="700"
-        MinWidth="600" MinHeight="480"
-        ResizeMode="CanResize"
-        WindowStartupLocation="CenterScreen"
-        ShowInTaskbar="True"
-        Background="{StaticResource BrushBg}"
-        Closing="on_closing">
+<Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="#121214">
 
-    <Window.Resources>
+    <!-- Background acima é o mesmo valor de BrushBg abaixo, mas em literal:
+         referenciar "{StaticResource BrushBg}" aqui no elemento raiz falha ao
+         carregar via XamlReader (pyrevit.forms), porque esse atributo é
+         processado antes do bloco Page.Resources (definido como filho, mais
+         abaixo no mesmo elemento) existir — StaticResourceExtension não acha
+         a chave e a interface cai no formulário padrão do pyRevit. -->
+    <Page.Resources>
         <!-- Paleta — identidade Fire Utils (fundo escuro + vermelho de destaque).
              Também consumida pelo code-behind (self.Resources["..."]) para os
              cartões/tiles montados dinamicamente. -->
@@ -49,7 +48,7 @@
             <Setter Property="Foreground" Value="{StaticResource BrushWhite}"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
-    </Window.Resources>
+    </Page.Resources>
 
     <Grid Margin="26,22,26,20">
         <Grid.RowDefinitions>
@@ -142,28 +141,21 @@
         <TextBlock Grid.Row="4" x:Name="LblStatus" FontSize="11"
                    Foreground="{StaticResource BrushText3}" Margin="0,10,0,10"/>
 
-        <!-- Botões -->
-        <Grid Grid.Row="5" Margin="0,4,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-
-            <StackPanel Grid.Column="0" Orientation="Horizontal">
-                <Button x:Name="BtnMarcar" Content="Marcar todos (filtrados)"
-                        Style="{StaticResource OutlineButtonStyle}" Click="on_marcar_todos"/>
-                <Button x:Name="BtnDesmarcar" Content="Desmarcar todos" Margin="8,0,0,0"
-                        Style="{StaticResource OutlineButtonStyle}" Click="on_desmarcar_todos"/>
-            </StackPanel>
-
-            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button x:Name="BtnFechar" Content="Fechar"
-                        Style="{StaticResource OutlineButtonStyle}" Click="on_fechar"/>
-                <Button x:Name="BtnCarregarPosicionar" Content="Carregar e posicionar" Margin="8,0,0,0"
-                        Style="{StaticResource AccentOutlineButtonStyle}" Click="on_carregar_posicionar"/>
-                <Button x:Name="BtnCarregar" Content="Carregar selecionadas" Margin="10,0,0,0"
-                        Style="{StaticResource AccentButtonStyle}" Click="on_carregar"/>
-            </StackPanel>
-        </Grid>
+        <!-- Botões — WrapPanel em vez de duas StackPanels lado a lado: o
+             painel de encaixe pode ficar bem mais estreito que a antiga
+             janela de 760px, então os botões precisam quebrar linha em vez
+             de serem cortados. -->
+        <WrapPanel Grid.Row="5" Margin="0,4,0,0" Orientation="Horizontal">
+            <Button x:Name="BtnMarcar" Content="Marcar todos (filtrados)" Margin="0,0,8,8"
+                    Style="{StaticResource OutlineButtonStyle}" Click="on_marcar_todos"/>
+            <Button x:Name="BtnDesmarcar" Content="Desmarcar todos" Margin="0,0,8,8"
+                    Style="{StaticResource OutlineButtonStyle}" Click="on_desmarcar_todos"/>
+            <Button x:Name="BtnFechar" Content="Fechar" Margin="0,0,8,8"
+                    Style="{StaticResource OutlineButtonStyle}" Click="on_fechar"/>
+            <Button x:Name="BtnCarregarPosicionar" Content="Carregar e posicionar" Margin="0,0,8,8"
+                    Style="{StaticResource AccentOutlineButtonStyle}" Click="on_carregar_posicionar"/>
+            <Button x:Name="BtnCarregar" Content="Carregar selecionadas" Margin="0,0,0,8"
+                    Style="{StaticResource AccentButtonStyle}" Click="on_carregar"/>
+        </WrapPanel>
     </Grid>
-</Window>
+</Page>
