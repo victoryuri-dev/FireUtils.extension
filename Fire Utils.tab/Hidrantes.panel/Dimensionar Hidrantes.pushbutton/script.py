@@ -193,6 +193,24 @@ def get_cota_rti(elem):
         except: continue
     return None
 
+def diagnostico_conectores(elem):
+    """Linhas com Direction/IsConnected/Z de cada conector de `elem` -
+    usado so para montar o alerta quando uma cota nao e lida, pra mostrar
+    exatamente por que (em vez de um "nao foi possivel" generico)."""
+    linhas = []
+    for i, conn in enumerate(get_conectores(elem)):
+        try:    direcao = conn.Direction
+        except: direcao = u"?"
+        try:    conectado = conn.IsConnected
+        except: conectado = u"?"
+        try:    z = u"{:.4f} m".format(to_m(conn.Origin.Z))
+        except: z = u"?"
+        linhas.append(u"    {}. Direction={} IsConnected={} Z={}".format(
+            i + 1, direcao, conectado, z))
+    if not linhas:
+        linhas.append(u"    (nenhum conector encontrado no elemento)")
+    return linhas
+
 
 # ===========================================================================
 # MEMORIAL DE CÁLCULO — passo a passo (método da marcha)
@@ -1236,10 +1254,24 @@ _nomes_cotas = {
     "z_rti": u"RTI", "z_succao": u"Sucção", "z_recalque": u"Recalque",
     "z_ponto_a": u"Ponto A", "z_hd01": u"HID-01", "z_hd02": u"HID-02",
 }
-erros_z = [_nomes_cotas[k] for k, z in cotas.items() if z is None]
-if erros_z:
-    forms.alert(u"Não foi possível ler a elevação de:\n{}".format(u"\n".join(erros_z)),
-                title="Fire Utils", warn_icon=True)
+# Elemento por tras de cada cota - so os lidos por conector (Ponto A usa
+# geometria, get_z, e nao entra aqui).
+_elem_cotas = {
+    "z_rti": ident_map.get(u"RTI"), "z_succao": ident_map.get(u"Bomba"),
+    "z_recalque": ident_map.get(u"Bomba"),
+    "z_hd01": hid_map.get(u"HID-01"), "z_hd02": hid_map.get(u"HID-02"),
+}
+_chaves_erro = [k for k, z in cotas.items() if z is None]
+if _chaves_erro:
+    detalhes = [u"Não foi possível ler a elevação de:"]
+    for k in _chaves_erro:
+        elem = _elem_cotas.get(k)
+        if elem is None:
+            detalhes.append(u"- {}".format(_nomes_cotas[k]))
+            continue
+        detalhes.append(u"- {} (elemento ID {}):".format(_nomes_cotas[k], elem.Id))
+        detalhes.extend(diagnostico_conectores(elem))
+    forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
     script.exit()
 
 # --- Etapa 3b: dados do NPSH disponível ---
