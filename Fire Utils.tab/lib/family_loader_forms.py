@@ -528,6 +528,12 @@ def alternar_painel(uiapp):
     Se o painel não foi registrado com sucesso no startup da extensão
     (ambiente WPF divergente, XAML inválido etc.), cai para o formulário
     padrão do pyRevit (forms.SelectFromList), modal, pontual.
+
+    Com nenhum projeto aberto (ex.: tela inicial do Revit), a API às vezes
+    reporta o painel como registrado mas ainda não "criado" de fato —
+    GetDockablePane lança Autodesk.Revit.Exceptions.ArgumentException nesse
+    caso. Como não travar o Revit com um traceback cru, tratamos isso com um
+    aviso pedindo pra abrir um projeto antes.
     """
     if not forms.is_registered_dockable_panel(PainelCarregadorFamilias):
         print(
@@ -540,8 +546,26 @@ def alternar_painel(uiapp):
             _mostrar_fallback(uidoc_ativo.Document, listar_familias())
         return
 
-    painel = forms.get_dockable_panel(PainelCarregadorFamilias)
-    if painel.IsShown():
-        painel.Hide()
-    else:
-        painel.Show()
+    if uiapp.ActiveUIDocument is None:
+        forms.alert(
+            u"Abra ou crie um projeto no Revit antes de abrir o Carregador "
+            u"de Famílias.",
+            title=u"Fire Utils - Carregador de Famílias",
+            warn_icon=True,
+        )
+        return
+
+    try:
+        painel = forms.get_dockable_panel(PainelCarregadorFamilias)
+        if painel.IsShown():
+            painel.Hide()
+        else:
+            painel.Show()
+    except Exception as ex:
+        forms.alert(
+            u"Não foi possível abrir o painel do Carregador de Famílias "
+            u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
+            u"Revit.".format(ex),
+            title=u"Fire Utils - Carregador de Famílias",
+            warn_icon=True,
+        )
