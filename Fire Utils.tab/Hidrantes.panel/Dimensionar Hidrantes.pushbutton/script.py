@@ -157,9 +157,20 @@ def _sup(texto):
     return _SUP_RE.sub(lambda m: u"<sup>{}</sup>".format(m.group(1)), texto)
 
 
+# Notação "X_abc" (P_hd01, Q_hd02, P_PA, P_valv, P_anterior...) → subscrito
+# real, como em qualquer notação de engenharia (P com "hd01" pequeno embaixo).
+# Só letras/dígitos ASCII depois do "_": rótulos com palavra acentuada
+# (ex.: cabeçalho de tabela) não usam essa notação — ver comentário onde são
+# definidos.
+_SUB_RE = _re.compile(u"\\b([A-Za-zΔ∆]+)_([A-Za-z0-9]+)\\b")
+
+def _sub(texto):
+    return _SUB_RE.sub(lambda m: u"{}<sub>{}</sub>".format(m.group(1), m.group(2)), texto)
+
+
 def _inline(valor):
-    """Escapa HTML e converte **negrito** / *itálico* / ^expoente do markdown."""
-    t = _sup(_esc(valor))
+    """Escapa HTML e converte **negrito** / *itálico* / ^expoente / _subscrito."""
+    t = _sub(_sup(_esc(valor)))
     partes = t.split(u"**")
     if len(partes) % 2 == 1:          # só converte se estiver balanceado
         t = u"".join(p if i % 2 == 0 else u"<b>" + p + u"</b>"
@@ -169,6 +180,14 @@ def _inline(valor):
         t = u"".join(p if i % 2 == 0 else u"<i>" + p + u"</i>"
                      for i, p in enumerate(partes))
     return t
+
+
+def _frac(num, den):
+    """Fração renderizada como numerador sobre denominador (com linha),
+    em vez de 'num / den' em uma linha só."""
+    return (u"<span class='fu-frac'><span class='fu-num'>{}</span>"
+            u"<span class='fu-den'>{}</span></span>").format(
+                _inline(num), _inline(den))
 
 
 def _formula(expr, definicoes=None):
@@ -184,12 +203,38 @@ def _formula(expr, definicoes=None):
     definicoes: lista de (símbolo, descrição); quando omitida, só a equação.
     """
     html = [u"<div class='fu-eq'>{}</div>".format(_inline(expr))]
-    if definicoes:
-        html.append(u"<div class='fu-eq-onde'><p class='fu-eq-onde-lbl'>Onde:</p>")
-        for simb, desc in definicoes:
-            html.append(u"<p class='fu-eq-def'><b>{}</b>: {}</p>".format(
-                _inline(simb), _inline(desc)))
-        html.append(u"</div>")
+    _formula_onde(html, definicoes)
+    output.print_html(u"".join(html))
+
+
+def _formula_onde(html, definicoes):
+    """Acrescenta o bloco 'Onde: símbolo: descrição' à lista de HTML de uma
+    fórmula — usado tanto por _formula() quanto por _formula_frac()."""
+    if not definicoes:
+        return
+    html.append(u"<div class='fu-eq-onde'><p class='fu-eq-onde-lbl'>Onde:</p>")
+    for simb, desc in definicoes:
+        html.append(u"<p class='fu-eq-def'><b>{}</b>: {}</p>".format(
+            _inline(simb), _inline(desc)))
+    html.append(u"</div>")
+
+
+def _formula_frac(lhs, num, den, depois=u"", sufixo=u"", definicoes=None):
+    """
+    Como _formula(), mas para uma equação cujo lado direito é uma fração —
+    renderiza numerador sobre denominador (com linha), em vez de
+    'numerador / denominador' em uma linha só.
+
+    depois: texto colado logo após a fração (ex.: '· Q²', quando a fração é
+            multiplicada por algo). sufixo: unidade entre colchetes, ex. '[mca]'.
+    """
+    corpo = u"{} = {}".format(_inline(lhs), _frac(num, den))
+    if depois:
+        corpo += u" {}".format(_inline(depois))
+    if sufixo:
+        corpo += u"   {}".format(_inline(sufixo))
+    html = [u"<div class='fu-eq'>{}</div>".format(corpo)]
+    _formula_onde(html, definicoes)
     output.print_html(u"".join(html))
 
 
@@ -274,11 +319,18 @@ def _css(cor_texto, cor_borda, cor_fundo, cor_suave, cor_acento):
 .fu-memorial th {{ font-weight:bold !important; }}
 .fu-memorial caption {{ caption-side:top; text-align:left; font-weight:bold;
                         padding:0 0 8px 0; }}
-.fu-memorial .fu-eq {{ margin:18px 0 4px 0; padding:10px 18px;
+.fu-memorial .fu-eq {{ margin:18px 0 4px 0; padding:14px 18px;
                        border-left:3px solid {acento};
                        font-family:'Cambria Math','Cambria',Georgia,serif;
-                       font-size:1.1em; letter-spacing:.2px; }}
-.fu-memorial .fu-eq sup {{ font-size:.72em; }}
+                       font-size:1.15em; letter-spacing:.2px; }}
+.fu-memorial sup {{ font-size:.72em; }}
+.fu-memorial sub {{ font-size:.72em; }}
+.fu-memorial .fu-frac {{ display:inline-flex; flex-direction:column;
+                         align-items:center; vertical-align:middle;
+                         margin:0 5px; line-height:1.3; text-align:center; }}
+.fu-memorial .fu-frac .fu-num {{ padding:0 4px 3px 4px;
+                                 border-bottom:1.3px solid currentColor; }}
+.fu-memorial .fu-frac .fu-den {{ padding:3px 4px 0 4px; }}
 .fu-memorial .fu-eq-onde {{ margin:2px 0 22px 21px; }}
 .fu-memorial .fu-eq-onde-lbl {{ margin:8px 0 4px 0 !important; font-weight:bold; }}
 .fu-memorial .fu-eq-def {{ margin:3px 0 !important; }}
@@ -380,7 +432,7 @@ def _passo_perda(jt, c_hw, letra):
 def _passo_velocidade(jt, v_limite, letra):
     """Velocidade de escoamento do trecho, por diâmetro, com verificação."""
     output.print_md(u"**{}) Velocidade de escoamento**".format(letra))
-    _formula(u"V = 21,22 · Q / D²   [m/s]")
+    _formula_frac(u"V", u"21,22 · Q", u"D²", sufixo=u"[m/s]")
     output.print_md(u"")
     linhas = []
     for s in jt["segmentos"]:
@@ -545,37 +597,40 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
 
     output.print_md(u"**{}) Velocidade de escoamento**, verificada contra o limite do "
                     u"trecho:".format(prox()))
-    _formula(u"V = 21,22 · Q / D²   [m/s]",
-             [(u"V", u"Velocidade de escoamento"),
-              (u"Limite", u"{:.1f} m/s no recalque/descarga; {:.1f} m/s na "
-                          u"sucção {}".format(v_max_tubo, v_max_succao, succao))])
+    _formula_frac(u"V", u"21,22 · Q", u"D²", sufixo=u"[m/s]",
+                 definicoes=[(u"V", u"Velocidade de escoamento"),
+                            (u"Limite", u"{:.1f} m/s no recalque/descarga; {:.1f} m/s "
+                                       u"na sucção {}".format(
+                                           v_max_tubo, v_max_succao, succao))])
 
     if esguicho:
         output.print_md(u"**{}) Esguicho, mangueira e válvula do hidrante** — como o par "
                         u"normativo (Q, Pmin) está referido à ponta do esguicho, a "
                         u"pressão sobe até a válvula somando as perdas da mangueira e "
                         u"da válvula angular:".format(prox()))
-        _formula(u"Jm = {:g}·f·Lm / (g·π²·Dm⁵) · Q²   [mca]".format(COEF_JM),
-                 [(u"Jm", u"Perda de carga na mangueira (Darcy-Weisbach)"),
-                  (u"f", u"Fator de atrito = {:g}".format(F_DARCY)),
-                  (u"Lm", u"Comprimento da mangueira, em m"),
-                  (u"g", u"Aceleração da gravidade = {:g} m/s²".format(G)),
-                  (u"Dm", u"Diâmetro da mangueira, em m")])
-        _formula(u"V = 21,22 · Q / Dm²   [m/s]",
-                 [(u"V", u"Velocidade do fluido na mangueira")])
-        _formula(u"Jvalv = K · V² / (2g)   [mca]",
-                 [(u"Jvalv", u"Perda de carga na válvula angular do hidrante"),
-                  (u"K", u"Fator K da válvula, adotado = {:g}".format(K_VALVULA))])
+        _formula_frac(u"Jm", u"{:g}·f·Lm".format(COEF_JM), u"g·π²·Dm⁵",
+                     depois=u"· Q²", sufixo=u"[mca]",
+                     definicoes=[(u"Jm", u"Perda de carga na mangueira (Darcy-Weisbach)"),
+                                (u"f", u"Fator de atrito = {:g}".format(F_DARCY)),
+                                (u"Lm", u"Comprimento da mangueira, em m"),
+                                (u"g", u"Aceleração da gravidade = {:g} m/s²".format(G)),
+                                (u"Dm", u"Diâmetro da mangueira, em m")])
+        _formula_frac(u"V", u"21,22 · Q", u"Dm²", sufixo=u"[m/s]",
+                     definicoes=[(u"V", u"Velocidade do fluido na mangueira")])
+        _formula_frac(u"Jvalv", u"K · V²", u"2g", sufixo=u"[mca]",
+                     definicoes=[(u"Jvalv", u"Perda de carga na válvula angular do hidrante"),
+                                (u"K", u"Fator K da válvula, adotado = {:g}".format(K_VALVULA))])
         _formula(u"P_valv = Pmin + Jm + Jvalv",
                  [(u"P_valv", u"Pressão na válvula do hidrante, soma das perdas "
                               u"entre o esguicho e a válvula")])
 
     output.print_md(u"**{}) Fator K**, calculado **somente no 1º hidrante mais "
                     u"desfavorável**, a partir do par normativo:".format(prox()))
-    _formula(u"K = Q / √P",
-             [(u"K", u"Fator de vazão (coeficiente de escoamento) do hidrante"),
-              (u"Q", u"Vazão normativa do hidrante mais desfavorável, em L/min"),
-              (u"P", u"{}, em bar (1 bar = {} mca)".format(_p_ref_desc, MCA_POR_BAR))])
+    _formula_frac(u"K", u"Q", u"√P",
+                 definicoes=[(u"K", u"Fator de vazão (coeficiente de escoamento) do hidrante"),
+                            (u"Q", u"Vazão normativa do hidrante mais desfavorável, em L/min"),
+                            (u"P", u"{}, em bar (1 bar = {} mca)".format(
+                                _p_ref_desc, MCA_POR_BAR))])
     output.print_md(u"Esse K, uma vez calculado, é reaproveitado para achar a vazão dos "
                     u"demais hidrantes: **Q = K·√P**.")
     output.print_md(u"")
@@ -646,7 +701,7 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
 
     output.print_md(u"**{}) Fator K** — calculado aqui, no 1º hidrante mais "
                     u"desfavorável, e reaproveitado nos demais trechos.".format(prox()))
-    _formula(u"K = Q / √P")
+    _formula_frac(u"K", u"Q", u"√P")
     output.print_md(u"K = {:g} / √({:.4f} / {}) = {:g} / √{:.4f} = "
                     u"**{:.4f} L/min/bar^0,5**".format(
                         Qs_lmin, P_ref, MCA_POR_BAR, Qs_lmin,
@@ -705,7 +760,7 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                         u"favoráveis. A pressão no esguicho sai de:")
         _formula(u"P_esg = P_hd − Jm − Jvalv")
         _tabela([u"Hidrante", u"Q (L/min)", u"V mangueira (m/s)", u"Jm (mca)",
-                 u"Jvalv (mca)", u"P_válvula (mca)", u"P_esguicho (mca)"],
+                 u"Jvalv (mca)", u"P válvula (mca)", u"P esguicho (mca)"],
                 [[lbl, u"{:.2f}".format(e["Q_lmin"]), u"{:.4f}".format(e["V"]),
                   u"{:.4f}".format(e["Jm"]), u"{:.4f}".format(e["Jvalv"]),
                   u"{:.4f}".format(e["P_valv"]), u"**{:.4f}**".format(e["P_esg"])]
@@ -777,10 +832,10 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     sec(u"Dimensionamento da Bomba de Recalque")
     Qt_m3s  = res["Qt"] / 60000.0
     eta_dec = eta / 100.0
-    _formula(u"P_cv = (1000 × Qt × Ht) / (75 × η)",
-             [(u"Qt", u"Vazão total de projeto, em m³/s"),
-              (u"Ht", u"Altura manométrica total, em mca (Ht = HMT = P_RTI)"),
-              (u"η", u"Eficiência global da bomba")])
+    _formula_frac(u"P_cv", u"1000 × Qt × Ht", u"75 × η",
+                 definicoes=[(u"Qt", u"Vazão total de projeto, em m³/s"),
+                            (u"Ht", u"Altura manométrica total, em mca (Ht = HMT = P_RTI)"),
+                            (u"η", u"Eficiência global da bomba")])
     _tabela([u"Parâmetro", u"Símbolo", u"Valor"],
             [[u"Vazão total de projeto", u"Qt",
               u"**{:.2f} L/min = {:.6f} m³/s = {:.4f} m³/h**".format(
