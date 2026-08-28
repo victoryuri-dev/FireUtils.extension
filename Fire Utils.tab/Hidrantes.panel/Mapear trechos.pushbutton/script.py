@@ -171,6 +171,16 @@ def seleciona(msg_alert, msg_pick, filtro):
         output.print_md(u"Selecao cancelada.")
         script.exit()
 
+def seleciona_opcional(msg_alert, msg_pick, filtro):
+    """Como `seleciona`, mas retorna None em vez de encerrar o script
+    se a selecao for cancelada (ex.: usuario clica fora de um elemento)."""
+    forms.alert(msg_alert, title="Fire Utils")
+    try:
+        ref = uidoc.Selection.PickObject(ObjectType.Element, filtro, msg_pick)
+        return doc.GetElement(ref.ElementId)
+    except:
+        return None
+
 # ===========================================================================
 # 0 — Garante parâmetros
 # ===========================================================================
@@ -243,18 +253,24 @@ output.print_md(u"HID-01: ID **{}** | HID-02: ID **{}**".format(eid_h1, eid_h2))
 output.print_md("---")
 output.print_md("### 2 - Selecionar RTI e Bomba")
 
-rti   = seleciona(u"Selecione o reservatorio (RTI).",     u"Reservatorio (RTI)",    FittingFilter())
-bomba = seleciona(u"Selecione a bomba de incendio.",      u"Bomba de incendio",     FittingFilter())
+rti = seleciona_opcional(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
 
-output.print_md(u"RTI: ID **{}** | Bomba: ID **{}**".format(get_id(rti), get_id(bomba)))
+tubo_rti = None
+if rti:
+    output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
+    tubo_rti = get_tubo_por_direcao(rti, (FlowDirectionType.Out,))
+else:
+    output.print_md(u"Nenhuma RTI selecionada.")
 
-tubo_rti = get_tubo_por_direcao(rti, (FlowDirectionType.Out,))
 if not tubo_rti:
     tubo_rti = seleciona(
-        u"Nao foi possivel identificar automaticamente o tubo conectado a RTI.\n"
-        u"Selecione o tubo que conecta na RTI.",
-        u"Tubo da RTI", PipeFilter()
+        u"Nao foi possivel identificar o tubo de saida da RTI.\n"
+        u"Clique no tubo de saida da RTI.",
+        u"Tubo de saida da RTI", PipeFilter()
     )
+
+bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
+output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
 
 tubo_bomba = get_tubo_por_direcao(bomba, (FlowDirectionType.In,))
 if not tubo_bomba:
