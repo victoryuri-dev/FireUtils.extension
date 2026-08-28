@@ -828,6 +828,45 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
 
     prox = _contador_letras()
 
+    output.print_md(u"A marcha de cada ramal segue o sentido do escoamento, do ponto mais "
+                    u"desfavorável (esguicho) até o Ponto A: esguicho → mangueira → "
+                    u"válvula → canalização → Ponto A.")
+    output.print_md(u"")
+
+    if esguicho:
+        output.print_md(u"Como o par normativo (Q, Pmin) está referido à ponta do "
+                        u"esguicho, a marcha começa por ele: a perda de carga no esguicho "
+                        u"é a própria **pressão mínima exigida em projeto (Pmin)**, e a "
+                        u"pressão sobe até a válvula somando as perdas da mangueira e da "
+                        u"válvula angular.")
+        output.print_md(u"")
+
+        output.print_md(u"**{}) Perda de carga na mangueira**:".format(prox()))
+        _formula_frac(u"Jm", u"{:g}·f·Lm".format(COEF_JM), u"g·π²·Dm⁵",
+                     depois=u"· Q²", sufixo=u"[mca]",
+                     definicoes=[(u"Jm", u"Perda de carga na mangueira (Darcy-Weisbach)"),
+                                (u"f", u"Fator de atrito = {:g}".format(F_DARCY)),
+                                (u"Lm", u"Comprimento da mangueira, em m"),
+                                (u"g", u"Aceleração da gravidade = {:g} m/s²".format(G)),
+                                (u"Dm", u"Diâmetro da mangueira, em m"),
+                                (u"Q", u"Vazão INDIVIDUAL do hidrante — nunca Qt nem "
+                                      u"Qt/2, já que cada mangueira tem sua própria "
+                                      u"vazão")])
+
+        output.print_md(u"**{}) Velocidade do fluido na mangueira**:".format(prox()))
+        _formula_frac(u"V", u"21,22 · Q", u"Dm²", sufixo=u"[m/s]",
+                     definicoes=[(u"V", u"Velocidade do fluido na mangueira")])
+
+        output.print_md(u"**{}) Perda de carga na válvula angular do hidrante**:".format(prox()))
+        _formula_frac(u"Jvalv", u"K · V²", u"2g", sufixo=u"[mca]",
+                     definicoes=[(u"Jvalv", u"Perda de carga na válvula angular do hidrante"),
+                                (u"K", u"Fator K da válvula, adotado = {:g}".format(K_VALVULA))])
+
+        output.print_md(u"**{}) Pressão na válvula do hidrante**:".format(prox()))
+        _formula(u"P_valv = Pmin + Jm + Jvalv",
+                 [(u"P_valv", u"Pressão na válvula do hidrante, soma das perdas "
+                              u"entre o esguicho e a válvula")])
+
     output.print_md(u"**{}) Comprimento total da tubulação**, somado por diâmetro:".format(prox()))
     _formula(u"Ltotal = L + Leq",
              [(u"L", u"Comprimento real da tubulação"),
@@ -850,27 +889,6 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                             (u"Limite", u"{:.1f} m/s no recalque/descarga; {:.1f} m/s "
                                        u"na sucção {}".format(
                                            v_max_tubo, v_max_succao, succao))])
-
-    if esguicho:
-        output.print_md(u"**{}) Esguicho, mangueira e válvula do hidrante** — como o par "
-                        u"normativo (Q, Pmin) está referido à ponta do esguicho, a "
-                        u"pressão sobe até a válvula somando as perdas da mangueira e "
-                        u"da válvula angular:".format(prox()))
-        _formula_frac(u"Jm", u"{:g}·f·Lm".format(COEF_JM), u"g·π²·Dm⁵",
-                     depois=u"· Q²", sufixo=u"[mca]",
-                     definicoes=[(u"Jm", u"Perda de carga na mangueira (Darcy-Weisbach)"),
-                                (u"f", u"Fator de atrito = {:g}".format(F_DARCY)),
-                                (u"Lm", u"Comprimento da mangueira, em m"),
-                                (u"g", u"Aceleração da gravidade = {:g} m/s²".format(G)),
-                                (u"Dm", u"Diâmetro da mangueira, em m")])
-        _formula_frac(u"V", u"21,22 · Q", u"Dm²", sufixo=u"[m/s]",
-                     definicoes=[(u"V", u"Velocidade do fluido na mangueira")])
-        _formula_frac(u"Jvalv", u"K · V²", u"2g", sufixo=u"[mca]",
-                     definicoes=[(u"Jvalv", u"Perda de carga na válvula angular do hidrante"),
-                                (u"K", u"Fator K da válvula, adotado = {:g}".format(K_VALVULA))])
-        _formula(u"P_valv = Pmin + Jm + Jvalv",
-                 [(u"P_valv", u"Pressão na válvula do hidrante, soma das perdas "
-                              u"entre o esguicho e a válvula")])
 
     output.print_md(u"**{}) Fator K**, calculado **somente no 1º hidrante mais "
                     u"desfavorável**, a partir do par normativo:".format(prox()))
@@ -919,33 +937,56 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     # --- Trecho HD01 (1º mais desfavorável) -------------------------------
     output.print_md(u"### {}.1 Trecho HD01 ao Ponto A".format(n7))
     output.print_md(u"Ramal do **1º hidrante mais desfavorável**, calculado com a vazão "
-                    u"normativa Q = {:g} L/min.".format(Qs_lmin))
+                    u"normativa Q = {:g} L/min. A marcha segue o sentido do escoamento: "
+                    u"esguicho → mangueira → válvula → canalização → Ponto A.".format(Qs_lmin))
     output.print_md(u"")
     prox = _contador_letras()
-    _passo_ltotal(j["t3"], prox())
-    _passo_perda(j["t3"], C_HW, prox())
-    _passo_velocidade(j["t3"], v_max_tubo, prox())
 
     if esguicho:
         _ref   = esg["ref"]
         _dm_mm = esg["mang_dn_mm"]
         _lm    = esg["mang_comp_m"]
-        output.print_md(u"**{}) Esguicho, mangueira e válvula do hidrante**".format(prox()))
         output.print_md(u"A perda de carga no esguicho é a própria **pressão mínima "
                         u"exigida em projeto (Pmin = {:g} mca)**, aplicada na ponta do "
                         u"esguicho. Da ponta até a válvula somam-se a perda na mangueira "
                         u"e a perda na válvula angular.".format(Pmin))
         output.print_md(u"")
-        output.print_md(u"Mangueira: Lm = {:g} m, Dm = {:g} mm.".format(_lm, _dm_mm))
-        _tabela([u"Grandeza", u"Valor"],
-                [[u"Jm — perda na mangueira", u"**{:.4f} mca**".format(_ref["Jm"])],
-                 [u"V — velocidade na mangueira", u"**{:.4f} m/s**".format(_ref["V"])],
-                 [u"Jvalv — perda na válvula angular",
-                  u"**{:.4f} mca**".format(_ref["Jvalv"])]])
-        output.print_md(u"P_valv = Pmin + Jm + Jvalv = {:g} + {:.4f} + {:.4f} = "
+
+        output.print_md(u"**{}) Perda de carga na mangueira**".format(prox()))
+        _formula_frac(u"Jm", u"{:g}·f·Lm".format(COEF_JM), u"g·π²·Dm⁵",
+                     depois=u"· Q²", sufixo=u"[mca]")
+        output.print_md(u"")
+        _tabela([u"Lm (m)", u"Dm (mm)", u"Q (L/min)", u"Jm (mca)"],
+                [[u"{:g}".format(_lm), u"{:g}".format(_dm_mm),
+                  u"{:.2f}".format(Qs_lmin), u"**{:.4f}**".format(_ref["Jm"])]])
+        output.print_md(u"")
+
+        output.print_md(u"**{}) Velocidade do fluido na mangueira**".format(prox()))
+        _formula_frac(u"V", u"21,22 · Q", u"Dm²", sufixo=u"[m/s]")
+        output.print_md(u"")
+        _tabela([u"Dm (mm)", u"Q (L/min)", u"V (m/s)"],
+                [[u"{:g}".format(_dm_mm), u"{:.2f}".format(Qs_lmin),
+                  u"**{:.4f}**".format(_ref["V"])]])
+        output.print_md(u"")
+
+        output.print_md(u"**{}) Perda de carga na válvula angular do hidrante**".format(prox()))
+        _formula_frac(u"Jvalv", u"K · V²", u"2g", sufixo=u"[mca]")
+        output.print_md(u"")
+        _tabela([u"K", u"V (m/s)", u"Jvalv (mca)"],
+                [[u"{:g}".format(K_VALVULA), u"{:.4f}".format(_ref["V"]),
+                  u"**{:.4f}**".format(_ref["Jvalv"])]])
+        output.print_md(u"")
+
+        output.print_md(u"**{}) Pressão na válvula do hidrante**".format(prox()))
+        _formula(u"P_valv = Pmin + Jm + Jvalv")
+        output.print_md(u"P_valv = {:g} + {:.4f} + {:.4f} = "
                         u"**{:.4f} mca**".format(
                             Pmin, _ref["Jm"], _ref["Jvalv"], P_ref))
         output.print_md(u"")
+
+    _passo_ltotal(j["t3"], prox())
+    _passo_perda(j["t3"], C_HW, prox())
+    _passo_velocidade(j["t3"], v_max_tubo, prox())
 
     output.print_md(u"**{}) Fator K** — calculado aqui, no 1º hidrante mais "
                     u"desfavorável, e reaproveitado nos demais trechos.".format(prox()))
