@@ -22,6 +22,7 @@ from Autodesk.Revit.DB import (
     FlowDirectionType,
     LocationCurve, LocationPoint, UnitUtils,
 )
+from Autodesk.Revit.DB.Plumbing import Pipe
 from pyrevit import forms, script
 
 try:
@@ -194,23 +195,32 @@ def get_cota_rti(elem):
     return None
 
 def diagnostico_conectores(elem):
-    """Linhas com tipo/categoria de `elem` e Direction/IsConnected/Z de
+    """Linhas com id/tipo/categoria de `elem` e Direction/IsConnected/Z de
     cada conector dele - usado so para montar o alerta quando uma cota
     nao e lida, pra mostrar exatamente por que (em vez de um "nao foi
     possivel" generico). Nao usa get_conectores (que engole excecoes) -
     aqui o erro real, se houver, aparece no alerta."""
     linhas = []
+    try:    id_txt = u"{}".format(elem.Id)
+    except: id_txt = u"?"
     try:    tipo = type(elem).__name__
     except: tipo = u"?"
+    try:    eh_pipe = isinstance(elem, Pipe)
+    except Exception as e: eh_pipe = u"erro ({})".format(e)
     try:    cat = elem.Category.Name if elem.Category else u"(sem categoria)"
     except: cat = u"?"
-    linhas.append(u"    tipo={} categoria={}".format(tipo, cat))
+    try:    tem_cm = hasattr(elem, "ConnectorManager")
+    except: tem_cm = u"?"
+    linhas.append(u"    Id={} tipo={} isinstance(Pipe)={}".format(id_txt, tipo, eh_pipe))
+    linhas.append(u"    categoria={} hasattr(ConnectorManager)={}".format(cat, tem_cm))
 
     conns = None
     erro = None
     try:
-        if hasattr(elem, 'ConnectorManager') and elem.ConnectorManager:
-            conns = list(elem.ConnectorManager.Connectors)
+        cm = elem.ConnectorManager if hasattr(elem, "ConnectorManager") else None
+        linhas.append(u"    elem.ConnectorManager = {}".format(cm))
+        if cm is not None:
+            conns = list(cm.Connectors)
         else:
             mep = elem.MEPModel
             if mep and mep.ConnectorManager:
