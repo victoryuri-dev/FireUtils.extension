@@ -27,8 +27,10 @@ from hidrantes.params import (
     create_hydrant_params, PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
 )
 from hidrantes.forms import show_system_selection_form
+from hidrantes.succao_form import show_succao_form
 from hidrantes.db import SISTEMAS_HIDRANTE
 from hidrantes import custom as custom_store
+from hidrantes import succao as succao_calc
 
 doc    = __revit__.ActiveUIDocument.Document
 output = script.get_output()
@@ -108,6 +110,40 @@ output.print_md(
     u"marcha com Fator K, independente da escolha acima._")
 
 # ===========================================================================
+# ETAPA 2b — Dados do reservatório (condição de sucção pelo nível X)
+# ===========================================================================
+output.print_md("---")
+output.print_md(u"### Etapa 2b — Condição de Sucção (Anexo B, NT 22)")
+
+# Só o que não dá para ler da geometria: as cotas, o DN da sucção e o tipo de
+# tomada saem do modelo em "Dimensionar Hidrantes".
+succao_salvo = succao_calc.load_dados(doc)
+dados_succao = show_succao_form(dados_iniciais=succao_salvo)
+
+if dados_succao is None:
+    # Pular aqui não invalida a classificação — a verificação do nível X
+    # simplesmente roda com o que já estava salvo (ou com os padrões).
+    dados_succao = succao_salvo
+    output.print_md(u"⚠ Dados de sucção não informados — será usado o que já "
+                    u"estava salvo no projeto.")
+else:
+    output.print_md(u"✔ Cota do fundo do reservatório: **{:g} m**".format(
+        dados_succao["cota_fundo_reservatorio"]))
+    if dados_succao["volume_total_m3"] is not None:
+        output.print_md(u"✔ Reservatório: **{:g} m³** em **{:g} m²** de planta".format(
+            dados_succao["volume_total_m3"], dados_succao["area_planta_m2"]))
+    else:
+        output.print_md(u"⚠ Volume/área não informados — a capacidade efetiva "
+                        u"(B.3.3) não será calculada e a tolerância do item "
+                        u"C.1.10 fica zerada (lado conservador).")
+    output.print_md(u"✔ Dispositivo antivórtice: **{}**".format(
+        u"sim" if dados_succao["possui_antivortice"] else u"não"))
+    output.print_md(u"✔ Poço de sucção: **{}**".format(
+        u"sim" if dados_succao["possui_poco_succao"] else u"não"))
+    output.print_md(u"✔ Tipo de tomada: **{}**".format(
+        dados_succao["tipo_tomada"] or u"detectar pela geometria do modelo"))
+
+# ===========================================================================
 # ETAPA 3 — Salvar no Project Information
 # ===========================================================================
 output.print_md("---")
@@ -146,6 +182,10 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
             ok_custom, msg_custom = custom_store.save_custom(
                 doc, resultado["custom_dados"])
             output.print_md(u"{} {}".format(u"✔" if ok_custom else u"⚠", msg_custom))
+
+        if dados_succao is not None:
+            ok_succao, msg_succao = succao_calc.save_dados(doc, dados_succao)
+            output.print_md(u"{} {}".format(u"✔" if ok_succao else u"⚠", msg_succao))
 
         t.Commit()
     except Exception as e:

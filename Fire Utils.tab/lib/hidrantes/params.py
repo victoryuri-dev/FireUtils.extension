@@ -115,8 +115,16 @@ PROJECT_INFO_CUSTOM_PARAM = u"FireUtils - Sistema Personalizado"
 # valor; ele sempre aplica o método da marcha com Fator K.
 PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
 
+# Guarda, em JSON, os dados do reservatório que a verificação da condição de
+# sucção pelo nível X (NT 22, Anexo B.3) precisa e que não existem na
+# geometria: cota do fundo, volume total, área em planta, dispositivo
+# antivórtice, poço de sucção e — opcionalmente — o tipo de tomada, quando o
+# usuário quer sobrepor o que foi lido do modelo.
+PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
+
 PROJECT_INFO_PARAMS = [
     PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM, PROJECT_INFO_METODO_PARAM,
+    PROJECT_INFO_SUCCAO_PARAM,
 ]
 
 
