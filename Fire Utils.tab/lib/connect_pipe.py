@@ -6,8 +6,11 @@ Conecta dois tubos com roteamento em ângulos retos.
 Fluxo:
   Clique 1 — ponta do PIPE_DESC (tubo desconectado)
   Clique 2 — PIPE_REF (tubo referência): corpo → cria Tê  |  ponta → roteia até a ponta com joelhos
-  Escolha  — onde a rota sobe/desce de altura: junto ao tubo desconectado
-             (padrão) ou junto ao tubo de referência (ver modo_altura em _conectar)
+  Form     — um único diálogo (FlexForm) reúne as duas preferências de rota:
+             • onde a rota sobe/desce de altura: junto ao tubo desconectado
+               (padrão) ou junto ao tubo de referência (ver modo_altura em _conectar)
+             • ordem dos eixos horizontais X/Y: padrão (primeiro paralelo ao
+               eixo do tubo referência) ou invertida (ver inverter_eixos)
 
 Etapa 1 — Extensão direta:
   Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref
@@ -22,9 +25,14 @@ Etapa 2 — Roteamento em L:
   modo_altura="destino": roteia horizontal na cota de pipe_desc e só
     sobe/desce no último trecho, já junto ao ponto de conexão em pipe_ref
 
+  inverter_eixos=False (padrão): seg1 fica paralelo ao eixo de pipe_ref e
+    seg2 perpendicular (entra em pipe_ref em ângulo reto — comportamento
+    histórico). inverter_eixos=True: troca a ordem — seg1 fica perpendicular
+    ao eixo de pipe_ref (ajusta o outro eixo primeiro) e seg2 paralelo.
+
 Casos PIPE_REF (clique):
   corpo  → tubo horizontal P_knee→P_target + Tê (BreakCurve)
-  ponta  → rota em L (seg1 paralelo ao eixo do ref + seg2 perpendicular) + joelhos
+  ponta  → rota em L (seg1/seg2 conforme inverter_eixos) + joelhos
 """
 
 import clr
@@ -84,17 +92,29 @@ def _projetar_segmento(pt, pt_a, pt_b):
     return XYZ(pt_a.X + n.X * t, pt_a.Y + n.Y * t, pt_a.Z + n.Z * t)
 
 
-def _rota_ate_endpoint(P_knee, P_target, d_ref):
+def _rota_ate_endpoint(P_knee, P_target, d_ref, inverter_eixos=False):
     """
-    Calcula a rota em L de P_knee até P_target usando d_ref como direção primária.
-    seg1: P_knee → P_mid   (paralelo ao eixo de PIPE_REF)
-    seg2: P_mid  → P_target (perpendicular ao eixo de PIPE_REF)
+    Calcula a rota em L de P_knee até P_target.
+    inverter_eixos=False (padrão): usa d_ref (eixo de PIPE_REF) como direção
+      primária — seg1: P_knee → P_mid (paralelo ao eixo de PIPE_REF),
+      seg2: P_mid → P_target (perpendicular ao eixo de PIPE_REF).
+    inverter_eixos=True: usa o eixo perpendicular (no plano horizontal) a
+      d_ref como direção primária — inverte a ordem dos ajustes X/Y.
     Retorna (P_mid, needs_seg1, needs_seg2).
     """
+    if inverter_eixos:
+        d_horiz = XYZ(d_ref.X, d_ref.Y, 0.0)
+        L_h     = d_horiz.GetLength()
+        if L_h > TOL:
+            d_horiz = XYZ(d_horiz.X / L_h, d_horiz.Y / L_h, 0.0)
+        d_prim = XYZ(-d_horiz.Y, d_horiz.X, 0.0)
+    else:
+        d_prim = d_ref
+
     v = P_target - P_knee
-    a = v.DotProduct(d_ref)
-    P_mid = XYZ(P_knee.X + d_ref.X * a,
-                P_knee.Y + d_ref.Y * a,
+    a = v.DotProduct(d_prim)
+    P_mid = XYZ(P_knee.X + d_prim.X * a,
+                P_knee.Y + d_prim.Y * a,
                 P_knee.Z)
     needs_seg1 = abs(a) > TOL_SEG
     needs_seg2 = P_mid.DistanceTo(P_target) > TOL_SEG
@@ -324,20 +344,32 @@ def run(doc, uidoc, output):
                     title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
-    # ── Onde muda de altura? ─────────────────────────────────────────────
-    escolha = forms.SelectFromList.show(
-        [u"Junto ao tubo desconectado", u"Junto ao tubo de referência"],
-        title=u"Fire Utils — Conectar Tubo",
-        prompt=u"Onde a tubulação deve subir/descer de altura?",
-        multiselect=False
-    )
-    if not escolha:
+    # ── Preferências de roteamento (altura + ordem dos eixos X/Y) ──────────
+    OPCAO_ALTURA_ORIGEM  = u"Junto ao tubo desconectado"
+    OPCAO_ALTURA_DESTINO = u"Junto ao tubo de referência"
+    OPCAO_EIXO_PADRAO    = u"Padrão (ajusta primeiro o eixo do tubo referência)"
+    OPCAO_EIXO_INVERTIDO = u"Invertida (troca a ordem dos eixos X/Y)"
+
+    components = [
+        forms.Label(u"Onde a tubulação deve subir/descer de altura?"),
+        forms.ComboBox("altura", [OPCAO_ALTURA_ORIGEM, OPCAO_ALTURA_DESTINO]),
+        forms.Label(u"Ordem dos eixos horizontais (X/Y) na rota:"),
+        forms.ComboBox("eixo", [OPCAO_EIXO_PADRAO, OPCAO_EIXO_INVERTIDO]),
+        forms.Separator(),
+        forms.Button(u"OK"),
+    ]
+    form = forms.FlexForm(u"Fire Utils — Conectar Tubo", components)
+    form.show()
+
+    if not form.values or u"altura" not in form.values or u"eixo" not in form.values:
         pyscript.exit()
-    modo_altura = (u"destino" if escolha == u"Junto ao tubo de referência"
-                   else u"origem")
+
+    modo_altura    = (u"destino" if form.values[u"altura"] == OPCAO_ALTURA_DESTINO
+                       else u"origem")
+    inverter_eixos = (form.values[u"eixo"] == OPCAO_EIXO_INVERTIDO)
 
     _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-               modo_altura=modo_altura)
+               modo_altura=modo_altura, inverter_eixos=inverter_eixos)
 
 
 # ============================================================================
@@ -345,13 +377,17 @@ def run(doc, uidoc, output):
 # ============================================================================
 
 def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-              modo_altura=u"origem"):
+              modo_altura=u"origem", inverter_eixos=False):
     """
     modo_altura : "origem"  → sobe/desce logo na saída do tubo desconectado
                               (comportamento padrão/histórico).
                   "destino" → roteia horizontalmente na cota do tubo
                               desconectado e só sobe/desce por último,
                               já junto ao tubo de referência.
+    inverter_eixos : False (padrão) → no trecho horizontal em L, ajusta
+                              primeiro o eixo paralelo ao tubo de referência.
+                     True  → inverte a ordem, ajustando primeiro o eixo
+                              perpendicular (troca X/Y).
     """
 
     # ── Endpoint de PIPE_DESC selecionado pelo clique ────────────────────────
@@ -526,7 +562,8 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                 # Roteia horizontalmente ainda na cota do tubo desconectado,
                 # alinhando X/Y ao ponto final; sobe/desce só no último trecho.
                 P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_start, P_pre, d_ref)
+                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
+                    P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
                 conn_cur = conn_desc
 
                 if needs_s1:
@@ -590,7 +627,8 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                 # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
                 # seg2 perpendicular. Garante ângulos retos mesmo quando
                 # P_knee está fora da extensão lateral de pipe_ref.
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(P_knee, P_final, d_ref)
+                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
+                    P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
                 conn_cur = conn_knee
 
                 if needs_s1:
