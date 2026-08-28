@@ -115,11 +115,9 @@ def succao_simples(condicao):
 DEFAULT_DADOS = {
     # Entradas do NPSH disponível. Altitude e temperatura são escolhidas
     # entre as linhas das tabelas de hidrantes/npshd.py — por isso já vêm
-    # preenchidas com o valor usual. NPSHr é dado de catálogo da bomba: sem
-    # bomba definida fica vazio, e a comparação sai como pendente.
+    # preenchidas com o valor usual.
     u"altitude_m":    None,
     u"temperatura_c": None,
-    u"npshr_m":       None,
 }
 
 
@@ -131,15 +129,6 @@ def normalizar_dados(dados):
     """Converte um dict cru (formulário ou JSON salvo) para o formato canônico."""
     base = default_dados()
     out  = dict(base)
-
-    valor = dados.get(u"npshr_m", base[u"npshr_m"])
-    if valor is None or valor == u"":
-        out[u"npshr_m"] = base[u"npshr_m"]
-    else:
-        try:
-            out[u"npshr_m"] = float(valor)
-        except (TypeError, ValueError):
-            out[u"npshr_m"] = base[u"npshr_m"]
 
     # Altitude e temperatura são chaves das tabelas de Ha/Hvp: inteiros, e
     # só valem se existirem na tabela — quem valida é hidrantes/npshd.py.

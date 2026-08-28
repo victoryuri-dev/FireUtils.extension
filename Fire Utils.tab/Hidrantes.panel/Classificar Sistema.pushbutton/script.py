@@ -11,7 +11,7 @@ Fluxo:
      enquanto só registrado; o motor de cálculo ('Dimensionar Hidrantes')
      ainda usa sempre o método da marcha com Fator K, independente dessa
      escolha — e, em "Configurações Avançadas > NPSH", os dados usados no
-     cálculo do NPSH disponível (altitude, temperatura, NPSHr da bomba)
+     cálculo do NPSH disponível (altitude e temperatura)
   3. Salvar tudo no Project Information — inclusive os valores
      personalizados (JSON), que ficam guardados no projeto para permitir
      reclassificar quantas vezes for preciso sem redigitar
@@ -116,9 +116,6 @@ output.print_md(u"")
 output.print_md(u"**Configurações Avançadas › NPSH:**")
 output.print_md(u"✔ Altitude do local: **{:g} m**".format(dados_succao["altitude_m"]))
 output.print_md(u"✔ Temperatura da água: **{:g} °C**".format(dados_succao["temperatura_c"]))
-output.print_md(u"✔ NPSHr da bomba: **{}**".format(
-    u"{:g} mca".format(dados_succao["npshr_m"])
-    if dados_succao["npshr_m"] is not None else u"não informado"))
 
 # ===========================================================================
 # ETAPA 3 — Salvar no Project Information

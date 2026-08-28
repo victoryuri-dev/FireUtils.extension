@@ -25,9 +25,9 @@ sucção, mas com a vazão majorada (Q_npsh = fator · Qt) — a majoração é
 normativa e vale só para esta verificação, por isso o fator vem do perfil do
 estado, não daqui.
 
-Critério: NPSHd ≥ NPSHr. O NPSHr é dado de catálogo da bomba escolhida — não
-se calcula a partir da instalação. Sem ele o módulo entrega o NPSHd e deixa a
-comparação pendente, em vez de afirmar que atende.
+Este módulo entrega só o NPSH disponível (NPSHd) — não compara com o NPSH
+requerido pela bomba (NPSHr): esse dado é de catálogo do fabricante e está
+fora do escopo deste memorial.
 
 Módulo puro: as tabelas de Ha e Hvp são propriedades físicas da água e da
 atmosfera, praticamente iguais entre normas, e ficam aqui. Citações de
@@ -66,10 +66,6 @@ TABELA_HVP = [
 ALTITUDE_PADRAO    = 0
 TEMPERATURA_PADRAO = 30
 
-# Margem de segurança sobre o NPSHr. Não é exigência normativa — é boa
-# prática de projeto, e por isso entra como sugestão, nunca como reprovação.
-MARGEM_RECOMENDADA_M = 0.5
-
 
 def _busca(tabela, chave):
     for k, v in tabela:
@@ -104,8 +100,7 @@ def opcoes_temperatura():
 # Cálculo
 # ===========================================================================
 
-def calcular_npshd(altitude_m, temperatura_c, hs_abs_m, hf_s_mca,
-                   npshr_m=None, margem_m=MARGEM_RECOMENDADA_M):
+def calcular_npshd(altitude_m, temperatura_c, hs_abs_m, hf_s_mca):
     """
     NPSH disponível na sucção.
 
@@ -114,8 +109,6 @@ def calcular_npshd(altitude_m, temperatura_c, hs_abs_m, hf_s_mca,
               cota da RTI.
     hf_s_mca: perda de carga no trecho de sucção, JÁ calculada com a vazão
               majorada.
-    npshr_m:  NPSH requerido pela bomba (catálogo). None quando ainda não há
-              bomba definida — a comparação fica pendente.
 
     Retorna dict pronto para o memorial.
     """
@@ -135,30 +128,6 @@ def calcular_npshd(altitude_m, temperatura_c, hs_abs_m, hf_s_mca,
     hf_s   = float(hf_s_mca)
     npshd  = ha - hvp - hs_abs - hf_s
 
-    if npshr_m is None:
-        atende = None
-        folga  = None
-        veredicto = (u"NPSHr não informado — a comparação não pode ser "
-                     u"concluída. Informe o NPSH requerido da bomba escolhida "
-                     u"(dado de catálogo do fabricante).")
-    else:
-        npshr = float(npshr_m)
-        folga = npshd - npshr
-        atende = folga >= 0.0
-        if atende:
-            veredicto = (u"NPSHd ({:.3f} mca) ≥ NPSHr ({:.3f} mca) — folga de "
-                         u"{:.3f} mca.".format(npshd, npshr, folga))
-            if margem_m and folga < float(margem_m):
-                veredicto += (u" A folga é menor que a margem de segurança "
-                              u"usualmente recomendada ({:g} mca); vale rever a "
-                              u"bomba ou a geometria da sucção.".format(margem_m))
-        else:
-            veredicto = (u"NPSHd ({:.3f} mca) < NPSHr ({:.3f} mca) — falta "
-                         u"{:.3f} mca. A bomba cavita nessa instalação: é "
-                         u"preciso reduzir a perda ou a altura de sucção, ou "
-                         u"escolher bomba com NPSHr menor.".format(
-                             npshd, npshr, -folga))
-
     return {
         u"altitude_m":    altitude_m,
         u"temperatura_c": temperatura_c,
@@ -167,9 +136,4 @@ def calcular_npshd(altitude_m, temperatura_c, hs_abs_m, hf_s_mca,
         u"Hs_abs":        hs_abs,
         u"Hf_s":          hf_s,
         u"NPSHd":         npshd,
-        u"NPSHr":         (None if npshr_m is None else float(npshr_m)),
-        u"folga":         folga,
-        u"atende":        atende,
-        u"margem":        margem_m,
-        u"veredicto":     veredicto,
     }

@@ -317,9 +317,7 @@ class HydrantSystemForm(Window):
         expander.Header      = u"Configurações Avançadas"
         expander.FontWeight  = System_FontWeights_Bold()
         expander.Margin      = Thickness(0, 0, 0, 10)
-        # Só abre sozinho quando já há algo salvo — o usuário não precisa
-        # entrar aqui em toda classificação de rotina.
-        expander.IsExpanded  = bool(d[u"npshr_m"])
+        expander.IsExpanded  = False
 
         raiz = StackPanel()
         raiz.Margin = Thickness(10, 8, 10, 4)
@@ -352,33 +350,14 @@ class HydrantSystemForm(Window):
             d[u"temperatura_c"] if d[u"temperatura_c"] is not None
             else npshd_calc.TEMPERATURA_PADRAO)
 
-        self._txt_npshr = _campo(
-            raiz, u"NPSH requerido pela bomba — NPSHr (mca)", d[u"npshr_m"],
-            u"Dado de catálogo do fabricante. Sem bomba definida ainda, "
-            u"deixe em branco: o memorial mostra o NPSHd e marca a "
-            u"comparação como pendente.")
-
         expander.Content = raiz
         return expander
 
-    def _ler_succao(self, erros):
-        """Lê o bloco de NPSH; acrescenta a erros quando o NPSHr digitado é
-        inválido, e sempre devolve o dict normalizado (com npshr_m=None
-        quando o campo está vazio ou inválido)."""
-        bruto = (self._txt_npshr.Text or u"").strip().replace(u",", u".")
-        npshr = None
-        if bruto:
-            try:
-                npshr = float(bruto)
-                if npshr <= 0:
-                    raise ValueError
-            except ValueError:
-                erros.append(u"'NPSH requerido pela bomba' deve ser um número maior que zero.")
-
+    def _ler_succao(self):
+        """Lê o bloco de NPSH e devolve o dict normalizado."""
         return succao_calc.normalizar_dados({
             u"altitude_m":    self._opc_altitude[self._cmb_altitude.SelectedIndex][0],
             u"temperatura_c": self._opc_temperatura[self._cmb_temperatura.SelectedIndex][0],
-            u"npshr_m":       npshr,
         })
 
     def _set_custom_enabled(self, ativo):
@@ -453,12 +432,7 @@ class HydrantSystemForm(Window):
 
     # ------------------------------------------------------------------
     def _on_confirm(self, sender, args):
-        erros_succao = []
-        self._dados_succao = self._ler_succao(erros_succao)
-        if erros_succao:
-            alert(u"Corrija as Configurações Avançadas:\n\n– {}".format(
-                u"\n– ".join(erros_succao)))
-            return
+        self._dados_succao = self._ler_succao()
 
         if self._chk_custom.IsChecked:
             erros = custom_store.validar(self._ler_custom())
@@ -599,25 +573,6 @@ def _combo(painel, rotulo, opcoes, selecionado, dica=u""):
     if dica:
         _nota(painel, dica)
     return cmb
-
-
-def _campo(painel, rotulo, valor, dica=u""):
-    """Campo de texto simples com rótulo acima e nota opcional abaixo."""
-    lbl = Label()
-    lbl.Content  = rotulo
-    lbl.FontSize = 11
-    lbl.Padding  = Thickness(0, 0, 0, 2)
-    painel.Children.Add(lbl)
-
-    txt = TextBox()
-    txt.Height  = 23
-    txt.Padding = Thickness(3, 2, 3, 2)
-    txt.Margin  = Thickness(0, 0, 0, 2)
-    txt.Text    = u"" if valor is None else u"{:g}".format(valor)
-    painel.Children.Add(txt)
-    if dica:
-        _nota(painel, dica)
-    return txt
 
 
 def _campo_texto(rotulo, largura, valor_inicial=u""):

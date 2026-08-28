@@ -561,15 +561,6 @@ def _secao_npshd(n, erro, v, j_succao, perfil, C_HW):
                                              n[u"Hf_s"], n[u"NPSHd"]))
     output.print_md(u"")
 
-    if n[u"atende"] is None:
-        output.print_md(u"{} **Comparação pendente** — {}".format(
-            SIM_X, n[u"veredicto"]))
-    else:
-        marca = SIM_OK if n[u"atende"] else SIM_X
-        output.print_md(u"**Critério: NPSHd {} NPSHr.**".format(SIM_GE))
-        output.print_md(u"{} {}".format(marca, n[u"veredicto"]))
-    output.print_md(u"")
-
 
 def _montar_memorial(res, dados_sistema, valor_sistema,
                      cotas, succao, verif_succao,
@@ -1241,7 +1232,6 @@ if verif_succao is not None and verif_succao[u"exige_npsh"]:
                              else npshd_calc.TEMPERATURA_PADRAO),
             hs_abs_m      = verif_succao[u"hs_abs"],
             hf_s_mca      = j_succao_npsh["J"],
-            npshr_m       = dados_succao[u"npshr_m"],
         )
     except ValueError as _e:
         erro_npshd = _txt(_e)
