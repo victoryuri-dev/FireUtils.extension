@@ -300,6 +300,7 @@ rti = seleciona(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", Fitti
 output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
 
 tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
+rti_auto_detectada = tubo_rti is not None
 if not tubo_rti:
     tubo_rti = seleciona(
         u"Nao foi possivel identificar o tubo de saida da RTI.\n"
@@ -410,8 +411,15 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
     try:
         # RTI e bomba - marcados direto na propria familia, para o
         # "Dimensionar Hidrantes" achar o elemento sem precisar percorrer
-        # a rede e ler a cota do conector real dele.
-        set_param(rti, P_IDENTIFICADOR, u"RTI")
+        # a rede e ler a cota do conector real dele. Se a RTI nao foi
+        # detectada automaticamente (fallback manual: o tubo de saida foi
+        # clicado, nao achado pelo conector), quem recebe o identificador
+        # "RTI" e o proprio tubo, nao a familia - so um dos dois pode
+        # carregar essa tag.
+        if rti_auto_detectada:
+            set_param(rti, P_IDENTIFICADOR, u"RTI")
+        else:
+            set_param(tubo_rti, P_IDENTIFICADOR, u"RTI")
         set_param(bomba, P_IDENTIFICADOR, u"Bomba")
 
         # Sucção

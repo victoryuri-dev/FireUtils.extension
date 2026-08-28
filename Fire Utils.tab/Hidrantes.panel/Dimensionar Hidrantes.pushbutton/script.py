@@ -176,6 +176,23 @@ def get_cota_conector(elem, direcoes=None):
         except: continue
     return None
 
+def get_cota_rti(elem):
+    """Cota da RTI: `elem` (ident_map["RTI"]) e a familia da RTI quando
+    ela foi detectada automaticamente no "Mapear Trechos" - nesse caso
+    le o conector Out conectado dela, igual a bomba. Quando a RTI nao
+    foi detectada (fallback manual: o usuario clicou no tubo de saida),
+    quem esta marcado como "RTI" e esse tubo, e a cota vem da ponta
+    solta dele - o conector que nao esta conectado em nada."""
+    cota = get_cota_conector(elem, (FlowDirectionType.Out,))
+    if cota is not None:
+        return cota
+    for conn in get_conectores(elem):
+        try:
+            if not conn.IsConnected:
+                return to_m(conn.Origin.Z)
+        except: continue
+    return None
+
 
 # ===========================================================================
 # MEMORIAL DE CÁLCULO — passo a passo (método da marcha)
@@ -1207,7 +1224,7 @@ if erros:
 # RTI e Bomba vêm do próprio ident_map (marcados direto na família pelo
 # "Mapear Trechos"): a cota é lida direto do conector nativo delas.
 cotas = {
-    "z_rti":      get_cota_conector(ident_map[u"RTI"],   (FlowDirectionType.Out,)),
+    "z_rti":      get_cota_rti(ident_map[u"RTI"]),
     "z_succao":   get_cota_conector(ident_map[u"Bomba"], (FlowDirectionType.In,)),
     "z_recalque": get_cota_conector(ident_map[u"Bomba"], (FlowDirectionType.Out,)),
     "z_ponto_a":  get_z(ident_map[u"Ponto A"]),
