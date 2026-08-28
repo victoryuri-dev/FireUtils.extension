@@ -11,7 +11,7 @@ clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance,
-    BuiltInParameter, Transaction, UnitUtils, ElementId, FlowDirectionType,
+    BuiltInParameter, Transaction, UnitUtils, ElementId,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
@@ -54,27 +54,12 @@ def get_conectores(elem):
     except: pass
     return []
 
-def get_primeiro_tubo(elem_ini, direcoes_ini):
-    """A partir dos conectores de `elem_ini` (RTI ou bomba) cuja Direction
-    esteja em `direcoes_ini`, anda pela rede - pulando acessorios/conexoes
-    que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
-    primeiro Pipe encontrado. Retorna None se a rede nao alcancar nenhum
-    tubo nessa direcao."""
-    eid_ini = get_id(elem_ini)
-    visitados = set([eid_ini])
-    fila = deque()
-    for conn in get_conectores(elem_ini):
-        try:
-            if conn.Direction not in direcoes_ini: continue
-            if not conn.IsConnected: continue
-            for ref in conn.AllRefs:
-                viz = ref.Owner
-                vid = get_id(viz)
-                if vid not in visitados:
-                    visitados.add(vid)
-                    fila.append(viz)
-        except: continue
-
+def anda_ate_pipe(vizinhos_iniciais, ids_visitados_ini):
+    """BFS a partir de uma lista de elementos vizinhos ate achar o primeiro
+    Pipe, pulando fittings/acessorios (ex.: luva de reducao, valvula) que
+    estejam no caminho. Retorna None se nao alcancar nenhum tubo."""
+    visitados = set(ids_visitados_ini)
+    fila = deque(vizinhos_iniciais)
     while fila:
         elem = fila.popleft()
         if isinstance(elem, Pipe):
@@ -90,6 +75,27 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
                         fila.append(viz)
             except: continue
     return None
+
+def get_tubos_por_conector(elem):
+    """Para cada conector nativo e conectado de `elem` (RTI ou bomba), anda
+    pela rede (pulando fittings) e retorna a lista de Pipes encontrados -
+    um por ramificacao/conector, sem duplicar o mesmo Pipe. Nao usa a
+    Direction do conector (In/Out): muitas familias de equipamento deixam
+    isso como "Calculated", que so resolve depois de um sistema computado,
+    entao aqui a distincao entrada/saida e feita por topologia."""
+    eid = get_id(elem)
+    encontrados  = []
+    ids_vistos   = set()
+    for conn in get_conectores(elem):
+        try:
+            if not conn.IsConnected: continue
+            vizinhos = [ref.Owner for ref in conn.AllRefs if get_id(ref.Owner) != eid]
+        except: continue
+        tubo = anda_ate_pipe(vizinhos, set([eid]))
+        if tubo and get_id(tubo) not in ids_vistos:
+            ids_vistos.add(get_id(tubo))
+            encontrados.append(tubo)
+    return encontrados
 
 def get_lt(pipe):
     try:
@@ -280,7 +286,9 @@ rti = seleciona_opcional(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI
 tubo_rti = None
 if rti:
     output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
-    tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
+    candidatos_rti = get_tubos_por_conector(rti)
+    if len(candidatos_rti) == 1:
+        tubo_rti = candidatos_rti[0]
 else:
     output.print_md(u"Nenhuma RTI selecionada.")
 
@@ -291,10 +299,26 @@ if not tubo_rti:
         u"Tubo de saida da RTI", PipeFilter()
     )
 
+eid_rti = get_id(tubo_rti)
+output.print_md(u"Saida RTI: ID **{}**".format(eid_rti))
+
 bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
 output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
 
-tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
+# Acha o tubo mais proximo de cada conector da bomba e descobre qual e a
+# succao (lado que chega ate a RTI) e qual e o recalque (o outro lado),
+# em vez de depender da Direction do conector (nem sempre confiavel).
+candidatos_bomba = get_tubos_por_conector(bomba)
+
+lado_rti    = []
+lado_oposto = []
+for cand in candidatos_bomba:
+    caminho, _ = bfs_ate(cand, get_id(cand), eid_rti)
+    (lado_rti if caminho else lado_oposto).append(cand)
+
+tubo_bomba = lado_rti[0]    if len(lado_rti)    == 1 else None  # succao
+tubo_rec   = lado_oposto[0] if len(lado_oposto) == 1 else None  # recalque
+
 if not tubo_bomba:
     tubo_bomba = seleciona(
         u"Nao foi possivel identificar automaticamente o tubo de entrada (succao) da bomba.\n"
@@ -302,7 +326,6 @@ if not tubo_bomba:
         u"Tubo succao bomba", PipeFilter()
     )
 
-tubo_rec = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
 if not tubo_rec:
     tubo_rec = seleciona(
         u"Nao foi possivel identificar automaticamente o tubo de saida (recalque) da bomba.\n"
@@ -310,12 +333,11 @@ if not tubo_rec:
         u"Tubo recalque bomba", PipeFilter()
     )
 
-eid_rti   = get_id(tubo_rti)
 eid_bomba = get_id(tubo_bomba)
 eid_rec   = get_id(tubo_rec)
 
-output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
-    eid_rti, eid_bomba, eid_rec
+output.print_md(u"Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
+    eid_bomba, eid_rec
 ))
 
 # ===========================================================================
