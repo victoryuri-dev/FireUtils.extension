@@ -54,19 +54,41 @@ def get_conectores(elem):
     except: pass
     return []
 
-def get_tubo_por_direcao(elem, direcoes):
-    """Percorre os conectores nativos de `elem` cuja Direction esteja em
-    `direcoes` (In/Out) e retorna o primeiro Pipe conectado a eles.
-    Retorna None se nao houver conector com essa direcao conectado a um tubo."""
-    for conn in get_conectores(elem):
+def get_primeiro_tubo(elem_ini, direcoes_ini):
+    """A partir dos conectores de `elem_ini` (RTI ou bomba) cuja Direction
+    esteja em `direcoes_ini`, anda pela rede - pulando acessorios/conexoes
+    que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
+    primeiro Pipe encontrado. Retorna None se a rede nao alcancar nenhum
+    tubo nessa direcao."""
+    eid_ini = get_id(elem_ini)
+    visitados = set([eid_ini])
+    fila = deque()
+    for conn in get_conectores(elem_ini):
         try:
-            if conn.Direction not in direcoes: continue
+            if conn.Direction not in direcoes_ini: continue
             if not conn.IsConnected: continue
             for ref in conn.AllRefs:
-                owner = ref.Owner
-                if isinstance(owner, Pipe):
-                    return owner
+                viz = ref.Owner
+                vid = get_id(viz)
+                if vid not in visitados:
+                    visitados.add(vid)
+                    fila.append(viz)
         except: continue
+
+    while fila:
+        elem = fila.popleft()
+        if isinstance(elem, Pipe):
+            return elem
+        for conn in get_conectores(elem):
+            try:
+                if not conn.IsConnected: continue
+                for ref in conn.AllRefs:
+                    viz = ref.Owner
+                    vid = get_id(viz)
+                    if vid not in visitados:
+                        visitados.add(vid)
+                        fila.append(viz)
+            except: continue
     return None
 
 def get_lt(pipe):
@@ -258,7 +280,7 @@ rti = seleciona_opcional(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI
 tubo_rti = None
 if rti:
     output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
-    tubo_rti = get_tubo_por_direcao(rti, (FlowDirectionType.Out,))
+    tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
 else:
     output.print_md(u"Nenhuma RTI selecionada.")
 
@@ -272,7 +294,7 @@ if not tubo_rti:
 bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
 output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
 
-tubo_bomba = get_tubo_por_direcao(bomba, (FlowDirectionType.In,))
+tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
 if not tubo_bomba:
     tubo_bomba = seleciona(
         u"Nao foi possivel identificar automaticamente o tubo de entrada (succao) da bomba.\n"
@@ -280,7 +302,7 @@ if not tubo_bomba:
         u"Tubo succao bomba", PipeFilter()
     )
 
-tubo_rec = get_tubo_por_direcao(bomba, (FlowDirectionType.Out,))
+tubo_rec = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
 if not tubo_rec:
     tubo_rec = seleciona(
         u"Nao foi possivel identificar automaticamente o tubo de saida (recalque) da bomba.\n"
