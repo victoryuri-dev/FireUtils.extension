@@ -37,6 +37,13 @@ Etapa 2 — Roteamento em L:
     histórico). inverter_eixos=True: troca a ordem — seg1 fica perpendicular
     ao eixo de pipe_ref (ajusta o outro eixo primeiro) e seg2 paralelo.
 
+  seg1 "colinear com pipe_desc": antes de criar seg1 como tubo novo,
+    _tenta_estender_colinear checa se pipe_desc já aponta reto (mesma
+    direção, mesma reta) para P_mid — se sim, PROLONGA pipe_desc até lá
+    (move só o endpoint solto) em vez de criar um tubo novo + joelho ali.
+    Só se aplica quando pipe_desc ainda não sofreu nenhum ajuste de altura
+    nesse trecho (ver pipe_desc_no_knee/modo_altura="destino").
+
 Casos PIPE_REF (clique):
   corpo  → tubo horizontal P_knee→P_target + Tê (BreakCurve)
   ponta  → rota em L (seg1/seg2 conforme inverter_eixos) + joelhos
@@ -173,6 +180,51 @@ def _intersecao_com_pipe(P_start, d_ext, pt_A, pt_B):
                    pt_A.Y + d_ref_n.Y * s_cl,
                    pt_A.Z + d_ref_n.Z * s_cl)
     return P_int, t, em_ponta
+
+
+def _extremo_oposto(curve, pt):
+    """Endpoint de curve mais distante de pt (o outro extremo)."""
+    p0, p1 = curve.GetEndPoint(0), curve.GetEndPoint(1)
+    return p1 if p0.DistanceTo(pt) < p1.DistanceTo(pt) else p0
+
+
+def _tenta_estender_colinear(doc, pipe, P_fixo, P_atual, P_alvo):
+    """
+    Se `pipe` (indo de P_fixo até P_atual) já aponta, em linha reta e no
+    mesmo sentido, para P_alvo, PROLONGA pipe até P_alvo (move só o
+    endpoint P_atual, mantém P_fixo) em vez de deixar quem chamou criar um
+    tubo novo + joelho ali. Retorna True se estendeu, False se não é
+    colinear (quem chamou deve criar o tubo novo normalmente).
+    """
+    if P_atual.DistanceTo(P_alvo) < TOL:
+        return False
+
+    d_pipe = P_atual - P_fixo
+    L_pipe = d_pipe.GetLength()
+    if L_pipe < TOL:
+        return False
+    d_pipe = XYZ(d_pipe.X / L_pipe, d_pipe.Y / L_pipe, d_pipe.Z / L_pipe)
+
+    d_want = P_alvo - P_atual
+    L_want = d_want.GetLength()
+    d_want = XYZ(d_want.X / L_want, d_want.Y / L_want, d_want.Z / L_want)
+
+    if d_pipe.DotProduct(d_want) < 0.999:
+        return False  # não é o mesmo sentido/direção — precisa de joelho
+
+    # Confere colinearidade de verdade (desvio perpendicular), não só
+    # direções paralelas — mesma checagem usada na Etapa 1.
+    w      = P_alvo - P_fixo
+    w_proj = w.DotProduct(d_pipe)
+    perp   = XYZ(w.X - d_pipe.X * w_proj,
+                w.Y - d_pipe.Y * w_proj,
+                w.Z - d_pipe.Z * w_proj)
+    if perp.GetLength() > TOL_COLINEAR:
+        return False
+
+    pipe.Location.Curve = Line.CreateBound(P_fixo, P_alvo)
+    doc.Regenerate()
+    return True
 
 
 # ============================================================================
@@ -708,11 +760,17 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         conn_cur = conn_desc
 
         if needs_s1:
-            seg1   = _mk_pipe(doc, P_start, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-            c_s1_k = _conn_near(seg1, P_start)
-            c_s1_m = _conn_near(seg1, P_mid)
-            _elbows_pend.append((conn_cur, c_s1_k))
-            conn_cur = c_s1_m
+            # Se pipe_desc já aponta reto para P_mid, prolonga o próprio
+            # tubo em vez de criar um segmento novo + joelho desnecessário.
+            P_other_desc = _extremo_oposto(pipe_desc.Location.Curve, P_start)
+            if _tenta_estender_colinear(doc, pipe_desc, P_other_desc, P_start, P_mid):
+                conn_cur = _conn_near(pipe_desc, P_mid)
+            else:
+                seg1   = _mk_pipe(doc, P_start, P_mid, pt_id, sys_id, lvl_id, diam_ft)
+                c_s1_k = _conn_near(seg1, P_start)
+                c_s1_m = _conn_near(seg1, P_mid)
+                _elbows_pend.append((conn_cur, c_s1_k))
+                conn_cur = c_s1_m
 
         if needs_s2:
             seg2   = _mk_pipe(doc, P_mid, P_pre, pt_id, sys_id, lvl_id, diam_ft)
@@ -733,9 +791,14 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     else:
         # ── Muda de altura junto ao tubo DESCONECTADO (padrão) ────────────
         conn_knee = None
+        # True só quando conn_knee ainda é o conector original de pipe_desc
+        # (nenhum trecho vertical foi criado/aplicado) — só nesse caso faz
+        # sentido tentar prolongar o próprio pipe_desc no passo seguinte.
+        pipe_desc_no_knee = False
 
         if not need_vert:
             conn_knee = _conn_near(pipe_desc, P_start)
+            pipe_desc_no_knee = True
 
         elif desc_vert:
             # pipe_desc vertical: estende a curva até z_ref
@@ -769,11 +832,22 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         conn_cur = conn_knee
 
         if needs_s1:
-            seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-            c_s1_k = _conn_near(seg1, P_knee)
-            c_s1_m = _conn_near(seg1, P_mid)
-            _elbows_pend.append((conn_cur, c_s1_k))
-            conn_cur = c_s1_m
+            estendeu = False
+            if pipe_desc_no_knee:
+                # P_knee == P_start aqui (não houve trecho vertical) — se
+                # pipe_desc já aponta reto para P_mid, prolonga o próprio
+                # tubo em vez de criar um segmento novo + joelho.
+                P_other_desc = _extremo_oposto(pipe_desc.Location.Curve, P_knee)
+                estendeu = _tenta_estender_colinear(doc, pipe_desc, P_other_desc, P_knee, P_mid)
+                if estendeu:
+                    conn_cur = _conn_near(pipe_desc, P_mid)
+
+            if not estendeu:
+                seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
+                c_s1_k = _conn_near(seg1, P_knee)
+                c_s1_m = _conn_near(seg1, P_mid)
+                _elbows_pend.append((conn_cur, c_s1_k))
+                conn_cur = c_s1_m
 
         if needs_s2:
             seg2   = _mk_pipe(doc, P_mid, P_final, pt_id, sys_id, lvl_id, diam_ft)
