@@ -2,32 +2,39 @@
 """
 connect_shelter_core_preview.py — Fire Utils · lib/
 
-Versão "preview" de connect_shelter_core.py — conecta um abrigo de hidrante
-existente à rede de tubulação, mas aplica a válvula e o stub ao projeto
-IMEDIATAMENTE após o clique de direção, antes de rotear até o tubo principal.
-Assim o usuário vê a posição real no modelo antes de comprometer com a conexão
-final.
-
-Sem caixas de diálogo de confirmação: o "confirmar" é o próprio clique nativo
-do Revit. Se o usuário pressionar ESC no passo de confirmação, apenas o
-roteamento final é cancelado — a válvula e o stub já aplicados permanecem no
-projeto (desfaça com Ctrl+Z se não gostar da posição).
+Conecta um abrigo de hidrante existente à rede de tubulação: cria uma
+válvula + stub saindo do abrigo e roteia até o tubo de referência — com
+PRÉVIA AO VIVO no modelo, no mesmo padrão de connect_pipe.py.
 
 Fluxo de cliques
 ----------------
   1. Selecionar o abrigo de referência
-  2. Clicar para indicar a direção de saída do ramal (snap 90°, relativo à face do abrigo)
-     → válvula + stub são criados e APLICADOS ao projeto aqui, sem pausa/diálogo
-       (tipo/sistema de tubulação: padrão do projeto — o tubo de referência
-       ainda não foi escolhido nesta etapa)
-  3. Clicar no tubo de referência — corpo → Tê  |  ponta → joelhos em L
-  4. Clique de confirmação (em qualquer ponto) para rotear até o tubo principal
-     → ESC neste passo cancela só o roteamento; válvula/stub continuam no projeto
+  2. Clicar no tubo de referência — corpo → Tê  |  ponta → joelhos em L
+  3. Janela WPF (connect_shelter_opcoes.xaml, classe _JanelaOpcoesAbrigo)
+     pergunta:
+       • lado do ramal (esquerda/direita da face do abrigo) — antes era
+         escolhido por um clique de direção; agora é por botões, igual à
+         pergunta de altura
+       • onde a tubulação sobe/desce de altura — junto à válvula (padrão)
+         ou junto ao tubo de referência
+     A cada troca de opção, válvula + stub + roteamento são reconstruídos
+     no modelo dentro de uma transação já aberta (revertida/refeita a cada
+     mudança) — nada é gravado de fato até o usuário confirmar em OK.
+     Cancelar ou fechar a janela reverte TUDO (inclusive a válvula e o
+     stub, que antes desta versão ficavam aplicados no projeto mesmo se o
+     usuário desistisse da conexão — só desfazendo manualmente).
+     Se essa janela falhar por qualquer motivo, cai para forms.SelectFromList
+     + fluxo direto sem prévia (_escolher_opcoes_abrigo_fallback).
 
-Todo o roteamento até o tubo de referência é delegado a connect_pipe._conectar,
-para que melhorias futuras no algoritmo de roteamento beneficiem este botão automaticamente.
-Os segmentos de roteamento herdam tipo/sistema do próprio stub (ver connect_pipe._conectar),
-não do tubo de referência — por isso a ordem dos cliques 2/3 não afeta o resultado.
+Tipo e sistema de tubulação do stub — e por herança, de qualquer segmento
+criado pelo roteamento — são SEMPRE os do tubo de referência (pipe_ref),
+lido antes de criar qualquer coisa (_pipe_params, de connect_pipe.py).
+Diâmetro do stub continua fixo em DIAM_RAMAL_M (regra própria do ramal de
+hidrante, independente do diâmetro de pipe_ref).
+
+Todo o roteamento entre o stub e o tubo de referência é delegado a
+connect_pipe._construir_conexao, para que melhorias futuras no algoritmo
+de roteamento beneficiem este botão automaticamente.
 
 Nível obtido diretamente do abrigo — sem prompt ao usuário.
 """
@@ -35,15 +42,18 @@ Nível obtido diretamente do abrigo — sem prompt ao usuário.
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
+clr.AddReference("PresentationFramework")
+clr.AddReference("PresentationCore")
+clr.AddReference("WindowsBase")
 
+import os
 import math
 
 from Autodesk.Revit.DB import (
     Transaction, XYZ, Line, UnitUtils,
     ElementTransformUtils, FamilyInstance,
-    FilteredElementCollector, ElementId,
 )
-from Autodesk.Revit.DB.Plumbing import Pipe, PipeType, PipingSystemType
+from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.DB.Structure import StructuralType
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
@@ -61,7 +71,10 @@ from hydrant_insert_core import (
     ALTURA_VALVULA_M, COMP_HORIZ_M, DIAM_RAMAL_M, TOL,
     _angulo_entre, _conector_mais_proximo, _setar_diametro_ft,
 )
-from connect_pipe import _conectar, _FiltroPipe
+from connect_pipe import _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params
+
+_XAML_OPCOES_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), u"connect_shelter_opcoes.xaml")
 
 
 # ===========================================================================
@@ -80,47 +93,252 @@ class _FiltroAbrigo(ISelectionFilter):
 
 
 # ===========================================================================
-# HELPER — snap de direção
+# HELPER — direção esquerda/direita a partir da face do abrigo
 # ===========================================================================
 
-def _snap_direcao(pt_ref, pt_click, dir_face):
-    """
-    Restringe a direção a APENAS esquerda ou direita da face do abrigo
-    (perpendicular ao FacingOrientation, paralelo ao plano da face).
-    """
-    dx   = pt_click.X - pt_ref.X
-    dy   = pt_click.Y - pt_ref.Y
-    dlen = math.sqrt(dx * dx + dy * dy)
-    # Perpendiculares à face (esquerda / direita)
-    dir_dir  = XYZ(-dir_face.Y,  dir_face.X, 0.0)   # 90° CCW da face
-    dir_esq  = XYZ( dir_face.Y, -dir_face.X, 0.0)   # 90° CW  da face
-    if dlen < 1e-3:
-        return dir_dir                                # fallback: direita
-    v = XYZ(dx / dlen, dy / dlen, 0.0)
-    return max([dir_dir, dir_esq], key=lambda d: v.DotProduct(d))
+def _direcao_lado(dir_face, lado):
+    """dir_face: XYZ (normal da face do abrigo, plano horizontal).
+    lado: "esquerda" ou "direita". Retorna XYZ unitário perpendicular a
+    dir_face, no sentido escolhido."""
+    if lado == u"esquerda":
+        return XYZ(dir_face.Y, -dir_face.X, 0.0)   # 90° CW da face
+    return XYZ(-dir_face.Y, dir_face.X, 0.0)        # 90° CCW da face (direita)
 
 
 # ===========================================================================
-# HELPER — tipo/sistema de tubulação padrão (tubo de referência ainda não escolhido)
+# LÓGICA DE CONSTRUÇÃO — válvula + stub + roteamento
 # ===========================================================================
 
-def _pipe_params_padrao(doc):
+def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
+                                    pt_abrigo, nivel, dir_face,
+                                    pipe_type_id, sys_type_id, output,
+                                    lado=u"direita", modo_altura=u"origem"):
     """
-    Primeiro PipeType e PipingSystemType encontrados no projeto.
-    Usado para o stub quando o tubo de referência ainda não foi selecionado
-    (mesmo fallback já usado em outros pontos do Fire Utils).
+    Cria a válvula + stub no lado escolhido e roteia até pipe_ref. NÃO abre
+    nem fecha transação — quem chama decide (janela de prévia ou o fluxo
+    direto de fallback). Propaga _ConexaoError nas validações conhecidas de
+    connect_pipe._construir_conexao; erros inesperados propagam como
+    Exception normal.
     """
-    pipe_type_id = ElementId.InvalidElementId
-    tipos_pipe = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
-    if tipos_pipe:
-        pipe_type_id = tipos_pipe[0].Id
+    dir_pipe = _direcao_lado(dir_face, lado)
 
-    sys_type_id = ElementId.InvalidElementId
-    tipos_sys = FilteredElementCollector(doc).OfClass(PipingSystemType).ToElements()
-    if tipos_sys:
-        sys_type_id = tipos_sys[0].Id
+    z_val   = nivel.Elevation + _to_ft(ALTURA_VALVULA_M)
+    comp_ft = _to_ft(COMP_HORIZ_M)
+    diam_ft = _to_ft(DIAM_RAMAL_M)
 
-    return pipe_type_id, sys_type_id
+    # Posição da válvula: inverso do offset de _calcular_pt_abrigo.
+    # No fluxo original: pt_abrigo = pt_valvula + 0.18·dir_saida − 0.085·dir_face
+    # Aqui dir_pipe = −dir_saida (aponta de válvula→rede), logo:
+    #   pt_valvula = pt_abrigo + 0.18·dir_pipe + 0.085·dir_face
+    pt_valvula = XYZ(
+        pt_abrigo.X + _to_ft(0.18) * dir_pipe.X - _to_ft(0.085) * dir_face.X,
+        pt_abrigo.Y + _to_ft(0.18) * dir_pipe.Y - _to_ft(0.085) * dir_face.Y,
+        z_val,
+    )
+    pt_stub_end = XYZ(
+        pt_valvula.X + dir_pipe.X * comp_ft,
+        pt_valvula.Y + dir_pipe.Y * comp_ft,
+        z_val,
+    )
+
+    tubo_stub = Pipe.Create(doc, sys_type_id, pipe_type_id, nivel.Id, pt_valvula, pt_stub_end)
+    _setar_diametro_ft(tubo_stub, diam_ft)
+
+    valvula = doc.Create.NewFamilyInstance(
+        pt_valvula, simbolo, nivel, StructuralType.NonStructural
+    )
+
+    # Rotação: + π porque dir_pipe aponta para a rede;
+    # a face da válvula fica voltada para o lado do abrigo
+    angulo = _angulo_entre(XYZ(1.0, 0.0, 0.0), dir_pipe) + math.pi
+    if abs(angulo) > TOL:
+        eixo = Line.CreateBound(
+            pt_valvula, XYZ(pt_valvula.X, pt_valvula.Y, pt_valvula.Z + 1.0)
+        )
+        ElementTransformUtils.RotateElement(doc, valvula.Id, eixo, angulo)
+
+    doc.Regenerate()
+
+    # Conectar válvula ao conector próximo do stub em pt_valvula
+    best_d, conn_stub_val = float('inf'), None
+    for c in tubo_stub.ConnectorManager.Connectors:
+        d = c.Origin.DistanceTo(pt_valvula)
+        if d < best_d:
+            best_d, conn_stub_val = d, c
+
+    if conn_stub_val:
+        conn_val = _conector_mais_proximo(valvula, pt_valvula)
+        if conn_val:
+            desl = conn_stub_val.Origin - conn_val.Origin
+            if desl.GetLength() > TOL:
+                ElementTransformUtils.MoveElement(doc, valvula.Id, desl)
+            try:
+                conn_stub_val.ConnectTo(conn_val)
+            except Exception:
+                pass
+
+    doc.Regenerate()
+
+    # ── Roteamento delegado a connect_pipe ───────────────────────────────
+    # pt_stub_end identifica a ponta livre do stub; pt_click_ref distingue
+    # corpo (Tê) vs ponta (joelho) de pipe_ref.
+    _construir_conexao(doc, tubo_stub, pipe_ref, pt_stub_end, pt_click_ref,
+                        output, modo_altura=modo_altura)
+
+
+# ===========================================================================
+# FORM — preferências de conexão (lado do ramal + altura), com prévia
+# ===========================================================================
+
+class _JanelaOpcoesAbrigo(forms.WPFWindow):
+    """Janela WPF (connect_shelter_opcoes.xaml) com PRÉVIA AO VIVO: a cada
+    troca de opção (lado do ramal / onde a rota sobe-desce de altura),
+    válvula + stub + roteamento são reconstruídos no modelo dentro de uma
+    transação já aberta — revertida e refeita a cada mudança. Só é gravado
+    de fato (Commit) quando o usuário clica OK; Cancelar ou fechar a janela
+    reverte (RollBack) tudo o que foi mostrado na prévia, válvula e stub
+    incluídos."""
+
+    def __init__(self, doc, uidoc, pipe_ref, pt_click_ref, simbolo,
+                 pt_abrigo, nivel, dir_face, pipe_type_id, sys_type_id, output):
+        forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
+        self.doc           = doc
+        self.uidoc         = uidoc
+        self.pipe_ref      = pipe_ref
+        self.pt_click_ref  = pt_click_ref
+        self.simbolo       = simbolo
+        self.pt_abrigo     = pt_abrigo
+        self.nivel         = nivel
+        self.dir_face      = dir_face
+        self.pipe_type_id  = pipe_type_id
+        self.sys_type_id   = sys_type_id
+        self.output        = output
+
+        self.confirmado        = False
+        self._preview_ok       = False
+        self._transacao_ativa  = False
+
+        # Dispara on_opcao_changed (via evento Checked), mas nesse momento
+        # _transacao_ativa ainda é False, então _atualizar_preview só sai
+        # sem fazer nada — a prévia real só começa abaixo, após abrir a
+        # transação.
+        self.RbLadoDireita.IsChecked  = True
+        self.RbAlturaOrigem.IsChecked = True
+
+        self._t = Transaction(doc, u"FireUtils - Conectar Abrigo")
+        self._t.Start()
+        self._transacao_ativa = True
+        try:
+            self._atualizar_preview()
+        except Exception:
+            # _atualizar_preview já trata os erros esperados internamente;
+            # isto é só uma rede de segurança pra nunca deixar a transação
+            # presa (sem RollBack) se algo inesperado escapar daqui, o que
+            # travaria o fallback (uma transação por vez no documento).
+            self._descartar()
+            raise
+
+    def _descartar(self):
+        if self._transacao_ativa:
+            try:
+                self._t.RollBack()
+            except Exception:
+                pass
+            self._transacao_ativa = False
+
+    def _lado_atual(self):
+        return u"esquerda" if self.RbLadoEsquerda.IsChecked else u"direita"
+
+    def _modo_altura_atual(self):
+        return u"destino" if self.RbAlturaDestino.IsChecked else u"origem"
+
+    def _atualizar_preview(self):
+        """Descarta a prévia anterior e reconstrói válvula + stub + rota com
+        as opções atuais, dentro da mesma transação (ainda não confirmada)."""
+        if not self._transacao_ativa:
+            return
+        self._t.RollBack()
+        self._t.Start()
+        try:
+            _construir_valvula_stub_e_rota(
+                self.doc, self.pipe_ref, self.pt_click_ref, self.simbolo,
+                self.pt_abrigo, self.nivel, self.dir_face,
+                self.pipe_type_id, self.sys_type_id, self.output,
+                lado=self._lado_atual(), modo_altura=self._modo_altura_atual(),
+            )
+            self.doc.Regenerate()
+            self._preview_ok = True
+            self.TxtStatus.Text       = u"Pré-visualização atualizada — confirme em OK."
+            self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
+        except _ConexaoError as ex:
+            self.doc.Regenerate()
+            self._preview_ok = False
+            self.TxtStatus.Text       = u"{}".format(ex)
+            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+        except Exception as ex:
+            self.doc.Regenerate()
+            self._preview_ok = False
+            self.TxtStatus.Text       = u"Erro na prévia: {}".format(ex)
+            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+        try:
+            self.uidoc.RefreshActiveView()
+        except Exception:
+            pass
+
+    def on_opcao_changed(self, sender, args):
+        self._atualizar_preview()
+
+    def on_cancel(self, sender, args):
+        self.Close()
+
+    def on_ok(self, sender, args):
+        if not self._preview_ok:
+            forms.alert(
+                u"Não é possível confirmar com as opções atuais:\n{}".format(self.TxtStatus.Text),
+                title=u"Fire Utils", warn_icon=True)
+            return
+        self.confirmado = True
+        self.Close()
+
+    def on_closing(self, sender, args):
+        """Sempre finaliza a transação da prévia ao fechar — confirma (Commit)
+        só se o usuário clicou OK; qualquer outro fechamento reverte tudo,
+        válvula e stub incluídos."""
+        if not self._transacao_ativa:
+            return
+        if self.confirmado:
+            try:
+                self._t.Commit()
+            except Exception:
+                pass
+            self._transacao_ativa = False
+        else:
+            self._descartar()
+
+
+def _escolher_opcoes_abrigo_fallback():
+    escolha_lado = forms.SelectFromList.show(
+        [u"Esquerda", u"Direita"],
+        title=u"Fire Utils — Conectar Abrigo",
+        prompt=u"Lado do ramal (a partir da face do abrigo):",
+        multiselect=False
+    )
+    if not escolha_lado:
+        return None
+    lado = u"esquerda" if escolha_lado == u"Esquerda" else u"direita"
+
+    escolha_altura = forms.SelectFromList.show(
+        [u"Junto à válvula", u"Junto ao tubo de referência"],
+        title=u"Fire Utils — Conectar Abrigo",
+        prompt=u"Onde a tubulação deve subir/descer de altura?",
+        multiselect=False
+    )
+    if not escolha_altura:
+        return None
+    modo_altura = (u"destino" if escolha_altura == u"Junto ao tubo de referência"
+                   else u"origem")
+
+    return lado, modo_altura
 
 
 # ===========================================================================
@@ -139,7 +357,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
     try:
         ref    = uidoc.Selection.PickObject(
             ObjectType.Element, _FiltroAbrigo(),
-            u"[1/4] Selecione o abrigo de hidrante"
+            u"[1/2] Selecione o abrigo de hidrante"
         )
         abrigo = doc.GetElement(ref.ElementId)
     except Exception:
@@ -165,120 +383,59 @@ def conectar_abrigo_preview(doc, uidoc, output):
     except Exception:
         dir_face = XYZ(0.0, 1.0, 0.0)
 
-    # ── Clique 2: direção do ramal ─────────────────────────────────────
-    try:
-        pt_dir = uidoc.Selection.PickPoint(
-            u"[2/4] Clique para indicar a direção de saída do ramal"
-        )
-    except Exception:
-        pyscript.exit()
-
-    dir_pipe = _snap_direcao(pt_abrigo, pt_dir, dir_face)
-
-    # ── Geometria do stub ────────────────────────────────────────────────
-    z_val   = nivel.Elevation + _to_ft(ALTURA_VALVULA_M)
-    comp_ft = _to_ft(COMP_HORIZ_M)
-    diam_ft = _to_ft(DIAM_RAMAL_M)
-
-    # Posição da válvula: inverso do offset de _calcular_pt_abrigo.
-    # No fluxo original: pt_abrigo = pt_valvula + 0.18·dir_saida − 0.085·dir_face
-    # Aqui dir_pipe = −dir_saida (aponta de válvula→rede), logo:
-    #   pt_valvula = pt_abrigo + 0.18·dir_pipe + 0.085·dir_face
-    pt_valvula = XYZ(
-        pt_abrigo.X + _to_ft(0.18) * dir_pipe.X - _to_ft(0.085) * dir_face.X,
-        pt_abrigo.Y + _to_ft(0.18) * dir_pipe.Y - _to_ft(0.085) * dir_face.Y,
-        z_val,
-    )
-
-    pt_stub_end = XYZ(
-        pt_valvula.X + dir_pipe.X * comp_ft,
-        pt_valvula.Y + dir_pipe.Y * comp_ft,
-        z_val,
-    )
-
-    # Tubo de referência ainda não foi escolhido — usa tipo/sistema padrão do projeto
-    pipe_type_id, sys_type_id = _pipe_params_padrao(doc)
-
-    # ── Transação: válvula + stub — APLICADA IMEDIATAMENTE ────────────────
-    # Sem diálogo de confirmação: o usuário já vê o resultado no modelo aqui.
-    # Se não gostar da posição, pode desfazer com Ctrl+Z e rodar de novo.
-    tubo_stub = None
-    with Transaction(doc, u"FireUtils - Válvula e Stub do Abrigo") as t:
-        t.Start()
-        try:
-            tubo_stub = Pipe.Create(
-                doc, sys_type_id, pipe_type_id, nivel.Id,
-                pt_valvula, pt_stub_end
-            )
-            _setar_diametro_ft(tubo_stub, diam_ft)
-
-            valvula = doc.Create.NewFamilyInstance(
-                pt_valvula, simbolo, nivel, StructuralType.NonStructural
-            )
-
-            # Rotação: + π porque dir_pipe aponta para a rede;
-            # a face da válvula fica voltada para o lado do abrigo
-            angulo = _angulo_entre(XYZ(1.0, 0.0, 0.0), dir_pipe) + math.pi
-            if abs(angulo) > TOL:
-                eixo = Line.CreateBound(
-                    pt_valvula,
-                    XYZ(pt_valvula.X, pt_valvula.Y, pt_valvula.Z + 1.0)
-                )
-                ElementTransformUtils.RotateElement(doc, valvula.Id, eixo, angulo)
-
-            doc.Regenerate()
-
-            # Conectar válvula ao conector próximo do stub em pt_valvula
-            best_d, conn_stub_val = float('inf'), None
-            for c in tubo_stub.ConnectorManager.Connectors:
-                d = c.Origin.DistanceTo(pt_valvula)
-                if d < best_d:
-                    best_d, conn_stub_val = d, c
-
-            if conn_stub_val:
-                conn_val = _conector_mais_proximo(valvula, pt_valvula)
-                if conn_val:
-                    desl = conn_stub_val.Origin - conn_val.Origin
-                    if desl.GetLength() > TOL:
-                        ElementTransformUtils.MoveElement(doc, valvula.Id, desl)
-                    try:
-                        conn_stub_val.ConnectTo(conn_val)
-                    except Exception:
-                        pass
-
-            t.Commit()
-        except Exception as e:
-            t.RollBack()
-            forms.alert(
-                u"Erro ao criar válvula e stub:\n{}".format(str(e)),
-                title=u"Fire Utils – Erro", warn_icon=True
-            )
-            pyscript.exit()
-
-    # ── Clique 3: tubo de referência ────────────────────────────────────
+    # ── Clique 2: tubo de referência ─────────────────────────────────────
     try:
         ref_p        = uidoc.Selection.PickObject(
             ObjectType.PointOnElement, _FiltroPipe(),
-            u"[3/4] Clique no tubo de referência — corpo para Tê, ponta para joelho"
+            u"[2/2] Clique no tubo de referência — corpo para Tê, ponta para joelho"
         )
         pipe_ref     = doc.GetElement(ref_p.ElementId)
         pt_click_ref = ref_p.GlobalPoint
     except Exception:
         pyscript.exit()
 
-    # ── Clique 4: confirmação nativa (sem diálogo) ─────────────────────────
-    # Válvula e stub já estão aplicados no projeto — visíveis para conferência.
-    # Qualquer clique aqui prossegue com a conexão ao tubo principal;
-    # ESC cancela apenas este roteamento final (válvula/stub continuam no projeto).
-    try:
-        uidoc.Selection.PickPoint(
-            u"[4/4] Posição aplicada. Clique para conectar ao tubo principal "
-            u"(ESC cancela só a conexão final — válvula/stub ficam no projeto)"
-        )
-    except Exception:
-        pyscript.exit()
+    # Tipo e sistema de tubulação SEMPRE herdados do tubo de referência
+    pipe_type_id, sys_type_id, _, _ = _pipe_params(doc, pipe_ref)
 
-    # ── Roteamento delegado a connect_pipe ───────────────────────────────
-    # pt_stub_end identifica a ponta livre do stub para _conectar.
-    # pt_click_ref distingue corpo (Tê) vs ponta (joelho) do pipe_ref.
-    _conectar(doc, tubo_stub, pipe_ref, pt_stub_end, pt_click_ref, output)
+    # ── Preferências (lado + altura), com prévia ao vivo no modelo ─────────
+    janela = None
+    try:
+        janela = _JanelaOpcoesAbrigo(doc, uidoc, pipe_ref, pt_click_ref, simbolo,
+                                      pt_abrigo, nivel, dir_face,
+                                      pipe_type_id, sys_type_id, output)
+        janela.ShowDialog()
+        return
+    except Exception as ex:
+        # Se falhar depois da janela já ter aberto, garante que a
+        # transação da prévia não fique presa — senão o fallback abaixo
+        # não conseguiria abrir a dele (só uma transação por vez).
+        if janela is not None:
+            janela._descartar()
+        print(u"[AVISO] Formulário WPF de Conectar Abrigo falhou ({}), "
+              u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
+
+    # ── Fallback sem prévia ──────────────────────────────────────────────
+    opcoes = _escolher_opcoes_abrigo_fallback()
+    if opcoes is None:
+        pyscript.exit()
+    lado, modo_altura = opcoes
+
+    with Transaction(doc, u"FireUtils - Conectar Abrigo") as t:
+        t.Start()
+        try:
+            _construir_valvula_stub_e_rota(
+                doc, pipe_ref, pt_click_ref, simbolo,
+                pt_abrigo, nivel, dir_face,
+                pipe_type_id, sys_type_id, output,
+                lado=lado, modo_altura=modo_altura,
+            )
+            t.Commit()
+        except _ConexaoError as ex:
+            t.RollBack()
+            forms.alert(u"{}".format(ex), title=u"Fire Utils", warn_icon=True)
+        except Exception as ex:
+            t.RollBack()
+            forms.alert(
+                u"Erro ao criar válvula, stub e conexão:\n{}".format(str(ex)),
+                title=u"Fire Utils – Erro", warn_icon=True
+            )
