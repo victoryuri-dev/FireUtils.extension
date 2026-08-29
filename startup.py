@@ -20,6 +20,7 @@ caso — ver family_loader_forms.alternar_painel).
 
 import os
 import sys
+import traceback
 
 from pyrevit import forms
 from pyrevit.coreutils.logger import get_logger
@@ -39,7 +40,15 @@ try:
 
     if not forms.is_registered_dockable_panel(PainelCarregadorFamilias):
         forms.register_dockable_panel(PainelCarregadorFamilias, default_visible=False)
+        print(u"[OK] Dockable Pane do Carregador de Famílias registrado.")
+    else:
+        print(u"[OK] Dockable Pane do Carregador de Famílias já estava registrado.")
 except Exception:
+    # _mlogger.exception manda só pro log em arquivo do pyRevit (fácil de
+    # passar despercebido); o print força a abertura da output window
+    # dedicada do startup script, com o traceback completo bem visível.
     _mlogger.exception(
         u"Falha ao registrar o Dockable Pane do Carregador de Famílias"
     )
+    print(u"[ERRO] Falha ao registrar o Dockable Pane do Carregador de Famílias:")
+    print(traceback.format_exc())
