@@ -5,7 +5,8 @@
         SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
-        Background="#F5F5F5">
+        Background="#F5F5F5"
+        Closing="on_closing">
 
     <Window.Resources>
         <SolidColorBrush x:Key="BrushCard"    Color="#FFFFFF"/>
@@ -15,6 +16,8 @@
         <SolidColorBrush x:Key="BrushAccent"  Color="#D83B01"/>
         <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
         <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
+        <SolidColorBrush x:Key="BrushOk"      Color="#1B7A3D"/>
+        <SolidColorBrush x:Key="BrushWarn"    Color="#B03A2E"/>
 
         <Style x:Key="LabelStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>
@@ -47,19 +50,24 @@
             <StackPanel>
 
                 <TextBlock Text="Onde a tubulação deve subir/descer de altura?" Style="{StaticResource LabelStyle}"/>
-                <ComboBox x:Name="CbAltura" Style="{StaticResource ComboStyle}">
+                <ComboBox x:Name="CbAltura" Style="{StaticResource ComboStyle}"
+                          SelectionChanged="on_opcao_changed">
                     <ComboBoxItem Content="Junto ao tubo desconectado" Tag="origem"/>
                     <ComboBoxItem Content="Junto ao tubo de referência" Tag="destino"/>
                 </ComboBox>
 
                 <TextBlock Text="Ordem dos eixos horizontais (X/Y) na rota" Style="{StaticResource LabelStyle}"/>
-                <ComboBox x:Name="CbEixo" Style="{StaticResource ComboStyle}" Margin="0,0,0,0">
+                <ComboBox x:Name="CbEixo" Style="{StaticResource ComboStyle}" Margin="0,0,0,0"
+                          SelectionChanged="on_opcao_changed">
                     <ComboBoxItem Content="Padrão (ajusta primeiro o eixo do tubo referência)" Tag="padrao"/>
                     <ComboBoxItem Content="Invertida (troca a ordem dos eixos X/Y)" Tag="invertida"/>
                 </ComboBox>
 
             </StackPanel>
         </Border>
+
+        <TextBlock x:Name="TxtStatus" Text="Pré-visualizando…" FontSize="11" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushOk}" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="BtnCancelar" Content="Cancelar" Style="{StaticResource BotaoStyle}"

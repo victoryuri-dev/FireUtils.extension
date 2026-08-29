@@ -6,11 +6,18 @@ Conecta dois tubos com roteamento em ângulos retos.
 Fluxo:
   Clique 1 — ponta do PIPE_DESC (tubo desconectado)
   Clique 2 — PIPE_REF (tubo referência): corpo → cria Tê  |  ponta → roteia até a ponta com joelhos
-  Form     — um único diálogo (FlexForm) reúne as duas preferências de rota:
+  Form     — janela WPF (connect_pipe_opcoes.xaml, classe _JanelaOpcoesRota)
+             reúne as duas preferências de rota E mostra PRÉVIA AO VIVO no
+             modelo a cada mudança de opção (dentro de uma transação aberta,
+             revertida/refeita a cada troca — só grava de fato no OK):
              • onde a rota sobe/desce de altura: junto ao tubo desconectado
-               (padrão) ou junto ao tubo de referência (ver modo_altura em _conectar)
+               (padrão) ou junto ao tubo de referência (ver modo_altura em
+               _construir_conexao)
              • ordem dos eixos horizontais X/Y: padrão (primeiro paralelo ao
                eixo do tubo referência) ou invertida (ver inverter_eixos)
+             Se essa janela falhar por qualquer motivo, cai para dois
+             diálogos forms.SelectFromList em sequência + fluxo sem prévia
+             (_escolher_opcoes_rota_fallback + _conectar).
 
 Etapa 1 — Extensão direta:
   Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref
@@ -325,40 +332,120 @@ class _FiltroPipe(ISelectionFilter):
 # ============================================================================
 
 class _JanelaOpcoesRota(forms.WPFWindow):
-    """Janela WPF (connect_pipe_opcoes.xaml) que reúne, num único diálogo,
-    as duas preferências de roteamento: onde a rota sobe/desce de altura e
-    a ordem de ajuste dos eixos horizontais X/Y."""
+    """Janela WPF (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a cada troca
+    de opção (altura / ordem dos eixos X-Y), o tubo é reconstruído no modelo
+    dentro de uma transação já aberta — revertida e refeita a cada mudança —
+    para o usuário ver o resultado antes de confirmar. Só é gravado de fato
+    (Commit) quando o usuário clica OK; Cancelar ou fechar a janela reverte
+    (RollBack) tudo o que foi mostrado na prévia."""
 
-    def __init__(self):
+    def __init__(self, doc, uidoc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
         forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
-        self.confirmado = False
+        self.doc           = doc
+        self.uidoc         = uidoc
+        self.pipe_desc     = pipe_desc
+        self.pipe_ref      = pipe_ref
+        self.pt_click_desc = pt_click_desc
+        self.pt_click_ref  = pt_click_ref
+        self.output        = output
+
+        self.confirmado        = False
+        self._preview_ok       = False
+        self._transacao_ativa  = False
+
         self.CbAltura.SelectedIndex = 0
         self.CbEixo.SelectedIndex   = 0
+
+        self._t = Transaction(doc, u"FireUtils - Conectar Tubo")
+        self._t.Start()
+        self._transacao_ativa = True
+        try:
+            self._atualizar_preview()
+        except Exception:
+            # _atualizar_preview já trata os erros esperados internamente;
+            # isto é só uma rede de segurança pra nunca deixar a transação
+            # presa (sem RollBack) se algo inesperado escapar daqui, o que
+            # travaria o fallback (uma transação por vez no documento).
+            self._descartar()
+            raise
+
+    def _descartar(self):
+        if self._transacao_ativa:
+            try:
+                self._t.RollBack()
+            except Exception:
+                pass
+            self._transacao_ativa = False
+
+    def _modo_altura_atual(self):
+        item = self.CbAltura.SelectedItem
+        return item.Tag if item is not None else u"origem"
+
+    def _inverter_eixos_atual(self):
+        item = self.CbEixo.SelectedItem
+        return item is not None and item.Tag == u"invertida"
+
+    def _atualizar_preview(self):
+        """Descarta a prévia anterior e reconstrói a conexão com as opções
+        atuais, dentro da mesma transação (ainda não confirmada)."""
+        if not self._transacao_ativa:
+            return
+        self._t.RollBack()
+        self._t.Start()
+        try:
+            _construir_conexao(
+                self.doc, self.pipe_desc, self.pipe_ref,
+                self.pt_click_desc, self.pt_click_ref, self.output,
+                modo_altura=self._modo_altura_atual(),
+                inverter_eixos=self._inverter_eixos_atual(),
+            )
+            self.doc.Regenerate()
+            self._preview_ok = True
+            self.TxtStatus.Text       = u"Pré-visualização atualizada — confirme em OK."
+            self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
+        except _ConexaoError as ex:
+            self.doc.Regenerate()
+            self._preview_ok = False
+            self.TxtStatus.Text       = u"{}".format(ex)
+            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+        except Exception as ex:
+            self.doc.Regenerate()
+            self._preview_ok = False
+            self.TxtStatus.Text       = u"Erro na prévia: {}".format(ex)
+            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+        try:
+            self.uidoc.RefreshActiveView()
+        except Exception:
+            pass
+
+    def on_opcao_changed(self, sender, args):
+        self._atualizar_preview()
 
     def on_cancel(self, sender, args):
         self.Close()
 
     def on_ok(self, sender, args):
+        if not self._preview_ok:
+            forms.alert(
+                u"Não é possível confirmar com as opções atuais:\n{}".format(self.TxtStatus.Text),
+                title=u"Fire Utils", warn_icon=True)
+            return
         self.confirmado = True
         self.Close()
 
-
-def _escolher_opcoes_rota():
-    """Mostra o diálogo WPF de preferências e retorna (modo_altura,
-    inverter_eixos), ou None se o usuário cancelar. Se a janela WPF falhar
-    por qualquer motivo, cai para dois diálogos forms.SelectFromList em
-    sequência (comportamento mais simples, porém já testado e funcional)."""
-    try:
-        janela = _JanelaOpcoesRota()
-        janela.ShowDialog()
-        if not janela.confirmado:
-            return None
-        return janela.CbAltura.SelectedItem.Tag, (
-            janela.CbEixo.SelectedItem.Tag == u"invertida")
-    except Exception as ex:
-        print(u"[AVISO] Formulário WPF de Conectar Tubo falhou ({}), "
-              u"usando formulário padrão do pyRevit.".format(ex))
-        return _escolher_opcoes_rota_fallback()
+    def on_closing(self, sender, args):
+        """Sempre finaliza a transação da prévia ao fechar — confirma (Commit)
+        só se o usuário clicou OK; qualquer outro fechamento reverte tudo."""
+        if not self._transacao_ativa:
+            return
+        if self.confirmado:
+            try:
+                self._t.Commit()
+            except Exception:
+                pass
+            self._transacao_ativa = False
+        else:
+            self._descartar()
 
 
 def _escolher_opcoes_rota_fallback():
@@ -419,8 +506,23 @@ def run(doc, uidoc, output):
                     title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
-    # ── Preferências de roteamento (altura + ordem dos eixos X/Y) ──────────
-    opcoes = _escolher_opcoes_rota()
+    # ── Preferências de roteamento, com prévia ao vivo no modelo ────────────
+    janela = None
+    try:
+        janela = _JanelaOpcoesRota(doc, uidoc, pipe_desc, pipe_ref,
+                                    pt_click_desc, pt_click_ref, output)
+        janela.ShowDialog()
+        return
+    except Exception as ex:
+        # Se falhar depois da janela já ter aberto (ex.: erro ao exibir),
+        # garante que a transação da prévia não fique presa — senão o
+        # fallback abaixo não conseguiria abrir a dele (só uma por vez).
+        if janela is not None:
+            janela._descartar()
+        print(u"[AVISO] Formulário WPF com prévia de Conectar Tubo falhou ({}), "
+              u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
+
+    opcoes = _escolher_opcoes_rota_fallback()
     if opcoes is None:
         pyscript.exit()
     modo_altura, inverter_eixos = opcoes
@@ -433,9 +535,20 @@ def run(doc, uidoc, output):
 # LÓGICA DE CONEXÃO
 # ============================================================================
 
-def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-              modo_altura=u"origem", inverter_eixos=False):
+class _ConexaoError(Exception):
+    """Falha de validação/criação conhecida — mensagem já pronta para o
+    usuário (alerta no fluxo sem prévia, texto de status no fluxo com
+    prévia). Erros inesperados propagam como Exception normal."""
+    pass
+
+
+def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
+                        modo_altura=u"origem", inverter_eixos=False):
     """
+    Lógica pura de conexão — NÃO abre/fecha transação (fica a cargo de
+    quem chama: _conectar, no fluxo direto, ou a janela de prévia, que
+    reconstrói isso a cada mudança de opção dentro da MESMA transação).
+
     modo_altura : "origem"  → sobe/desce logo na saída do tubo desconectado
                               (comportamento padrão/histórico).
                   "destino" → roteia horizontalmente na cota do tubo
@@ -458,18 +571,12 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
         conn_desc = _conn_nearest(pipe_desc, mid_fb)
 
     if conn_desc is None:
-        forms.alert(u"Não foi possível encontrar conector no tubo desconectado.",
-                    title=u"Fire Utils", warn_icon=True)
-        return
+        raise _ConexaoError(u"Não foi possível encontrar conector no tubo desconectado.")
 
     if conn_desc.IsConnected:
-        forms.alert(
+        raise _ConexaoError(
             u"A ponta selecionada do tubo já está conectada a outro elemento.\n"
-            u"Selecione uma ponta livre (sem conexão).",
-            title=u"Fire Utils – Ponta Ocupada",
-            warn_icon=True
-        )
-        return
+            u"Selecione uma ponta livre (sem conexão).")
 
     P_start = conn_desc.Origin
 
@@ -508,29 +615,19 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
         resultado = _intersecao_com_pipe(P_start, d_ext, pt_A, pt_B)
         if resultado is not None:
             P_int, t_ext, em_ponta_int = resultado
-            with Transaction(doc, u"FireUtils - Conectar Tubo") as t:
-                t.Start()
-                try:
-                    if t_ext > TOL:
-                        pipe_desc.Location.Curve = Line.CreateBound(P_other, P_int)
-                        doc.Regenerate()
-                    conn_end = _conn_near(pipe_desc, P_int)
-                    if conn_end:
-                        if em_ponta_int:
-                            at_end_a = P_int.DistanceTo(pt_A) < _to_ft(0.05)
-                            pt_ponta = pt_A if at_end_a else pt_B
-                            c_ponta  = _conn_near(pipe_ref, pt_ponta)
-                            if c_ponta:
-                                _elbow(doc, c_ponta, conn_end)
-                        else:
-                            _tee(doc, pipe_ref, P_int, conn_end)
-                    t.Commit()
-                except Exception as ex:
-                    t.RollBack()
-                    forms.alert(
-                        u"Erro ao estender o tubo:\n{}".format(str(ex)),
-                        title=u"Fire Utils – Erro",
-                        warn_icon=True)
+            if t_ext > TOL:
+                pipe_desc.Location.Curve = Line.CreateBound(P_other, P_int)
+                doc.Regenerate()
+            conn_end = _conn_near(pipe_desc, P_int)
+            if conn_end:
+                if em_ponta_int:
+                    at_end_a = P_int.DistanceTo(pt_A) < _to_ft(0.05)
+                    pt_ponta = pt_A if at_end_a else pt_B
+                    c_ponta  = _conn_near(pipe_ref, pt_ponta)
+                    if c_ponta:
+                        _elbow(doc, c_ponta, conn_end)
+                else:
+                    _tee(doc, pipe_ref, P_int, conn_end)
             return
 
         # Caso colinear: tubos alinhados ponta a ponta.
@@ -558,23 +655,13 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                 candidates.append((t_b, pt_B))
             if candidates:
                 _, pt_join = min(candidates, key=lambda x: x[0])
-                with Transaction(doc, u"FireUtils - Conectar Tubo") as tx:
-                    tx.Start()
-                    try:
-                        if P_start.DistanceTo(pt_join) > TOL:
-                            pipe_desc.Location.Curve = Line.CreateBound(P_other, pt_join)
-                            doc.Regenerate()
-                        conn_end = _conn_near(pipe_desc, pt_join)
-                        c_ep     = _conn_near(pipe_ref,  pt_join)
-                        if conn_end and c_ep:
-                            conn_end.ConnectTo(c_ep)
-                        tx.Commit()
-                    except Exception as ex:
-                        tx.RollBack()
-                        forms.alert(
-                            u"Erro ao conectar tubos colineares:\n{}".format(str(ex)),
-                            title=u"Fire Utils – Erro",
-                            warn_icon=True)
+                if P_start.DistanceTo(pt_join) > TOL:
+                    pipe_desc.Location.Curve = Line.CreateBound(P_other, pt_join)
+                    doc.Regenerate()
+                conn_end = _conn_near(pipe_desc, pt_join)
+                c_ep     = _conn_near(pipe_ref,  pt_join)
+                if conn_end and c_ep:
+                    conn_end.ConnectTo(c_ep)
                 return
 
     # ── Etapa 2: roteamento em L ─────────────────────────────────────────────
@@ -599,9 +686,7 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
         need_horiz = True
 
     if not need_vert and not need_horiz and not clicou_ponta:
-        forms.alert(u"Os tubos já estão alinhados — nenhuma conexão necessária.",
-                    title=u"Fire Utils")
-        return
+        raise _ConexaoError(u"Os tubos já estão alinhados — nenhuma conexão necessária.")
 
     # Ponto final da rota — onde o último trecho encontra pipe_ref.
     P_final = pt_endpoint if clicou_ponta else P_target
@@ -609,143 +694,148 @@ def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
     pt_id, sys_id, _,      diam_ft = _pipe_params(doc, pipe_desc)
     _,     _,      lvl_id, _       = _pipe_params(doc, pipe_ref)
 
+    _elbows_pend = []
+
+    if modo_altura == u"destino":
+        # ── Muda de altura junto ao tubo de REFERÊNCIA ────────────────────
+        # Roteia horizontalmente ainda na cota do tubo desconectado,
+        # alinhando X/Y ao ponto final; sobe/desce só no último trecho.
+        P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
+        P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
+            P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
+        conn_cur = conn_desc
+
+        if needs_s1:
+            seg1   = _mk_pipe(doc, P_start, P_mid, pt_id, sys_id, lvl_id, diam_ft)
+            c_s1_k = _conn_near(seg1, P_start)
+            c_s1_m = _conn_near(seg1, P_mid)
+            _elbows_pend.append((conn_cur, c_s1_k))
+            conn_cur = c_s1_m
+
+        if needs_s2:
+            seg2   = _mk_pipe(doc, P_mid, P_pre, pt_id, sys_id, lvl_id, diam_ft)
+            c_s2_m = _conn_near(seg2, P_mid)
+            c_s2_e = _conn_near(seg2, P_pre)
+            _elbows_pend.append((conn_cur, c_s2_m))
+            conn_cur = c_s2_e
+
+        if need_vert:
+            pipe_vert = _mk_pipe(doc, P_pre, P_final, pt_id, sys_id, lvl_id, diam_ft)
+            c_v_pre   = _conn_near(pipe_vert, P_pre)
+            c_v_final = _conn_near(pipe_vert, P_final)
+            _elbows_pend.append((conn_cur, c_v_pre))
+            conn_cur = c_v_final
+
+        conn_final = conn_cur
+
+    else:
+        # ── Muda de altura junto ao tubo DESCONECTADO (padrão) ────────────
+        conn_knee = None
+
+        if not need_vert:
+            conn_knee = _conn_near(pipe_desc, P_start)
+
+        elif desc_vert:
+            # pipe_desc vertical: estende a curva até z_ref
+            c  = pipe_desc.Location.Curve
+            p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
+            if p0.DistanceTo(P_start) < p1.DistanceTo(P_start):
+                pipe_desc.Location.Curve = Line.CreateBound(
+                    XYZ(p0.X, p0.Y, z_ref), p1)
+            else:
+                pipe_desc.Location.Curve = Line.CreateBound(
+                    p0, XYZ(p1.X, p1.Y, z_ref))
+            doc.Regenerate()
+            conn_knee = _conn_near(pipe_desc, P_knee)
+
+        else:
+            # pipe_desc horizontal: cria tubo vertical P_start → P_knee
+            pipe_vert = _mk_pipe(doc, P_start, P_knee, pt_id, sys_id, lvl_id, diam_ft)
+            conn_knee = _conn_near(pipe_vert, P_knee)
+            c_d       = _conn_near(pipe_desc,  P_start)
+            c_v       = _conn_near(pipe_vert,  P_start)
+            _elbows_pend.append((c_d, c_v))
+
+        if conn_knee is None:
+            raise _ConexaoError(u"Não foi possível localizar o conector em P_knee.")
+
+        # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
+        # seg2 perpendicular. Garante ângulos retos mesmo quando
+        # P_knee está fora da extensão lateral de pipe_ref.
+        P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
+            P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
+        conn_cur = conn_knee
+
+        if needs_s1:
+            seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
+            c_s1_k = _conn_near(seg1, P_knee)
+            c_s1_m = _conn_near(seg1, P_mid)
+            _elbows_pend.append((conn_cur, c_s1_k))
+            conn_cur = c_s1_m
+
+        if needs_s2:
+            seg2   = _mk_pipe(doc, P_mid, P_final, pt_id, sys_id, lvl_id, diam_ft)
+            c_s2_m = _conn_near(seg2, P_mid)
+            c_s2_e = _conn_near(seg2, P_final)
+            _elbows_pend.append((conn_cur, c_s2_m))
+            conn_cur = c_s2_e
+
+        conn_final = conn_cur
+
+    # ── Conexão final a pipe_ref: Tê (modo corpo) ou joelho (modo ponta) ──────
+    if not clicou_ponta:
+        if conn_final:
+            doc.Regenerate()
+            _TOL_PONTA_GEO = _to_ft(0.05)
+            at_end_a = P_final.DistanceTo(pt_A) < _TOL_PONTA_GEO
+            at_end_b = P_final.DistanceTo(pt_B) < _TOL_PONTA_GEO
+            if at_end_a or at_end_b:
+                pt_ponta = pt_A if at_end_a else pt_B
+                c_ponta  = _conn_near(pipe_ref, pt_ponta)
+                if c_ponta:
+                    ok = _elbow(doc, c_ponta, conn_final)
+                    if not ok:
+                        output.print_md(u"| Joelho na ponta | **falhou** |")
+            else:
+                ok = _tee(doc, pipe_ref, P_final, conn_final)
+                if not ok:
+                    output.print_md(u"| Tê | **falhou** — verifique se há família de tê carregada |")
+
+            doc.Regenerate()
+            for c1, c2 in _elbows_pend:
+                _elbow(doc, c1, c2)
+
+    else:
+        doc.Regenerate()
+        c_ref_end = _conn_near(pipe_ref, P_final)
+        if c_ref_end and conn_final:
+            ok = _elbow(doc, c_ref_end, conn_final)
+            if not ok:
+                output.print_md(
+                    u"| Joelho na ponta | **falhou** — "
+                    u"verifique se o endpoint de pipe_ref está livre |")
+
+        doc.Regenerate()
+        for c1, c2 in _elbows_pend:
+            _elbow(doc, c1, c2)
+
+
+def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
+              modo_altura=u"origem", inverter_eixos=False):
+    """Fluxo direto (sem prévia) — abre/fecha a transação e mostra alerta em
+    caso de falha. Usado como fallback quando a janela de prévia falha."""
     with Transaction(doc, u"FireUtils - Conectar Tubo") as t:
         t.Start()
         try:
-            _elbows_pend = []
-
-            if modo_altura == u"destino":
-                # ── Muda de altura junto ao tubo de REFERÊNCIA ────────────────
-                # Roteia horizontalmente ainda na cota do tubo desconectado,
-                # alinhando X/Y ao ponto final; sobe/desce só no último trecho.
-                P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
-                    P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
-                conn_cur = conn_desc
-
-                if needs_s1:
-                    seg1   = _mk_pipe(doc, P_start, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-                    c_s1_k = _conn_near(seg1, P_start)
-                    c_s1_m = _conn_near(seg1, P_mid)
-                    _elbows_pend.append((conn_cur, c_s1_k))
-                    conn_cur = c_s1_m
-
-                if needs_s2:
-                    seg2   = _mk_pipe(doc, P_mid, P_pre, pt_id, sys_id, lvl_id, diam_ft)
-                    c_s2_m = _conn_near(seg2, P_mid)
-                    c_s2_e = _conn_near(seg2, P_pre)
-                    _elbows_pend.append((conn_cur, c_s2_m))
-                    conn_cur = c_s2_e
-
-                if need_vert:
-                    pipe_vert = _mk_pipe(doc, P_pre, P_final, pt_id, sys_id, lvl_id, diam_ft)
-                    c_v_pre   = _conn_near(pipe_vert, P_pre)
-                    c_v_final = _conn_near(pipe_vert, P_final)
-                    _elbows_pend.append((conn_cur, c_v_pre))
-                    conn_cur = c_v_final
-
-                conn_final = conn_cur
-
-            else:
-                # ── Muda de altura junto ao tubo DESCONECTADO (padrão) ────────
-                conn_knee = None
-
-                if not need_vert:
-                    conn_knee = _conn_near(pipe_desc, P_start)
-
-                elif desc_vert:
-                    # pipe_desc vertical: estende a curva até z_ref
-                    c  = pipe_desc.Location.Curve
-                    p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
-                    if p0.DistanceTo(P_start) < p1.DistanceTo(P_start):
-                        pipe_desc.Location.Curve = Line.CreateBound(
-                            XYZ(p0.X, p0.Y, z_ref), p1)
-                    else:
-                        pipe_desc.Location.Curve = Line.CreateBound(
-                            p0, XYZ(p1.X, p1.Y, z_ref))
-                    doc.Regenerate()
-                    conn_knee = _conn_near(pipe_desc, P_knee)
-
-                else:
-                    # pipe_desc horizontal: cria tubo vertical P_start → P_knee
-                    pipe_vert = _mk_pipe(doc, P_start, P_knee, pt_id, sys_id, lvl_id, diam_ft)
-                    conn_knee = _conn_near(pipe_vert, P_knee)
-                    c_d       = _conn_near(pipe_desc,  P_start)
-                    c_v       = _conn_near(pipe_vert,  P_start)
-                    _elbows_pend.append((c_d, c_v))
-
-                if conn_knee is None:
-                    forms.alert(
-                        u"Não foi possível localizar o conector em P_knee.",
-                        title=u"Fire Utils", warn_icon=True)
-                    t.RollBack()
-                    return
-
-                # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
-                # seg2 perpendicular. Garante ângulos retos mesmo quando
-                # P_knee está fora da extensão lateral de pipe_ref.
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
-                    P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
-                conn_cur = conn_knee
-
-                if needs_s1:
-                    seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-                    c_s1_k = _conn_near(seg1, P_knee)
-                    c_s1_m = _conn_near(seg1, P_mid)
-                    _elbows_pend.append((conn_cur, c_s1_k))
-                    conn_cur = c_s1_m
-
-                if needs_s2:
-                    seg2   = _mk_pipe(doc, P_mid, P_final, pt_id, sys_id, lvl_id, diam_ft)
-                    c_s2_m = _conn_near(seg2, P_mid)
-                    c_s2_e = _conn_near(seg2, P_final)
-                    _elbows_pend.append((conn_cur, c_s2_m))
-                    conn_cur = c_s2_e
-
-                conn_final = conn_cur
-
-            # ── Conexão final a pipe_ref: Tê (modo corpo) ou joelho (modo ponta) ──
-            if not clicou_ponta:
-                if conn_final:
-                    doc.Regenerate()
-                    _TOL_PONTA_GEO = _to_ft(0.05)
-                    at_end_a = P_final.DistanceTo(pt_A) < _TOL_PONTA_GEO
-                    at_end_b = P_final.DistanceTo(pt_B) < _TOL_PONTA_GEO
-                    if at_end_a or at_end_b:
-                        pt_ponta = pt_A if at_end_a else pt_B
-                        c_ponta  = _conn_near(pipe_ref, pt_ponta)
-                        if c_ponta:
-                            ok = _elbow(doc, c_ponta, conn_final)
-                            if not ok:
-                                output.print_md(u"| Joelho na ponta | **falhou** |")
-                    else:
-                        ok = _tee(doc, pipe_ref, P_final, conn_final)
-                        if not ok:
-                            output.print_md(u"| Tê | **falhou** — verifique se há família de tê carregada |")
-
-                    doc.Regenerate()
-                    for c1, c2 in _elbows_pend:
-                        _elbow(doc, c1, c2)
-
-            else:
-                doc.Regenerate()
-                c_ref_end = _conn_near(pipe_ref, P_final)
-                if c_ref_end and conn_final:
-                    ok = _elbow(doc, c_ref_end, conn_final)
-                    if not ok:
-                        output.print_md(
-                            u"| Joelho na ponta | **falhou** — "
-                            u"verifique se o endpoint de pipe_ref está livre |")
-
-                doc.Regenerate()
-                for c1, c2 in _elbows_pend:
-                    _elbow(doc, c1, c2)
-
+            _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
+                                output, modo_altura=modo_altura, inverter_eixos=inverter_eixos)
             t.Commit()
-
-        except Exception as e:
+        except _ConexaoError as ex:
+            t.RollBack()
+            forms.alert(u"{}".format(ex), title=u"Fire Utils", warn_icon=True)
+        except Exception as ex:
             t.RollBack()
             forms.alert(
-                u"Erro ao criar a conexão:\n{}".format(str(e)),
+                u"Erro ao criar a conexão:\n{}".format(str(ex)),
                 title=u"Fire Utils – Erro",
                 warn_icon=True)
