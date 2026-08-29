@@ -35,9 +35,14 @@ Casos PIPE_REF (clique):
   ponta  → rota em L (seg1/seg2 conforme inverter_eixos) + joelhos
 """
 
+import os
+
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
+clr.AddReference("PresentationFramework")
+clr.AddReference("PresentationCore")
+clr.AddReference("WindowsBase")
 
 import math
 
@@ -49,6 +54,9 @@ from Autodesk.Revit.DB import (
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
+
+_XAML_OPCOES_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), u"connect_pipe_opcoes.xaml")
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -313,6 +321,73 @@ class _FiltroPipe(ISelectionFilter):
 
 
 # ============================================================================
+# FORM — preferências de roteamento (altura + ordem dos eixos X/Y)
+# ============================================================================
+
+class _JanelaOpcoesRota(forms.WPFWindow):
+    """Janela WPF (connect_pipe_opcoes.xaml) que reúne, num único diálogo,
+    as duas preferências de roteamento: onde a rota sobe/desce de altura e
+    a ordem de ajuste dos eixos horizontais X/Y."""
+
+    def __init__(self):
+        forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
+        self.confirmado = False
+        self.CbAltura.SelectedIndex = 0
+        self.CbEixo.SelectedIndex   = 0
+
+    def on_cancel(self, sender, args):
+        self.Close()
+
+    def on_ok(self, sender, args):
+        self.confirmado = True
+        self.Close()
+
+
+def _escolher_opcoes_rota():
+    """Mostra o diálogo WPF de preferências e retorna (modo_altura,
+    inverter_eixos), ou None se o usuário cancelar. Se a janela WPF falhar
+    por qualquer motivo, cai para dois diálogos forms.SelectFromList em
+    sequência (comportamento mais simples, porém já testado e funcional)."""
+    try:
+        janela = _JanelaOpcoesRota()
+        janela.ShowDialog()
+        if not janela.confirmado:
+            return None
+        return janela.CbAltura.SelectedItem.Tag, (
+            janela.CbEixo.SelectedItem.Tag == u"invertida")
+    except Exception as ex:
+        print(u"[AVISO] Formulário WPF de Conectar Tubo falhou ({}), "
+              u"usando formulário padrão do pyRevit.".format(ex))
+        return _escolher_opcoes_rota_fallback()
+
+
+def _escolher_opcoes_rota_fallback():
+    escolha_altura = forms.SelectFromList.show(
+        [u"Junto ao tubo desconectado", u"Junto ao tubo de referência"],
+        title=u"Fire Utils — Conectar Tubo",
+        prompt=u"Onde a tubulação deve subir/descer de altura?",
+        multiselect=False
+    )
+    if not escolha_altura:
+        return None
+    modo_altura = (u"destino" if escolha_altura == u"Junto ao tubo de referência"
+                   else u"origem")
+
+    escolha_eixo = forms.SelectFromList.show(
+        [u"Padrão (ajusta primeiro o eixo do tubo referência)",
+         u"Invertida (troca a ordem dos eixos X/Y)"],
+        title=u"Fire Utils — Conectar Tubo",
+        prompt=u"Ordem dos eixos horizontais (X/Y) na rota:",
+        multiselect=False
+    )
+    if not escolha_eixo:
+        return None
+    inverter_eixos = escolha_eixo.startswith(u"Invertida")
+
+    return modo_altura, inverter_eixos
+
+
+# ============================================================================
 # PONTO DE ENTRADA
 # ============================================================================
 
@@ -345,28 +420,10 @@ def run(doc, uidoc, output):
         pyscript.exit()
 
     # ── Preferências de roteamento (altura + ordem dos eixos X/Y) ──────────
-    OPCAO_ALTURA_ORIGEM  = u"Junto ao tubo desconectado"
-    OPCAO_ALTURA_DESTINO = u"Junto ao tubo de referência"
-    OPCAO_EIXO_PADRAO    = u"Padrão (ajusta primeiro o eixo do tubo referência)"
-    OPCAO_EIXO_INVERTIDO = u"Invertida (troca a ordem dos eixos X/Y)"
-
-    components = [
-        forms.Label(u"Onde a tubulação deve subir/descer de altura?"),
-        forms.ComboBox("altura", [OPCAO_ALTURA_ORIGEM, OPCAO_ALTURA_DESTINO]),
-        forms.Label(u"Ordem dos eixos horizontais (X/Y) na rota:"),
-        forms.ComboBox("eixo", [OPCAO_EIXO_PADRAO, OPCAO_EIXO_INVERTIDO]),
-        forms.Separator(),
-        forms.Button(u"OK"),
-    ]
-    form = forms.FlexForm(u"Fire Utils — Conectar Tubo", components)
-    form.show()
-
-    if not form.values or u"altura" not in form.values or u"eixo" not in form.values:
+    opcoes = _escolher_opcoes_rota()
+    if opcoes is None:
         pyscript.exit()
-
-    modo_altura    = (u"destino" if form.values[u"altura"] == OPCAO_ALTURA_DESTINO
-                       else u"origem")
-    inverter_eixos = (form.values[u"eixo"] == OPCAO_EIXO_INVERTIDO)
+    modo_altura, inverter_eixos = opcoes
 
     _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                modo_altura=modo_altura, inverter_eixos=inverter_eixos)
