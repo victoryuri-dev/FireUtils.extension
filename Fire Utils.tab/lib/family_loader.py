@@ -22,6 +22,15 @@ from Autodesk.Revit.DB import Transaction, Family, FilteredElementCollector
 _LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 FAMILY_LIBRARY_DIR = os.path.join(_LIB_DIR, u"family_library")
 
+# Cache de previews (miniaturas .png) — espelha a estrutura de pastas da
+# biblioteca, trocando .rfa por .png (ex.: family_library/Hidrantes/X.rfa ->
+# family_library/.previews/Hidrantes/X.png). Adicionado manualmente (não há
+# geração automática): o gestor da biblioteca exporta/coloca o .png de cada
+# família nesse caminho espelhado e o catálogo passa a mostrá-lo no lugar do
+# monograma de duas letras.
+_PREVIEWS_DIRNAME = u".previews"
+PREVIEWS_DIR = os.path.join(FAMILY_LIBRARY_DIR, _PREVIEWS_DIRNAME)
+
 
 class FamilyEntry(object):
     """Representa uma família (.rfa) encontrada na biblioteca."""
@@ -98,6 +107,32 @@ def listar_categorias(entradas):
     """Retorna a lista de categorias distintas presentes em `entradas`, ordenada."""
     categorias = set(entrada.category for entrada in entradas)
     return sorted(categorias)
+
+
+# ---------------------------------------------------------------------------
+# Preview (miniatura) das famílias — cache em .png, gerado sob demanda
+# ---------------------------------------------------------------------------
+def caminho_preview(entrada):
+    """Caminho do .png de preview em cache para uma FamilyEntry — espelha a
+    posição do .rfa dentro de family_library/, trocado para dentro de
+    family_library/.previews/ com extensão .png."""
+    relativo = os.path.relpath(entrada.path, FAMILY_LIBRARY_DIR)
+    relativo_png = os.path.splitext(relativo)[0] + u".png"
+    return os.path.join(PREVIEWS_DIR, relativo_png)
+
+
+def preview_valido(entrada):
+    """Retorna o caminho do .png em cache se ele existir e for mais recente
+    que o .rfa de origem; None se precisa ser (re)gerado."""
+    caminho_png = caminho_preview(entrada)
+    if not os.path.isfile(caminho_png):
+        return None
+    try:
+        if os.path.getmtime(caminho_png) < os.path.getmtime(entrada.path):
+            return None  # .rfa foi modificado depois do cache — está desatualizado
+    except OSError:
+        return None
+    return caminho_png
 
 
 def carregar_familias(doc, entradas):
