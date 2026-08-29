@@ -83,7 +83,8 @@ except ImportError:
 TOL           = 1e-4          # geral (pés)
 TOL_DZ        = _to_ft(0.01)  # 1 cm  — diferença de Z considerada "mesmo nível"
 TOL_SEG       = _to_ft(0.05)  # 5 cm  — distância mínima para criar segmento
-TOL_PONTA_REF = _to_ft(0.40)  # 40 cm — raio do clique para detectar ponta do PIPE_REF
+TOL_PONTA_REF = _to_ft(0.40)  # 40 cm — teto do raio do clique p/ detectar ponta do PIPE_REF
+                               # (raio efetivo é limitado a 25% do comprimento de pipe_ref)
 TOL_CONN      = _to_ft(0.50)  # 50 cm — raio de busca de conector próximo
 TOL_COLINEAR  = _to_ft(0.02)  # 2 cm  — desvio perpendicular máx. p/ considerar 2 retas paralelas como a MESMA reta
 
@@ -669,9 +670,16 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
 
     # ── Modo de conexão: ponta ou corpo? ────────────────────────────────────
     if pt_click_ref is not None:
+        # Raio de detecção de "ponta" proporcional ao comprimento de
+        # pipe_ref (até o teto de TOL_PONTA_REF). Sem isso, um pipe_ref
+        # curto (ex.: um ramal curto) tem o CORPO INTEIRO dentro do raio
+        # fixo de 40cm — qualquer clique no corpo era classificado como
+        # clique na ponta, criando joelho no meio do tubo em vez de Tê.
+        L_ref          = pt_A.DistanceTo(pt_B)
+        tol_ponta_ref  = min(TOL_PONTA_REF, L_ref * 0.25)
         da = pt_click_ref.DistanceTo(pt_A)
         db = pt_click_ref.DistanceTo(pt_B)
-        clicou_ponta = da < TOL_PONTA_REF or db < TOL_PONTA_REF
+        clicou_ponta = da < tol_ponta_ref or db < tol_ponta_ref
         pt_endpoint  = pt_A if da < db else pt_B
     else:
         clicou_ponta = False
