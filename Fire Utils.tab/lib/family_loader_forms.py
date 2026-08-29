@@ -191,7 +191,7 @@ class PainelCarregadorFamilias(forms.WPFPanel):
         self.todas_entradas = list(listar_familias())
         self.selecionadas_paths = {}   # path -> FamilyEntry
         self.categoria_atual = _TODAS
-        self.tiles_categoria = {}      # categoria -> (icone_border, icone_txt, rotulo)
+        self.tiles_categoria = {}      # categoria -> (pill, icone_txt, rotulo)
         self.fila_acoes = criar_fila_acoes()
 
         # Brushes definidas em family_loader_forms.xaml (Page.Resources) —
@@ -221,77 +221,72 @@ class PainelCarregadorFamilias(forms.WPFPanel):
     # Categorias — tiles com ícone
     # ------------------------------------------------------------------
     def _estilizar_tile(self, nome_categoria, ativo):
-        icone_border, icone_txt, rotulo = self.tiles_categoria[nome_categoria]
-        icone_border.Background = self.C_ACCENT if ativo else self.C_BG2
-        icone_border.BorderBrush = self.C_ACCENT if ativo else self.C_BORDER
-        icone_txt.Foreground = self.C_WHITE if ativo else self.C_TEXT2
-        rotulo.Foreground = self.C_ACCENT if ativo else self.C_TEXT2
-        rotulo.FontWeight = SW.FontWeights.SemiBold if ativo else SW.FontWeights.Normal
+        pill, icone_txt, rotulo = self.tiles_categoria[nome_categoria]
+        pill.Background = self.C_ACCENT if ativo else self.C_BG2
+        pill.BorderBrush = self.C_ACCENT if ativo else self.C_BORDER
+        if icone_txt is not None:
+            icone_txt.Foreground = self.C_WHITE if ativo else self.C_ACCENT
+        rotulo.Foreground = self.C_WHITE if ativo else self.C_TEXT
 
     def _criar_tile_categoria(self, nome_categoria):
+        """Tile de categoria em formato de pílula horizontal: ícone à
+        esquerda, rótulo à direita, tudo em uma única linha."""
         ativo = (nome_categoria == self.categoria_atual)
 
-        externo = SWC.StackPanel()
-        externo.Margin = SW.Thickness(0, 0, 18, 10)
-        externo.Width = 68
-        externo.Cursor = SWI.Cursors.Hand
-        externo.Background = self.C_TRANSPARENT  # garante hit-test em toda a área
+        pill = SWC.Border()
+        pill.Height = 44
+        pill.CornerRadius = SW.CornerRadius(22)
+        pill.Padding = SW.Thickness(16, 0, 18, 0)
+        pill.Margin = SW.Thickness(0, 0, 10, 10)
+        pill.BorderThickness = SW.Thickness(1)
+        pill.Cursor = SWI.Cursors.Hand
+        pill.Background = self.C_ACCENT if ativo else self.C_BG2
+        pill.BorderBrush = self.C_ACCENT if ativo else self.C_BORDER
 
-        icone_border = SWC.Border()
-        icone_border.Width = 48
-        icone_border.Height = 48
-        icone_border.CornerRadius = SW.CornerRadius(24)
-        icone_border.HorizontalAlignment = SW.HorizontalAlignment.Center
-        icone_border.BorderThickness = SW.Thickness(1)
-        icone_border.Background = self.C_ACCENT if ativo else self.C_BG2
-        icone_border.BorderBrush = self.C_ACCENT if ativo else self.C_BORDER
+        conteudo = SWC.StackPanel()
+        conteudo.Orientation = SWC.Orientation.Horizontal
+        conteudo.VerticalAlignment = SW.VerticalAlignment.Center
 
         # Tentar carregar icon.svg da categoria; se não existir ou falhar,
         # voltar ao monograma de texto.
         caminho_svg = _localizar_icone_svg(nome_categoria)
         icone_txt = None
+        icone_visual = None
 
         if caminho_svg:
             bitmap_svg = _carregar_bitmap_svg(caminho_svg)
             if bitmap_svg is not None:
                 icone_img = SWC.Image()
                 icone_img.Source = bitmap_svg
-                icone_img.Stretch = SWM.Stretch.UniformToFill
-                icone_border.Child = icone_img
-            else:
-                # SVG não pode ser carregado como BitmapImage; usar monograma
-                icone_txt = SWC.TextBlock()
-                icone_txt.Text = _icone_categoria(nome_categoria)
-                icone_txt.FontSize = 16
-                icone_txt.FontWeight = SW.FontWeights.SemiBold
-                icone_txt.Foreground = self.C_WHITE if ativo else self.C_TEXT2
-                icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
-                icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
-                icone_border.Child = icone_txt
-        else:
-            # Sem icon.svg, usar monograma de texto.
+                icone_img.Width = 22
+                icone_img.Height = 22
+                icone_img.Stretch = SWM.Stretch.Uniform
+                icone_visual = icone_img
+
+        if icone_visual is None:
+            # Sem icon.svg carregável, usar monograma de texto.
             icone_txt = SWC.TextBlock()
             icone_txt.Text = _icone_categoria(nome_categoria)
-            icone_txt.FontSize = 16
-            icone_txt.FontWeight = SW.FontWeights.SemiBold
-            icone_txt.Foreground = self.C_WHITE if ativo else self.C_TEXT2
-            icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
+            icone_txt.FontSize = 15
+            icone_txt.FontWeight = SW.FontWeights.Bold
+            icone_txt.Foreground = self.C_WHITE if ativo else self.C_ACCENT
             icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
-            icone_border.Child = icone_txt
+            icone_visual = icone_txt
+
+        icone_visual.Margin = SW.Thickness(0, 0, 10, 0)
+        conteudo.Children.Add(icone_visual)
 
         rotulo = SWC.TextBlock()
         rotulo.Text = nome_categoria
-        rotulo.FontSize = 10
-        rotulo.Foreground = self.C_ACCENT if ativo else self.C_TEXT2
-        rotulo.FontWeight = SW.FontWeights.SemiBold if ativo else SW.FontWeights.Normal
-        rotulo.TextAlignment = SW.TextAlignment.Center
-        rotulo.TextWrapping = SW.TextWrapping.Wrap
-        rotulo.Margin = SW.Thickness(0, 6, 0, 0)
+        rotulo.FontSize = 13
+        rotulo.FontWeight = SW.FontWeights.SemiBold
+        rotulo.Foreground = self.C_WHITE if ativo else self.C_TEXT
+        rotulo.VerticalAlignment = SW.VerticalAlignment.Center
+        conteudo.Children.Add(rotulo)
 
-        externo.Children.Add(icone_border)
-        externo.Children.Add(rotulo)
+        pill.Child = conteudo
 
-        return externo, icone_border, icone_txt, rotulo
+        return pill, icone_txt, rotulo
 
     def _on_tile_click(self, nome_categoria):
         def _handler(sender, args):
@@ -308,10 +303,10 @@ class PainelCarregadorFamilias(forms.WPFPanel):
 
         nomes = [_TODAS] + listar_categorias(self.todas_entradas)
         for nome in nomes:
-            externo, icone_border, icone_txt, rotulo = self._criar_tile_categoria(nome)
-            self.tiles_categoria[nome] = (icone_border, icone_txt, rotulo)
-            externo.MouseLeftButtonDown += SWI.MouseButtonEventHandler(self._on_tile_click(nome))
-            self.TilesPanel.Children.Add(externo)
+            pill, icone_txt, rotulo = self._criar_tile_categoria(nome)
+            self.tiles_categoria[nome] = (pill, icone_txt, rotulo)
+            pill.MouseLeftButtonDown += SWI.MouseButtonEventHandler(self._on_tile_click(nome))
+            self.TilesPanel.Children.Add(pill)
 
     # ------------------------------------------------------------------
     # Catálogo — seções por categoria, cartões em grade
