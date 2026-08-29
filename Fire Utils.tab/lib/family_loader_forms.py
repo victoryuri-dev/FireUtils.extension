@@ -69,11 +69,8 @@ _XAML_PATH = os.path.join(_LIB_DIR, u"family_loader_forms.xaml")
 # Ordem de preferência para a logo do cabeçalho. O primeiro arquivo
 # encontrado é usado; se nenhum existir, mantém-se o placeholder "LOGO" já
 # definido no XAML.
-_LOGO_CANDIDATOS = [
-    os.path.join(_LIB_DIR, u"assets", u"logo.png"),
-    os.path.join(_LIB_DIR, u"assets", u"etos-logo-hor.png"),
-    os.path.join(_LIB_DIR, u"assets", u"etos-logo-vert.png"),
-]
+LOGO_PATH = os.path.join(_LIB_DIR, u"assets", u"fireutils-logo-h.png")
+
 
 
 def _carregar_bitmap(caminho):
@@ -91,10 +88,9 @@ def _carregar_bitmap(caminho):
 
 
 def _localizar_logo():
-    for caminho in _LOGO_CANDIDATOS:
-        bmp = _carregar_bitmap(caminho)
-        if bmp is not None:
-            return bmp
+    bmp = _carregar_bitmap(LOGO_PATH)
+    if bmp is not None:
+        return bmp
     return None
 
 
