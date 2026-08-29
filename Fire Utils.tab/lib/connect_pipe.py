@@ -353,8 +353,12 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self._preview_ok       = False
         self._transacao_ativa  = False
 
-        self.CbAltura.SelectedIndex = 0
-        self.CbEixo.SelectedIndex   = 0
+        # Dispara on_opcao_changed (via evento Checked), mas nesse momento
+        # _transacao_ativa ainda é False, então _atualizar_preview só sai
+        # sem fazer nada — a prévia real só começa abaixo, após abrir a
+        # transação.
+        self.RbAlturaOrigem.IsChecked = True
+        self.RbEixoPadrao.IsChecked   = True
 
         self._t = Transaction(doc, u"FireUtils - Conectar Tubo")
         self._t.Start()
@@ -378,12 +382,10 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self._transacao_ativa = False
 
     def _modo_altura_atual(self):
-        item = self.CbAltura.SelectedItem
-        return item.Tag if item is not None else u"origem"
+        return u"destino" if self.RbAlturaDestino.IsChecked else u"origem"
 
     def _inverter_eixos_atual(self):
-        item = self.CbEixo.SelectedItem
-        return item is not None and item.Tag == u"invertida"
+        return bool(self.RbEixoInvertido.IsChecked)
 
     def _atualizar_preview(self):
         """Descarta a prévia anterior e reconstrói a conexão com as opções

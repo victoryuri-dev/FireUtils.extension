@@ -25,18 +25,45 @@
             <Setter Property="Margin" Value="0,0,0,4"/>
         </Style>
 
-        <Style x:Key="ComboStyle" TargetType="ComboBox">
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="Height" Value="28"/>
-            <Setter Property="Margin" Value="0,0,0,14"/>
-        </Style>
-
         <Style x:Key="BotaoStyle" TargetType="Button">
             <Setter Property="Width" Value="100"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <!-- Opção em formato de botão (RadioButton com template próprio) —
+             duas lado a lado por pergunta, clique alterna qual está ativa. -->
+        <Style x:Key="OpcaoBotaoStyle" TargetType="RadioButton">
+            <Setter Property="Padding" Value="6,10,6,10"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushValor}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{StaticResource BrushBranco}"
+                                BorderBrush="{StaticResource BrushBorder}" BorderThickness="1"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextBlock.TextAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushAccent}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrushBranco}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
 
@@ -50,18 +77,30 @@
             <StackPanel>
 
                 <TextBlock Text="Onde a tubulação deve subir/descer de altura?" Style="{StaticResource LabelStyle}"/>
-                <ComboBox x:Name="CbAltura" Style="{StaticResource ComboStyle}"
-                          SelectionChanged="on_opcao_changed">
-                    <ComboBoxItem Content="Junto ao tubo desconectado" Tag="origem"/>
-                    <ComboBoxItem Content="Junto ao tubo de referência" Tag="destino"/>
-                </ComboBox>
+                <UniformGrid Columns="2" Margin="0,0,0,14">
+                    <RadioButton x:Name="RbAlturaOrigem" GroupName="GrupoAltura" Margin="0,0,4,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                        <TextBlock Text="Junto ao tubo desconectado" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton x:Name="RbAlturaDestino" GroupName="GrupoAltura" Margin="4,0,0,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                        <TextBlock Text="Junto ao tubo de referência" TextWrapping="Wrap"/>
+                    </RadioButton>
+                </UniformGrid>
 
                 <TextBlock Text="Ordem dos eixos horizontais (X/Y) na rota" Style="{StaticResource LabelStyle}"/>
-                <ComboBox x:Name="CbEixo" Style="{StaticResource ComboStyle}" Margin="0,0,0,0"
-                          SelectionChanged="on_opcao_changed">
-                    <ComboBoxItem Content="Padrão (ajusta primeiro o eixo do tubo referência)" Tag="padrao"/>
-                    <ComboBoxItem Content="Invertida (troca a ordem dos eixos X/Y)" Tag="invertida"/>
-                </ComboBox>
+                <UniformGrid Columns="2">
+                    <RadioButton x:Name="RbEixoPadrao" GroupName="GrupoEixo" Margin="0,0,4,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                        <TextBlock Text="Padrão" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton x:Name="RbEixoInvertido" GroupName="GrupoEixo" Margin="4,0,0,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                        <TextBlock Text="Invertida (troca X/Y)" TextWrapping="Wrap"/>
+                    </RadioButton>
+                </UniformGrid>
+                <TextBlock Text="Padrão: ajusta primeiro o eixo paralelo ao tubo referência. Invertida: ajusta primeiro o eixo perpendicular."
+                           FontSize="10" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
             </StackPanel>
         </Border>
