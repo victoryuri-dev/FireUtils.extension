@@ -100,23 +100,35 @@ def _icone_categoria(nome_categoria):
     return limpo[0].upper() if limpo else u"?"
 
 
-def _localizar_icone_svg(nome_categoria):
-    """Localiza icon.svg da categoria — procura na pasta da categoria ou no
-    raiz de family_library para 'Todas'. Retorna o caminho se existir, None c.c."""
-    if nome_categoria == _TODAS:
-        caminho = os.path.join(FAMILY_LIBRARY_DIR, u"icon.svg")
-    else:
-        caminho = os.path.join(FAMILY_LIBRARY_DIR, nome_categoria, u"icon.svg")
+# Extensões de ícone aceitas, em ordem de preferência. WPF (BitmapImage) não
+# decodifica .svg nativamente — só entra na lista por retrocompatibilidade
+# (um icon.svg é ignorado silenciosamente e cai no monograma de texto); use
+# .png (com fundo transparente) para o ícone realmente aparecer.
+_ICONE_EXTENSOES = [u".png", u".jpg", u".jpeg", u".svg"]
 
-    if os.path.exists(caminho):
-        return caminho
+
+def _localizar_icone_categoria(nome_categoria):
+    """Localiza o arquivo icon.<ext> da categoria — procura na pasta da
+    categoria ou no raiz de family_library para 'Todas'. Retorna o caminho
+    da primeira extensão encontrada (ordem de _ICONE_EXTENSOES), ou None."""
+    pasta = (
+        FAMILY_LIBRARY_DIR if nome_categoria == _TODAS
+        else os.path.join(FAMILY_LIBRARY_DIR, nome_categoria)
+    )
+    for extensao in _ICONE_EXTENSOES:
+        caminho = os.path.join(pasta, u"icon" + extensao)
+        if os.path.exists(caminho):
+            return caminho
     return None
 
 
-def _carregar_bitmap_svg(caminho):
-    """Tenta carregar SVG como BitmapImage. SVG nativo não é suportado por
-    WPF — retorna None se o arquivo for SVG. Para .png/.jpg funciona."""
+def _carregar_bitmap_icone(caminho):
+    """Carrega o ícone como BitmapImage. Funciona para .png/.jpg/.jpeg;
+    retorna None para .svg (não suportado nativamente pelo WPF) ou qualquer
+    falha de leitura, caindo no monograma de texto em quem chama."""
     if not caminho or not os.path.exists(caminho):
+        return None
+    if caminho.lower().endswith(u".svg"):
         return None
     try:
         bmp = SWMI.BitmapImage()
@@ -247,24 +259,24 @@ class PainelCarregadorFamilias(forms.WPFPanel):
         conteudo.Orientation = SWC.Orientation.Horizontal
         conteudo.VerticalAlignment = SW.VerticalAlignment.Center
 
-        # Tentar carregar icon.svg da categoria; se não existir ou falhar,
-        # voltar ao monograma de texto.
-        caminho_svg = _localizar_icone_svg(nome_categoria)
+        # Tentar carregar icon.png/.jpg da categoria; se não existir ou
+        # falhar, voltar ao monograma de texto.
+        caminho_icone = _localizar_icone_categoria(nome_categoria)
         icone_txt = None
         icone_visual = None
 
-        if caminho_svg:
-            bitmap_svg = _carregar_bitmap_svg(caminho_svg)
-            if bitmap_svg is not None:
+        if caminho_icone:
+            bitmap_icone = _carregar_bitmap_icone(caminho_icone)
+            if bitmap_icone is not None:
                 icone_img = SWC.Image()
-                icone_img.Source = bitmap_svg
+                icone_img.Source = bitmap_icone
                 icone_img.Width = 22
                 icone_img.Height = 22
                 icone_img.Stretch = SWM.Stretch.Uniform
                 icone_visual = icone_img
 
         if icone_visual is None:
-            # Sem icon.svg carregável, usar monograma de texto.
+            # Sem ícone carregável, usar monograma de texto.
             icone_txt = SWC.TextBlock()
             icone_txt.Text = _icone_categoria(nome_categoria)
             icone_txt.FontSize = 15
