@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 family_loader_forms.py — Fire Utils · lib/
-Code-behind (identidade visual Fire Utils — escura, com destaque vermelho)
+Code-behind (identidade visual Fire Utils — clara, com destaque vermelho)
 do Carregador de Famílias, em formato de catálogo: pesquisa por texto,
 categorias em destaque, cartões de família selecionáveis por clique e
 carregamento em lote no documento ativo.
@@ -50,7 +50,7 @@ from pyrevit import forms
 
 from family_loader import (
     listar_familias, listar_categorias, carregar_familias,
-    obter_symbol_para_posicionar,
+    obter_symbol_para_posicionar, preview_valido, FAMILY_LIBRARY_DIR,
 )
 from family_loader_events import criar_fila_acoes
 
@@ -106,6 +106,35 @@ def _icone_categoria(nome_categoria):
         return u"▦"
     limpo = nome_categoria.strip()
     return limpo[0].upper() if limpo else u"?"
+
+
+def _localizar_icone_svg(nome_categoria):
+    """Localiza icon.svg da categoria — procura na pasta da categoria ou no
+    raiz de family_library para 'Todas'. Retorna o caminho se existir, None c.c."""
+    if nome_categoria == _TODAS:
+        caminho = os.path.join(FAMILY_LIBRARY_DIR, u"icon.svg")
+    else:
+        caminho = os.path.join(FAMILY_LIBRARY_DIR, nome_categoria, u"icon.svg")
+
+    if os.path.exists(caminho):
+        return caminho
+    return None
+
+
+def _carregar_bitmap_svg(caminho):
+    """Tenta carregar SVG como BitmapImage. SVG nativo não é suportado por
+    WPF — retorna None se o arquivo for SVG. Para .png/.jpg funciona."""
+    if not caminho or not os.path.exists(caminho):
+        return None
+    try:
+        bmp = SWMI.BitmapImage()
+        bmp.BeginInit()
+        bmp.UriSource = Uri(caminho, UriKind.Absolute)
+        bmp.CacheOption = SWMI.BitmapCacheOption.OnLoad
+        bmp.EndInit()
+        return bmp
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -225,14 +254,38 @@ class PainelCarregadorFamilias(forms.WPFPanel):
         icone_border.Background = self.C_ACCENT if ativo else self.C_BG2
         icone_border.BorderBrush = self.C_ACCENT if ativo else self.C_BORDER
 
-        icone_txt = SWC.TextBlock()
-        icone_txt.Text = _icone_categoria(nome_categoria)
-        icone_txt.FontSize = 16
-        icone_txt.FontWeight = SW.FontWeights.SemiBold
-        icone_txt.Foreground = self.C_WHITE if ativo else self.C_TEXT2
-        icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
-        icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
-        icone_border.Child = icone_txt
+        # Tentar carregar icon.svg da categoria; se não existir ou falhar,
+        # voltar ao monograma de texto.
+        caminho_svg = _localizar_icone_svg(nome_categoria)
+        icone_txt = None
+
+        if caminho_svg:
+            bitmap_svg = _carregar_bitmap_svg(caminho_svg)
+            if bitmap_svg is not None:
+                icone_img = SWC.Image()
+                icone_img.Source = bitmap_svg
+                icone_img.Stretch = SWM.Stretch.UniformToFill
+                icone_border.Child = icone_img
+            else:
+                # SVG não pode ser carregado como BitmapImage; usar monograma
+                icone_txt = SWC.TextBlock()
+                icone_txt.Text = _icone_categoria(nome_categoria)
+                icone_txt.FontSize = 16
+                icone_txt.FontWeight = SW.FontWeights.SemiBold
+                icone_txt.Foreground = self.C_WHITE if ativo else self.C_TEXT2
+                icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
+                icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
+                icone_border.Child = icone_txt
+        else:
+            # Sem icon.svg, usar monograma de texto.
+            icone_txt = SWC.TextBlock()
+            icone_txt.Text = _icone_categoria(nome_categoria)
+            icone_txt.FontSize = 16
+            icone_txt.FontWeight = SW.FontWeights.SemiBold
+            icone_txt.Foreground = self.C_WHITE if ativo else self.C_TEXT2
+            icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
+            icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
+            icone_border.Child = icone_txt
 
         rotulo = SWC.TextBlock()
         rotulo.Text = nome_categoria
