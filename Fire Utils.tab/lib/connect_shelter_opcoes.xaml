@@ -89,7 +89,7 @@
                 </UniformGrid>
 
                 <TextBlock Text="Onde a tubulação deve subir/descer de altura?" Style="{StaticResource LabelStyle}"/>
-                <UniformGrid Columns="2">
+                <UniformGrid Columns="2" Margin="0,0,0,14">
                     <RadioButton x:Name="RbAlturaOrigem" GroupName="GrupoAltura" Margin="0,0,4,0"
                                  Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
                         <TextBlock Text="Junto à válvula" TextWrapping="Wrap"/>
@@ -99,6 +99,20 @@
                         <TextBlock Text="Junto ao tubo de referência" TextWrapping="Wrap"/>
                     </RadioButton>
                 </UniformGrid>
+
+                <TextBlock Text="Ordem dos eixos horizontais (X/Y) na rota" Style="{StaticResource LabelStyle}"/>
+                <UniformGrid Columns="2">
+                    <RadioButton x:Name="RbEixoPadrao" GroupName="GrupoEixo" Margin="0,0,4,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                        <TextBlock Text="Padrão" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton x:Name="RbEixoInvertido" GroupName="GrupoEixo" Margin="4,0,0,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                        <TextBlock Text="Invertida (troca X/Y)" TextWrapping="Wrap"/>
+                    </RadioButton>
+                </UniformGrid>
+                <TextBlock Text="Padrão: ajusta primeiro o eixo paralelo ao tubo referência. Invertida: ajusta primeiro o eixo perpendicular (pode não ser possível em toda combinação — a prévia avisa)."
+                           FontSize="10" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
             </StackPanel>
         </Border>
