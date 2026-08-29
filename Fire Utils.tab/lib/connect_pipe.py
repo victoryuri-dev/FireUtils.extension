@@ -333,6 +333,32 @@ def _elbow(doc, c1, c2):
         return False
 
 
+def _conn_dir(c):
+    try:
+        return c.CoordinateSystem.BasisZ
+    except Exception:
+        return None
+
+
+def _juntar(doc, c1, c2):
+    """
+    Junta dois conectores que já estão no mesmo ponto (ex.: fim da rota
+    encostando bem na ponta de pipe_ref). Se apontam um pro outro em linha
+    reta (colineares), NewElbowFitting falha — não é uma curva de verdade,
+    é uma continuação reta — então conecta direto (ConnectTo). Caso
+    contrário, cria joelho normalmente. Retorna True se conseguiu (por
+    qualquer um dos dois métodos).
+    """
+    d1, d2 = _conn_dir(c1), _conn_dir(c2)
+    if d1 is not None and d2 is not None and d1.DotProduct(d2) < -0.999:
+        try:
+            c1.ConnectTo(c2)
+            return True
+        except Exception:
+            pass  # cai pro joelho abaixo como última tentativa
+    return _elbow(doc, c1, c2)
+
+
 def _tee(doc, pipe_ref, P_target, conn_branch):
     """
     Cria tê no corpo de pipe_ref em P_target, conectando conn_branch como ramal.
@@ -679,7 +705,7 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                     pt_ponta = pt_A if at_end_a else pt_B
                     c_ponta  = _conn_near(pipe_ref, pt_ponta)
                     if c_ponta:
-                        _elbow(doc, c_ponta, conn_end)
+                        _juntar(doc, c_ponta, conn_end)
                 else:
                     _tee(doc, pipe_ref, P_int, conn_end)
             return
@@ -869,9 +895,13 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                 pt_ponta = pt_A if at_end_a else pt_B
                 c_ponta  = _conn_near(pipe_ref, pt_ponta)
                 if c_ponta:
-                    ok = _elbow(doc, c_ponta, conn_final)
+                    # _juntar: se o último trecho chega colinear na ponta de
+                    # pipe_ref (reta contínua), conecta direto em vez de
+                    # forçar um joelho — que falharia por não ser uma curva
+                    # de verdade nesse caso.
+                    ok = _juntar(doc, c_ponta, conn_final)
                     if not ok:
-                        output.print_md(u"| Joelho na ponta | **falhou** |")
+                        output.print_md(u"| Conexão na ponta | **falhou** |")
             else:
                 ok = _tee(doc, pipe_ref, P_final, conn_final)
                 if not ok:
@@ -879,21 +909,23 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
 
             doc.Regenerate()
             for c1, c2 in _elbows_pend:
-                _elbow(doc, c1, c2)
+                _juntar(doc, c1, c2)
 
     else:
         doc.Regenerate()
         c_ref_end = _conn_near(pipe_ref, P_final)
         if c_ref_end and conn_final:
-            ok = _elbow(doc, c_ref_end, conn_final)
+            # Idem: pode ser uma continuação reta (ConnectTo), não
+            # necessariamente um joelho — ver _juntar.
+            ok = _juntar(doc, c_ref_end, conn_final)
             if not ok:
                 output.print_md(
-                    u"| Joelho na ponta | **falhou** — "
+                    u"| Conexão na ponta | **falhou** — "
                     u"verifique se o endpoint de pipe_ref está livre |")
 
         doc.Regenerate()
         for c1, c2 in _elbows_pend:
-            _elbow(doc, c1, c2)
+            _juntar(doc, c1, c2)
 
 
 def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
