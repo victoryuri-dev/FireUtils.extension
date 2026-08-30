@@ -5,18 +5,23 @@ Conecta dois tubos com roteamento em ângulos retos.
 
 Fluxo:
   Clique 1 — ponta do PIPE_DESC (tubo desconectado)
-  Clique 2 — PIPE_REF (tubo referência): corpo → cria Tê  |  ponta → roteia até a ponta com joelhos
+  Clique 2 — PIPE_REF (tubo referência): o CLIQUE só marca a posição no
+             corpo (usada se o modo "corpo" for escolhido); corpo vs ponta
+             não é mais adivinhado pela distância do clique — ver form abaixo.
   Form     — janela WPF (connect_pipe_opcoes.xaml, classe _JanelaOpcoesRota)
-             reúne as duas preferências de rota E mostra PRÉVIA AO VIVO no
+             reúne as preferências de rota E mostra PRÉVIA AO VIVO no
              modelo a cada mudança de opção (dentro de uma transação aberta,
              revertida/refeita a cada troca — só grava de fato no OK):
+             • onde conectar em pipe_ref: ponto clicado no corpo (Tê,
+               padrão) ou ponta livre — se houver (ver modo_conexao_ref em
+               _construir_conexao)
              • onde a rota sobe/desce de altura: junto ao tubo desconectado
                (padrão) ou junto ao tubo de referência (ver modo_altura em
                _construir_conexao)
              • ordem dos eixos horizontais X/Y: padrão (primeiro paralelo ao
                eixo do tubo referência) ou invertida (ver inverter_eixos)
-             Se essa janela falhar por qualquer motivo, cai para dois
-             diálogos forms.SelectFromList em sequência + fluxo sem prévia
+             Se essa janela falhar por qualquer motivo, cai para diálogos
+             forms.SelectFromList em sequência + fluxo sem prévia
              (_escolher_opcoes_rota_fallback + _conectar).
 
 Etapa 1 — Extensão direta:
@@ -44,7 +49,7 @@ Etapa 2 — Roteamento em L:
     Só se aplica quando pipe_desc ainda não sofreu nenhum ajuste de altura
     nesse trecho (ver pipe_desc_no_knee/modo_altura="destino").
 
-Casos PIPE_REF (clique):
+Casos PIPE_REF (modo_conexao_ref):
   corpo  → tubo horizontal P_knee→P_target + Tê (BreakCurve)
   ponta  → rota em L (seg1/seg2 conforme inverter_eixos) + joelhos
 """
@@ -444,6 +449,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         # _transacao_ativa ainda é False, então _atualizar_preview só sai
         # sem fazer nada — a prévia real só começa abaixo, após abrir a
         # transação.
+        self.RbRefCorpo.IsChecked     = True
         self.RbAlturaOrigem.IsChecked = True
         self.RbEixoPadrao.IsChecked   = True
 
@@ -474,6 +480,9 @@ class _JanelaOpcoesRota(forms.WPFWindow):
     def _inverter_eixos_atual(self):
         return bool(self.RbEixoInvertido.IsChecked)
 
+    def _modo_conexao_ref_atual(self):
+        return u"ponta" if self.RbRefPonta.IsChecked else u"corpo"
+
     def _atualizar_preview(self):
         """Descarta a prévia anterior e reconstrói a conexão com as opções
         atuais, dentro da mesma transação (ainda não confirmada)."""
@@ -487,6 +496,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
                 self.pt_click_desc, self.pt_click_ref, self.output,
                 modo_altura=self._modo_altura_atual(),
                 inverter_eixos=self._inverter_eixos_atual(),
+                modo_conexao_ref=self._modo_conexao_ref_atual(),
             )
             self.doc.Regenerate()
             self._preview_ok = True
@@ -538,6 +548,16 @@ class _JanelaOpcoesRota(forms.WPFWindow):
 
 
 def _escolher_opcoes_rota_fallback():
+    escolha_ref = forms.SelectFromList.show(
+        [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
+        title=u"Fire Utils — Conectar Tubo",
+        prompt=u"Onde conectar no tubo de referência?",
+        multiselect=False
+    )
+    if not escolha_ref:
+        return None
+    modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
+
     escolha_altura = forms.SelectFromList.show(
         [u"Junto ao tubo desconectado", u"Junto ao tubo de referência"],
         title=u"Fire Utils — Conectar Tubo",
@@ -560,7 +580,7 @@ def _escolher_opcoes_rota_fallback():
         return None
     inverter_eixos = escolha_eixo.startswith(u"Invertida")
 
-    return modo_altura, inverter_eixos
+    return modo_altura, inverter_eixos, modo_conexao_ref
 
 
 # ============================================================================
@@ -614,10 +634,11 @@ def run(doc, uidoc, output):
     opcoes = _escolher_opcoes_rota_fallback()
     if opcoes is None:
         pyscript.exit()
-    modo_altura, inverter_eixos = opcoes
+    modo_altura, inverter_eixos, modo_conexao_ref = opcoes
 
     _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-               modo_altura=modo_altura, inverter_eixos=inverter_eixos)
+               modo_altura=modo_altura, inverter_eixos=inverter_eixos,
+               modo_conexao_ref=modo_conexao_ref)
 
 
 # ============================================================================
@@ -654,8 +675,33 @@ def _validar_ordem_eixos(inverter_eixos, needs_seg2):
             u"válido aqui. Use a ordem padrão para esta conexão.")
 
 
+def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
+    """
+    Escolhe a ponta LIVRE (sem conexão) de pipe_ref pra conectar via joelho.
+    Se as duas pontas estiverem livres, usa a mais próxima do clique (ou de
+    pt_A, se não houver clique). Levanta _ConexaoError se nenhuma ponta
+    estiver livre. Retorna o XYZ da ponta escolhida.
+    """
+    c_a = _conn_near(pipe_ref, pt_A)
+    c_b = _conn_near(pipe_ref, pt_B)
+    livre_a = c_a is not None and not c_a.IsConnected
+    livre_b = c_b is not None and not c_b.IsConnected
+
+    if livre_a and livre_b:
+        ref = pt_click_ref if pt_click_ref is not None else pt_A
+        return pt_A if ref.DistanceTo(pt_A) < ref.DistanceTo(pt_B) else pt_B
+    if livre_a:
+        return pt_A
+    if livre_b:
+        return pt_B
+    raise _ConexaoError(
+        u"O tubo de referência não tem nenhuma ponta livre para conectar — "
+        u"as duas pontas já estão conectadas a outros elementos.")
+
+
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-                        modo_altura=u"origem", inverter_eixos=False):
+                        modo_altura=u"origem", inverter_eixos=False,
+                        modo_conexao_ref=u"auto"):
     """
     Lógica pura de conexão — NÃO abre/fecha transação (fica a cargo de
     quem chama: _conectar, no fluxo direto, ou a janela de prévia, que
@@ -670,6 +716,18 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                               primeiro o eixo paralelo ao tubo de referência.
                      True  → inverte a ordem, ajustando primeiro o eixo
                               perpendicular (troca X/Y).
+    modo_conexao_ref : escolhe ponta vs corpo em pipe_ref — decisão do
+                              usuário, não mais adivinhada pela distância do
+                              clique (raio de tolerância dava falso positivo
+                              em pipe_ref curto).
+                        "ponta" → força joelho na ponta LIVRE de pipe_ref
+                              (a mais próxima do clique, se as duas
+                              estiverem livres); _ConexaoError se nenhuma
+                              ponta estiver livre.
+                        "corpo" → força Tê no ponto clicado (projetado no
+                              corpo de pipe_ref), mesmo perto de uma ponta.
+                        "auto"  (compatibilidade, sem diálogo) → heurística
+                              antiga por proximidade do clique.
     """
 
     # ── Endpoint de PIPE_DESC selecionado pelo clique ────────────────────────
@@ -700,12 +758,19 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     d_ref   = (pt_B - pt_A).Normalize()
 
     # ── Modo de conexão: ponta ou corpo? ────────────────────────────────────
-    if pt_click_ref is not None:
-        # Raio de detecção de "ponta" proporcional ao comprimento de
-        # pipe_ref (até o teto de TOL_PONTA_REF). Sem isso, um pipe_ref
-        # curto (ex.: um ramal curto) tem o CORPO INTEIRO dentro do raio
-        # fixo de 40cm — qualquer clique no corpo era classificado como
-        # clique na ponta, criando joelho no meio do tubo em vez de Tê.
+    # Decisão explícita do usuário via diálogo, por padrão — não é mais
+    # adivinhada por um raio de tolerância (dava falso positivo em pipe_ref
+    # curto: corpo inteiro "parecia" ponta).
+    if modo_conexao_ref == u"ponta":
+        clicou_ponta = True
+        pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+    elif modo_conexao_ref == u"corpo":
+        clicou_ponta = False
+        pt_endpoint  = None
+    elif pt_click_ref is not None:
+        # "auto" (compatibilidade, sem diálogo) — heurística antiga por
+        # proximidade do clique, com raio proporcional ao comprimento de
+        # pipe_ref (até o teto de TOL_PONTA_REF).
         L_ref          = pt_A.DistanceTo(pt_B)
         tol_ponta_ref  = min(TOL_PONTA_REF, L_ref * 0.25)
         da = pt_click_ref.DistanceTo(pt_A)
@@ -718,12 +783,15 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
 
     # ── Etapa 1: extensão direta ─────────────────────────────────────────────
     # Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref,
-    # apenas estende e conecta sem criar tubos extras.
+    # apenas estende e conecta sem criar tubos extras. Só roda no modo "auto"
+    # (compatibilidade, sem diálogo) — com ponta/corpo escolhidos
+    # explicitamente pelo usuário, pular esse atalho evita que o resultado
+    # saia "silenciosamente" diferente do que foi pedido no diálogo.
     loc_desc = pipe_desc.Location.Curve
     p_desc_0 = loc_desc.GetEndPoint(0)
     p_desc_1 = loc_desc.GetEndPoint(1)
     L_desc   = p_desc_0.DistanceTo(p_desc_1)
-    if L_desc > TOL:
+    if modo_conexao_ref == u"auto" and L_desc > TOL:
         P_other = (p_desc_1 if p_desc_0.DistanceTo(P_start) < p_desc_1.DistanceTo(P_start)
                    else p_desc_0)
         d_ext = XYZ(
@@ -970,14 +1038,15 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
 
 
 def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-              modo_altura=u"origem", inverter_eixos=False):
+              modo_altura=u"origem", inverter_eixos=False, modo_conexao_ref=u"auto"):
     """Fluxo direto (sem prévia) — abre/fecha a transação e mostra alerta em
     caso de falha. Usado como fallback quando a janela de prévia falha."""
     with Transaction(doc, u"FireUtils - Conectar Tubo") as t:
         t.Start()
         try:
             _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
-                                output, modo_altura=modo_altura, inverter_eixos=inverter_eixos)
+                                output, modo_altura=modo_altura, inverter_eixos=inverter_eixos,
+                                modo_conexao_ref=modo_conexao_ref)
             t.Commit()
         except _ConexaoError as ex:
             t.RollBack()

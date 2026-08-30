@@ -113,7 +113,8 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
                                     pt_abrigo, nivel, dir_face,
                                     pipe_type_id, sys_type_id, output,
                                     lado=u"direita", modo_altura=u"origem",
-                                    inverter_eixos=False):
+                                    inverter_eixos=False,
+                                    modo_conexao_ref=u"corpo"):
     """
     Cria a válvula + stub no lado escolhido e roteia até pipe_ref. NÃO abre
     nem fecha transação — quem chama decide (janela de prévia ou o fluxo
@@ -181,11 +182,13 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
     doc.Regenerate()
 
     # ── Roteamento delegado a connect_pipe ───────────────────────────────
-    # pt_stub_end identifica a ponta livre do stub; pt_click_ref distingue
-    # corpo (Tê) vs ponta (joelho) de pipe_ref.
+    # pt_stub_end identifica a ponta livre do stub; modo_conexao_ref
+    # decide corpo (Tê) vs ponta (joelho) de pipe_ref — escolha explícita
+    # do usuário no diálogo, não mais adivinhada pela distância do clique.
     _construir_conexao(doc, tubo_stub, pipe_ref, pt_stub_end, pt_click_ref,
                         output, modo_altura=modo_altura,
-                        inverter_eixos=inverter_eixos)
+                        inverter_eixos=inverter_eixos,
+                        modo_conexao_ref=modo_conexao_ref)
 
 
 # ===========================================================================
@@ -224,6 +227,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         # _transacao_ativa ainda é False, então _atualizar_preview só sai
         # sem fazer nada — a prévia real só começa abaixo, após abrir a
         # transação.
+        self.RbRefCorpo.IsChecked     = True
         self.RbLadoDireita.IsChecked  = True
         self.RbAlturaOrigem.IsChecked = True
         self.RbEixoPadrao.IsChecked   = True
@@ -258,6 +262,9 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
     def _inverter_eixos_atual(self):
         return bool(self.RbEixoInvertido.IsChecked)
 
+    def _modo_conexao_ref_atual(self):
+        return u"ponta" if self.RbRefPonta.IsChecked else u"corpo"
+
     def _atualizar_preview(self):
         """Descarta a prévia anterior e reconstrói válvula + stub + rota com
         as opções atuais, dentro da mesma transação (ainda não confirmada)."""
@@ -272,6 +279,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 self.pipe_type_id, self.sys_type_id, self.output,
                 lado=self._lado_atual(), modo_altura=self._modo_altura_atual(),
                 inverter_eixos=self._inverter_eixos_atual(),
+                modo_conexao_ref=self._modo_conexao_ref_atual(),
             )
             self.doc.Regenerate()
             self._preview_ok = True
@@ -324,6 +332,16 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
 
 
 def _escolher_opcoes_abrigo_fallback():
+    escolha_ref = forms.SelectFromList.show(
+        [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
+        title=u"Fire Utils — Conectar Abrigo",
+        prompt=u"Onde conectar no tubo de referência?",
+        multiselect=False
+    )
+    if not escolha_ref:
+        return None
+    modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
+
     escolha_lado = forms.SelectFromList.show(
         [u"Esquerda", u"Direita"],
         title=u"Fire Utils — Conectar Abrigo",
@@ -356,7 +374,7 @@ def _escolher_opcoes_abrigo_fallback():
         return None
     inverter_eixos = escolha_eixo.startswith(u"Invertida")
 
-    return lado, modo_altura, inverter_eixos
+    return lado, modo_altura, inverter_eixos, modo_conexao_ref
 
 
 # ===========================================================================
@@ -436,7 +454,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
     opcoes = _escolher_opcoes_abrigo_fallback()
     if opcoes is None:
         pyscript.exit()
-    lado, modo_altura, inverter_eixos = opcoes
+    lado, modo_altura, inverter_eixos, modo_conexao_ref = opcoes
 
     with Transaction(doc, u"FireUtils - Conectar Abrigo") as t:
         t.Start()
@@ -447,6 +465,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
                 pipe_type_id, sys_type_id, output,
                 lado=lado, modo_altura=modo_altura,
                 inverter_eixos=inverter_eixos,
+                modo_conexao_ref=modo_conexao_ref,
             )
             t.Commit()
         except _ConexaoError as ex:
