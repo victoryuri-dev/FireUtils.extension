@@ -652,29 +652,6 @@ class _ConexaoError(Exception):
     pass
 
 
-def _validar_ordem_eixos(inverter_eixos, needs_seg2):
-    """
-    Com inverter_eixos=True, o 1º trecho fecha TODO o desvio perpendicular
-    de uma vez — o que faz esse trecho terminar exatamente SOBRE a reta de
-    pipe_ref (matematicamente: o ponto final do 1º trecho sempre cai na
-    reta, seja qual for o deslocamento perpendicular original). Se ainda
-    sobra um 2º trecho depois disso (needs_seg2=True), esse 2º trecho anda
-    PARALELO a pipe_ref a partir de um ponto que já está sobre a própria
-    reta dele — ou seja, sobrepõe/duplica um pedaço de pipe_ref em vez de
-    formar um Tê/joelho em ângulo reto. Isso só é detectável depois de
-    calcular a rota (não dá pra saber antes se vai sobrar 2º trecho), por
-    isso é chamado logo após cada _rota_ate_endpoint, antes de criar
-    qualquer tubo. Com inverter_eixos=False isso nunca acontece (o trecho
-    final é sempre perpendicular por construção).
-    """
-    if inverter_eixos and needs_seg2:
-        raise _ConexaoError(
-            u"Com a ordem de eixos invertida, o trecho final ficaria "
-            u"paralelo ao tubo de referência (sobreposto à própria linha "
-            u"dele) em vez de perpendicular — não forma um Tê/joelho "
-            u"válido aqui. Use a ordem padrão para esta conexão.")
-
-
 def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
     """
     Escolhe a ponta LIVRE (sem conexão) de pipe_ref pra conectar via joelho.
@@ -890,7 +867,6 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
         P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
             P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
-        _validar_ordem_eixos(inverter_eixos, needs_s2)
         conn_cur = conn_desc
 
         if needs_s1:
@@ -963,7 +939,6 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         # P_knee está fora da extensão lateral de pipe_ref.
         P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
             P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
-        _validar_ordem_eixos(inverter_eixos, needs_s2)
         conn_cur = conn_knee
 
         if needs_s1:

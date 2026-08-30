@@ -123,7 +123,7 @@
                         <TextBlock Text="Invertida (troca X/Y)" TextWrapping="Wrap"/>
                     </RadioButton>
                 </UniformGrid>
-                <TextBlock Text="Padrão: ajusta primeiro o eixo paralelo ao tubo referência. Invertida: ajusta primeiro o eixo perpendicular (pode não ser possível em toda combinação — a prévia avisa)."
+                <TextBlock Text="Padrão: ajusta primeiro o eixo paralelo ao tubo referência. Invertida: ajusta primeiro o eixo perpendicular."
                            FontSize="10" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
             </StackPanel>
