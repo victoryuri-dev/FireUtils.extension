@@ -42,6 +42,20 @@ Etapa 2 — Roteamento em L:
     histórico). inverter_eixos=True: troca a ordem — seg1 fica perpendicular
     ao eixo de pipe_ref (ajusta o outro eixo primeiro) e seg2 paralelo.
 
+    modo_conexao_ref="corpo" + inverter_eixos=True + ainda sobra seg2:
+    seg1 (perpendicular) sempre termina EXATAMENTE sobre a reta infinita
+    de pipe_ref — _ajustar_alvo_corpo_invertido decide o que fazer com
+    isso ANTES de criar seg2 (que rodaria por cima do próprio pipe_ref):
+      ponto de seg1 dentro do corpo físico → conecta ali mesmo (Tê em
+        P_mid), dispensa seg2 e o ponto clicado original.
+      ponto de seg1 fora do corpo físico  → cai para a ponta LIVRE mais
+        próxima de pipe_ref e recalcula a rota pra esse novo alvo (modo
+        joelho, clicou_ponta passa a True).
+    Só se aplica quando a rota horizontal já está na cota de pipe_ref
+    (sempre em modo_altura="origem"; em "destino" só quando not need_vert
+    — do contrário seg2 fica numa cota diferente de pipe_ref e não
+    sobrepõe nada de verdade).
+
   seg1 "colinear com pipe_desc": antes de criar seg1 como tubo novo,
     _tenta_estender_colinear checa se pipe_desc já aponta reto (mesma
     direção, mesma reta) para P_mid — se sim, PROLONGA pipe_desc até lá
@@ -676,6 +690,30 @@ def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
         u"as duas pontas já estão conectadas a outros elementos.")
 
 
+def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref):
+    """
+    Corpo (Tê) + ordem invertida + ainda sobra 2º trecho: o 1º trecho, ao
+    fechar o desvio perpendicular inteiro, sempre termina EXATAMENTE sobre
+    a reta infinita de pipe_ref (matemática garantida, não depende de onde
+    foi o clique) — só falta saber se esse ponto (P_mid) cai dentro do
+    corpo FÍSICO de pipe_ref (entre pt_A e pt_B) ou fora dele:
+
+      dentro → já tem tubo ali pra conectar: usa o próprio P_mid como
+               alvo do Tê, dispensando o 2º trecho (que rodaria por cima
+               do próprio pipe_ref até o ponto clicado originalmente).
+      fora   → não tem tubo naquele ponto da reta; cai para a ponta LIVRE
+               mais próxima de pipe_ref (rota recalculada para esse novo
+               alvo, agora em modo joelho).
+
+    Retorna ("corpo", P_mid) ou ("ponta", pt_endpoint).
+    """
+    L_ref = pt_A.DistanceTo(pt_B)
+    t_mid = (P_mid - pt_A).DotProduct(d_ref)
+    if -TOL <= t_mid <= L_ref + TOL:
+        return u"corpo", P_mid
+    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+
+
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                         modo_altura=u"origem", inverter_eixos=False,
                         modo_conexao_ref=u"auto"):
@@ -867,6 +905,27 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
         P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
             P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
+
+        # Corpo + invertida + ainda sobra 2º trecho: só é um problema real
+        # de sobreposição quando essa rota horizontal já está na cota de
+        # pipe_ref (not need_vert) — se a subida/descida ainda vai
+        # acontecer depois (need_vert), o 2º trecho fica numa cota
+        # diferente da de pipe_ref e não sobrepõe nada de verdade.
+        if (modo_conexao_ref == u"corpo" and inverter_eixos and needs_s2
+                and not clicou_ponta and not need_vert):
+            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
+                pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref)
+            if modo_resultado == u"corpo":
+                P_final  = alvo
+                P_pre    = alvo
+                needs_s2 = False
+            else:
+                clicou_ponta = True
+                P_final = alvo
+                P_pre   = XYZ(P_final.X, P_final.Y, P_start.Z)
+                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
+                    P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
+
         conn_cur = conn_desc
 
         if needs_s1:
@@ -939,6 +998,23 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         # P_knee está fora da extensão lateral de pipe_ref.
         P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
             P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
+
+        # Corpo + invertida + ainda sobra 2º trecho: aqui a rota horizontal
+        # já está sempre na cota de pipe_ref (P_knee.Z == z_ref), então a
+        # sobreposição é sempre real quando isso acontece.
+        if (modo_conexao_ref == u"corpo" and inverter_eixos and needs_s2
+                and not clicou_ponta):
+            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
+                pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref)
+            if modo_resultado == u"corpo":
+                P_final  = alvo
+                needs_s2 = False
+            else:
+                clicou_ponta = True
+                P_final = alvo
+                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
+                    P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
+
         conn_cur = conn_knee
 
         if needs_s1:
