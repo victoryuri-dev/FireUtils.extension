@@ -479,12 +479,14 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
 
     v_max_succao = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
 
-    K        = res["K"]
-    dH       = res["dH"]
-    j        = res["j"]
-    metodo   = res["metodo"]
-    esguicho = res["esguicho"]
-    esg      = res["esg"]
+    K          = res["K"]
+    dH         = res["dH"]
+    j          = res["j"]
+    metodo     = res["metodo"]
+    esguicho   = res["esguicho"]
+    esg        = res["esg"]
+    equilibrio = res["equilibrio"]
+    tolerancia_equilibrio = equilibrio["tolerancia"]
 
     # Ponto de aplicação do par normativo (Q, Pmin), conforme o método
     ponto_ref = u"ponta do esguicho" if esguicho else u"válvula do hidrante"
@@ -679,25 +681,38 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                     u"demais hidrantes: **Q = K·√P**.")
     output.print_md(u"")
 
-    output.print_md(u"**{}) Pressão no Ponto A**, por ramal:".format(prox()))
+    output.print_md(u"**{}) Pressão no Ponto A**, por ramal — os dois calculados "
+                    u"inicialmente com a mesma vazão normativa Qs:".format(prox()))
     _formula(u"P_PA = P_ref + J ± ∆H",
              [(u"P_PA", u"Pressão necessária no Ponto A pelo ramal"),
               (u"P_ref", u"Pressão de referência do hidrante — Pmin ou P_valv, "
                         u"conforme o método"),
               (u"J", u"Perda de carga do ramal (hidrante → Ponto A)"),
               (u"∆H", u"Desnível geométrico do trecho (Hi − Hf)")])
-    output.print_md(u"A pressão adotada no Ponto A é a **maior** entre os ramais "
-                    u"calculados — o ramal dessa pressão é o **ramal governante**.")
+    output.print_md(u"A **maior** pressão entre os dois ramais vira a **pressão-alvo** do "
+                    u"Ponto A, e o ramal dela é o **ramal governante** — ele não muda mais: "
+                    u"por construção, já está com a vazão normativa Qs e a pressão de "
+                    u"referência P_ref.")
     output.print_md(u"")
 
-    output.print_md(u"**{}) Pressão e vazão final em cada hidrante**:".format(prox()))
-    _formula(u"P_hd = P_PA − J ∓ ∆H",
-             [(u"P_hd", u"Pressão resultante em cada hidrante — marcha inversa, "
-                       u"partindo do Ponto A (o ramal governante retorna "
-                       u"exatamente à pressão de referência)")])
-    _formula(u"Q = K · √P",
-             [(u"Q", u"Vazão final de cada hidrante, a partir do Fator K e de P_hd"),
-              (u"Qt", u"Vazão total = soma das vazões dos hidrantes (Qt = ΣQ)")])
+    output.print_md(u"**{}) Equilíbrio hidráulico do ramal mais favorável**: uma diferença "
+                    u"de pressão entre os ramais, calculados os dois com a mesma vazão, é "
+                    u"normal — reflete a diferença de resistência hidráulica entre os "
+                    u"caminhos (comprimento, diâmetro, conexões, desnível), não um erro de "
+                    u"projeto. O Ponto A só tem uma pressão física, então o ramal mais "
+                    u"favorável precisa **convergir** até sua P_A bater com a "
+                    u"pressão-alvo:".format(prox()))
+    _formula(u"P_ref = P_PA,alvo − J − ∆H",
+             [(u"P_ref", u"Pressão de referência recalculada do ramal mais favorável")])
+    _formula(u"Q = K · √P_ref",
+             [(u"Q", u"Vazão recalculada — muda a cada passo, então a perda de carga "
+                    u"TEM que ser recalculada com ela; nunca reaproveitar a perda de "
+                    u"uma vazão diferente")])
+    _formula(u"Erro = |P_A − P_PA,alvo|",
+             [(u"P_A", u"Pressão no Ponto A recalculada com a nova vazão (P_ref + J + ∆H)")])
+    output.print_md(u"Repete até **Erro ≤ tolerância** ({:g} mca). Só então soma-se a "
+                    u"vazão dos dois ramais:".format(tolerancia_equilibrio))
+    _formula(u"Qt = Q_hd01 + Q_hd02")
 
     output.print_md(u"**{}) Marcha de pressões** até a bomba e a RTI, agora com a "
                     u"vazão total Qt:".format(prox()))
@@ -809,18 +824,41 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
              [u"HD02", u"{:.4f}".format(res["P_PA2"]),
               SIM_OK if res["hid_governa"] == u"HD02" else u""]],
             alinhas=[u"left", u"right", u"left"])
-    output.print_md(u"P_PA adotado = **{:.4f} mca** (ramal governante: **{}**)".format(
+    output.print_md(u"P_PA,alvo = **{:.4f} mca** (ramal governante: **{}**)".format(
         res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
-    output.print_md(u"Com o Ponto A nessa pressão, a pressão na válvula de cada hidrante "
-                    u"vem da marcha inversa (o ramal governante retorna, por construção, "
-                    u"exatamente à pressão de referência):")
-    _formula(u"P_hd = P_PA − J ∓ ∆H")
-    _tabela([u"Hidrante", u"P_PA (mca)", u"J (mca)", u"∆H (m)", u"P_hd (mca)"],
-            [[u"HD01", u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t3"]["J"]),
-              _fmt_dh(-dH["t3"]), u"**{:.4f}**".format(res["P_hd01"])],
-             [u"HD02", u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t4"]["J"]),
-              _fmt_dh(-dH["t4"]), u"**{:.4f}**".format(res["P_hd02"])]])
+
+    output.print_md(u"O ramal governante (**{}**) não muda — permanece com a vazão "
+                    u"normativa Qs = {:g} L/min e a pressão de referência P_ref = "
+                    u"{:.4f} mca, por construção. O ramal mais favorável (**{}**) "
+                    u"converge iterativamente até sua P_A bater com a pressão-alvo:".format(
+                        equilibrio[u"ramal_governante"], Qs_lmin, res["P_valv_ref"],
+                        equilibrio[u"ramal_iterado"]))
+    output.print_md(u"")
+    _tabela([u"n", u"P_ref (mca)", u"Q (L/min)", u"J (mca)", u"P_A (mca)", u"Erro (mca)"],
+            [[u"{}".format(h[u"n"]), u"{:.4f}".format(h[u"P_ref"]),
+              u"{:.2f}".format(h[u"Q"]), u"{:.4f}".format(h[u"J"]),
+              u"{:.4f}".format(h[u"P_A"]), u"{:.6f}".format(h[u"erro"])]
+             for h in equilibrio[u"historico"]],
+            titulo=u"Iteração do ramal {} (tolerância = {:g} mca)".format(
+                equilibrio[u"ramal_iterado"], equilibrio[u"tolerancia"]))
+    if equilibrio[u"convergiu"]:
+        output.print_md(u"{} **Convergiu** em {} iteração(ões) — erro final de "
+                        u"{:.6f} mca, dentro da tolerância de {:g} mca.".format(
+                            SIM_OK, len(equilibrio[u"historico"]),
+                            equilibrio[u"erro"], equilibrio[u"tolerancia"]))
+    else:
+        output.print_md(u"{} **Não convergiu** em {} iterações — erro final de "
+                        u"{:.6f} mca, acima da tolerância de {:g} mca. Resultado "
+                        u"aproximado; revisar a geometria da rede.".format(
+                            SIM_X, len(equilibrio[u"historico"]),
+                            equilibrio[u"erro"], equilibrio[u"tolerancia"]))
+    output.print_md(u"")
+
+    output.print_md(u"Pressão na válvula de cada hidrante, ao final do equilíbrio:")
+    _tabela([u"Hidrante", u"P_hd (mca)"],
+            [[u"HD01", u"**{:.4f}**".format(res["P_hd01"])],
+             [u"HD02", u"**{:.4f}**".format(res["P_hd02"])]])
     output.print_md(u"")
     _formula(u"Q = K · √P")
     _tabela([u"Hidrante", u"K", u"P (bar)", u"Q (L/min)"],
@@ -831,6 +869,20 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     output.print_md(u"")
     output.print_md(u"**Qt = Q_hd01 + Q_hd02 = {:.2f} + {:.2f} = {:.2f} L/min**".format(
         res["Q_hd01"], res["Q_hd02"], res["Qt"]))
+    output.print_md(u"")
+
+    _q_favoravel = (res["Q_hd02"] if equilibrio[u"ramal_iterado"] == u"HD02"
+                    else res["Q_hd01"])
+    _r_q = _q_favoravel / Qs_lmin if Qs_lmin else 0.0
+    output.print_md(u"_Indicador de desequilíbrio entre os ramais — o quanto o equilíbrio "
+                    u"elevou a vazão do ramal mais favorável acima da vazão mínima: "
+                    u"R_Q = Q_final/Q_mín = {:.2f}/{:g} = **{:.3f}**. Não há um percentual "
+                    u"fixo como critério normativo; um R_Q alto indica que o ramal "
+                    u"governante está sofrendo perda de carga desproporcional em relação "
+                    u"ao mais favorável, e vale avaliar o diâmetro dele — mas só depois de "
+                    u"conferir a velocidade de escoamento (próximo passo) e verificar se a "
+                    u"diferença não é predominantemente por desnível geométrico, que o "
+                    u"diâmetro não corrige._".format(_q_favoravel, Qs_lmin, _r_q))
     output.print_md(u"")
 
     if esguicho:

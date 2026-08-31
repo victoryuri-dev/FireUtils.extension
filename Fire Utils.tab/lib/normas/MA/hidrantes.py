@@ -64,6 +64,12 @@ DADOS_HIDRANTES = {
     u"v_max_succao_negativa": 2.0,
     u"v_max_succao_ref": u"NT 22 item 5.8.12",
 
+    # -- Equilibrio hidraulico entre os ramais no Ponto A -----------------
+    # Criterio NUMERICO de convergencia da iteracao (|P_A - P_A,alvo|) -
+    # nao e um valor normativo, e a precisao aceita entre o ramal mais
+    # favoravel e a pressao-alvo do ramal governante.
+    u"tolerancia_equilibrio_mca": 0.01,
+
     # -- NPSH disponivel (exigido quando a succao e negativa) ------------
     # Majoracao normativa da vazao usada SO nesta verificacao.
     u"npshd_fator_vazao": 1.5,

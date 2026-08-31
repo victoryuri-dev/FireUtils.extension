@@ -44,7 +44,7 @@ except ImportError:
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
     calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
-    METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
+    METODO_VALVULA, METODOS_CALCULO, calc_j_trecho, TOLERANCIA_EQUILIBRIO_MCA,
 )
 from hidrantes.resultado_ui import (
     mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
@@ -439,7 +439,9 @@ trechos_data = {
 res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
                     metodo=metodo_calculo,
                     mang_dn_mm=dados_sistema["mang_dn"],
-                    mang_comp_m=dados_sistema["mang_comp"])
+                    mang_comp_m=dados_sistema["mang_comp"],
+                    tolerancia_equilibrio_mca=opt(
+                        perfil, u"tolerancia_equilibrio_mca", TOLERANCIA_EQUILIBRIO_MCA))
 
 # Condição de sucção pelo método direto e conservador: compara a cota da RTI
 # com a cota de sucção da bomba, ambas já lidas em "Cotas Altimétricas". Não
