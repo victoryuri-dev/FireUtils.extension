@@ -81,45 +81,43 @@
                     <UniformGrid Columns="2" Margin="0,0,0,14">
                         <RadioButton x:Name="RbRefCorpo" GroupName="GrupoRef" Margin="0,0,4,0"
                                      Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                            <TextBlock Text="Ponto clicado no corpo (Tê)" TextWrapping="Wrap"/>
+                            <TextBlock Text="Ponto clicado" TextWrapping="Wrap"/>
                         </RadioButton>
                         <RadioButton x:Name="RbRefPonta" GroupName="GrupoRef" Margin="4,0,0,0"
                                      Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                            <TextBlock Text="Ponta livre (se houver)" TextWrapping="Wrap"/>
+                            <TextBlock Text="Ponta livre" TextWrapping="Wrap"/>
                         </RadioButton>
                     </UniformGrid>
                 </StackPanel>
 
-                <TextBlock Text="Onde a tubulação deve subir/descer de altura?" Style="{StaticResource LabelStyle}"/>
+                <TextBlock Text="Onde a tubulação deve subir/descer?" Style="{StaticResource LabelStyle}"/>
                 <UniformGrid Columns="2" Margin="0,0,0,14">
                     <RadioButton x:Name="RbAlturaOrigem" GroupName="GrupoAltura" Margin="0,0,4,0"
                                  Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Junto ao tubo desconectado" TextWrapping="Wrap"/>
+                        <TextBlock Text="No tubo desconectado" TextWrapping="Wrap"/>
                     </RadioButton>
                     <RadioButton x:Name="RbAlturaDestino" GroupName="GrupoAltura" Margin="4,0,0,0"
                                  Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Junto ao tubo de referência" TextWrapping="Wrap"/>
+                        <TextBlock Text="No tubo referência" TextWrapping="Wrap"/>
                     </RadioButton>
                 </UniformGrid>
 
-                <TextBlock Text="Ordem dos eixos horizontais (X/Y) na rota" Style="{StaticResource LabelStyle}"/>
+                <TextBlock Text="Qual eixo alinhar primeiro?" Style="{StaticResource LabelStyle}"/>
                 <UniformGrid Columns="2">
                     <RadioButton x:Name="RbEixoPadrao" GroupName="GrupoEixo" Margin="0,0,4,0"
                                  Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Padrão" TextWrapping="Wrap"/>
+                        <TextBlock Text="Paralelo" TextWrapping="Wrap"/>
                     </RadioButton>
                     <RadioButton x:Name="RbEixoInvertido" GroupName="GrupoEixo" Margin="4,0,0,0"
                                  Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Invertida (troca X/Y)" TextWrapping="Wrap"/>
+                        <TextBlock Text="Perpendicular" TextWrapping="Wrap"/>
                     </RadioButton>
                 </UniformGrid>
-                <TextBlock Text="Padrão: ajusta primeiro o eixo paralelo ao tubo referência. Invertida: ajusta primeiro o eixo perpendicular."
-                           FontSize="10" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,6,0,0"/>
 
             </StackPanel>
         </Border>
 
-        <TextBlock x:Name="TxtStatus" Text="Pré-visualizando…" FontSize="11" FontWeight="SemiBold"
+        <TextBlock x:Name="TxtStatus" Text="" FontSize="11" FontWeight="SemiBold"
                    Foreground="{StaticResource BrushOk}" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

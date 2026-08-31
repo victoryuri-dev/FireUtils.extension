@@ -589,7 +589,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             )
             self.doc.Regenerate()
             self._preview_ok = True
-            self.TxtStatus.Text       = u"Pré-visualização atualizada — confirme em OK."
+            self.TxtStatus.Text       = u""
             self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
         except _ConexaoError as ex:
             self.doc.Regenerate()
@@ -643,7 +643,7 @@ def _escolher_opcoes_rota_fallback(clicou_ponta_exata=False):
         modo_conexao_ref = u"ponta"
     else:
         escolha_ref = forms.SelectFromList.show(
-            [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
+            [u"Ponto clicado", u"Ponta livre"],
             title=u"Fire Utils — Conectar Tubo",
             prompt=u"Onde conectar no tubo de referência?",
             multiselect=False
@@ -653,26 +653,25 @@ def _escolher_opcoes_rota_fallback(clicou_ponta_exata=False):
         modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
 
     escolha_altura = forms.SelectFromList.show(
-        [u"Junto ao tubo desconectado", u"Junto ao tubo de referência"],
+        [u"No tubo desconectado", u"No tubo referência"],
         title=u"Fire Utils — Conectar Tubo",
-        prompt=u"Onde a tubulação deve subir/descer de altura?",
+        prompt=u"Onde a tubulação deve subir/descer?",
         multiselect=False
     )
     if not escolha_altura:
         return None
-    modo_altura = (u"destino" if escolha_altura == u"Junto ao tubo de referência"
+    modo_altura = (u"destino" if escolha_altura == u"No tubo referência"
                    else u"origem")
 
     escolha_eixo = forms.SelectFromList.show(
-        [u"Padrão (ajusta primeiro o eixo do tubo referência)",
-         u"Invertida (troca a ordem dos eixos X/Y)"],
+        [u"Paralelo", u"Perpendicular"],
         title=u"Fire Utils — Conectar Tubo",
-        prompt=u"Ordem dos eixos horizontais (X/Y) na rota:",
+        prompt=u"Qual eixo alinhar primeiro?",
         multiselect=False
     )
     if not escolha_eixo:
         return None
-    inverter_eixos = escolha_eixo.startswith(u"Invertida")
+    inverter_eixos = escolha_eixo.startswith(u"Perpendicular")
 
     return modo_altura, inverter_eixos, modo_conexao_ref
 
