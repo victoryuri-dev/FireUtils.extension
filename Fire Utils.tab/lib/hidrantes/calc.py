@@ -22,7 +22,7 @@ de Hidrantes"):
        - "Válvula do Hidrante": na válvula. P de referência = Pmin.
        - "Ponta do Esguicho Regulável": na ponta do esguicho. Entre o
          esguicho e a válvula entram a mangueira e a válvula angular:
-           Jm    = 2·f·Lm/(g·π²·Dm⁵)·Q²   (Darcy-Weisbach, f = 0,022)
+           Jm    = 8·f·Lm/(g·π²·Dm⁵)·Q²   (Darcy-Weisbach, f = 0,022)
            V     = 21,22·Q/Dm²             (velocidade na mangueira)
            Jvalv = K_v·V²/(2g)             (válvula angular, K_v = 5)
            P de referência (na válvula) = Pmin + Jm + Jvalv
@@ -67,12 +67,15 @@ from sync import enviar as enviar_sync
 MCA_POR_BAR = 10.1971
 
 # Constantes do trecho esguicho → mangueira → válvula (método "Ponta do
-# Esguicho Regulável"). O coeficiente 2 da fórmula de Jm é o adotado no
-# documento de referência do escritório.
+# Esguicho Regulável"). O coeficiente 8 da fórmula de Jm vem da própria
+# substituição de Darcy-Weisbach: Jm = f·(Lm/Dm)·(Vm²/2g), com
+# Vm = 4·Qi/(π·Dm²) (velocidade média na mangueira a partir da vazão
+# individual do hidrante), o que dá Jm = 8·f·Lm/(g·π²·Dm⁵)·Qi² — não é uma
+# constante arbitrária de documento.
 F_DARCY     = 0.022   # fator de atrito da mangueira
 G           = 9.81    # aceleração da gravidade, m/s²
 K_VALVULA   = 5.0     # coef. de perda localizada da válvula angular
-COEF_JM     = 2.0     # coeficiente da fórmula de Jm (documento de referência)
+COEF_JM     = 8.0     # coeficiente da fórmula de Jm, de Darcy-Weisbach com Vm=4Qi/(πDm²)
 
 # Métodos de cálculo — a escolha é feita em "Classificar Sistema" e define
 # ONDE o par normativo (Q, Pmin) é aplicado:
@@ -164,13 +167,19 @@ def calc_potencia(qt_m3s, ht_mca, eta_decimal):
 
 def calc_jm_mangueira(q_lmin, lm_m, dm_m, f=F_DARCY):
     """
-    Perda de carga na mangueira (Darcy-Weisbach), na forma do documento
-    de referência:
+    Perda de carga na mangueira, por Darcy-Weisbach:
 
-        Jm = 2·f·Lm / (g·π²·Dm⁵) · Q²
+        Jm = f · (Lm/Dm) · (Vm²/2g),  Vm = 4·Q/(π·Dm²)
 
-    Q é convertida de L/min para m³/s; Lm e Dm em metros (a fórmula só
-    fecha dimensionalmente em SI).
+    que, substituindo Vm, fecha em:
+
+        Jm = 8·f·Lm / (g·π²·Dm⁵) · Q²
+
+    Q é a vazão INDIVIDUAL da mangueira (nunca Qt nem Qt/2 — cada hidrante
+    tem sua própria mangueira e sua própria vazão, que pode divergir da do
+    outro hidrante depois do equilíbrio hidráulico). Q é convertida de
+    L/min para m³/s; Lm e Dm em metros (a fórmula só fecha
+    dimensionalmente em SI).
     """
     if lm_m <= 0 or dm_m <= 0:
         return 0.0
@@ -194,7 +203,7 @@ def calc_cadeia_esguicho(q_lmin, mang_dn_mm, mang_comp_m, p_valv_mca=None,
     """
     Resolve o trecho entre a ponta do esguicho e a válvula do hidrante.
 
-        Jm    = 2·f·Lm/(g·π²·Dm⁵)·Q²      (perda na mangueira)
+        Jm    = 8·f·Lm/(g·π²·Dm⁵)·Q²      (perda na mangueira, Darcy-Weisbach)
         V     = 21,22·Q/Dm²                (velocidade na mangueira)
         Jvalv = K·V²/(2g)                  (perda na válvula angular)
         P_valv = P_esg + Jm + Jvalv        (marcha esguicho → válvula)
@@ -288,7 +297,7 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
       1. Ponto de referência do par normativo:
          - Válvula:  P_valv_ref = Pmin (não há mangueira no cálculo).
          - Esguicho: Pmin está na ponta do esguicho; sobe-se até a válvula
-             Jm    = 2·f·Lm/(g·π²·Dm⁵)·Qs²
+             Jm    = 8·f·Lm/(g·π²·Dm⁵)·Qs²
              V     = 21,22·Qs/Dm²        Jvalv = K·V²/(2g)
              P_valv_ref = Pmin + Jm + Jvalv
       2. K = Qs/√P_valv_ref — calculado só no hidrante mais desfavorável;
