@@ -46,6 +46,17 @@ SHARED_PARAM_FILENAME = "FireUtils_SharedParams.txt"
 
 GROUP_NAME  = "Fire Utils – Hidrantes"
 
+def _categorias_equipamento():
+    """Categorias onde RTI/bomba podem estar modeladas: equipamento
+    mecanico (bomba) e, para a RTI, tanto equipamento quanto peca
+    hidrossanitaria (Plumbing Fixtures - reservatorios costumam vir
+    nessa categoria). OST_PlumbingEquipment nem sempre existe (varia por
+    versao/instalacao do Revit) - getattr com fallback evita
+    AttributeError na importacao do modulo."""
+    nomes = ("OST_MechanicalEquipment", "OST_PlumbingEquipment", "OST_PlumbingFixtures")
+    return [c for c in (getattr(BuiltInCategory, n, None) for n in nomes) if c is not None]
+
+
 # Parâmetros e suas configurações
 #   (nome, tipo_spec_novo, tipo_param_legado, categoria_builtin_list)
 PARAMS_CONFIG = [
@@ -89,6 +100,10 @@ PARAMS_CONFIG = [
         "grupo_ui":   "PG_DATA",
     },
     {
+        # Tambem vai em RTI/bomba (Mechanical/Plumbing Equipment): "Mapear
+        # Trechos" marca essas familias com Identificador = "RTI"/"Bomba",
+        # para o "Dimensionar Hidrantes" achar o elemento direto (sem
+        # precisar percorrer a rede) e ler a cota do conector real dele.
         "nome":       u"FireUtils - Identificador",
         "tipo_novo":  "Text",
         "tipo_legado": "Text",
@@ -96,7 +111,7 @@ PARAMS_CONFIG = [
             BuiltInCategory.OST_PipeCurves,
             BuiltInCategory.OST_PipeFitting,
             BuiltInCategory.OST_PipeAccessory,
-        ],
+        ] + _categorias_equipamento(),
         "instancia":  True,
         "grupo_ui":   "PG_DATA",
     },
@@ -109,7 +124,23 @@ PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 # reclassificar quantas vezes for preciso sem redigitar.
 PROJECT_INFO_CUSTOM_PARAM = u"FireUtils - Sistema Personalizado"
 
-PROJECT_INFO_PARAMS = [PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM]
+# Guarda a escolha de método de cálculo (Válvula do Hidrante / Ponta do
+# Esguicho Regulável), feita em "Classificar Sistema". Por enquanto é só
+# um registro — o motor de cálculo (hidrantes/calc.py) ainda não usa esse
+# valor; ele sempre aplica o método da marcha com Fator K.
+PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
+
+# Guarda, em JSON, os dados do reservatório que a verificação da condição de
+# sucção pelo nível X e o NPSH disponível precisam e que não existem na
+# geometria: cota do fundo, volume total, área em planta, dispositivo
+# antivórtice, poço de sucção e — opcionalmente — o tipo de tomada, quando o
+# usuário quer sobrepor o que foi lido do modelo.
+PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
+
+PROJECT_INFO_PARAMS = [
+    PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM, PROJECT_INFO_METODO_PARAM,
+    PROJECT_INFO_SUCCAO_PARAM,
+]
 
 
 # ---------------------------------------------------------------------------

@@ -5,9 +5,14 @@ Configuração inicial do sistema de hidrantes no projeto.
 
 Fluxo:
   1. Criar e vincular os Shared Parameters no projeto
-  2. Abrir formulário de seleção do Tipo de Sistema (Tabela 2 NT 22) ou de
-     valores personalizados (fora da tabela)
-  3. Salvar o tipo escolhido no Project Information — inclusive os valores
+  2. Abrir formulário único de classificação (hidrantes/forms.py): tipo de
+     sistema (Tabela 2 NT 22) ou valores personalizados, método de cálculo
+     (Válvula do Hidrante / Ponta do Esguicho Regulável) — este último por
+     enquanto só registrado; o motor de cálculo ('Dimensionar Hidrantes')
+     ainda usa sempre o método da marcha com Fator K, independente dessa
+     escolha — e, em "Configurações Avançadas > NPSH", os dados usados no
+     cálculo do NPSH disponível (altitude e temperatura)
+  3. Salvar tudo no Project Information — inclusive os valores
      personalizados (JSON), que ficam guardados no projeto para permitir
      reclassificar quantas vezes for preciso sem redigitar
 """
@@ -19,10 +24,13 @@ clr.AddReference("RevitAPIUI")
 from Autodesk.Revit.DB import Transaction
 from pyrevit import forms, script
 
-from hidrantes.params import create_hydrant_params, PROJECT_INFO_PARAM
+from hidrantes.params import (
+    create_hydrant_params, PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
+)
 from hidrantes.forms import show_system_selection_form
 from hidrantes.db import SISTEMAS_HIDRANTE
 from hidrantes import custom as custom_store
+from hidrantes import succao as succao_calc
 
 doc    = __revit__.ActiveUIDocument.Document
 output = script.get_output()
@@ -49,29 +57,39 @@ except Exception as e:
     script.exit()
 
 # ===========================================================================
-# ETAPA 2 — Selecionar tipo de sistema
+# ETAPA 2 — Selecionar tipo de sistema e método de cálculo
 # ===========================================================================
 output.print_md("---")
-output.print_md("### Etapa 2 — Tipo de Sistema")
+output.print_md("### Etapa 2 — Tipo de Sistema e Método de Cálculo")
 
-# Valores personalizados já salvos neste projeto (se houver) pré-carregam o
-# formulário, permitindo reclassificar sem redigitar tudo de novo.
+# Valores personalizados, método de cálculo e dados de NPSH já salvos neste
+# projeto (se houver) pré-carregam o formulário, permitindo reclassificar
+# sem redigitar/reselecionar tudo de novo.
 custom_salvo = custom_store.load_custom(doc)
 if custom_salvo:
     output.print_md(u"ℹ Valores personalizados encontrados no projeto — "
                     u"formulário pré-carregado.")
 
-resultado = show_system_selection_form(custom_inicial=custom_salvo)
+metodo_param_atual = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
+metodo_salvo = metodo_param_atual.AsString() if metodo_param_atual else None
+
+succao_salvo = succao_calc.load_dados(doc)
+
+resultado = show_system_selection_form(custom_inicial=custom_salvo,
+                                       metodo_inicial=metodo_salvo,
+                                       succao_inicial=succao_salvo)
 
 if resultado is None:
     output.print_md(u"⚠ Seleção cancelada pelo usuário.")
     script.exit()
 
-tipo      = resultado["tipo"]
-variante  = resultado["variante_idx"]
-dados     = resultado["dados"]
-descricao = resultado["descricao"]
-eh_custom = resultado["custom"]
+tipo           = resultado["tipo"]
+variante       = resultado["variante_idx"]
+dados          = resultado["dados"]
+descricao      = resultado["descricao"]
+eh_custom      = resultado["custom"]
+metodo_calculo = resultado["metodo_calculo"]
+dados_succao   = resultado["dados_succao"]
 
 if eh_custom:
     valor_param = custom_store.descrever(resultado["custom_dados"])
@@ -89,6 +107,15 @@ else:
     )
 
 output.print_md(u"✔ Selecionado: **{}**".format(valor_param))
+output.print_md(u"✔ Método de cálculo: **{}**".format(metodo_calculo))
+output.print_md(
+    u"\nℹ _Por enquanto o método de cálculo é apenas registrado — o motor "
+    u"usado em **Dimensionar Hidrantes** ainda aplica sempre o método da "
+    u"marcha com Fator K, independente da escolha acima._")
+output.print_md(u"")
+output.print_md(u"**Configurações Avançadas › NPSH:**")
+output.print_md(u"✔ Altitude do local: **{:g} m**".format(dados_succao["altitude_m"]))
+output.print_md(u"✔ Temperatura da água: **{:g} °C**".format(dados_succao["temperatura_c"]))
 
 # ===========================================================================
 # ETAPA 3 — Salvar no Project Information
@@ -111,6 +138,16 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
                 u"Reabra o projeto e execute novamente.".format(PROJECT_INFO_PARAM)
             )
 
+        param_metodo = pi.LookupParameter(PROJECT_INFO_METODO_PARAM)
+        if param_metodo and not param_metodo.IsReadOnly:
+            param_metodo.Set(metodo_calculo)
+            output.print_md(u"✔ Método de cálculo salvo em Project Information.")
+        else:
+            output.print_md(
+                u"⚠ Parâmetro '{}' não encontrado. "
+                u"Reabra o projeto e execute novamente.".format(PROJECT_INFO_METODO_PARAM)
+            )
+
         # Valores personalizados ficam gravados no projeto (JSON) para poder
         # reclassificar depois sem redigitar. Só sobrescreve quando a
         # classificação atual é personalizada — assim o custom anterior é
@@ -119,6 +156,9 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
             ok_custom, msg_custom = custom_store.save_custom(
                 doc, resultado["custom_dados"])
             output.print_md(u"{} {}".format(u"✔" if ok_custom else u"⚠", msg_custom))
+
+        ok_succao, msg_succao = succao_calc.save_dados(doc, dados_succao)
+        output.print_md(u"{} {}".format(u"✔" if ok_succao else u"⚠", msg_succao))
 
         t.Commit()
     except Exception as e:
@@ -136,6 +176,7 @@ with Transaction(doc, "FireUtils - Definir Tipo de Sistema de Hidrante") as t:
 output.print_md("---")
 output.print_md(u"### ✔ Classificação concluída")
 output.print_md(u"**Sistema:** {}".format(valor_param))
+output.print_md(u"**Método de cálculo:** {}".format(metodo_calculo))
 output.print_md(u"**Descrição:** {}".format(descricao))
 output.print_md(u"**Vazão mín.:** {} L/min".format(dados["vazao_min"]))
 output.print_md(u"**Pressão mín.:** {} mca".format(dados["pressao_min"]))

@@ -67,6 +67,8 @@ def _scan_pasta(pasta, categoria_fixa):
 
     # Sem categoria fixa: cada subpasta vira uma categoria própria.
     for item in os.listdir(pasta):
+        if item == _PREVIEWS_DIRNAME:
+            continue  # pasta de cache de previews, não é uma categoria
         caminho_item = os.path.join(pasta, item)
         if os.path.isdir(caminho_item):
             for nome_arquivo in _arquivos_rfa(caminho_item):

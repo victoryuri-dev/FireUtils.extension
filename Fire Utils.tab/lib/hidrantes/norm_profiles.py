@@ -12,7 +12,7 @@ Uso:
     from hidrantes.norm_profiles import get_profile, req
 
     perfil = get_profile(sigla_estado)   # default "MA" se a UF nao tiver dominio hidrantes
-    pmin_ref = req(perfil, u"pmin_ref")  # erro claro se a chave nao existir
+    c_ref = req(perfil, u"hazen_c_ref")  # erro claro se a chave nao existir
 """
 
 import copy
@@ -71,6 +71,32 @@ def req(perfil, chave):
                 perfil.get(u"norma", u"?"),
                 chave, chave, perfil.get(u"_uf_efetiva", u"?")))
     return perfil[chave]
+
+
+def opt(perfil, chave, default=None):
+    """
+    Acessa uma chave OPCIONAL do perfil normativo ativo.
+
+    Ao contrario de req(), nao levanta erro quando a chave nao existe - e o
+    caminho para dados que variam de estado para estado e que nem todo perfil
+    precisa declarar, como as citacoes de item/tabela da norma. Perfil que nao
+    declara a citacao simplesmente nao a exibe, em vez de exibir a de outro
+    estado.
+    """
+    valor = perfil.get(chave, default)
+    return default if valor is None else valor
+
+
+def ref(perfil, chave):
+    """
+    Citacao normativa (item/tabela/figura) pronta para ir entre parenteses no
+    memorial: " (NT 22 item 5.8.16)". String vazia quando o perfil do estado
+    ativo nao declara essa citacao - o texto sai sem a referencia, nunca com a
+    referencia de outra norma.
+    """
+    valor = opt(perfil, chave, u"")
+    valor = (valor or u"").strip()
+    return u" ({})".format(valor) if valor else u""
 
 
 def lista_ufs_disponiveis():

@@ -30,6 +30,13 @@ XAML inválido etc.), o registro do painel falha silenciosamente em
 startup.py e o botão da faixa de opções cai para o formulário padrão do
 pyRevit (forms.SelectFromList), que já é funcional e testado — nesse caso a
 janela é modal.
+
+Preview (miniatura) das famílias: os cartões mostram a imagem em
+family_library/.previews/<Categoria>/<Nome>.png quando ela existe (ver
+family_loader.py), lida direto do disco — leve e instantânea. Esse .png é
+adicionado manualmente pelo gestor da biblioteca (não há geração
+automática); famílias sem preview continuam mostrando o monograma de duas
+letras.
 """
 
 import os
@@ -220,6 +227,11 @@ class PainelCarregadorFamilias(forms.WPFPanel):
         self.C_WHITE       = self.Resources[u"BrushWhite"]
         self.C_TRANSPARENT = SWM.Brushes.Transparent
 
+        # path -> BitmapImage já decodificado, pra não reler/redecodificar o
+        # .png do disco a cada _atualizar_lista() (ex.: a cada tecla digitada
+        # na busca).
+        self._cache_bitmaps_preview = {}
+
         logo_bitmap = _localizar_logo()
         if logo_bitmap is not None:
             self.LogoImage.Source = logo_bitmap
@@ -346,12 +358,21 @@ class PainelCarregadorFamilias(forms.WPFPanel):
             resultado.extend(entradas_categoria)
         return resultado
 
+    def _obter_bitmap_preview(self, entrada):
+        caminho_png = preview_valido(entrada)
+        if not caminho_png:
+            self._cache_bitmaps_preview.pop(entrada.path, None)
+            return None
+        if entrada.path not in self._cache_bitmaps_preview:
+            self._cache_bitmaps_preview[entrada.path] = _carregar_bitmap(caminho_png)
+        return self._cache_bitmaps_preview[entrada.path]
+
     def _criar_cartao_familia(self, entrada):
         selecionado = entrada.path in self.selecionadas_paths
 
         cartao = SWC.Border()
         cartao.Width = 138
-        cartao.Height = 150
+        cartao.Height = 190
         cartao.Background = self.C_BG2
         cartao.BorderBrush = self.C_ACCENT if selecionado else self.C_BORDER
         cartao.BorderThickness = SW.Thickness(2 if selecionado else 1)
@@ -364,20 +385,34 @@ class PainelCarregadorFamilias(forms.WPFPanel):
 
         conteudo = SWC.StackPanel()
 
+        # Quadrado (118x118 = largura útil do cartão, já descontado o
+        # padding de 10 de cada lado) — imagem de preview em cima, nome
+        # embaixo, igual ao card de referência.
         icone_tile = SWC.Border()
-        icone_tile.Height = 78
+        icone_tile.Height = 118
         icone_tile.CornerRadius = SW.CornerRadius(8)
         icone_tile.ClipToBounds = True
         icone_tile.Background = self.C_ACCENT_TINT if selecionado else self.C_BG3
 
-        icone_txt = SWC.TextBlock()
-        icone_txt.Text = _monograma(entrada.name)
-        icone_txt.FontSize = 22
-        icone_txt.FontWeight = SW.FontWeights.Bold
-        icone_txt.Foreground = self.C_ACCENT if selecionado else self.C_TEXT3
-        icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
-        icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
-        icone_tile.Child = icone_txt
+        # Preview manual (family_library/.previews/*.png) tem prioridade;
+        # sem preview, cai no monograma de sempre.
+        preview_bitmap = self._obter_bitmap_preview(entrada)
+
+        if preview_bitmap is not None:
+            icone_txt = None
+            imagem_preview = SWC.Image()
+            imagem_preview.Source = preview_bitmap
+            imagem_preview.Stretch = SWM.Stretch.UniformToFill
+            icone_tile.Child = imagem_preview
+        else:
+            icone_txt = SWC.TextBlock()
+            icone_txt.Text = _monograma(entrada.name)
+            icone_txt.FontSize = 22
+            icone_txt.FontWeight = SW.FontWeights.Bold
+            icone_txt.Foreground = self.C_ACCENT if selecionado else self.C_TEXT3
+            icone_txt.HorizontalAlignment = SW.HorizontalAlignment.Center
+            icone_txt.VerticalAlignment = SW.VerticalAlignment.Center
+            icone_tile.Child = icone_txt
 
         conteudo.Children.Add(icone_tile)
 
@@ -425,8 +460,12 @@ class PainelCarregadorFamilias(forms.WPFPanel):
 
             cartao.BorderBrush = self.C_ACCENT if novo_estado else self.C_BORDER
             cartao.BorderThickness = SW.Thickness(2 if novo_estado else 1)
-            icone_tile.Background = self.C_ACCENT_TINT if novo_estado else self.C_BG3
-            icone_txt.Foreground = self.C_ACCENT if novo_estado else self.C_TEXT3
+            if icone_txt is not None:
+                # Sem preview real (monograma): tile e texto acompanham a
+                # seleção. Com preview real, a imagem cobre o tile inteiro —
+                # a borda do cartão e o selo no canto já comunicam a seleção.
+                icone_tile.Background = self.C_ACCENT_TINT if novo_estado else self.C_BG3
+                icone_txt.Foreground = self.C_ACCENT if novo_estado else self.C_TEXT3
             badge.Visibility = SW.Visibility.Visible if novo_estado else SW.Visibility.Collapsed
             self._atualizar_status()
 
@@ -580,6 +619,12 @@ def alternar_painel(uiapp):
     Se o painel não foi registrado com sucesso no startup da extensão
     (ambiente WPF divergente, XAML inválido etc.), cai para o formulário
     padrão do pyRevit (forms.SelectFromList), modal, pontual.
+
+    Com nenhum projeto aberto (ex.: tela inicial do Revit), a API às vezes
+    reporta o painel como registrado mas ainda não "criado" de fato —
+    GetDockablePane lança Autodesk.Revit.Exceptions.ArgumentException nesse
+    caso. Como não travar o Revit com um traceback cru, tratamos isso com um
+    aviso pedindo pra abrir um projeto antes.
     """
     if not forms.is_registered_dockable_panel(PainelCarregadorFamilias):
         print(
@@ -592,8 +637,26 @@ def alternar_painel(uiapp):
             _mostrar_fallback(uidoc_ativo.Document, listar_familias())
         return
 
-    painel = forms.get_dockable_panel(PainelCarregadorFamilias)
-    if painel.IsShown():
-        painel.Hide()
-    else:
-        painel.Show()
+    if uiapp.ActiveUIDocument is None:
+        forms.alert(
+            u"Abra ou crie um projeto no Revit antes de abrir o Carregador "
+            u"de Famílias.",
+            title=u"Fire Utils - Carregador de Famílias",
+            warn_icon=True,
+        )
+        return
+
+    try:
+        painel = forms.get_dockable_panel(PainelCarregadorFamilias)
+        if painel.IsShown():
+            painel.Hide()
+        else:
+            painel.Show()
+    except Exception as ex:
+        forms.alert(
+            u"Não foi possível abrir o painel do Carregador de Famílias "
+            u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
+            u"Revit.".format(ex),
+            title=u"Fire Utils - Carregador de Famílias",
+            warn_icon=True,
+        )

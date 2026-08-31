@@ -1,8 +1,55 @@
 # -*- coding: utf-8 -*-
 """
-dimensionar_hidrantes_calc.py — Fire Utils · lib/
-Módulo puro de cálculo hidráulico de hidrantes.
+calc.py — Fire Utils · lib/hidrantes/
+Módulo puro de cálculo hidráulico de hidrantes — MÉTODO DA MARCHA.
 Sem dependências de Revit ou output — pode ser importado por qualquer script.
+
+Passo a passo implementado (documento "Passo a Passo de Cálculo Hidráulico
+de Hidrantes"):
+
+  1. Vazão (Q) e pressão residual mínima (Pmin) de projeto vêm da norma
+     vigente (perfil normativo ativo / Tabela 2).
+  2. Cenário de cálculo: os 2 hidrantes mais desfavoráveis em funcionamento
+     simultâneo (HD01 = mais desfavorável, HD02 = 2º mais desfavorável).
+  3. Trechos: Sucção (RTI → Bomba) e Recalque, subdividido no Ponto A
+     (ponto de distribuição onde as vazões dos hidrantes se separam):
+       T1 = Sucção: RTI → Bomba
+       T2 = Bomba → Ponto A
+       T3 = Ponto A → HD01
+       T4 = Ponto A → HD02
+  4. O método de cálculo (definido em "Classificar Sistema") diz ONDE o par
+     normativo (Q, Pmin) se aplica:
+       - "Válvula do Hidrante": na válvula. P de referência = Pmin.
+       - "Ponta do Esguicho Regulável": na ponta do esguicho. Entre o
+         esguicho e a válvula entram a mangueira e a válvula angular:
+           Jm    = 8·f·Lm/(g·π²·Dm⁵)·Q²   (Darcy-Weisbach, f = 0,022)
+           V     = 21,22·Q/Dm²             (velocidade na mangueira)
+           Jvalv = K_v·V²/(2g)             (válvula angular, K_v = 5)
+           P de referência (na válvula) = Pmin + Jm + Jvalv
+     Fator K calculado APENAS no hidrante mais desfavorável, com esse P de
+     referência:  K = Q / √P , com P em bar (1 bar = 10,1971 mca).
+     O hidrante mais favorável (HD02) recebe pressão maior e portanto
+     vazão maior:  Q_hd02 = K·√P_hd02.
+  5. Comprimentos equivalentes somados POR TRECHO E POR DIÂMETRO:
+     Ltotal(D) = L(D) + Leq(D).
+  6. Perda de carga por Hazen-Williams, por trecho e por diâmetro:
+       Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87   [m/m]
+       (Q em L/min, D = diâmetro NOMINAL (DN) em mm — não o diâmetro
+       interno real do tubo; ex.: DN 65 usa D=65 mm mesmo que o
+       diâmetro interno medido seja 68,8 mm)
+       J   = Ltotal · Jun                            [mca]
+  7. Cotas altimétricas: ΔH = Hi − Hf (ponto inicial e final do trecho,
+     na direção da marcha de cálculo).
+  8. Marcha de pressões (do hidrante mais desfavorável até a RTI):
+       P_PA  = P_hd01 + J ± ΔH
+       P_SB  = P_PA   + J ± ΔH   (Qt = Q_hd01 + Q_hd02; P_PA = maior pressão
+                                  requerida no Ponto A entre os ramais)
+       P_RTI = P_SB   + J ± ΔH   (também com Qt)
+  9. Verificação de velocidade por trecho/diâmetro:
+       V = 21,22 · Q / D²   [m/s]
+     Limites: 2,0 m/s (sucção negativa), 3,0 m/s (sucção positiva),
+              5,0 m/s (recalque/descarga).
+ 10. Demanda final do sistema:  Q = Qt  e  P = P_RTI.
 """
 
 import math
@@ -16,17 +63,37 @@ from sync import enviar as enviar_sync
 # ===========================================================================
 # Constantes
 # ===========================================================================
-# C_HW nao existe mais como constante fixa aqui: o coeficiente de Hazen-Williams
-# e um parametro normativo (Tabela 1) e vem do perfil ativo
-# (hidrantes.norm_profiles) via script.py. _f, _g e _Lm sao constantes fisicas
-# / geometricas internas da formula de Darcy-Weisbach da mangueira, nao valores
-# normativos por estado - permanecem aqui.
-_f   = 0.022
-_g   = 9.81
-_Lm  = 30.0
+# Conversão de unidades de pressão usada pelo Fator K (1 bar = 10,1971 mca).
+MCA_POR_BAR = 10.1971
+
+# Constantes do trecho esguicho → mangueira → válvula (método "Ponta do
+# Esguicho Regulável"). O coeficiente 8 da fórmula de Jm vem da própria
+# substituição de Darcy-Weisbach: Jm = f·(Lm/Dm)·(Vm²/2g), com
+# Vm = 4·Qi/(π·Dm²) (velocidade média na mangueira a partir da vazão
+# individual do hidrante), o que dá Jm = 8·f·Lm/(g·π²·Dm⁵)·Qi² — não é uma
+# constante arbitrária de documento.
+F_DARCY     = 0.022   # fator de atrito da mangueira
+G           = 9.81    # aceleração da gravidade, m/s²
+K_VALVULA   = 5.0     # coef. de perda localizada da válvula angular
+COEF_JM     = 8.0     # coeficiente da fórmula de Jm, de Darcy-Weisbach com Vm=4Qi/(πDm²)
+
+# Métodos de cálculo — a escolha é feita em "Classificar Sistema" e define
+# ONDE o par normativo (Q, Pmin) é aplicado:
+#   Válvula do Hidrante        → Q e Pmin na válvula (não há mangueira no cálculo)
+#   Ponta do Esguicho Regulável → Q e Pmin na ponta do esguicho; a marcha
+#                                 sobe pelo esguicho → mangueira (Jm) →
+#                                 válvula (Jvalv) antes de seguir pela rede
+METODO_VALVULA  = u"Válvula do Hidrante"
+METODO_ESGUICHO = u"Ponta do Esguicho Regulável"
+METODOS_CALCULO = [METODO_VALVULA, METODO_ESGUICHO]
 
 _CACHE_NOME    = u"firedata.json"
 _LAST_PROJ_TXT = u"fireutils_last_project.txt"
+
+
+def eh_metodo_esguicho(metodo):
+    """True se o método de cálculo referencia o par normativo no esguicho."""
+    return (metodo or u"").strip() == METODO_ESGUICHO
 
 
 def _cache_path(projeto_dir=None):
@@ -47,214 +114,309 @@ def _salvar_ponteiro_projeto(projeto_dir):
 
 
 # ===========================================================================
-# CÁLCULO HIDRÁULICO
+# FÓRMULAS BÁSICAS (unidades do memorial: Q em L/min, D em mm, P em mca)
 # ===========================================================================
 
-def calc_hf_trecho(elems_data, Q_m3s, C, label):
+def calc_fator_k(q_lmin, p_mca):
     """
-    Calcula perda de carga de um trecho por Hazen-Williams.
-    elems_data: dict com chaves L, D, Leq, acessorios (já extraídos do Revit).
+    Fator K (coeficiente de vazão) do hidrante mais desfavorável:
+        K = Q / √P      [L/min/bar^0,5]
+    Q em L/min; P convertida de mca para bar (1 bar = 10,1971 mca).
     """
-    L          = elems_data["L"]
-    D          = elems_data["D"]
-    Leq        = elems_data["Leq"]
-    acessorios = elems_data["acessorios"]
-    n_tubos    = elems_data["n_tubos"]
+    p_bar = float(p_mca) / MCA_POR_BAR
+    return float(q_lmin) / math.sqrt(p_bar)
 
-    Lt = L + Leq
-    J  = 10.643 * (Q_m3s ** 1.852) * (C ** -1.852) * (D ** -4.871) if Lt > 0 else 0.0
-    Hf = J * Lt
-    V  = Q_m3s / (math.pi * D * D / 4.0) if D > 0 else 0.0
+
+def vazao_por_k(k, p_mca):
+    """Vazão resultante de uma pressão disponível: Q = K·√P (P em bar)."""
+    if p_mca <= 0:
+        return 0.0
+    return float(k) * math.sqrt(float(p_mca) / MCA_POR_BAR)
+
+
+def calc_jun(q_lmin, c, d_mm):
+    """
+    Perda de carga unitária por Hazen-Williams [m/m]:
+        Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87
+    Q em L/min; D = diâmetro NOMINAL (DN) em mm (não o diâmetro interno
+    real); C adimensional.
+    """
+    if q_lmin <= 0 or d_mm <= 0:
+        return 0.0
+    return (605.0 * (10.0 ** 4)
+            * (float(q_lmin) ** 1.85)
+            * (float(c) ** -1.85)
+            * (float(d_mm) ** -4.87))
+
+
+def calc_velocidade(q_lmin, d_mm):
+    """Velocidade de escoamento [m/s]: V = 21,22 · Q / D² (Q em L/min, D em mm)."""
+    if d_mm <= 0:
+        return 0.0
+    return 21.22 * float(q_lmin) / (float(d_mm) ** 2)
+
+
+def calc_potencia(qt_m3s, ht_mca, eta_decimal):
+    """Potência mínima da bomba em cv: P_cv = (1000·Q·Ht)/(75·η)."""
+    return (1000.0 * qt_m3s * ht_mca) / (75.0 * eta_decimal)
+
+
+# ===========================================================================
+# ESGUICHO → MANGUEIRA → VÁLVULA (método "Ponta do Esguicho Regulável")
+# ===========================================================================
+
+def calc_jm_mangueira(q_lmin, lm_m, dm_m, f=F_DARCY):
+    """
+    Perda de carga na mangueira, por Darcy-Weisbach:
+
+        Jm = f · (Lm/Dm) · (Vm²/2g),  Vm = 4·Q/(π·Dm²)
+
+    que, substituindo Vm, fecha em:
+
+        Jm = 8·f·Lm / (g·π²·Dm⁵) · Q²
+
+    Q é a vazão INDIVIDUAL da mangueira (nunca Qt nem Qt/2 — cada hidrante
+    tem sua própria mangueira e sua própria vazão, que pode divergir da do
+    outro hidrante depois do equilíbrio hidráulico). Q é convertida de
+    L/min para m³/s; Lm e Dm em metros (a fórmula só fecha
+    dimensionalmente em SI).
+    """
+    if lm_m <= 0 or dm_m <= 0:
+        return 0.0
+    q_m3s = float(q_lmin) / 60000.0
+    return ((COEF_JM * f * float(lm_m))
+            / (G * (math.pi ** 2) * (float(dm_m) ** 5))
+            * (q_m3s ** 2))
+
+
+def calc_jvalv(v_ms, k_valv=K_VALVULA):
+    """
+    Perda de carga localizada na válvula angular do hidrante:
+        Jvalv = K · v² / (2g)
+    v = velocidade do fluido na mangueira [m/s]; K = 5 (adotado em projeto).
+    """
+    return float(k_valv) * (float(v_ms) ** 2) / (2.0 * G)
+
+
+def calc_cadeia_esguicho(q_lmin, mang_dn_mm, mang_comp_m, p_valv_mca=None,
+                         p_esg_mca=None):
+    """
+    Resolve o trecho entre a ponta do esguicho e a válvula do hidrante.
+
+        Jm    = 8·f·Lm/(g·π²·Dm⁵)·Q²      (perda na mangueira, Darcy-Weisbach)
+        V     = 21,22·Q/Dm²                (velocidade na mangueira)
+        Jvalv = K·V²/(2g)                  (perda na válvula angular)
+        P_valv = P_esg + Jm + Jvalv        (marcha esguicho → válvula)
+
+    Informe p_esg_mca para subir do esguicho até a válvula (dimensionamento
+    do hidrante governante), ou p_valv_mca para descer da válvula até o
+    esguicho (demais hidrantes, cuja vazão já saiu do Fator K).
+    """
+    dm_m  = float(mang_dn_mm) / 1000.0
+    jm    = calc_jm_mangueira(q_lmin, mang_comp_m, dm_m)
+    v     = calc_velocidade(q_lmin, mang_dn_mm)
+    jvalv = calc_jvalv(v)
+
+    if p_esg_mca is not None:
+        p_esg  = float(p_esg_mca)
+        p_valv = p_esg + jm + jvalv
+    else:
+        p_valv = float(p_valv_mca)
+        p_esg  = p_valv - jm - jvalv
 
     return {
-        "label":      label,
-        "Q_m3s":      Q_m3s,
-        "Q_lmin":     Q_m3s * 60000.0,
-        "L":          L,
-        "Leq":        Leq,
-        "Lt":         Lt,
-        "D":          D,
-        "J":          J,
-        "Hf":         Hf,
-        "V":          V,
-        "acessorios": acessorios,
-        "n_tubos":    n_tubos,
-        "n_aces":     len(acessorios),
+        "Q_lmin": q_lmin,
+        "Jm":     jm,
+        "V":      v,
+        "Jvalv":  jvalv,
+        "P_esg":  p_esg,
+        "P_valv": p_valv,
     }
 
 
-def calc_hf_mangueira(Q_m3s, Dm_m):
+# ===========================================================================
+# PERDA DE CARGA DE UM TRECHO (por diâmetro)
+# ===========================================================================
+
+def calc_j_trecho(trecho_data, q_lmin, c, label=u""):
     """
-    Perda de carga na mangueira por Darcy-Weisbach, em função da vazão.
+    Aplica Hazen-Williams a um trecho, POR SEGMENTO DE DIÂMETRO, e soma:
+        J_trecho = Σ [ Ltotal(D) · Jun(Q, C, D) ]
 
-    Dedução: hf = f·(L/D)·(V²/2g), com V = Q/A = 4Q/(π·D²)
-      → V² = 16·Q² / (π²·D⁴)
-      → hf = f·L/D × 16·Q² / (2g·π²·D⁴) = 8·f·L·Q² / (g·π²·D⁵)
+    trecho_data: dict de extrair_trecho() — {"segmentos": [...], "L", "Leq"}.
+    Retorna dict com os segmentos calculados (Jun, J e V por diâmetro),
+    a perda total J e a maior velocidade encontrada no trecho.
     """
-    return (8.0 * _f * _Lm) / (_g * (math.pi ** 2) * (Dm_m ** 5)) * (Q_m3s ** 2)
-
-
-def calc_pressao(Ht, Hz, Hf_percurso):
-    """Pressão residual na válvula do hidrante."""
-    return Ht + Hz - Hf_percurso
-
-
-def calc_potencia(Qt_m3s, Ht, eta_decimal):
-    """Potência da bomba em cv."""
-    return (1000.0 * Qt_m3s * Ht) / (75.0 * eta_decimal)
-
-
-def hesg_mca(q_lmin, k=None, d_mm=None, cd=0.97):
-    """
-    Pressao requerida no esguicho (mca), para uso quando Pmin e referenciada
-    na valvula do hidrante (pmin_ref = "valvula") e a perda no esguicho
-    regulavel precisa ser somada explicitamente na cadeia de energia.
-
-    k    : fator de vazao de catalogo do esguicho regulavel (Q = K*sqrt(P)).
-    d_mm : diametro do requinte, para jato solido (Q = 0,2087*cd*d^2*sqrt(H)).
-    """
-    if k:
-        return (q_lmin / float(k)) ** 2
-    return (q_lmin / (0.2087 * cd * float(d_mm) ** 2)) ** 2
-
-
-def verificar_equilibrio_no(E1, E2, limite):
-    """
-    Verifica o equilibrio de pressoes requeridas no no de derivacao entre os
-    dois ramais mais desfavoraveis (referencia normativa: limite recebido do
-    perfil ativo, ex. NT 22 item 5.8.15).
-
-    No modelo de demanda fixa, o desequilibrio entre os ramais e:
-        desequilibrio = abs(E1 - E2)
-    onde E1/E2 sao as energias dos ramais ja calculadas por calcular_rede().
-
-    Retorna dict com desequilibrio, limite, margem (limite - desequilibrio,
-    negativa se reprovado) e atende (bool).
-    """
-    desequilibrio = abs(E1 - E2)
+    segmentos = []
+    J_total = 0.0
+    V_max   = 0.0
+    for seg in trecho_data["segmentos"]:
+        jun = calc_jun(q_lmin, c, seg["d_mm"])
+        j   = jun * seg["Ltotal"]
+        v   = calc_velocidade(q_lmin, seg["d_mm"])
+        J_total += j
+        if v > V_max:
+            V_max = v
+        s = dict(seg)
+        s["Jun"] = jun
+        s["J"]   = j
+        s["V"]   = v
+        segmentos.append(s)
     return {
-        u"desequilibrio": desequilibrio,
-        u"limite":        limite,
-        u"margem":        limite - desequilibrio,
-        u"atende":        desequilibrio <= limite,
+        "label":     label,
+        "Q_lmin":    q_lmin,
+        "segmentos": segmentos,
+        "J":         J_total,
+        "V_max":     V_max,
+        "L":         trecho_data["L"],
+        "Leq":       trecho_data["Leq"],
     }
 
 
 # ===========================================================================
-# RESOLUÇÃO DA REDE HIDRÁULICA — MODELO DE DEMANDA FIXA
+# RESOLUÇÃO DA REDE — MÉTODO DA MARCHA COM FATOR K
 # ===========================================================================
 
-def calcular_rede(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
-                  Hesg, Pmin, C,
-                  Dm_mangueira_m=None,
-                  **kwargs):
+def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
+                  metodo=METODO_VALVULA, mang_dn_mm=None, mang_comp_m=None):
     """
-    Calcula a rede hidráulica de dois hidrantes em paralelo.
+    Resolve a rede de 2 hidrantes em paralelo pelo método da marcha.
+    PASSO ÚNICO — sem iteração, sem recalcular o Fator K.
 
-    Modelo de demanda fixa: cada hidrante opera com a vazão normativa mínima
-    Q_i = Qs_lmin (demanda especificada pela norma). Isso determina o sistema
-    completamente — sem coeficiente empírico, sem igualdade artificial de energia
-    entre ramais. As pressões resultam das equações hidráulicas; não são impostas.
+    trechos_data: {"t1","t2","t3","t4"} — dicts de extrair_trecho().
+        t1 = Sucção: RTI → Bomba      t2 = Bomba → Ponto A
+        t3 = Ponto A → HD01           t4 = Ponto A → HD02
+    Qs_lmin, Pmin: par normativo do hidrante mais desfavorável (L/min, mca).
+    C: coeficiente de Hazen-Williams.
+    cotas: {"z_rti","z_hd01","z_hd02","z_ponto_a","z_recalque","z_succao"} em m.
+    metodo: METODO_VALVULA ou METODO_ESGUICHO — define onde (Qs, Pmin) se
+        aplicam. No método do esguicho, mang_dn_mm e mang_comp_m são
+        obrigatórios (mangueira entre o esguicho e a válvula).
 
-    Sequência de cálculo (ordem física da rede):
-      1. Q1 = Q2 = Qs_lmin → Qt = Q1 + Q2
-      2. Hazen-Williams em cada trecho com as vazões especificadas
-      3. Darcy-Weisbach na mangueira de cada hidrante: Hm = (8fLm)/(gπ²Dm⁵) × Q²
-      4. Energia de cada ramal: E_i = hf_ramal_i + Hm_i + Hesg − ΔZ_i
-      5. Ramal governante: argmax(E1, E2) → determina a HMT mínima da bomba
-      6. HMT: Ht = Pmin + Hf_tronco + E_gov
-      7. Pressões reais (P1 ≠ P2 em geral): P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg
-         O ramal governante tem P = Pmin; o outro tem P = Pmin + (E_gov − E_i) > Pmin.
-
-    Hipótese de projeto: demanda fixa é a modelagem padrão em dimensionamento
-    de sistemas de proteção contra incêndio (analogia ao fire flow analysis no EPANET:
-    demanda nodal especificada → solver calcula pressões).
+    Sequência:
+      1. Ponto de referência do par normativo:
+         - Válvula:  P_valv_ref = Pmin (não há mangueira no cálculo).
+         - Esguicho: Pmin está na ponta do esguicho; sobe-se até a válvula
+             Jm    = 8·f·Lm/(g·π²·Dm⁵)·Qs²
+             V     = 21,22·Qs/Dm²        Jvalv = K·V²/(2g)
+             P_valv_ref = Pmin + Jm + Jvalv
+      2. K = Qs/√P_valv_ref — calculado só no hidrante mais desfavorável;
+         é ele que dá a vazão dos demais hidrantes.
+      3. Hazen-Williams nos dois ramais, ambos com a vazão normativa Qs
+         (uma única passada — J_i não é recalculado depois):
+           P_PA(ramal i) = P_valv_ref + J_i ± ΔH_i
+      4. Ponto A adota a MAIOR pressão requerida entre os ramais — o ramal
+         dessa pressão é o governante:  P_PA = max(P_PA1, P_PA2)
+      5. Pressão na válvula de cada hidrante (o governante fica, por
+         construção, com P_valv = P_valv_ref):
+           P_hd_i = P_PA − J_i ∓ ΔH_i
+      6. Vazão final de cada hidrante pelo Fator K:  Q_hd_i = K·√P_hd_i
+         Qt = Q_hd01 + Q_hd02
+         No método do esguicho, Jm/V/Jvalv de cada hidrante são então
+         recalculados com a vazão final (crescem em direção aos pontos
+         mais favoráveis) e a pressão no esguicho sai de
+           P_esg_i = P_hd_i − Jm_i − Jvalv_i.
+      7. Qt segue para o tronco: P_SB  = P_PA + J(T2, Qt) ± ΔH_t2
+                                  P_RTI = P_SB + J(T1, Qt) ± ΔH_t1
+      8. Demanda final: Q = Qt, P = P_RTI.
     """
-    Qs = Qs_lmin / 60000.0   # m³/s
+    Qs   = float(Qs_lmin)
+    Pmin = float(Pmin)
 
-    # Demandas especificadas pela norma (vazão mínima em cada hidrante)
-    Q1 = Qs
-    Q2 = Qs
+    esguicho = eh_metodo_esguicho(metodo)
+    if esguicho and not (mang_dn_mm and mang_comp_m):
+        raise ValueError(
+            u"O método '{}' exige o DN e o comprimento da mangueira.".format(
+                METODO_ESGUICHO))
+
+    # ΔH = Hi − Hf por trecho, na direção da marcha de cálculo:
+    #   T3/T4: hidrante → Ponto A    T2: Ponto A → saída da bomba (recalque)
+    #   T1: sucção da bomba → RTI
+    dH = {
+        "t3": cotas["z_hd01"]   - cotas["z_ponto_a"],
+        "t4": cotas["z_hd02"]   - cotas["z_ponto_a"],
+        "t2": cotas["z_ponto_a"] - cotas["z_recalque"],
+        "t1": cotas["z_succao"] - cotas["z_rti"],
+    }
+
+    # Ponto de referência do par normativo, na válvula do hidrante governante
+    if esguicho:
+        # Pmin está na ponta do esguicho: sobe esguicho → mangueira → válvula
+        esg_ref = calc_cadeia_esguicho(Qs, mang_dn_mm, mang_comp_m,
+                                       p_esg_mca=Pmin)
+        P_valv_ref = esg_ref["P_valv"]
+    else:
+        esg_ref = None
+        P_valv_ref = Pmin
+
+    K = calc_fator_k(Qs, P_valv_ref)
+
+    # Ramais HD01 e HD02, ambos com a vazão normativa — passada única
+    j3 = calc_j_trecho(trechos_data["t3"], Qs, C, u"Trecho HD01 ao Ponto A")
+    j4 = calc_j_trecho(trechos_data["t4"], Qs, C, u"Trecho HD02 ao Ponto A")
+
+    # Pressão requerida no Ponto A por cada ramal
+    P_PA1 = P_valv_ref + j3["J"] + dH["t3"]
+    P_PA2 = P_valv_ref + j4["J"] + dH["t4"]
+    P_PA  = max(P_PA1, P_PA2)
+
+    # Pressão na válvula de cada hidrante com o Ponto A na pressão adotada.
+    # O ramal governante fica exatamente em P_valv_ref (é dele que P_PA veio).
+    P_hd01 = P_PA - j3["J"] - dH["t3"]
+    P_hd02 = P_PA - j4["J"] - dH["t4"]
+
+    # Vazão final de cada hidrante pelo Fator K — J não é recalculado; o
+    # ramal governante retorna à vazão normativa Qs por construção
+    # (K·√P_valv_ref = Qs, já que K foi definido a partir desse mesmo par).
+    Q1 = vazao_por_k(K, P_hd01)
+    Q2 = vazao_por_k(K, P_hd02)
     Qt = Q1 + Q2
 
-    # Hazen-Williams em cada trecho com as respectivas vazões
-    hf = {
-        "t1": calc_hf_trecho(trechos_data["t1"], Qt, C, u"RTI → Bomba"),
-        "t2": calc_hf_trecho(trechos_data["t2"], Qt, C, u"Bomba → Ponto A"),
-        "t3": calc_hf_trecho(trechos_data["t3"], Q1, C, u"Ponto A → HID-01"),
-        "t4": calc_hf_trecho(trechos_data["t4"], Q2, C, u"Ponto A → HID-02"),
-    }
-
-    Hf_tronco = hf["t1"]["Hf"] + hf["t2"]["Hf"]
-    Hf1       = Hf_tronco + hf["t3"]["Hf"]
-    Hf2       = Hf_tronco + hf["t4"]["Hf"]
-
-    # Darcy-Weisbach na mangueira de cada hidrante
-    Hm1 = calc_hf_mangueira(Q1, Dm_mangueira_m) if Dm_mangueira_m else 0.0
-    Hm2 = calc_hf_mangueira(Q2, Dm_mangueira_m) if Dm_mangueira_m else 0.0
-
-    # Energia de cada ramal vista do Nó A (demanda energética do ramal, sem Pmin)
-    E1 = hf["t3"]["Hf"] + Hm1 + Hesg - Hz_H1
-    E2 = hf["t4"]["Hf"] + Hm2 + Hesg - Hz_H2
-
-    # Ramal governante: o mais exigente define a HMT mínima da bomba
-    E_gov = max(E1, E2)
-    Ht    = float(Pmin) + Hf_tronco + E_gov
-
-    # Pressões reais em cada hidrante (resultado das equações — não impostas)
-    p1 = Ht + Hz_H1 - Hf1 - Hm1 - Hesg
-    p2 = Ht + Hz_H2 - Hf2 - Hm2 - Hesg
-
-    norm_ok = (p1 >= float(Pmin) - 0.01 and p2 >= float(Pmin) - 0.01)
-
-    historico = [{
-        "ciclo":   1,
-        "Qt":      Qt * 60000.0,
-        "Q_h01":   Q1 * 60000.0,
-        "Q_h02":   Q2 * 60000.0,
-        "Hf_t1":   hf["t1"]["Hf"],
-        "Hf_t2":   hf["t2"]["Hf"],
-        "Hf_t3":   hf["t3"]["Hf"],
-        "Hf_t4":   hf["t4"]["Hf"],
-        "Hf1":     Hf1,
-        "Hf2":     Hf2,
-        "Hm1":     Hm1,
-        "Hm2":     Hm2,
-        "E1":      E1,
-        "E2":      E2,
-        "Ht":      Ht,
-        "p1":      p1,
-        "p2":      p2,
-        "V_t1":    hf["t1"]["V"],
-        "V_t2":    hf["t2"]["V"],
-        "V_t3":    hf["t3"]["V"],
-        "V_t4":    hf["t4"]["V"],
-        "norm_ok": norm_ok,
-    }]
-
-    if E1 >= E2:
-        hid_governa = u"HID-01"; Hf_gov = Hf1; Hz_gov = Hz_H1; Hm_gov = Hm1
+    # Método do esguicho: com a vazão final de cada hidrante, refaz-se a
+    # cadeia válvula → mangueira → esguicho (valores crescem em direção aos
+    # pontos mais favoráveis). No governante, P_esg volta a ser Pmin.
+    if esguicho:
+        esg = {
+            "hd01": calc_cadeia_esguicho(Q1, mang_dn_mm, mang_comp_m,
+                                         p_valv_mca=P_hd01),
+            "hd02": calc_cadeia_esguicho(Q2, mang_dn_mm, mang_comp_m,
+                                         p_valv_mca=P_hd02),
+            "ref":  esg_ref,
+            "mang_dn_mm":  mang_dn_mm,
+            "mang_comp_m": mang_comp_m,
+        }
     else:
-        hid_governa = u"HID-02"; Hf_gov = Hf2; Hz_gov = Hz_H2; Hm_gov = Hm2
+        esg = None
+
+    # Trecho Ponto A à descarga da bomba, com Qt e a maior pressão do Ponto A
+    j2 = calc_j_trecho(trechos_data["t2"], Qt, C, u"Trecho Bomba ao Ponto A")
+    P_SB = P_PA + j2["J"] + dH["t2"]
+
+    # Trecho de sucção (também com Qt); P_RTI é a demanda final de pressão
+    j1 = calc_j_trecho(trechos_data["t1"], Qt, C, u"Trecho de Sucção (RTI à Bomba)")
+    P_RTI = P_SB + j1["J"] + dH["t1"]
+
+    hid_governa = u"HD01" if P_PA1 >= P_PA2 else u"HD02"
 
     return {
-        "hf":          hf,
-        "Hf_Hid01":    Hf1,
-        "Hf_Hid02":    Hf2,
-        "Ht":          Ht,
-        "p_hid01":     p1,
-        "p_hid02":     p2,
-        "Q_h01":       Q1 * 60000.0,
-        "Q_h02":       Q2 * 60000.0,
-        "Qt_final":    Qt * 60000.0,
+        "metodo":     metodo,
+        "esguicho":   esguicho,
+        "K":          K,
+        "P_valv_ref": P_valv_ref,
+        "esg":        esg,
+        "dH":         dH,
+        "j":          {"t1": j1, "t2": j2, "t3": j3, "t4": j4},
+        "Q_hd01":     Q1,
+        "Q_hd02":     Q2,
+        "Qt":         Qt,
+        "P_PA1":      P_PA1,
+        "P_PA2":      P_PA2,
+        "P_PA":       P_PA,
+        "P_hd01":     P_hd01,
+        "P_hd02":     P_hd02,
+        "P_SB":       P_SB,
+        "P_RTI":      P_RTI,
         "hid_governa": hid_governa,
-        "Hf_governa":  Hf_gov,
-        "Hz_governa":  Hz_gov,
-        "Hm_governa":  Hm_gov,
-        "Hm_hid01":    Hm1,
-        "Hm_hid02":    Hm2,
-        "iteracoes":   1,
-        "historico":   historico,
     }
 
 
@@ -265,55 +427,81 @@ def calcular_rede(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
 
 def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_nome_fn):
     """
-    Extrai L, D, Leq e acessórios agrupados de uma lista de elementos Revit.
-    Recebe as funções helper como parâmetro para manter este módulo sem imports Revit.
+    Extrai os dados de um trecho AGRUPADOS POR DIÂMETRO NOMINAL (DN), como
+    exige o passo a passo: um mesmo trecho pode ter variações de diâmetro, e
+    cada diâmetro precisa de somatória própria (Ltotal(D) = L(D) + Leq(D)).
+    "d_mm" nos segmentos abaixo é sempre o DN (get_diametro_fn deve
+    retornar o diâmetro nominal do elemento, não o interno real).
 
-    Acessórios são agrupados por (nome do tipo, diâmetro nominal) — nunca apenas
-    pelo nome — pois um mesmo tipo de acessório (ex.: "Tê") pode ocorrer em
-    diâmetros diferentes dentro do mesmo trecho, cada um com Leq unitário próprio.
-    Dentro de cada grupo, le_unit é a média exata dos valores acumulados
-    (leq_tot_grupo / qtd_grupo), garantindo por construção que
-    qtd × le_unit == leq_tot em toda linha exibida no memorial.
+    Recebe as funções helper como parâmetro para manter este módulo sem
+    imports Revit. Retorna:
+        {
+          "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos",
+                           "acessorios": [ {nome, qtd, leq_unit, leq_tot} ] } ],
+          "L":   soma dos comprimentos reais,
+          "Leq": soma dos comprimentos equivalentes,
+        }
+
+    Acessórios são agrupados por nome do tipo dentro de cada diâmetro.
+    le_unit é a média exata dos valores acumulados (leq_tot / qtd), garantindo
+    por construção que qtd × le_unit == leq_tot em toda linha do memorial.
     """
     from Autodesk.Revit.DB.Plumbing import Pipe
     from Autodesk.Revit.DB import FamilyInstance
 
-    L = 0.0; Leq = 0.0; D_list = []; aces_raw = {}
+    segs = {}
+
+    def _seg(d_mm):
+        if d_mm not in segs:
+            segs[d_mm] = {"d_mm": d_mm, "L": 0.0, "Leq": 0.0,
+                          "n_tubos": 0, "aces": {}}
+        return segs[d_mm]
 
     for elem in elems:
         if isinstance(elem, Pipe):
-            L += get_comprimento_fn(elem)
-            D_list.append(get_diametro_fn(elem))
+            d_mm = round(get_diametro_fn(elem) * 1000.0, 1)
+            s = _seg(d_mm)
+            s["L"]       += get_comprimento_fn(elem)
+            s["n_tubos"] += 1
         elif isinstance(elem, FamilyInstance):
             leq = get_leq_fn(elem)
-            Leq += leq
             if leq > 0:
-                nome  = get_nome_fn(elem)
-                dn_mm = int(round(get_diametro_fn(elem) * 1000.0))
-                chave = (nome, dn_mm)
-                if chave in aces_raw:
-                    aces_raw[chave]["qtd"]     += 1
-                    aces_raw[chave]["leq_tot"] += leq
+                d_mm = round(get_diametro_fn(elem) * 1000.0, 1)
+                s = _seg(d_mm)
+                s["Leq"] += leq
+                nome = get_nome_fn(elem)
+                if nome in s["aces"]:
+                    s["aces"][nome]["qtd"]     += 1
+                    s["aces"][nome]["leq_tot"] += leq
                 else:
-                    aces_raw[chave] = {"qtd": 1, "leq_tot": leq, "nome": nome, "dn_mm": dn_mm}
+                    s["aces"][nome] = {"qtd": 1, "leq_tot": leq, "nome": nome}
 
-    acessorios = []
-    for v in aces_raw.values():
-        leq_unit = v["leq_tot"] / float(v["qtd"])  # média exata: qtd*leq_unit == leq_tot sempre
-        assert abs(v["qtd"] * leq_unit - v["leq_tot"]) < 0.001
-        acessorios.append({
-            "nome":     u"{} DN{}".format(v["nome"], v["dn_mm"]),
-            "qtd":      v["qtd"],
-            "leq_unit": leq_unit,
-            "leq_tot":  v["leq_tot"],
+    segmentos = []
+    for d_mm in sorted(segs.keys()):
+        s = segs[d_mm]
+        acessorios = []
+        for v in s["aces"].values():
+            leq_unit = v["leq_tot"] / float(v["qtd"])
+            acessorios.append({
+                "nome":     v["nome"],
+                "qtd":      v["qtd"],
+                "leq_unit": leq_unit,
+                "leq_tot":  v["leq_tot"],
+            })
+        acessorios.sort(key=lambda a: a["nome"])
+        segmentos.append({
+            "d_mm":       s["d_mm"],
+            "L":          s["L"],
+            "Leq":        s["Leq"],
+            "Ltotal":     s["L"] + s["Leq"],
+            "n_tubos":    s["n_tubos"],
+            "acessorios": acessorios,
         })
 
     return {
-        "L":          L,
-        "D":          sum(D_list) / len(D_list) if D_list else 0.065,
-        "Leq":        Leq,
-        "acessorios": acessorios,
-        "n_tubos":    len(D_list),
+        "segmentos": segmentos,
+        "L":   sum(s["L"]   for s in segmentos),
+        "Leq": sum(s["Leq"] for s in segmentos),
     }
 
 

@@ -1,20 +1,38 @@
 # -*- coding: utf-8 -*-
 """
 script.py — Fire Utils · Dimensionar Hidrantes
-Output rápido de conferência no pyRevit + salva cache para o botão Memorial.
+Dimensionamento hidráulico pelo MÉTODO DA MARCHA (passo a passo):
+HD01 → Ponto A → Descarga da Bomba → RTI, com ajuste da vazão do hidrante
+mais favorável pelo Fator K.
+
+Ao final, mostra só as verificações e os resultados finais (velocidade nos
+trechos, pressão/vazão nos hidrantes mais desfavoráveis, demanda do sistema
+e requisitos da bomba) — não o memorial de cálculo completo, que agora é o
+botão separado "Memorial de Cálculo". Se alguma verificação não atender a
+norma, o dimensionamento para naquele ponto e mostra onde corrigir, em vez
+de seguir adiante com um resultado que não atende.
+
+Salva os resultados completos no cache (firedata.json) para o botão
+"Memorial de Cálculo" reimprimir o passo a passo sem recalcular.
+(Nos elementos do Revit os identificadores gravados por 'Mapear Trechos'
+continuam sendo "HID-01"/"HID-02"; no memorial a nomenclatura é HD01/HD02.)
 """
 
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
+import os
+import io as _io
+import re as _re
+
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
+    FlowDirectionType, ConnectorType,
     LocationCurve, LocationPoint, UnitUtils,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from pyrevit import forms, script
-import math, sys, os
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -25,26 +43,28 @@ except ImportError:
 
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
-    calcular_rede, calc_hf_mangueira, calc_potencia, hesg_mca,
-    verificar_equilibrio_no, extrair_trecho, salvar_cache,
-    _f, _g, _Lm,
+    calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
+    METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
 )
-from hidrantes.norm_profiles import get_profile, req
+from hidrantes.resultado_ui import (
+    mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
+    mostrar_resultado_ok,
+)
+from hidrantes.params import PROJECT_INFO_METODO_PARAM
+from hidrantes.norm_profiles import get_profile, req, opt
 from hidrantes import custom as custom_store
+from hidrantes import succao as succao_calc
+from hidrantes import npshd as npshd_calc
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 P_TRECHO           = u"FireUtils - Trecho"
 P_IDENTIFICADOR    = u"FireUtils - Identificador"
 
-# Simbolos de saida no output window do pyRevit (janela de output do pyRevit
-# roda em unicode e normalmente exibe ✓/✗/≤ sem problema). Se algum ambiente
-# nao renderizar esses caracteres, mude _ASCII_FALLBACK para True aqui -
-# unico lugar do arquivo que define esses simbolos.
-_ASCII_FALLBACK = False
-if _ASCII_FALLBACK:
-    SIM_OK, SIM_X, SIM_LE, SIM_GE = u"OK", u"X", u"<=", u">="
-else:
-    SIM_OK, SIM_X, SIM_LE, SIM_GE = u"✓", u"✗", u"≤", u"≥"
+# IronPython 2.7 (engine do pyRevit) tem 'unicode'; CPython 3 não.
+try:
+    _txt = unicode
+except NameError:
+    _txt = str
 
 doc    = __revit__.ActiveUIDocument.Document
 output = script.get_output()
@@ -62,7 +82,9 @@ def get_trecho(elem):
 def get_identificador(elem):
     try:
         p = elem.LookupParameter(P_IDENTIFICADOR)
-        return p.AsString() if p else None
+        if not p or not p.HasValue: return None
+        valor = p.AsString()
+        return valor.strip() if valor else None
     except: return None
 
 def get_comprimento(pipe):
@@ -72,10 +94,19 @@ def get_comprimento(pipe):
     except: return 0.0
 
 def get_diametro(pipe):
+    """
+    Diâmetro NOMINAL (DN) do elemento — não o diâmetro interno real medido
+    pelo schedule/material. Ex.: um tubo DN 65 pode ter diâmetro interno
+    de 68,8 mm; o cálculo (Jun, J, V) usa o nominal, como no dimensionamento
+    de referência. RBS_PIPE_DIAMETER_PARAM é o parâmetro "Diâmetro" do tubo
+    (o tamanho nominal da lista de segmentos/tipos de tubo do Revit).
+    """
     try:
-        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
-        if p and p.AsDouble() > 0: return to_m(p.AsDouble())
         p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
+        if p and p.AsDouble() > 0: return to_m(p.AsDouble())
+        # Fallback: elemento sem "Diâmetro" nominal (ex.: acessório atípico)
+        # usa o diâmetro interno, melhor que nada.
+        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
         return to_m(p.AsDouble()) if p else 0.065
     except: return 0.065
 
@@ -111,445 +142,126 @@ def get_z(elem, modo="mid"):
     return None
 
 # ===========================================================================
-# MEMORIAL DE CÁLCULO — apresentação única e completa
+# COTAS DE RTI/SUCCAO/RECALQUE/HIDRANTE — ao vivo, pelos conectores nativos
 # ===========================================================================
+# RTI e bomba sao marcadas pelo "Mapear Trechos" com FireUtils -
+# Identificador = "RTI"/"Bomba", direto na propria familia - igual ja
+# acontece com HID-01/HID-02 na valvula do hidrante. Com o elemento
+# certo em maos (achado pela tag, sem percorrer a rede), a cota e so
+# ler o conector nativo dele. Nada e gravado; recalculado a cada execucao.
 
-def print_memorial_calculo(res, dados_sistema, valor_sistema, calculo_escolha,
-                            Z_RTI, Z_HID01, Z_HID02, Hz_H1, Hz_H2,
-                            Dm_mangueira_m, Hesg,
-                            Pmin, C_HW, eta, pot_cv, pot_kw, timestamp,
-                            perfil, succao, Hz_succao):
-    import math as _math
+def get_conectores(elem):
+    try:
+        if hasattr(elem, 'ConnectorManager'):
+            return list(elem.ConnectorManager.Connectors)
+        mep = elem.MEPModel
+        if mep and mep.ConnectorManager:
+            return list(mep.ConnectorManager.Connectors)
+    except: pass
+    return []
 
-    hf_fin = res["hf"]
-    hist   = res.get(u"historico", [])
+def get_cota_conector(elem, direcoes=None):
+    """Cota (Z, em metros) de um conector nativo e conectado de `elem`.
+    Se `direcoes` for informado (RTI/bomba), usa o primeiro conector com
+    essa Direction; senao (valvula do hidrante), prioriza um conector
+    conectado e cai no primeiro conector que existir. None se nao
+    encontrar - sem nenhum fallback por geometria."""
+    conns = get_conectores(elem)
+    if direcoes is not None:
+        for conn in conns:
+            try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
+                if conn.Direction not in direcoes: continue
+                if not conn.IsConnected: continue
+                return to_m(conn.Origin.Z)
+            except: continue
+        return None
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if conn.IsConnected:
+                return to_m(conn.Origin.Z)
+        except: continue
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            return to_m(conn.Origin.Z)
+        except: continue
+    return None
 
-    norma           = req(perfil, u"norma")
-    pmin_ref        = req(perfil, u"pmin_ref")
-    hidr_simult     = req(perfil, u"hidrantes_simultaneos")
-    hidr_simult_ref = req(perfil, u"hidrantes_simultaneos_ref")
-    tipos_ref       = req(perfil, u"tipos_ref")
-    p_max           = req(perfil, u"p_max_esguicho")
-    p_max_ref       = req(perfil, u"p_max_esguicho_ref")
-    v_max_tubo      = req(perfil, u"v_max_tubulacao")
-    v_max_tubo_ref  = req(perfil, u"v_max_tubulacao_ref")
-    v_max_suc_pos   = req(perfil, u"v_max_succao_positiva")
-    v_max_suc_neg   = req(perfil, u"v_max_succao_negativa")
-    v_max_suc_ref   = req(perfil, u"v_max_succao_ref")
-    equilibrio_max  = req(perfil, u"equilibrio_no_max")
-    equilibrio_ref  = req(perfil, u"equilibrio_no_max_ref")
-    governante_ref  = req(perfil, u"governante_ref")
-    hazen_c_ref     = req(perfil, u"hazen_c_ref")
+def get_cota_rti(elem):
+    """Cota da RTI: acha a ponta solta de `elem` (o elemento marcado
+    "RTI" pelo "Mapear Trechos" - familia da RTI ou, no fallback manual,
+    o proprio tubo) e le a elevacao dela. Ponta solta = conector fisico
+    (nao Logical) que nao esta conectado a nada - o mesmo criterio tanto
+    para a familia quanto para o tubo, sem tentar adivinhar Direction.
+    None se nao achar nenhuma ponta solta."""
+    cm = None
+    if hasattr(elem, "ConnectorManager") and elem.ConnectorManager:
+        cm = elem.ConnectorManager
+    elif hasattr(elem, "MEPModel") and elem.MEPModel and elem.MEPModel.ConnectorManager:
+        cm = elem.MEPModel.ConnectorManager
+    if not cm:
+        return None
+    for conn in cm.Connectors:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected:
+                return to_m(conn.Origin.Z)
+        except: continue
+    return None
 
-    # Sistema personalizado: os valores Q/P/DN/comprimento não vêm da Tabela 2,
-    # então o memorial não pode citá-la como referência deles.
-    if custom_store.is_custom(valor_sistema):
-        tipos_ref = u"valores definidos pelo usuário (fora da {})".format(
-            req(perfil, u"tipos_ref"))
+def diagnostico_conectores(elem):
+    """Linhas com id/tipo/categoria de `elem` e Direction/IsConnected/Z de
+    cada conector dele - usado so para montar o alerta quando uma cota
+    nao e lida, pra mostrar exatamente por que (em vez de um "nao foi
+    possivel" generico). Nao usa get_conectores (que engole excecoes) -
+    aqui o erro real, se houver, aparece no alerta."""
+    linhas = []
+    try:    id_txt = u"{}".format(elem.Id)
+    except: id_txt = u"?"
+    try:    tipo = type(elem).__name__
+    except: tipo = u"?"
+    try:    eh_pipe = isinstance(elem, Pipe)
+    except Exception as e: eh_pipe = u"erro ({})".format(e)
+    try:    cat = elem.Category.Name if elem.Category else u"(sem categoria)"
+    except: cat = u"?"
+    try:    tem_cm = hasattr(elem, "ConnectorManager")
+    except: tem_cm = u"?"
+    linhas.append(u"    Id={} tipo={} isinstance(Pipe)={}".format(id_txt, tipo, eh_pipe))
+    linhas.append(u"    categoria={} hasattr(ConnectorManager)={}".format(cat, tem_cm))
 
-    v_max_succao = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
-
-    # Ponto de referência onde P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg é de fato calculada:
-    # "válvula" quando não há mangueira/esguicho no cálculo (Hm=0) ou quando o
-    # perfil referencia Pmin na válvula (pmin_ref="valvula"); caso contrário, a
-    # subtração de Hm desloca o ponto calculado para a entrada do esguicho.
-    _ponto_pmin = (u"válvula" if (Dm_mangueira_m is None or pmin_ref == u"valvula")
-                   else u"entrada do esguicho")
-
-    def _vel(v, limite):
-        if v <= limite:
-            return u"{} {:.3f} m/s ({} {:.1f})".format(SIM_OK, v, SIM_LE, limite)
-        return u"{} {:.3f} m/s (> {:.1f})".format(SIM_X, v, limite)
-
-    # ── Cabeçalho ─────────────────────────────────────────────────────────
-    output.print_md(u"# Memorial de Cálculo — Dimensionamento Hidráulico de Hidrantes")
-    output.print_md(u"**Sistema:** {} | **Método:** {} | **Norma:** {} | *{}*".format(
-        valor_sistema, calculo_escolha, norma, timestamp))
-    output.print_md(u"---")
-
-    if perfil.get(u"_uf_efetiva") != perfil.get(u"_uf_solicitada"):
-        output.print_md(
-            u"> **Aviso:** o Estado do projeto ('{}') ainda não possui perfil "
-            u"normativo próprio nesta extensão. Usando o perfil default "
-            u"'{}' ({}).".format(
-                perfil.get(u"_uf_solicitada"), perfil.get(u"_uf_efetiva"), norma))
-        output.print_md(u"")
-
-    # ── 1. Dados normativos ────────────────────────────────────────────────
-    # NT 22 item 5.1.2: todos os parâmetros usados no dimensionamento devem
-    # ser relacionados no memorial.
-    output.print_md(u"## 1. Dados Normativos do Sistema")
-    output.print_md(u"| Parâmetro | Valor | Referência |")
-    output.print_md(u"|---|---|---|")
-    output.print_md(u"| Norma aplicada | **{}** | — |".format(norma))
-    output.print_md(u"| Classificação | **{}** | {} |".format(valor_sistema, tipos_ref))
-    output.print_md(u"| Método de cálculo | {} | — |".format(calculo_escolha))
-    output.print_md(u"| Hidrantes simultâneos | **{}** | {} |".format(
-        hidr_simult, hidr_simult_ref))
-    output.print_md(u"| Critério do hidrante governante | menor pressão dinâmica na saída | {} |".format(
-        governante_ref))
-    output.print_md(u"| Esguicho — DN | **{} mm** | {} |".format(
-        dados_sistema["esguicho_dn"], tipos_ref))
-    output.print_md(u"| Vazão mínima por hidrante (Qmin) | **{} L/min = {:.6f} m³/s** | {} |".format(
-        dados_sistema["q_min"], dados_sistema["q_min"] / 60000.0, tipos_ref))
-    output.print_md(u"| Pressão mínima ({}) (Pmin) | **{} mca** | {} |".format(
-        _ponto_pmin, Pmin, tipos_ref))
-    output.print_md(u"| Pressão máxima | **{:.0f} mca** | {} |".format(p_max, p_max_ref))
-    output.print_md(u"| Coef. Hazen-Williams (C) | **{}** | {} — aço/ferro galvanizado |".format(
-        C_HW, hazen_c_ref))
-    output.print_md(u"| Velocidade máxima — tubulação geral | **{:.1f} m/s** | {} |".format(
-        v_max_tubo, v_max_tubo_ref))
-    output.print_md(u"| Velocidade máxima — sucção ({}) | **{:.1f} m/s** | {} |".format(
-        succao, v_max_succao, v_max_suc_ref))
-    output.print_md(u"| Equilíbrio no nó de derivação (máx.) | **{:.2f} mca** | {} |".format(
-        equilibrio_max, equilibrio_ref))
-    if Dm_mangueira_m is not None:
-        output.print_md(u"| Diâmetro da mangueira (Dm) | **{} mm ({:.4f} m)** | {} |".format(
-            dados_sistema["mang_dn"], Dm_mangueira_m, tipos_ref))
-        output.print_md(u"| Comprimento da mangueira (Lm) | **{:.1f} m** | {} |".format(
-            dados_sistema["mang_comp"], tipos_ref))
-    output.print_md(u"")
-
-    # ── 2. Cotas altimétricas ──────────────────────────────────────────────
-    output.print_md(u"## 2. Cotas Altimétricas e Desníveis")
-    output.print_md(u"| Ponto | Cota Z (m) |")
-    output.print_md(u"|---|---|")
-    output.print_md(u"| RTI (Reservatório / referência) | **{:.4f}** |".format(Z_RTI))
-    output.print_md(u"| HID-01 (1° mais desfavorável) | **{:.4f}** |".format(Z_HID01))
-    output.print_md(u"| HID-02 (2° mais desfavorável) | **{:.4f}** |".format(Z_HID02))
-    output.print_md(u"")
-    output.print_md(u"**ΔZ = Z_RTI − Z_válvula** (positivo = RTI acima = favorável ao bombeamento)")
-    output.print_md(u"| Percurso | ΔZ (m) | Condição |")
-    output.print_md(u"|---|---|---|")
-    for hz, lbl in [(Hz_H1, u"RTI → HID-01"), (Hz_H2, u"RTI → HID-02")]:
-        cond = u"RTI acima — favorável" if hz > 0.05 else (u"RTI abaixo — desfavorável" if hz < -0.05 else u"Mesmo nível")
-        output.print_md(u"| {} | **{:.4f}** | {} |".format(lbl, hz, cond))
-    _cond_succao = (u"RTI acima da sucção — favorável" if Hz_succao > 0.05
-                    else u"RTI no mesmo nível ou abaixo — bomba puxa a água")
-    output.print_md(u"| RTI → Sucção (entrada da bomba) | **{:.4f}** | {} |".format(
-        Hz_succao, _cond_succao))
-    output.print_md(u"")
-    output.print_md(
-        u"**Condição de sucção ({}):** determinada automaticamente pela cota entre "
-        u"a RTI e a entrada de sucção da bomba (ΔZ = {:.4f} m) — **sucção {}**.".format(
-            v_max_suc_ref, Hz_succao, succao))
-    output.print_md(u"")
-
-    # ── 3. Caracterização dos trechos ──────────────────────────────────────
-    output.print_md(u"## 3. Caracterização dos Trechos")
-    output.print_md(u"Fórmula de Hazen-Williams:")
-    output.print_md(u"**J = 10,643 × Q^1,852 × C^−1,852 × D^−4,871** (gradiente hidráulico, mca/m)")
-    output.print_md(u"**hf = J × Lt** (perda de carga total do trecho, mca)")
-    output.print_md(u"**Lt = L + Σle** (comprimento total = real + equivalente de acessórios)")
-    output.print_md(u"")
-    _rotulos = {
-        "t1": u"T1 — Sucção: RTI → Bomba",
-        "t2": u"T2 — Recalque tronco: Bomba → Ponto A",
-        "t3": u"T3 — Ramal: Ponto A → HID-01",
-        "t4": u"T4 — Ramal: Ponto A → HID-02",
-    }
-    for key in ["t1", "t2", "t3", "t4"]:
-        t = hf_fin[key]
-        output.print_md(u"### {}".format(_rotulos[key]))
-        output.print_md(u"| Parâmetro | Valor |")
-        output.print_md(u"|---|---|")
-        output.print_md(u"| Comprimento real (L) | {:.4f} m |".format(t["L"]))
-        output.print_md(u"| Diâmetro interno médio (D) | {:.1f} mm = **{:.4f} m** |".format(
-            t["D"] * 1000, t["D"]))
-        output.print_md(u"| Nº de tubos no trecho | {} |".format(t["n_tubos"]))
-        if t["acessorios"]:
-            for ace in t["acessorios"]:
-                output.print_md(u"| Acessório: {}× {} | le_unit = {:.4f} m  →  Σ = {:.4f} m |".format(
-                    ace["qtd"], ace["nome"], ace["leq_unit"], ace["leq_tot"]))
+    conns = None
+    erro = None
+    try:
+        cm = elem.ConnectorManager if hasattr(elem, "ConnectorManager") else None
+        linhas.append(u"    elem.ConnectorManager = {}".format(cm))
+        if cm is not None:
+            conns = list(cm.Connectors)
         else:
-            output.print_md(u"| Acessórios | Nenhum cadastrado |")
-        output.print_md(u"| Comprimento equivalente total (Σle) | **{:.4f} m** |".format(t["Leq"]))
-        output.print_md(u"| **Comprimento total** Lt = L + Σle | **{:.4f} + {:.4f} = {:.4f} m** |".format(
-            t["L"], t["Leq"], t["Lt"]))
-        output.print_md(u"")
+            mep = elem.MEPModel
+            if mep and mep.ConnectorManager:
+                conns = list(mep.ConnectorManager.Connectors)
+    except Exception as e:
+        erro = e
 
-    # ── 4. Mangueira (opcional) ────────────────────────────────────────────
-    if Dm_mangueira_m is not None:
-        output.print_md(u"## 4. Perda de Carga na Mangueira (Darcy-Weisbach)")
-        output.print_md(u"A perda de carga na mangueira é calculada individualmente para cada "
-                        u"hidrante usando a **vazão normativa especificada** Q_i = Qs_min.")
-        output.print_md(u"")
-        output.print_md(u"**Fórmula:** Hm = (8 × f × Lm) / (g × π² × Dm⁵) × Q²")
-        output.print_md(u"")
-        output.print_md(u"*Dedução:* hf = f·(L/D)·(V²/2g), com V = 4Q/(π·D²) → "
-                        u"hf = 8·f·L·Q² / (g·π²·D⁵)")
-        output.print_md(u"")
-        _pi2 = _math.pi ** 2
-        _Dm5 = Dm_mangueira_m ** 5
-        _denom = 9.81 * _pi2 * _Dm5
-        output.print_md(u"| Constante | Símbolo | Valor |")
-        output.print_md(u"|---|---|---|")
-        output.print_md(u"| Fator de atrito Darcy | f | 0,022 |")
-        output.print_md(u"| Comprimento da mangueira | Lm | {:.1f} m |".format(dados_sistema["mang_comp"]))
-        output.print_md(u"| Aceleração gravitacional | g | 9,81 m/s² |")
-        output.print_md(u"| Diâmetro interno | Dm | {:.4f} m ({} mm) |".format(
-            Dm_mangueira_m, dados_sistema["mang_dn"]))
-        output.print_md(u"| π² | — | {:.6f} |".format(_pi2))
-        output.print_md(u"| Dm⁵ | — | {:.4e} m⁵ |".format(_Dm5))
-        output.print_md(u"| **Denominador constante** g × π² × Dm⁵ | — | **{:.6e}** |".format(_denom))
-        output.print_md(u"| Numerador constante 8 × f × Lm | — | **{:.4f}** |".format(
-            8.0 * 0.022 * dados_sistema["mang_comp"]))
-        output.print_md(u"")
-        if pmin_ref == u"esguicho":
-            output.print_md(
-                u"**Modelo de demanda fixa:** adota-se o par normativo do esguicho "
-                u"regulável (Q = {} L/min a P = {} mca na entrada do esguicho), de modo "
-                u"que a pressão requerida do esguicho já está incorporada em Pmin e "
-                u"Hesg = 0 na cadeia de energia. As vazões reais de operação serão "
-                u"iguais ou superiores às normativas.".format(
-                    dados_sistema["q_min"], Pmin))
-            output.print_md(u"")
-        else:
-            output.print_md(
-                u"**Pmin referenciado na válvula** ({}): a perda no esguicho regulável "
-                u"é calculada explicitamente (Hesg = {:.4f} mca) e somada à cadeia de "
-                u"energia — mangueira e esguicho compostos a jusante da válvula.".format(
-                    tipos_ref, Hesg))
-            output.print_md(u"")
-        output.print_md(u"*Os valores de Hm resultantes por hidrante são apresentados em cada ciclo abaixo.*")
-        output.print_md(u"")
+    if erro is not None:
+        linhas.append(u"    erro ao ler ConnectorManager: {}".format(erro))
+        return linhas
+    if not conns:
+        linhas.append(u"    ConnectorManager nao encontrou nenhum conector")
+        return linhas
 
-    # ── 5. Equilíbrio hidráulico ───────────────────────────────────────────
-    sec_iter = u"5" if Dm_mangueira_m is not None else u"4"
-    Qs_lmin  = dados_sistema["q_min"]
-    tol_lmin = 0.01
-    output.print_md(u"## {}. Cálculo Hidráulico da Rede".format(sec_iter))
-    output.print_md(u"")
-    output.print_md(u"**Modelo de demanda fixa:** cada hidrante opera com a vazão normativa mínima "
-                    u"Q_i = Qs_min (demanda especificada pela norma). "
-                    u"O sistema fica determinado sem coeficientes empíricos.")
-    output.print_md(u"Qt = Q₁ + Q₂ = 2 × {} = **{:.2f} L/min**".format(
-        Qs_lmin, Qs_lmin * 2.0))
-    output.print_md(u"")
-    output.print_md(u"**Topologia:** RTI → T1 → Bomba → T2 → Nó A → T3 → HID-01")
-    output.print_md(u"**&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
-                    u"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
-                    u"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"
-                    u"Nó A → T4 → HID-02**")
-    output.print_md(u"")
-    output.print_md(u"**Equações utilizadas:**")
-    output.print_md(u"- Hazen-Williams: hf = 10,643 × Q^1,852 / (C^1,852 × D^4,871) × Lt")
-    if Dm_mangueira_m is not None:
-        output.print_md(u"- Darcy-Weisbach (mangueira): Hm = (8fLm)/(gπ²Dm⁵) × Q²")
-    output.print_md(u"- Energia do ramal: E_i = hf_ramal_i + Hm_i + Hesg − ΔZ_i")
-    output.print_md(u"- HMT: Ht = Pmin + Hf_tronco + E_gov (ramal governante = max E_i)")
-    output.print_md(u"- Pressão: P_i = Ht + ΔZ_i − Hf_i − Hm_i − Hesg")
-    output.print_md(u"")
-
-    c = hist[0] if hist else {}
-    Qt_m3s = c.get("Qt",    0.0) / 60000.0
-    Q1_m3s = c.get("Q_h01", 0.0) / 60000.0
-    Q2_m3s = c.get("Q_h02", 0.0) / 60000.0
-
-    output.print_md(u"### Vazões (demanda normativa mínima especificada)")
-    output.print_md(u"| | L/min | m³/s |")
-    output.print_md(u"|---|---|---|")
-    output.print_md(u"| Q₁ = Q_HID01 | **{:.2f}** | **{:.6f}** |".format(c.get("Q_h01", 0.0), Q1_m3s))
-    output.print_md(u"| Q₂ = Q_HID02 | **{:.2f}** | **{:.6f}** |".format(c.get("Q_h02", 0.0), Q2_m3s))
-    output.print_md(u"| Qt = Q₁ + Q₂ | **{:.2f}** | **{:.6f}** |".format(c.get("Qt", 0.0), Qt_m3s))
-    output.print_md(u"")
-
-    output.print_md(u"### Hazen-Williams por trecho")
-    output.print_md(u"J = 10,643 × Q^1,852 / (C^1,852 × D^4,871)  |  hf = J × Lt")
-    output.print_md(u"| Trecho | Q (m³/s) | D (m) | Lt (m) | J (mca/m) | hf (mca) | V (m/s) |")
-    output.print_md(u"|---|---|---|---|---|---|---|")
-    _q_c = {"t1": Qt_m3s, "t2": Qt_m3s, "t3": Q1_m3s, "t4": Q2_m3s}
-    _hfc = {"t1": c.get("Hf_t1", 0.0), "t2": c.get("Hf_t2", 0.0),
-            "t3": c.get("Hf_t3", 0.0), "t4": c.get("Hf_t4", 0.0)}
-    _vc  = {"t1": c.get("V_t1", 0.0),  "t2": c.get("V_t2", 0.0),
-            "t3": c.get("V_t3", 0.0),  "t4": c.get("V_t4", 0.0)}
-    for key in ["t1", "t2", "t3", "t4"]:
-        t  = hf_fin[key]
-        Q  = _q_c[key]; D = t["D"]; Lt = t["Lt"]
-        J  = (10.643 * (Q ** 1.852) * (float(C_HW) ** -1.852) * (D ** -4.871)) if Lt > 0 and Q > 0 else 0.0
-        _lim = v_max_succao if key == u"t1" else v_max_tubo
-        output.print_md(u"| {} | {:.6f} | {:.4f} | {:.4f} | {:.6f} | **{:.4f}** | {} |".format(
-            key.upper(), Q, D, Lt, J, _hfc[key], _vel(_vc[key], _lim)))
-    output.print_md(u"| **Σhf HID-01** (T1+T2+T3) | — | — | — | — | **{:.4f}** | — |".format(
-        c.get("Hf1", 0.0)))
-    output.print_md(u"| **Σhf HID-02** (T1+T2+T4) | — | — | — | — | **{:.4f}** | — |".format(
-        c.get("Hf2", 0.0)))
-    output.print_md(u"")
-
-    if Dm_mangueira_m is not None:
-        output.print_md(u"### Darcy-Weisbach — mangueira")
-        output.print_md(u"Hm = (8 × f × Lm) / (g × π² × Dm⁵) × Q²")
-        output.print_md(u"| Hidrante | Q (m³/s) | Q² (m⁶/s²) | Hm (mca) |")
-        output.print_md(u"|---|---|---|---|")
-        output.print_md(u"| HID-01 | {:.6f} | {:.4e} | **{:.4f}** |".format(
-            Q1_m3s, Q1_m3s ** 2, c.get("Hm1", 0.0)))
-        output.print_md(u"| HID-02 | {:.6f} | {:.4e} | **{:.4f}** |".format(
-            Q2_m3s, Q2_m3s ** 2, c.get("Hm2", 0.0)))
-        output.print_md(u"")
-
-    _E_gov = max(c.get("E1", 0.0), c.get("E2", 0.0))
-    _gov   = u"HID-01" if c.get("E1", 0.0) >= c.get("E2", 0.0) else u"HID-02"
-    output.print_md(u"### Energia dos ramais e ramal governante")
-    output.print_md(u"E_i = hf_ramal_i + Hm_i + Hesg − ΔZ_i")
-    output.print_md(u"| Ramal | hf_ramal (mca) | Hm (mca) | Hesg (mca) | −ΔZ (mca) | **E (mca)** |")
-    output.print_md(u"|---|---|---|---|---|---|")
-    output.print_md(u"| T3 → HID-01 | {:.4f} | {:.4f} | {:.4f} | {:.4f} | **{:.4f}** |".format(
-        c.get("Hf_t3", 0.0), c.get("Hm1", 0.0), Hesg, -Hz_H1, c.get("E1", 0.0)))
-    output.print_md(u"| T4 → HID-02 | {:.4f} | {:.4f} | {:.4f} | {:.4f} | **{:.4f}** |".format(
-        c.get("Hf_t4", 0.0), c.get("Hm2", 0.0), Hesg, -Hz_H2, c.get("E2", 0.0)))
-    output.print_md(u"**Ramal governante: {} → E_gov = {:.4f} mca**".format(_gov, _E_gov))
-    output.print_md(u"")
-
-    output.print_md(u"### HMT e pressões reais")
-    output.print_md(u"Ht = Pmin + Hf_tronco + E_gov")
-    output.print_md(u"Ht = {:.2f} + {:.4f} + {:.4f} = **{:.4f} mca**".format(
-        float(Pmin), c.get("Hf_t1", 0.0) + c.get("Hf_t2", 0.0), _E_gov, c.get("Ht", 0.0)))
-    output.print_md(u"")
-    output.print_md(u"P_i = Ht + ΔZ_i − Σhf_i − Hm_i − Hesg  (ponto de cálculo: {})".format(_ponto_pmin))
-    output.print_md(u"| Hidrante | Cálculo | **P real (mca)** |")
-    output.print_md(u"|---|---|---|")
-    _hidrantes_calc = [
-        (u"HID-01", Hz_H1, c.get("Hf1", 0.0), c.get("Hm1", 0.0), c.get("p1", 0.0), c.get("Q_h01", 0.0)),
-        (u"HID-02", Hz_H2, c.get("Hf2", 0.0), c.get("Hm2", 0.0), c.get("p2", 0.0), c.get("Q_h02", 0.0)),
-    ]
-    for lbl, hz, hf_tot, hm, p, q in _hidrantes_calc:
-        _calc = u"{:.4f} + ({:.4f}) − {:.4f} − {:.4f} − {:.4f}".format(
-            c.get("Ht", 0.0), hz, hf_tot, hm, Hesg)
-        output.print_md(u"| {} | {} | **{:.4f}** |".format(lbl, _calc, p))
-    output.print_md(u"")
-
-    # ── Verificações normativas: pressões → vazões → velocidades → equilíbrio do nó ──
-    output.print_md(u"### Verificações Normativas")
-    output.print_md(u"")
-
-    output.print_md(u"**Pressão mínima (Pmin = {} mca, {})**".format(Pmin, tipos_ref))
-    output.print_md(u"| Hidrante | P real (mca) | Verificação |")
-    output.print_md(u"|---|---|---|")
-    for lbl, hz, hf_tot, hm, p, q in _hidrantes_calc:
-        if p < float(Pmin) - 0.01:
-            _pv = u"{} {:.4f} < {} mca".format(SIM_X, p, Pmin)
-        else:
-            _pv = u"{} {:.4f} {} {} mca".format(SIM_OK, p, SIM_GE, Pmin)
-        output.print_md(u"| {} | {:.4f} | {} |".format(lbl, p, _pv))
-    output.print_md(u"")
-
-    output.print_md(u"**Pressão máxima (Pmax = {:.0f} mca, {}, referida aos esguichos — "
-                    u"verificação na válvula é conservadora)**".format(p_max, p_max_ref))
-    output.print_md(u"| Hidrante | P_válvula (mca) | Verificação |")
-    output.print_md(u"|---|---|---|")
-    for lbl, hz, hf_tot, hm, p, q in _hidrantes_calc:
-        _pmaxv = (u"{} {:.4f} {} {:.0f} mca".format(SIM_OK, p, SIM_LE, p_max) if p <= p_max
-                  else u"{} {:.4f} > {:.0f} mca".format(SIM_X, p, p_max))
-        output.print_md(u"| {} | {:.4f} | {} |".format(lbl, p, _pmaxv))
-    output.print_md(u"")
-
-    output.print_md(u"**Vazão mínima (Qmin = {} L/min, {})**".format(Qs_lmin, tipos_ref))
-    output.print_md(u"| Hidrante | Q real (L/min) | Verificação |")
-    output.print_md(u"|---|---|---|")
-    for lbl, hz, hf_tot, hm, p, q in _hidrantes_calc:
-        _qv = (u"{} {:.2f} {} {} L/min".format(SIM_OK, q, SIM_GE, Qs_lmin) if q >= Qs_lmin - tol_lmin
-               else u"{} {:.2f} < {} L/min".format(SIM_X, q, Qs_lmin))
-        output.print_md(u"| {} | {:.2f} | {} |".format(lbl, q, _qv))
-    output.print_md(u"")
-
-    output.print_md(u"**Velocidade** (tubulação geral {} {:.1f} m/s, {}; sucção "
-                    u"({}) {} {:.1f} m/s, {})".format(
-                        SIM_LE, v_max_tubo, v_max_tubo_ref,
-                        succao, SIM_LE, v_max_succao, v_max_suc_ref))
-    output.print_md(u"| Trecho | V (m/s) | Limite (m/s) | Verificação |")
-    output.print_md(u"|---|---|---|---|")
-    for key in ["t1", "t2", "t3", "t4"]:
-        _v   = _vc[key]
-        _lim = v_max_succao if key == u"t1" else v_max_tubo
-        _vv  = (u"{} {} {:.1f}".format(SIM_OK, SIM_LE, _lim) if _v <= _lim
-                else u"{} > {:.1f}".format(SIM_X, _lim))
-        output.print_md(u"| {} | {:.3f} | {:.1f} | {} |".format(key.upper(), _v, _lim, _vv))
-    output.print_md(u"")
-    if succao == u"negativa":
-        output.print_md(
-            u"> **Sucção negativa:** calcular o NPSH disponível com {:.1f} × vazão "
-            u"nominal e comparar ao NPSH requerido da bomba ({}).".format(
-                perfil.get(u"npsh_fator_vazao", 1.5),
-                perfil.get(u"npsh_fator_vazao_ref", u"—")))
-        output.print_md(u"")
-
-    _eq = verificar_equilibrio_no(c.get("E1", 0.0), c.get("E2", 0.0), equilibrio_max)
-    _eq_ok = _eq["atende"]
-    output.print_md(u"**Equilíbrio no nó de derivação ({})**".format(equilibrio_ref))
-    output.print_md(u"|E1 − E2| = |{:.4f} − ({:.4f})| = **{:.4f} mca** {} {:.2f} mca → **{}**".format(
-        c.get("E1", 0.0), c.get("E2", 0.0), _eq["desequilibrio"], SIM_LE, equilibrio_max,
-        u"ATENDE" if _eq_ok else u"NÃO ATENDE"))
-    if _eq_ok:
-        output.print_md(u"{} Margem: {:.4f} mca".format(SIM_OK, _eq["margem"]))
-    else:
-        output.print_md(u"{} **REPROVADO** — margem negativa de {:.4f} mca.".format(SIM_X, -_eq["margem"]))
-        output.print_md(
-            u"**Sugestão:** aumentar o diâmetro ou reduzir o comprimento do ramal de "
-            u"maior perda, ou reposicionar o nó de derivação.")
-    output.print_md(u"")
-
-    # ── 6. Resumo dos resultados ──────────────────────────────────────────
-    sec_res = str(int(sec_iter) + 1)
-    output.print_md(u"## {}. Resumo dos Resultados".format(sec_res))
-    output.print_md(u"")
-    output.print_md(u"| Grandeza | HID-01 | HID-02 | Unidade |")
-    output.print_md(u"|---|---|---|---|")
-    output.print_md(u"| Vazão (demanda normativa) | **{:.2f}** | **{:.2f}** | L/min |".format(
-        res["Q_h01"], res["Q_h02"]))
-    output.print_md(u"| Σhf percurso | {:.4f} | {:.4f} | mca |".format(
-        res["Hf_Hid01"], res["Hf_Hid02"]))
-    if Dm_mangueira_m is not None:
-        output.print_md(u"| Hm mangueira | {:.4f} | {:.4f} | mca |".format(
-            res.get("Hm_hid01", 0.0), res.get("Hm_hid02", 0.0)))
-    output.print_md(u"| **Pressão real na {}** | **{:.4f}** | **{:.4f}** | mca |".format(
-        _ponto_pmin,
-        res["p_hid01"], res["p_hid02"]))
-    _pv1 = u"{} ATENDE".format(SIM_OK) if float(Pmin) <= res["p_hid01"] <= p_max else u"{} NÃO ATENDE".format(SIM_X)
-    _pv2 = u"{} ATENDE".format(SIM_OK) if float(Pmin) <= res["p_hid02"] <= p_max else u"{} NÃO ATENDE".format(SIM_X)
-    output.print_md(u"| Verificação (P ∈ [{}, {:.0f}] mca) | **{}** | **{}** | — |".format(
-        Pmin, p_max, _pv1, _pv2))
-    output.print_md(u"")
-    output.print_md(u"**Equilíbrio no nó de derivação ({}):** |E1−E2| = {:.4f} mca {} {:.2f} mca → **{}**".format(
-        equilibrio_ref, _eq["desequilibrio"], SIM_LE, equilibrio_max,
-        u"ATENDE" if _eq_ok else u"NÃO ATENDE"))
-    output.print_md(u"")
-    output.print_md(u"**Qt = {:.2f} + {:.2f} = {:.2f} L/min = {:.4f} m³/h**".format(
-        res["Q_h01"], res["Q_h02"], res["Qt_final"], res["Qt_final"] / 1000.0 * 60))
-    output.print_md(u"**Ht = {:.4f} mca** (ramal governante: {})".format(
-        res["Ht"], res["hid_governa"]))
-    output.print_md(u"")
-
-    # ── 7. Bomba ──────────────────────────────────────────────────────────
-    sec_bomba = str(int(sec_res) + 1)
-    output.print_md(u"## {}. Dimensionamento da Bomba de Recalque".format(sec_bomba))
-    output.print_md(u"")
-    Qt_m3s_f = res["Qt_final"] / 60000.0
-    eta_dec  = eta / 100.0
-    output.print_md(u"**Fórmula:** P_cv = (1000 × Qt × Ht) / (75 × η)")
-    output.print_md(u"")
-    output.print_md(u"| Parâmetro | Símbolo | Valor |")
-    output.print_md(u"|---|---|---|")
-    output.print_md(u"| Vazão total de projeto | Qt | **{:.2f} L/min = {:.6f} m³/s = {:.4f} m³/h** |".format(
-        res["Qt_final"], Qt_m3s_f, res["Qt_final"] / 1000.0 * 60))
-    output.print_md(u"| Altura manométrica total | Ht | **{:.4f} mca** |".format(res["Ht"]))
-    output.print_md(u"| Eficiência global | η | **{:.0f}% = {:.2f}** |".format(eta, eta_dec))
-    output.print_md(u"")
-    output.print_md(u"**Desenvolvimento:**")
-    output.print_md(u"P_cv = (1000 × {:.6f} × {:.4f}) / (75 × {:.2f})".format(
-        Qt_m3s_f, res["Ht"], eta_dec))
-    output.print_md(u"P_cv = {:.4f} / {:.4f}".format(
-        1000.0 * Qt_m3s_f * res["Ht"], 75.0 * eta_dec))
-    output.print_md(u"**P_cv = {:.2f} cv  →  {:.2f} kW**".format(pot_cv, pot_kw))
-    output.print_md(u"")
-    output.print_md(u"| Resultado | Valor |")
-    output.print_md(u"|---|---|")
-    output.print_md(u"| Ponto de operação Qt | **{:.2f} L/min / {:.4f} m³/h** |".format(
-        res["Qt_final"], res["Qt_final"] / 1000.0 * 60))
-    output.print_md(u"| Ponto de operação Ht | **{:.4f} mca** |".format(res["Ht"]))
-    output.print_md(u"| **Potência mínima** | **{:.2f} cv / {:.2f} kW** |".format(pot_cv, pot_kw))
-    output.print_md(u"")
-    output.print_md(u"---")
-    output.print_md(u"*Cache salvo. Use o botão **Gerar Memorial** para o relatório em HTML.*")
+    for i, conn in enumerate(conns):
+        try:    direcao = conn.Direction
+        except: direcao = u"?"
+        try:    conectado = conn.IsConnected
+        except: conectado = u"?"
+        try:    z = u"{:.4f} m".format(to_m(conn.Origin.Z))
+        except: z = u"?"
+        linhas.append(u"    {}. Direction={} IsConnected={} Z={}".format(
+            i + 1, direcao, conectado, z))
+    return linhas
 
 # ===========================================================================
 # MAIN
@@ -568,14 +280,6 @@ if not param_sistema or not param_sistema.AsString():
                 title="Fire Utils", warn_icon=True)
     script.exit()
 
-calculo_escolha = forms.SelectFromList.show(
-    [u"Válvula do Hidrante", u"Ponta do Esguicho Regulável"],
-    title=u"Fire Utils — Método de Cálculo",
-    prompt=u"Selecione o método de cálculo:",
-    multiselect=False
-)
-if not calculo_escolha: script.exit()
-
 valor_sistema = param_sistema.AsString()
 
 if custom_store.is_custom(valor_sistema):
@@ -590,7 +294,6 @@ if custom_store.is_custom(valor_sistema):
             title="Fire Utils", warn_icon=True)
         script.exit()
     dados_sistema = custom_store.para_dados_sistema(_custom)
-    variante_idx  = 0
 else:
     try:    tipo_num = int(valor_sistema.split()[1])
     except:
@@ -612,22 +315,49 @@ else:
 
     dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
     dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
+
+# A Tabela 2 (hidrantes/db.py) guarda esses valores como int. O IronPython
+# 2.7 do Revit (diferente do CPython) lança ValueError em "{:.1f}".format(x)
+# quando x é int — então normalizamos tudo para float aqui, no único ponto
+# de entrada dos dois caminhos (Tabela 2 e personalizado; este último já
+# vem normalizado de custom_store, mas o float() abaixo é inofensivo).
+for _chave in (u"q_min", u"p_min", u"mang_dn", u"mang_comp", u"esguicho_dn"):
+    dados_sistema[_chave] = float(dados_sistema[_chave])
+
 Qs_lmin = dados_sistema["q_min"]
-Qs_m3s  = Qs_lmin / 60000.0
 Pmin    = dados_sistema["p_min"]
-Dm_m    = dados_sistema["mang_dn"] / 1000.0
 C_HW    = req(perfil, u"hazen_c")[u"galvanizado"]
+
+# --- Etapa 1b: método de cálculo (define ONDE Qs/Pmin se aplicam) ---
+# Gravado por "Classificar Sistema". Projetos classificados antes desse
+# parâmetro existir caem no método da válvula (comportamento anterior).
+_param_metodo = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
+metodo_calculo = _param_metodo.AsString() if _param_metodo else None
+if metodo_calculo not in METODOS_CALCULO:
+    if metodo_calculo:
+        forms.alert(
+            u"Método de cálculo desconhecido no projeto:\n'{}'\n\n"
+            u"Execute 'Classificar Sistema de Hidrante' novamente.".format(
+                metodo_calculo),
+            title="Fire Utils", warn_icon=True)
+        script.exit()
+    metodo_calculo = METODO_VALVULA
 
 # --- Etapa 2: captura de elementos ---
 TRECHOS = [u"RTI - Bomba", u"Bomba - Ponto A", u"Ponto A - Hid 01", u"Ponto A - Hid 02"]
 trechos_elems = {t: [] for t in TRECHOS}
 ident_map = {}; hid_map = {}
 
-for elem in FilteredElementCollector(doc, doc.ActiveView.Id).WhereElementIsNotElementType().ToElements():
+for elem in FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements():
     t = get_trecho(elem)
     if t in trechos_elems: trechos_elems[t].append(elem)
     i = get_identificador(elem)
-    if i: ident_map[i] = elem
+    # So Pipe ou FamilyInstance sao alvos legitimos de "Mapear Trechos" -
+    # ignora qualquer outro elemento que porventura carregue o mesmo
+    # texto no parametro (ex.: elemento auxiliar de categoria "Linha de
+    # centro"), pra nao pegar o elemento errado por engano.
+    if i and isinstance(elem, (Pipe, FamilyInstance)):
+        ident_map[i] = elem
     if isinstance(elem, FamilyInstance):
         try:
             p = elem.LookupParameter(u"FireUtils - Identificador")
@@ -638,7 +368,7 @@ for elem in FilteredElementCollector(doc, doc.ActiveView.Id).WhereElementIsNotEl
 erros = []
 for t in TRECHOS:
     if not trechos_elems[t]: erros.append(u"Trecho '{}' vazio".format(t))
-for i in [u"RTI", u"Succao", u"Ponto A"]:
+for i in [u"RTI", u"Bomba", u"Ponto A"]:
     if i not in ident_map: erros.append(u"Identificador '{}' não encontrado".format(i))
 for h in [u"HID-01", u"HID-02"]:
     if h not in hid_map: erros.append(u"'{}' não encontrado".format(h))
@@ -647,44 +377,48 @@ if erros:
         u"\n".join(erros)), title="Fire Utils", warn_icon=True)
     script.exit()
 
-# --- Etapa 3: cotas ---
-Z_RTI    = get_z(ident_map[u"RTI"], modo="auto")
-Z_HID01  = get_z(hid_map[u"HID-01"])
-Z_HID02  = get_z(hid_map[u"HID-02"])
-Z_Succao = get_z(ident_map[u"Succao"], modo="auto")
+# --- Etapa 3: cotas altimétricas de todos os pontos da marcha ---
+# RTI e Bomba vêm do próprio ident_map (marcados direto na família pelo
+# "Mapear Trechos"): a cota é lida direto do conector nativo delas.
+cotas = {
+    "z_rti":      get_cota_rti(ident_map[u"RTI"]),
+    "z_succao":   get_cota_conector(ident_map[u"Bomba"], (FlowDirectionType.In,)),
+    "z_recalque": get_cota_conector(ident_map[u"Bomba"], (FlowDirectionType.Out,)),
+    "z_ponto_a":  get_z(ident_map[u"Ponto A"]),
+    "z_hd01":     get_cota_conector(hid_map[u"HID-01"]),
+    "z_hd02":     get_cota_conector(hid_map[u"HID-02"]),
+}
 
-erros_z = [n for n, z in [(u"RTI", Z_RTI), (u"HID-01", Z_HID01), (u"HID-02", Z_HID02),
-                          (u"Sucção", Z_Succao)] if z is None]
-if erros_z:
-    forms.alert(u"Não foi possível ler a elevação de:\n{}".format(u"\n".join(erros_z)),
-                title="Fire Utils", warn_icon=True)
+_nomes_cotas = {
+    "z_rti": u"RTI", "z_succao": u"Sucção", "z_recalque": u"Recalque",
+    "z_ponto_a": u"Ponto A", "z_hd01": u"HID-01", "z_hd02": u"HID-02",
+}
+# Elemento por tras de cada cota - so os lidos por conector (Ponto A usa
+# geometria, get_z, e nao entra aqui).
+_elem_cotas = {
+    "z_rti": ident_map.get(u"RTI"), "z_succao": ident_map.get(u"Bomba"),
+    "z_recalque": ident_map.get(u"Bomba"),
+    "z_hd01": hid_map.get(u"HID-01"), "z_hd02": hid_map.get(u"HID-02"),
+}
+_chaves_erro = [k for k, z in cotas.items() if z is None]
+if _chaves_erro:
+    detalhes = [u"Não foi possível ler a elevação de:"]
+    for k in _chaves_erro:
+        elem = _elem_cotas.get(k)
+        if elem is None:
+            detalhes.append(u"- {}".format(_nomes_cotas[k]))
+            continue
+        detalhes.append(u"- {} (elemento ID {}):".format(_nomes_cotas[k], elem.Id))
+        detalhes.extend(diagnostico_conectores(elem))
+    forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
     script.exit()
 
-Hz_H1 = Z_RTI - Z_HID01
-Hz_H2 = Z_RTI - Z_HID02
+# --- Etapa 3b: dados do NPSH disponível ---
+# Só o que o cálculo de NPSH precisa e não vem da geometria — a condição de
+# sucção em si (positiva/negativa) é decidida abaixo, direto das cotas.
+dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
-# Condição de sucção (NT 22 item 5.8.12) — determinada automaticamente pela
-# cota entre a RTI e o trecho de sucção da bomba, nunca perguntada ao usuário:
-#   RTI acima da sucção (ΔZ > 0)      → sucção positiva (afogada, favorável)
-#   RTI no mesmo nível ou abaixo      → sucção negativa (bomba "puxa" a água) — mais restritiva
-Hz_succao = Z_RTI - Z_Succao
-succao = u"positiva" if Hz_succao > 0.05 else u"negativa"
-
-# --- Etapa 4: mangueira ---
-# Hm é calculado por hidrante dentro da iteração usando Q real.
-# Dm_mangueira_m=None desativa (método = válvula do hidrante).
-Hm_mangueira = 0.0; Hesg = 0.0; Dm_mangueira_m = None
-if calculo_escolha == u"Ponta do Esguicho Regulável":
-    Dm_mangueira_m = Dm_m
-    if req(perfil, u"pmin_ref") == u"valvula":
-        # Pmin referenciado na válvula (perfil normativo ativo): a perda no
-        # esguicho regulável passa a ser explícita na cadeia de energia
-        # (E_i, Ht, P_i), em vez de já estar incorporada em Pmin.
-        esguicho_dn = dados_sistema.get("esguicho_dn")
-        if esguicho_dn:
-            Hesg = hesg_mca(Qs_lmin, d_mm=esguicho_dn)
-
-# --- Etapa 5: extrair dados dos trechos e iterar ---
+# --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
 trechos_data = {
     "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome),
     "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome),
@@ -692,11 +426,92 @@ trechos_data = {
     "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome),
 }
 
-res = calcular_rede(trechos_data, Qs_lmin, Hz_H1, Hz_H2,
-                    Hesg, Pmin, C_HW,
-                    Dm_mangueira_m=Dm_mangueira_m)
+res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
+                    metodo=metodo_calculo,
+                    mang_dn_mm=dados_sistema["mang_dn"],
+                    mang_comp_m=dados_sistema["mang_comp"])
 
-# --- Etapa 6: eficiência e potência ---
+# Condição de sucção pelo método direto e conservador: compara a cota da RTI
+# com a cota de sucção da bomba, ambas já lidas em "Cotas Altimétricas". Não
+# depende de nível mínimo de água, dimensão de tomada, nem tipo de captação.
+# Precisa da vazão total (Qt) resolvida acima, que é a vazão nominal
+# majorada do gatilho de NPSH.
+verif_succao = succao_calc.verificar_condicao_succao(
+    cota_rti            = cotas["z_rti"],
+    cota_succao_bomba   = cotas["z_succao"],
+    q_nominal_lmin      = res["Qt"],
+    fator_vazao_npsh    = opt(perfil, u"npshd_fator_vazao",
+                              succao_calc.FATOR_VAZAO_NPSH),
+)
+succao = verif_succao[u"succao_simples"]
+
+# --- Etapa 4b: NPSH disponível (só quando a sucção é negativa) ---
+# Reaproveita o |Hs| da verificação acima — a diferença entre a cota de
+# sucção da bomba e a cota da RTI — para os dois módulos não divergirem. A
+# perda na sucção é recalculada com a vazão majorada, que vale só para esta
+# verificação.
+verif_npshd = None
+erro_npshd  = None
+j_succao_npsh = None
+
+if verif_succao is not None and verif_succao[u"exige_npsh"]:
+    q_npsh = verif_succao[u"vazao_npsh_lmin"]
+    j_succao_npsh = calc_j_trecho(trechos_data["t1"], q_npsh, C_HW,
+                                  u"Sucção — vazão majorada (NPSH)")
+    try:
+        verif_npshd = npshd_calc.calcular_npshd(
+            altitude_m    = (dados_succao[u"altitude_m"]
+                             if dados_succao[u"altitude_m"] is not None
+                             else npshd_calc.ALTITUDE_PADRAO),
+            temperatura_c = (dados_succao[u"temperatura_c"]
+                             if dados_succao[u"temperatura_c"] is not None
+                             else npshd_calc.TEMPERATURA_PADRAO),
+            hs_abs_m      = verif_succao[u"hs_abs"],
+            hf_s_mca      = j_succao_npsh["J"],
+        )
+    except ValueError as _e:
+        erro_npshd = _txt(_e)
+
+# ===========================================================================
+# Etapa 5 — Verificações normativas: para o dimensionamento no primeiro
+# ponto que não atender, em vez de seguir adiante com um resultado que não
+# atende a norma. Mostra exatamente onde o projetista deve corrigir.
+# ===========================================================================
+v_max_tubo    = req(perfil, u"v_max_tubulacao")
+v_max_suc_pos = req(perfil, u"v_max_succao_positiva")
+v_max_suc_neg = req(perfil, u"v_max_succao_negativa")
+v_max_succao  = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
+
+if res["esguicho"]:
+    p_hd01_ref = res["esg"]["hd01"]["P_esg"]
+    p_hd02_ref = res["esg"]["hd02"]["P_esg"]
+    p_ref_desc = u"pressão no esguicho"
+else:
+    p_hd01_ref = res["P_hd01"]
+    p_hd02_ref = res["P_hd02"]
+    p_ref_desc = u"pressão na válvula"
+
+def _para_por_velocidade(j, limite, nome_trecho):
+    falhas = [s for s in j["segmentos"] if s["V"] > limite + 1e-9]
+    if not falhas:
+        return
+    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas)
+    script.exit()
+
+def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc):
+    if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
+        return
+    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
+    script.exit()
+
+_para_por_velocidade(res["j"]["t3"], v_max_tubo, u"Ponto A → HD01")
+_para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A → HD01")
+_para_por_velocidade(res["j"]["t4"], v_max_tubo, u"Ponto A → HD02")
+_para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02")
+_para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)")
+_para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)")
+
+# --- Etapa 6: eficiência e potência da bomba ---
 eta_str = forms.ask_for_string(
     default="60",
     prompt=u"Eficiência global da bomba (%)\nEx: 60",
@@ -712,39 +527,41 @@ except ValueError:
     script.exit()
 
 eta_dec = eta / 100.0
-pot_cv  = calc_potencia(res["Qt_final"] / 60000.0, res["Ht"], eta_dec)
+pot_cv  = calc_potencia(res["Qt"] / 60000.0, res["P_RTI"], eta_dec)
 pot_kw  = pot_cv / 1.36
 
-# --- Etapa 7: memorial de cálculo ---
-import datetime
-timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
-print_memorial_calculo(
-    res, dados_sistema, valor_sistema, calculo_escolha,
-    Z_RTI, Z_HID01, Z_HID02, Hz_H1, Hz_H2,
-    Dm_mangueira_m, Hesg,
-    Pmin, C_HW, eta, pot_cv, pot_kw, timestamp,
-    perfil, succao, Hz_succao,
+# ===========================================================================
+# Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
+# completo agora é o botão separado "Memorial de Cálculo")
+# ===========================================================================
+mostrar_resultado_ok(
+    res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
+    v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
+    Pmin, Qs_lmin, eta, pot_cv, pot_kw,
 )
 
-# --- Etapa 8: salvar cache para o botão Memorial ---
+# --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
+import datetime
+timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 payload_hid = {
-    "res":            res,
-    "dados_sistema":  dados_sistema,
-    "valor_sistema":  valor_sistema,
-    "calculo_escolha": calculo_escolha,
-    "Z_RTI":   Z_RTI,   "Z_HID01":   Z_HID01,  "Z_HID02":   Z_HID02,
-    "Hz_H1":   Hz_H1,   "Hz_H2":     Hz_H2,
-    "Hm_mangueira": res.get("Hm_governa", 0.0),   # Hm do percurso governante (Q real)
-    "Dm_mangueira_m": Dm_mangueira_m,
-    "Hesg":    Hesg,
-    "C_HW":    C_HW,
-    "uf":      perfil.get(u"_uf_efetiva"),
-    "Z_Succao": Z_Succao, "Hz_succao": Hz_succao,
-    "succao":  succao,
-    "eta":     eta,
-    "pot_cv":  pot_cv,
-    "pot_kw":  pot_kw,
+    "res":           res,
+    "dados_sistema": dados_sistema,
+    "valor_sistema": valor_sistema,
+    "metodo":        metodo_calculo,
+    "cotas":         cotas,
+    "succao":        succao,
+    "verif_succao":  verif_succao,
+    "dados_succao":  dados_succao,
+    "verif_npshd":   verif_npshd,
+    "erro_npshd":    erro_npshd,
+    "j_succao_npsh": j_succao_npsh,
+    "C_HW":          C_HW,
+    "uf":            perfil.get(u"_uf_efetiva"),
+    "eta":           eta,
+    "pot_cv":        pot_cv,
+    "pot_kw":        pot_kw,
+    "timestamp":     timestamp,
     "_nome_projeto": doc.Title,
 }
 salvar_cache(payload_hid, projeto_dir)
-
+output.print_md(u"*Cache salvo em firedata.json (chave 'hidrantes').*")

@@ -10,8 +10,8 @@ clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import (
-    FilteredElementCollector, FamilyInstance,
-    BuiltInParameter, Transaction, UnitUtils, ElementId,
+    FilteredElementCollector, FamilyInstance, BuiltInCategory,
+    BuiltInParameter, Transaction, UnitUtils, ElementId, FlowDirectionType,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
@@ -54,6 +54,70 @@ def get_conectores(elem):
     except: pass
     return []
 
+_CATS_EQUIPAMENTO = None
+def eh_equipamento(elem):
+    """True se `elem` for um equipamento (bomba, RTI, etc.) - categoria
+    Mechanical/Plumbing Equipment ou Peca Hidrossanitaria (a RTI costuma
+    vir como Plumbing Fixture). Esses elementos tem lados fisicamente
+    distintos (ex.: succao x recalque de uma bomba) e NAO devem ser
+    atravessados como se fossem uma conexao/te qualquer: entrar por um
+    conector e sair por outro conector do mesmo equipamento salta
+    indevidamente de um trecho hidraulico para outro."""
+    global _CATS_EQUIPAMENTO
+    if _CATS_EQUIPAMENTO is None:
+        _CATS_EQUIPAMENTO = set()
+        for bic_nome in ("OST_MechanicalEquipment", "OST_PlumbingEquipment",
+                         "OST_PlumbingFixtures"):
+            bic = getattr(BuiltInCategory, bic_nome, None)
+            if bic is not None:
+                _CATS_EQUIPAMENTO.add(int(bic))
+    try:
+        cat = elem.Category
+        if not cat: return False
+        cat_id = cat.Id
+        cat_int = cat_id.Value if hasattr(cat_id, "Value") else cat_id.IntegerValue
+        return cat_int in _CATS_EQUIPAMENTO
+    except: return False
+
+def get_primeiro_tubo(elem_ini, direcoes_ini):
+    """A partir dos conectores de `elem_ini` (RTI ou bomba) cuja Direction
+    esteja em `direcoes_ini`, anda pela rede - pulando acessorios/conexoes
+    que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
+    primeiro Pipe encontrado. Nao atravessa outros equipamentos (ex.: uma
+    segunda bomba) pelo caminho. Retorna None se a rede nao alcancar
+    nenhum tubo nessa direcao."""
+    eid_ini = get_id(elem_ini)
+    visitados = set([eid_ini])
+    fila = deque()
+    for conn in get_conectores(elem_ini):
+        try:
+            if conn.Direction not in direcoes_ini: continue
+            if not conn.IsConnected: continue
+            for ref in conn.AllRefs:
+                viz = ref.Owner
+                vid = get_id(viz)
+                if vid not in visitados:
+                    visitados.add(vid)
+                    fila.append(viz)
+        except: continue
+
+    while fila:
+        elem = fila.popleft()
+        if isinstance(elem, Pipe):
+            return elem
+        if eh_equipamento(elem): continue
+        for conn in get_conectores(elem):
+            try:
+                if not conn.IsConnected: continue
+                for ref in conn.AllRefs:
+                    viz = ref.Owner
+                    vid = get_id(viz)
+                    if vid not in visitados:
+                        visitados.add(vid)
+                        fila.append(viz)
+            except: continue
+    return None
+
 def get_lt(pipe):
     try:
         p = pipe.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)
@@ -78,13 +142,17 @@ def set_param(elem, nome, valor):
 def bfs_ate(elem_ini, eid_ini, eid_alvo):
     """BFS de elem_ini ate eid_alvo. Retorna (caminho, visitados).
     Se o alvo nao for alcancado, caminho vem vazio e visitados guarda
-    tudo que a busca conseguiu percorrer, para diagnostico da quebra."""
+    tudo que a busca conseguiu percorrer, para diagnostico da quebra.
+    Nao atravessa equipamentos (bombas, RTI etc.) encontrados pelo
+    caminho - ver eh_equipamento."""
     visitados = set([eid_ini])
     fila      = deque([(elem_ini, [eid_ini])])
     while fila:
         elem, caminho = fila.popleft()
         if get_id(elem) == eid_alvo:
             return caminho, visitados
+        if eh_equipamento(elem) and get_id(elem) != eid_ini:
+            continue
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -223,20 +291,47 @@ eid_h2 = get_id(hid02)
 output.print_md(u"HID-01: ID **{}** | HID-02: ID **{}**".format(eid_h1, eid_h2))
 
 # ===========================================================================
-# 2 — Seleciona tubos de referência
+# 2 — Seleciona RTI e Bomba (usa as conexões nativas de entrada/saída)
 # ===========================================================================
 output.print_md("---")
-output.print_md("### 2 - Selecionar Tubos de Referencia")
+output.print_md("### 2 - Selecionar RTI e Bomba")
 
-tubo_rti   = seleciona(u"Selecione o tubo imediato de SAIDA da RTI.",   u"Tubo saida RTI",   PipeFilter())
-tubo_bomba = seleciona(u"Selecione o tubo imediato de ENTRADA da bomba (succao).", u"Tubo entrada bomba", PipeFilter())
-tubo_rec   = seleciona(u"Selecione o tubo imediato de SAIDA da bomba (recalque).", u"Tubo saida bomba",   PipeFilter())
+rti = seleciona(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
+output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
+
+tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
+rti_auto_detectada = tubo_rti is not None
+if not tubo_rti:
+    tubo_rti = seleciona(
+        u"Nao foi possivel identificar o tubo de saida da RTI.\n"
+        u"Clique no tubo de saida da RTI.",
+        u"Tubo de saida da RTI", PipeFilter()
+    )
+
+bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
+output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
+
+tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
+if not tubo_bomba:
+    tubo_bomba = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo de entrada (succao) da bomba.\n"
+        u"Selecione o tubo que conecta na entrada da bomba.",
+        u"Tubo succao bomba", PipeFilter()
+    )
+
+tubo_rec = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
+if not tubo_rec:
+    tubo_rec = seleciona(
+        u"Nao foi possivel identificar automaticamente o tubo de saida (recalque) da bomba.\n"
+        u"Selecione o tubo que conecta na saida da bomba.",
+        u"Tubo recalque bomba", PipeFilter()
+    )
 
 eid_rti   = get_id(tubo_rti)
 eid_bomba = get_id(tubo_bomba)
 eid_rec   = get_id(tubo_rec)
 
-output.print_md(u"Saida RTI: ID **{}** | Entrada bomba: ID **{}** | Saida bomba: ID **{}**".format(
+output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
     eid_rti, eid_bomba, eid_rec
 ))
 
@@ -314,28 +409,31 @@ cont = {}
 with Transaction(doc, "FireUtils - Mapear Trechos") as t:
     t.Start()
     try:
+        # RTI e bomba - marcados direto na propria familia, para o
+        # "Dimensionar Hidrantes" achar o elemento sem precisar percorrer
+        # a rede e ler a cota do conector real dele. Se a RTI nao foi
+        # detectada automaticamente (fallback manual: o tubo de saida foi
+        # clicado, nao achado pelo conector), quem recebe o identificador
+        # "RTI" e o proprio tubo, nao a familia - so um dos dois pode
+        # carregar essa tag.
+        if rti_auto_detectada:
+            set_param(rti, P_IDENTIFICADOR, u"RTI")
+        else:
+            set_param(tubo_rti, P_IDENTIFICADOR, u"RTI")
+        set_param(bomba, P_IDENTIFICADOR, u"Bomba")
+
         # Sucção
         for eid in ids_succao:
             elem = doc.GetElement(ElementId(eid))
-            if not elem: continue
-            if eid == eid_rti:
+            if elem:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
-                set_param(elem, P_IDENTIFICADOR, u"RTI")
-            elif eid == eid_bomba:
-                set_param(elem, P_TRECHO, u"RTI - Bomba")
-                set_param(elem, P_IDENTIFICADOR, u"Succao")
-            else:
-                set_param(elem, P_TRECHO, u"RTI - Bomba")
-            cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
+                cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
 
         # Recalque comum
         for eid in ids_rec_comum:
             elem = doc.GetElement(ElementId(eid))
             if not elem: continue
-            if eid == eid_rec:
-                set_param(elem, P_TRECHO, u"Bomba - Ponto A")
-                set_param(elem, P_IDENTIFICADOR, u"Recalque")
-            elif eid == ponto_a_id:
+            if eid == ponto_a_id:
                 set_param(elem, P_TRECHO, u"Bomba - Ponto A")
                 set_param(elem, P_IDENTIFICADOR, u"Ponto A")
             else:
