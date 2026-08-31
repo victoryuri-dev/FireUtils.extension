@@ -190,12 +190,16 @@ def get_cota_conector(elem, direcoes=None):
     return None
 
 def get_cota_rti(elem):
-    """Cota da RTI: acha a ponta solta de `elem` (o elemento marcado
-    "RTI" pelo "Mapear Trechos" - familia da RTI ou, no fallback manual,
-    o proprio tubo) e le a elevacao dela. Ponta solta = conector fisico
-    (nao Logical) que nao esta conectado a nada - o mesmo criterio tanto
-    para a familia quanto para o tubo, sem tentar adivinhar Direction.
-    None se nao achar nenhuma ponta solta."""
+    """Cota da RTI: le a elevacao de um conector fisico de `elem` (o
+    elemento marcado "RTI" pelo "Mapear Trechos" - familia da RTI ou, no
+    fallback manual, o proprio tubo). Preferencia pela ponta solta (conector
+    nao Logical e nao conectado a nada) - normalmente e ela que fica virada
+    para dentro do reservatorio. Mas nem todo modelo tem uma ponta solta ali
+    (o elemento pode estar plenamente conectado nos dois lados da rede, com
+    a cota do RTI vindo so da posicao dele) - nesse caso cai para qualquer
+    conector fisico, mesmo criterio de get_cota_conector() para os demais
+    pontos (succao/recalque/hidrantes). None so se nao achar conector
+    nenhum."""
     cm = None
     if hasattr(elem, "ConnectorManager") and elem.ConnectorManager:
         cm = elem.ConnectorManager
@@ -203,11 +207,17 @@ def get_cota_rti(elem):
         cm = elem.MEPModel.ConnectorManager
     if not cm:
         return None
-    for conn in cm.Connectors:
+    conns = list(cm.Connectors)
+    for conn in conns:
         try:
             if conn.ConnectorType == ConnectorType.Logical: continue
             if not conn.IsConnected:
                 return to_m(conn.Origin.Z)
+        except: continue
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            return to_m(conn.Origin.Z)
         except: continue
     return None
 
