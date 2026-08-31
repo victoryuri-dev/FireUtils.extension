@@ -79,6 +79,8 @@ clr.AddReference("WindowsBase")
 
 import math
 
+import System.Windows as SW
+
 from Autodesk.Revit.DB import (
     Transaction, XYZ, Line, LocationCurve,
     BuiltInParameter, FilteredElementCollector,
@@ -508,7 +510,8 @@ class _JanelaOpcoesRota(forms.WPFWindow):
     (Commit) quando o usuário clica OK; Cancelar ou fechar a janela reverte
     (RollBack) tudo o que foi mostrado na prévia."""
 
-    def __init__(self, doc, uidoc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output):
+    def __init__(self, doc, uidoc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
+                 clicou_ponta_exata=False):
         forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
         self.doc           = doc
         self.uidoc         = uidoc
@@ -522,11 +525,20 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self._preview_ok       = False
         self._transacao_ativa  = False
 
+        # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
+        # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
+        # de fazer o usuário confirmar algo que ele já decidiu com o clique.
+        if clicou_ponta_exata:
+            self.SecaoRef.Visibility = SW.Visibility.Collapsed
+
         # Dispara on_opcao_changed (via evento Checked), mas nesse momento
         # _transacao_ativa ainda é False, então _atualizar_preview só sai
         # sem fazer nada — a prévia real só começa abaixo, após abrir a
         # transação.
-        self.RbRefCorpo.IsChecked     = True
+        if clicou_ponta_exata:
+            self.RbRefPonta.IsChecked = True
+        else:
+            self.RbRefCorpo.IsChecked = True
         self.RbAlturaOrigem.IsChecked = True
         self.RbEixoPadrao.IsChecked   = True
 
@@ -624,16 +636,21 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self._descartar()
 
 
-def _escolher_opcoes_rota_fallback():
-    escolha_ref = forms.SelectFromList.show(
-        [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
-        title=u"Fire Utils — Conectar Tubo",
-        prompt=u"Onde conectar no tubo de referência?",
-        multiselect=False
-    )
-    if not escolha_ref:
-        return None
-    modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
+def _escolher_opcoes_rota_fallback(clicou_ponta_exata=False):
+    if clicou_ponta_exata:
+        # Clique já caiu exatamente na ponta de pipe_ref — resposta óbvia,
+        # pula a pergunta em vez de fazer o usuário confirmar o óbvio.
+        modo_conexao_ref = u"ponta"
+    else:
+        escolha_ref = forms.SelectFromList.show(
+            [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
+            title=u"Fire Utils — Conectar Tubo",
+            prompt=u"Onde conectar no tubo de referência?",
+            multiselect=False
+        )
+        if not escolha_ref:
+            return None
+        modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
 
     escolha_altura = forms.SelectFromList.show(
         [u"Junto ao tubo desconectado", u"Junto ao tubo de referência"],
@@ -692,11 +709,22 @@ def run(doc, uidoc, output):
                     title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
+    # Clique caiu exatamente numa ponta de pipe_ref? Se sim, a resposta pra
+    # "onde conectar no tubo de referência?" já é óbvia — pula a pergunta.
+    clicou_ponta_exata = False
+    if pt_click_ref is not None:
+        loc_ref_click = pipe_ref.Location.Curve
+        pt_a_click = loc_ref_click.GetEndPoint(0)
+        pt_b_click = loc_ref_click.GetEndPoint(1)
+        clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
+                               pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
+
     # ── Preferências de roteamento, com prévia ao vivo no modelo ────────────
     janela = None
     try:
         janela = _JanelaOpcoesRota(doc, uidoc, pipe_desc, pipe_ref,
-                                    pt_click_desc, pt_click_ref, output)
+                                    pt_click_desc, pt_click_ref, output,
+                                    clicou_ponta_exata=clicou_ponta_exata)
         janela.ShowDialog()
         return
     except Exception as ex:
@@ -708,7 +736,7 @@ def run(doc, uidoc, output):
         print(u"[AVISO] Formulário WPF com prévia de Conectar Tubo falhou ({}), "
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
-    opcoes = _escolher_opcoes_rota_fallback()
+    opcoes = _escolher_opcoes_rota_fallback(clicou_ponta_exata=clicou_ponta_exata)
     if opcoes is None:
         pyscript.exit()
     modo_altura, inverter_eixos, modo_conexao_ref = opcoes

@@ -76,17 +76,19 @@
                 BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,16">
             <StackPanel>
 
-                <TextBlock Text="Onde conectar no tubo de referência?" Style="{StaticResource LabelStyle}"/>
-                <UniformGrid Columns="2" Margin="0,0,0,14">
-                    <RadioButton x:Name="RbRefCorpo" GroupName="GrupoRef" Margin="0,0,4,0"
-                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Ponto clicado no corpo (Tê)" TextWrapping="Wrap"/>
-                    </RadioButton>
-                    <RadioButton x:Name="RbRefPonta" GroupName="GrupoRef" Margin="4,0,0,0"
-                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Ponta livre (se houver)" TextWrapping="Wrap"/>
-                    </RadioButton>
-                </UniformGrid>
+                <StackPanel x:Name="SecaoRef">
+                    <TextBlock Text="Onde conectar no tubo de referência?" Style="{StaticResource LabelStyle}"/>
+                    <UniformGrid Columns="2" Margin="0,0,0,14">
+                        <RadioButton x:Name="RbRefCorpo" GroupName="GrupoRef" Margin="0,0,4,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                            <TextBlock Text="Ponto clicado no corpo (Tê)" TextWrapping="Wrap"/>
+                        </RadioButton>
+                        <RadioButton x:Name="RbRefPonta" GroupName="GrupoRef" Margin="4,0,0,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
+                            <TextBlock Text="Ponta livre (se houver)" TextWrapping="Wrap"/>
+                        </RadioButton>
+                    </UniformGrid>
+                </StackPanel>
 
                 <TextBlock Text="Lado do ramal (a partir da face do abrigo)" Style="{StaticResource LabelStyle}"/>
                 <UniformGrid Columns="2" Margin="0,0,0,14">

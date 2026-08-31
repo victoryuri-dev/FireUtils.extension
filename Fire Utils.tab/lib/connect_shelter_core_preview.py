@@ -49,6 +49,8 @@ clr.AddReference("WindowsBase")
 import os
 import math
 
+import System.Windows as SW
+
 from Autodesk.Revit.DB import (
     Transaction, XYZ, Line, UnitUtils,
     ElementTransformUtils, FamilyInstance,
@@ -71,7 +73,7 @@ from hydrant_insert_core import (
     ALTURA_VALVULA_M, COMP_HORIZ_M, DIAM_RAMAL_M, TOL,
     _angulo_entre, _conector_mais_proximo, _setar_diametro_ft,
 )
-from connect_pipe import _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params
+from connect_pipe import _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params, TOL_SEG
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"connect_shelter_opcoes.xaml")
@@ -205,7 +207,8 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
     incluídos."""
 
     def __init__(self, doc, uidoc, pipe_ref, pt_click_ref, simbolo,
-                 pt_abrigo, nivel, dir_face, pipe_type_id, sys_type_id, output):
+                 pt_abrigo, nivel, dir_face, pipe_type_id, sys_type_id, output,
+                 clicou_ponta_exata=False):
         forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
         self.doc           = doc
         self.uidoc         = uidoc
@@ -223,11 +226,20 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self._preview_ok       = False
         self._transacao_ativa  = False
 
+        # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
+        # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
+        # de fazer o usuário confirmar algo que ele já decidiu com o clique.
+        if clicou_ponta_exata:
+            self.SecaoRef.Visibility = SW.Visibility.Collapsed
+
         # Dispara on_opcao_changed (via evento Checked), mas nesse momento
         # _transacao_ativa ainda é False, então _atualizar_preview só sai
         # sem fazer nada — a prévia real só começa abaixo, após abrir a
         # transação.
-        self.RbRefCorpo.IsChecked     = True
+        if clicou_ponta_exata:
+            self.RbRefPonta.IsChecked = True
+        else:
+            self.RbRefCorpo.IsChecked = True
         self.RbLadoDireita.IsChecked  = True
         self.RbAlturaOrigem.IsChecked = True
         self.RbEixoPadrao.IsChecked   = True
@@ -331,16 +343,21 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             self._descartar()
 
 
-def _escolher_opcoes_abrigo_fallback():
-    escolha_ref = forms.SelectFromList.show(
-        [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
-        title=u"Fire Utils — Conectar Abrigo",
-        prompt=u"Onde conectar no tubo de referência?",
-        multiselect=False
-    )
-    if not escolha_ref:
-        return None
-    modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
+def _escolher_opcoes_abrigo_fallback(clicou_ponta_exata=False):
+    if clicou_ponta_exata:
+        # Clique já caiu exatamente na ponta de pipe_ref — resposta óbvia,
+        # pula a pergunta em vez de fazer o usuário confirmar o óbvio.
+        modo_conexao_ref = u"ponta"
+    else:
+        escolha_ref = forms.SelectFromList.show(
+            [u"Ponto clicado no corpo (Tê)", u"Ponta livre (se houver)"],
+            title=u"Fire Utils — Conectar Abrigo",
+            prompt=u"Onde conectar no tubo de referência?",
+            multiselect=False
+        )
+        if not escolha_ref:
+            return None
+        modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
 
     escolha_lado = forms.SelectFromList.show(
         [u"Esquerda", u"Direita"],
@@ -433,12 +450,23 @@ def conectar_abrigo_preview(doc, uidoc, output):
     # Tipo e sistema de tubulação SEMPRE herdados do tubo de referência
     pipe_type_id, sys_type_id, _, _ = _pipe_params(doc, pipe_ref)
 
+    # Clique caiu exatamente numa ponta de pipe_ref? Se sim, a resposta pra
+    # "onde conectar no tubo de referência?" já é óbvia — pula a pergunta.
+    clicou_ponta_exata = False
+    if pt_click_ref is not None:
+        loc_ref_click = pipe_ref.Location.Curve
+        pt_a_click = loc_ref_click.GetEndPoint(0)
+        pt_b_click = loc_ref_click.GetEndPoint(1)
+        clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
+                               pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
+
     # ── Preferências (lado + altura), com prévia ao vivo no modelo ─────────
     janela = None
     try:
         janela = _JanelaOpcoesAbrigo(doc, uidoc, pipe_ref, pt_click_ref, simbolo,
                                       pt_abrigo, nivel, dir_face,
-                                      pipe_type_id, sys_type_id, output)
+                                      pipe_type_id, sys_type_id, output,
+                                      clicou_ponta_exata=clicou_ponta_exata)
         janela.ShowDialog()
         return
     except Exception as ex:
@@ -451,7 +479,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
     # ── Fallback sem prévia ──────────────────────────────────────────────
-    opcoes = _escolher_opcoes_abrigo_fallback()
+    opcoes = _escolher_opcoes_abrigo_fallback(clicou_ponta_exata=clicou_ponta_exata)
     if opcoes is None:
         pyscript.exit()
     lado, modo_altura, inverter_eixos, modo_conexao_ref = opcoes
