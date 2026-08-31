@@ -20,7 +20,9 @@ clr.AddReference("PresentationFramework")
 clr.AddReference("PresentationCore")
 clr.AddReference("WindowsBase")
 
-from System.Windows import Thickness, HorizontalAlignment, TextWrapping, FontWeights
+from System.Windows import (
+    Thickness, HorizontalAlignment, TextWrapping, FontWeights, CornerRadius,
+)
 from System.Windows.Controls import Grid, TextBlock, Border, ColumnDefinition, RowDefinition
 
 from pyrevit import forms
@@ -97,7 +99,7 @@ class _JanelaResultado(forms.WPFWindow):
         moldura = Border()
         moldura.BorderBrush     = self.Resources[u"BrushBorder"]
         moldura.BorderThickness = Thickness(1)
-        moldura.CornerRadius    = 4
+        moldura.CornerRadius    = CornerRadius(4)
         moldura.Margin          = Thickness(0, 0, 0, 16)
 
         grid = Grid()
@@ -166,11 +168,13 @@ class _JanelaResultado(forms.WPFWindow):
 def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                           v_max_tubo, v_max_succao, p_ref_desc,
                           p_hd01_ref, p_hd02_ref, Pmin, Qs_lmin,
-                          eta, pot_cv, pot_kw):
+                          eta, pot_cv, pot_kw,
+                          pot_escolhida_cv=None, pot_escolhida_kw=None):
     """
     Resumo final mostrado ao término de "Dimensionar Hidrantes": só
     verificações e resultados finais (velocidade por trecho, pressão/vazão
-    nos hidrantes mais desfavoráveis, demanda do sistema e requisitos da
+    nos hidrantes mais desfavoráveis e no Ponto A, diferença de pressão
+    entre os ramais antes do equilíbrio, demanda do sistema e requisitos da
     bomba) — não o passo a passo completo, que é o botão "Memorial de
     Cálculo". Só é chamada depois que todas as verificações normativas
     passaram.
@@ -200,7 +204,7 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                   linhas_v,
                   alinhas=[u"left", u"right", u"right", u"right", u"right", u"left"])
 
-    janela.secao(u"2. Pressão e Vazão nos Hidrantes Mais Desfavoráveis")
+    janela.secao(u"2. Pressão e Vazão Finais — Hidrantes e Ponto A")
     _col_p = p_ref_desc[0].upper() + p_ref_desc[1:]
     janela.tabela([u"Hidrante", u"{} (mca)".format(_col_p), u"Q (L/min)",
                   u"Mínimo exigido", u"Verificação"],
@@ -211,8 +215,56 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                     u"{:.4f} mca / {:.2f} L/min".format(Pmin, Qs_lmin),
                     u"{} atende".format(SIM_OK)]],
                   alinhas=[u"left", u"right", u"right", u"left", u"left"])
+    janela.tabela([u"Ponto A", u"Valor"],
+                  [[u"Pressão adotada (P_PA,alvo)", u"**{:.4f} mca**".format(res["P_PA"])],
+                   [u"Vazão total (Qt = Q_hd01 + Q_hd02)",
+                    u"**{:.2f} L/min**".format(res["Qt"])]],
+                  alinhas=[u"left", u"left"])
 
-    janela.secao(u"3. Demanda do Sistema")
+    janela.secao(u"3. Verificação de Diferença de Pressão entre os Ramais")
+    equilibrio = res.get("equilibrio")
+    diferenca = abs(res["P_PA1"] - res["P_PA2"])
+    janela.tabela([u"Ramal", u"P_A inicial (mca, ambos em Qs)", u"Governante"],
+                  [[u"HD01", u"{:.4f}".format(res["P_PA1"]),
+                    SIM_OK if res["hid_governa"] == u"HD01" else u""],
+                   [u"HD02", u"{:.4f}".format(res["P_PA2"]),
+                    SIM_OK if res["hid_governa"] == u"HD02" else u""]],
+                  alinhas=[u"left", u"right", u"left"])
+    janela.paragrafo(
+        u"Diferença inicial entre os ramais (ambos calculados com a vazão mínima "
+        u"Qs, antes do equilíbrio): {:.4f} mca. Essa diferença é esperada — vem de "
+        u"variações de comprimento, comprimento equivalente (conexões/acessórios), "
+        u"diâmetro e desnível entre os dois ramais — e não indica, por si só, "
+        u"subdimensionamento da tubulação.".format(diferenca))
+    if equilibrio is not None:
+        if equilibrio[u"convergiu"]:
+            janela.paragrafo(
+                u"{} Equilíbrio hidráulico do ramal mais favorável (**{}**) convergiu em "
+                u"{} iteração(ões) — erro final de {:.6f} mca (tolerância {:g} mca).".format(
+                    SIM_OK, equilibrio[u"ramal_iterado"], len(equilibrio[u"historico"]),
+                    equilibrio[u"erro"], equilibrio[u"tolerancia"]))
+        else:
+            janela.paragrafo(
+                u"{} Equilíbrio hidráulico do ramal mais favorável (**{}**) NÃO convergiu "
+                u"em {} iterações — erro final de {:.6f} mca (tolerância {:g} mca). "
+                u"Resultado aproximado; revisar a geometria da rede.".format(
+                    SIM_X, equilibrio[u"ramal_iterado"], len(equilibrio[u"historico"]),
+                    equilibrio[u"erro"], equilibrio[u"tolerancia"]),
+                cor=janela.Resources[u"BrushAccent"])
+        _q_favoravel = (res["Q_hd02"] if equilibrio[u"ramal_iterado"] == u"HD02"
+                        else res["Q_hd01"])
+        _r_q = _q_favoravel / Qs_lmin if Qs_lmin else 0.0
+        janela.paragrafo(
+            u"Indicador de desequilíbrio — o quanto o equilíbrio elevou a vazão do "
+            u"ramal mais favorável acima da vazão mínima: R_Q = Q_final/Q_mín = "
+            u"{:.2f}/{:g} = {:.3f}. Não há percentual fixo como critério normativo; um "
+            u"R_Q alto indica perda de carga desproporcional no ramal governante e "
+            u"vale avaliar o diâmetro dele, desde que a diferença não seja "
+            u"predominantemente por desnível geométrico (que o diâmetro não "
+            u"corrige). Para o detalhamento completo da iteração, veja o \"Memorial "
+            u"de Cálculo\".".format(_q_favoravel, Qs_lmin, _r_q))
+
+    janela.secao(u"4. Demanda do Sistema")
     janela.tabela([u"Parâmetro", u"Valor"],
                   [[u"Vazão total (Qt)", u"**{:.2f} L/min = {:.4f} m³/h**".format(
                       res["Qt"], res["Qt"] * 60.0 / 1000.0)],
@@ -220,14 +272,23 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                     u"**{:.4f} mca**".format(res["P_RTI"])]],
                   alinhas=[u"left", u"left"])
 
-    janela.secao(u"4. Requisitos da Bomba de Recalque")
-    janela.tabela([u"Parâmetro", u"Valor"],
-                  [[u"Vazão de projeto (Qt)", u"{:.2f} L/min = {:.4f} m³/h".format(
-                      res["Qt"], res["Qt"] * 60.0 / 1000.0)],
-                   [u"Altura manométrica (Ht)", u"{:.4f} mca".format(res["P_RTI"])],
-                   [u"Eficiência global (η)", u"{:.0f}%".format(eta)],
-                   [u"Potência mínima", u"**{:.2f} cv = {:.2f} kW**".format(pot_cv, pot_kw)]],
-                  alinhas=[u"left", u"left"])
+    janela.secao(u"5. Requisitos da Bomba de Recalque")
+    linhas_bomba = [
+        [u"Vazão de projeto (Qt)", u"{:.2f} L/min = {:.4f} m³/h".format(
+            res["Qt"], res["Qt"] * 60.0 / 1000.0)],
+        [u"Altura manométrica (Ht)", u"{:.4f} mca".format(res["P_RTI"])],
+        [u"Eficiência global (η)", u"{:.0f}%".format(eta)],
+        [u"Potência mínima calculada", u"**{:.2f} cv = {:.2f} kW**".format(pot_cv, pot_kw)],
+    ]
+    if pot_escolhida_cv is not None:
+        atende = pot_escolhida_cv >= pot_cv - 1e-6
+        linhas_bomba.append(
+            [u"Potência escolhida",
+             u"**{:.2f} cv = {:.2f} kW**  —  {} {}".format(
+                 pot_escolhida_cv, pot_escolhida_kw,
+                 SIM_OK if atende else SIM_X,
+                 u"atende a mínima" if atende else u"ABAIXO da mínima calculada")])
+    janela.tabela([u"Parâmetro", u"Valor"], linhas_bomba, alinhas=[u"left", u"left"])
 
     janela.paragrafo(u"Para o memorial de cálculo completo (passo a passo), "
                      u"execute \"Memorial de Cálculo\".")

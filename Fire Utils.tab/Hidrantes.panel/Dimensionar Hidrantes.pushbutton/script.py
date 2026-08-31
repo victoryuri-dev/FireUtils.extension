@@ -542,6 +542,26 @@ eta_dec = eta / 100.0
 pot_cv  = calc_potencia(res["Qt"] / 60000.0, res["P_RTI"], eta_dec)
 pot_kw  = pot_cv / 1.36
 
+# Potência da bomba escolhida para o projeto — digitada pelo usuário (não é
+# calculada): a mínima acima é só a referência mostrada no prompt. Cancelar
+# ou deixar em branco segue o dimensionamento só com a potência mínima.
+pot_escolhida_str = forms.ask_for_string(
+    default=u"{:.2f}".format(pot_cv),
+    prompt=u"Potência da bomba escolhida (cv)\nPotência mínima calculada: {:.2f} cv".format(pot_cv),
+    title=u"Fire Utils — Potência da Bomba"
+)
+pot_escolhida_cv = None
+pot_escolhida_kw = None
+if pot_escolhida_str:
+    try:
+        pot_escolhida_cv = float(pot_escolhida_str.replace(",", "."))
+        if pot_escolhida_cv <= 0: raise ValueError
+        pot_escolhida_kw = pot_escolhida_cv / 1.36
+    except ValueError:
+        forms.alert(u"Potência escolhida inválida — seguindo só com a potência "
+                    u"mínima calculada.", title="Fire Utils", warn_icon=True)
+        pot_escolhida_cv = None
+
 # ===========================================================================
 # Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
 # completo agora é o botão separado "Memorial de Cálculo")
@@ -550,6 +570,7 @@ mostrar_resultado_ok(
     res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
     Pmin, Qs_lmin, eta, pot_cv, pot_kw,
+    pot_escolhida_cv=pot_escolhida_cv, pot_escolhida_kw=pot_escolhida_kw,
 )
 
 # --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
@@ -569,9 +590,11 @@ payload_hid = {
     "j_succao_npsh": j_succao_npsh,
     "C_HW":          C_HW,
     "uf":            perfil.get(u"_uf_efetiva"),
-    "eta":           eta,
-    "pot_cv":        pot_cv,
-    "pot_kw":        pot_kw,
+    "eta":              eta,
+    "pot_cv":           pot_cv,
+    "pot_kw":           pot_kw,
+    "pot_escolhida_cv": pot_escolhida_cv,
+    "pot_escolhida_kw": pot_escolhida_kw,
     "timestamp":     timestamp,
     "_nome_projeto": doc.Title,
 }
