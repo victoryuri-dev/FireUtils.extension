@@ -476,6 +476,7 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     K          = res["K"]
     dH         = res["dH"]
     j          = res["j"]
+    j_inicial  = res["j_inicial"]   # t3/t4 ANTES do equilíbrio, ambos em Qs
     metodo     = res["metodo"]
     esguicho   = res["esguicho"]
     esg        = res["esg"]
@@ -773,9 +774,9 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                             Pmin, _ref["Jm"], _ref["Jvalv"], P_ref))
         output.print_md(u"")
 
-    _passo_ltotal(j["t3"], prox())
-    _passo_perda(j["t3"], C_HW, prox())
-    _passo_velocidade(j["t3"], v_max_tubo, prox())
+    _passo_ltotal(j_inicial["t3"], prox())
+    _passo_perda(j_inicial["t3"], C_HW, prox())
+    _passo_velocidade(j_inicial["t3"], v_max_tubo, prox())
 
     output.print_md(u"**{}) Fator K** — calculado aqui, no 1º hidrante mais "
                     u"desfavorável, e reaproveitado nos demais trechos.".format(prox()))
@@ -786,26 +787,29 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                         P_ref / MCA_POR_BAR, K))
     output.print_md(u"")
 
-    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD01:".format(prox()))
+    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD01, "
+                    u"ainda com a vazão normativa Qs:".format(prox()))
     _formula(u"P_PA = {} + J ± ∆H".format(_P_ref_lbl))
     _tabela([_P_ref_lbl + u" (mca)", u"J (mca)", u"∆H (m)", u"P_PA (mca)"],
-            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j["t3"]["J"]),
+            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j_inicial["t3"]["J"]),
               _fmt_dh(dH["t3"]), u"**{:.4f}**".format(res["P_PA1"])]])
     output.print_md(u"")
 
     # --- Trecho HD02 -------------------------------------------------------
     output.print_md(u"### {}.2 Trecho HD02 ao Ponto A".format(n7))
-    output.print_md(u"Ramal do 2º hidrante mais desfavorável, calculado com a mesma "
-                    u"vazão normativa Q = {:g} L/min.".format(Qs_lmin))
+    output.print_md(u"Ramal do 2º hidrante mais desfavorável — **primeiro cálculo**, "
+                    u"ainda com a mesma vazão normativa Qs = {:g} L/min dos dois "
+                    u"ramais, antes de qualquer equilíbrio.".format(Qs_lmin))
     output.print_md(u"")
     prox = _contador_letras()
-    _passo_ltotal(j["t4"], prox())
-    _passo_perda(j["t4"], C_HW, prox())
-    _passo_velocidade(j["t4"], v_max_tubo, prox())
-    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD02:".format(prox()))
+    _passo_ltotal(j_inicial["t4"], prox())
+    _passo_perda(j_inicial["t4"], C_HW, prox())
+    _passo_velocidade(j_inicial["t4"], v_max_tubo, prox())
+    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD02, "
+                    u"ainda com a vazão normativa Qs:".format(prox()))
     _formula(u"P_PA = {} + J ± ∆H".format(_P_ref_lbl))
     _tabela([_P_ref_lbl + u" (mca)", u"J (mca)", u"∆H (m)", u"P_PA (mca)"],
-            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j["t4"]["J"]),
+            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j_inicial["t4"]["J"]),
               _fmt_dh(dH["t4"]), u"**{:.4f}**".format(res["P_PA2"])]])
     output.print_md(u"")
 
@@ -823,26 +827,76 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
         res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
 
+    ramal_it        = equilibrio[u"ramal_iterado"]
+    ramal_gov       = equilibrio[u"ramal_governante"]
+    trecho_it       = u"t3" if ramal_it == u"HD01" else u"t4"
+    dH_it           = dH[trecho_it]
+    P_PA_it_inicial = res["P_PA1"] if ramal_it == u"HD01" else res["P_PA2"]
+
     output.print_md(u"O ramal governante (**{}**) não muda — permanece com a vazão "
                     u"normativa Qs = {:g} L/min e a pressão de referência P_ref = "
-                    u"{:.4f} mca, por construção. O ramal mais favorável (**{}**) "
-                    u"converge iterativamente até sua P_A bater com a pressão-alvo:".format(
-                        equilibrio[u"ramal_governante"], Qs_lmin, res["P_valv_ref"],
-                        equilibrio[u"ramal_iterado"]))
+                    u"{:.4f} mca, por construção.".format(
+                        ramal_gov, Qs_lmin, res["P_valv_ref"]))
     output.print_md(u"")
-    _tabela([u"n", u"P_ref (mca)", u"Q (L/min)", u"J (mca)", u"P_A (mca)", u"Erro (mca)"],
-            [[u"{}".format(h[u"n"]), u"{:.4f}".format(h[u"P_ref"]),
-              u"{:.2f}".format(h[u"Q"]), u"{:.4f}".format(h[u"J"]),
-              u"{:.4f}".format(h[u"P_A"]), u"{:.6f}".format(h[u"erro"])]
-             for h in equilibrio[u"historico"]],
-            titulo=u"Iteração do ramal {} (variação máxima admitida pela norma{} = "
-                   u"{:g} mca)".format(equilibrio[u"ramal_iterado"],
-                                       ref(perfil, u"tolerancia_equilibrio_mca_ref"),
-                                       equilibrio[u"tolerancia"]))
+
+    output.print_md(u"**Diferença de pressão entre os ramais**, ambos calculados com "
+                    u"a mesma vazão normativa Qs — é essa diferença que o ramal mais "
+                    u"favorável (**{}**) precisa absorver, subindo sua vazão até sua "
+                    u"P_A bater com a pressão-alvo:".format(ramal_it))
+    _formula(u"∆P = |P_PA,alvo − P_PA,{}|".format(ramal_it.lower()))
+    output.print_md(u"∆P = |{:.4f} − {:.4f}| = **{:.4f} mca**".format(
+        res["P_PA"], P_PA_it_inicial, abs(res["P_PA"] - P_PA_it_inicial)))
+    output.print_md(u"")
+
+    J_atual = j_inicial[trecho_it][u"J"]
+    for h in equilibrio[u"historico"]:
+        output.print_md(u"**Iteração {} do ramal {}**".format(h[u"n"], ramal_it))
+        output.print_md(u"")
+
+        output.print_md(u"Pressão de referência recalculada — a pressão-alvo do "
+                        u"Ponto A menos a perda de carga e o desnível deste ramal:")
+        _formula(u"P_ref = P_PA,alvo − J − ∆H")
+        output.print_md(u"P_ref = {:.4f} − {:.4f} {} = **{:.4f} mca**".format(
+            res["P_PA"], J_atual, _fmt_dh(dH_it), h[u"P_ref"]))
+        output.print_md(u"")
+
+        output.print_md(u"Vazão recalculada pelo Fator K, com essa nova pressão de "
+                        u"referência — **nunca** a vazão de uma iteração anterior:")
+        _formula(u"Q = K · √(P_ref / {:g})".format(MCA_POR_BAR))
+        output.print_md(u"Q = {:.4f} · √({:.4f} / {:g}) = **{:.2f} L/min**".format(
+            K, h[u"P_ref"], MCA_POR_BAR, h[u"Q"]))
+        output.print_md(u"")
+
+        output.print_md(u"Perda de carga recalculada por Hazen-Williams — Jun muda "
+                        u"porque a vazão mudou; nunca reaproveita a perda de uma "
+                        u"vazão diferente:")
+        _formula(u"Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87   [m/m]")
+        _formula(u"J = Ltotal · Jun   [mca]")
+        _tabela([u"DN (mm)", u"Ltotal (m)", u"Jun (m/m)", u"J (mca)"],
+                [[u"{:.1f}".format(s["d_mm"]), u"{:.4f}".format(s["Ltotal"]),
+                  u"{:.6f}".format(s["Jun"]), u"**{:.4f}**".format(s["J"])]
+                 for s in h[u"j"][u"segmentos"]])
+        output.print_md(u"**J recalculado (soma dos diâmetros) = {:.4f} mca**".format(
+            h[u"j"][u"J"]))
+        output.print_md(u"")
+
+        output.print_md(u"Nova pressão no Ponto A, com o J recalculado:")
+        _formula(u"P_A = P_ref + J ± ∆H")
+        output.print_md(u"P_A = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+            h[u"P_ref"], h[u"j"][u"J"], _fmt_dh(dH_it), h[u"P_A"]))
+        output.print_md(u"")
+
+        output.print_md(u"Erro = |P_A − P_PA,alvo| = |{:.4f} − {:.4f}| = "
+                        u"**{:.6f} mca**".format(h[u"P_A"], res["P_PA"], h[u"erro"]))
+        output.print_md(u"")
+
+        J_atual = h[u"j"][u"J"]
+
     if equilibrio[u"convergiu"]:
         output.print_md(u"{} **Convergiu** em {} iteração(ões) — erro final de "
                         u"{:.6f} mca, dentro da variação máxima admitida pela norma{} "
-                        u"de {:g} mca.".format(
+                        u"de {:g} mca. Resultado esperado: a diferença de pressão "
+                        u"entre os ramais no Ponto A fica, na prática, eliminada.".format(
                             SIM_OK, len(equilibrio[u"historico"]), equilibrio[u"erro"],
                             ref(perfil, u"tolerancia_equilibrio_mca_ref"),
                             equilibrio[u"tolerancia"]))

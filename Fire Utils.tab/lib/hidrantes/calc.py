@@ -322,7 +322,9 @@ def _equilibrar_ramal(trecho_data, K, P_alvo, dH_ramal, C, j_inicial,
     inviável) — o chamador decide o que fazer com "convergiu": False.
 
     Retorna dict com Q/P_ref/j/P_A/erro FINAIS e o histórico de iterações
-    (uma linha por passo), pronto para a tabela do memorial.
+    (uma linha por passo, cada uma já com o "j" completo — por diâmetro —
+    daquele passo, não só o J total), pronto para o memorial narrar cada
+    iteração (diferença de pressão → Fator K → Hazen-Williams → P_A nova).
     """
     J_atual   = j_inicial["J"]
     label     = j_inicial.get("label", u"")
@@ -346,6 +348,7 @@ def _equilibrar_ramal(trecho_data, K, P_alvo, dH_ramal, C, j_inicial,
             "P_ref": P_ref,
             "Q":     Q_novo,
             "J":     j_novo["J"],
+            "j":     j_novo,   # trecho completo (por diâmetro) desta iteração — memorial
             "P_A":   P_A_novo,
             "erro":  erro,
         })
@@ -462,8 +465,13 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas, tolerancia_equilibrio_m
 
     # Cálculo INICIAL dos dois ramais, ambos com a mesma vazão normativa Qs
     # — antes de qualquer tentativa de equilíbrio (Passo a Passo, item 3).
+    # j3_inicial/j4_inicial ficam guardados à parte (nunca reatribuídos):
+    # j3/j4 abaixo são sobrescritos pelo resultado FINAL (pós-equilíbrio)
+    # do ramal iterado, e o memorial precisa dos dois — o "antes" (Qs) nas
+    # seções 7.1/7.2 e o "depois" na narrativa do equilíbrio.
     j3 = calc_j_trecho(trechos_data["t3"], Qs, C, u"Trecho HD01 ao Ponto A")
     j4 = calc_j_trecho(trechos_data["t4"], Qs, C, u"Trecho HD02 ao Ponto A")
+    j3_inicial, j4_inicial = j3, j4
 
     # Pressão requerida no Ponto A por cada ramal, ainda com Qs nos dois
     P_PA1 = P_valv_ref + j3["J"] + dH["t3"]
@@ -529,6 +537,7 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas, tolerancia_equilibrio_m
         "esg":        esg,
         "dH":         dH,
         "j":          {"t1": j1, "t2": j2, "t3": j3, "t4": j4},
+        "j_inicial":  {"t3": j3_inicial, "t4": j4_inicial},
         "equilibrio": equilibrio,
         "Q_hd01":     Q1,
         "Q_hd02":     Q2,
