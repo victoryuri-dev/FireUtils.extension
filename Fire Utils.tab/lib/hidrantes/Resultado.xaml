@@ -24,6 +24,8 @@
         <SolidColorBrush x:Key="BrushAccentTint" Color="#33E03A2E"/>
         <SolidColorBrush x:Key="BrushOk"         Color="#2FA84F"/>
         <SolidColorBrush x:Key="BrushOkTint"     Color="#332FA84F"/>
+        <SolidColorBrush x:Key="BrushInfo"       Color="#3B82F6"/>
+        <SolidColorBrush x:Key="BrushInfoTint"   Color="#333B82F6"/>
         <SolidColorBrush x:Key="BrushWhite"      Color="#FFFFFF"/>
 
         <Style x:Key="AccentButtonStyle" TargetType="Button">

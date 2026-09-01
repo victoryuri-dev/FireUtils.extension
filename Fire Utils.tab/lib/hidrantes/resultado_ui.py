@@ -51,6 +51,19 @@ def _mca(valor):
     return u"{:.2f}".format(valor).replace(u".", u",") + u" mca"
 
 
+def _mca_fina(valor, casas_max=8):
+    """
+    Como _mca(), mas com precisão variável — usada só para a diferença de
+    pressão entre os ramais, que pode ser bem menor que 0,01 mca (ex.:
+    0,00041 ou 0,0000062) e ficaria escondida (viraria "0,00") no formato
+    fixo de 2 casas. Arredonda em `casas_max` decimais e tira os zeros à
+    direita, nunca notação científica; mantém no mínimo 2 casas.
+    """
+    inteiro, dec = u"{:.{}f}".format(valor, casas_max).split(u".")
+    dec = dec.rstrip(u"0").ljust(2, u"0")
+    return u"{},{} mca".format(inteiro, dec)
+
+
 # ===========================================================================
 # Janela — casco fixo (XAML) + conteúdo dinâmico (seções/tabelas montadas
 # em código, mesmo padrão do Carregador de Famílias para o catálogo)
@@ -102,6 +115,25 @@ class _JanelaResultado(forms.WPFWindow):
         bloco.TextWrapping = TextWrapping.Wrap
         bloco.Margin       = Thickness(0, 0, 0, 10)
         self.ConteudoPanel.Children.Add(bloco)
+
+    def dica(self, texto):
+        """Caixa de dica — fundo e borda azuis, para a sugestão de correção
+        nas janelas de bloqueio (separada do texto que diz o que não atendeu)."""
+        caixa = Border()
+        caixa.BorderBrush     = self.Resources[u"BrushInfo"]
+        caixa.Background      = self.Resources[u"BrushInfoTint"]
+        caixa.BorderThickness = Thickness(1)
+        caixa.CornerRadius    = CornerRadius(6)
+        caixa.Padding         = Thickness(14, 10, 14, 10)
+        caixa.Margin          = Thickness(0, 0, 0, 10)
+
+        txt = TextBlock()
+        txt.Text         = texto
+        txt.FontSize     = 12
+        txt.Foreground   = self.Resources[u"BrushInfo"]
+        txt.TextWrapping = TextWrapping.Wrap
+        caixa.Child = txt
+        self.ConteudoPanel.Children.Add(caixa)
 
     def tabela(self, colunas, linhas, alinhas=None):
         """
@@ -271,7 +303,7 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     if equilibrio is not None:
         janela.tabela(
             [u"Verificação", u"Valor"],
-            [[u"Diferença entre os ramais (após equilíbrio)", _mca(equilibrio[u"erro"])],
+            [[u"Diferença entre os ramais (após equilíbrio)", _mca_fina(equilibrio[u"erro"])],
              [u"Limite normativo ({})".format(norma), _mca(equilibrio[u"tolerancia"])],
              [u"Resultado", _pill(True)]],
             alinhas=[u"left", u"left"])
@@ -320,14 +352,13 @@ def mostrar_bloqueio_equilibrio(equilibrio, norma):
     janela.tabela(
         [u"Verificação", u"Valor"],
         [[u"Diferença entre os ramais (após {} iteração(ões))".format(
-              len(equilibrio[u"historico"])), _mca(equilibrio[u"erro"])],
+              len(equilibrio[u"historico"])), _mca_fina(equilibrio[u"erro"])],
          [u"Limite normativo ({})".format(norma), _mca(equilibrio[u"tolerancia"])],
          [u"Resultado", _pill(False)]],
         alinhas=[u"left", u"left"])
-    janela.paragrafo(
-        u"Não atende: a diferença de pressão entre os ramais no Ponto A passou do "
-        u"limite da norma. Dica: revise o diâmetro dos trechos entre o Ponto A e "
-        u"os hidrantes.")
+    janela.paragrafo(u"Não atende: a diferença de pressão entre os ramais no "
+                     u"Ponto A passou do limite da norma.")
+    janela.dica(u"Dica: revise o diâmetro dos trechos entre o Ponto A e os hidrantes.")
     janela.ShowDialog()
 
 
@@ -343,9 +374,9 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas):
     janela.tabela([u"DN (mm)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
                   [[u"{:.1f}".format(s["d_mm"]), u"**{:.3f}**".format(s["V"]),
                     u"{:.1f}".format(limite), _pill(False)] for s in falhas])
-    janela.paragrafo(
-        u"Não atende: velocidade acima do limite normativo. Dica: aumente o "
-        u"diâmetro do trecho ou reduza a vazão.")
+    janela.paragrafo(u"Não atende: velocidade acima do limite normativo.")
+    janela.dica(u"Dica: aumente o diâmetro do trecho. A vazão é um dado "
+                u"normativo fixo do tipo de sistema e não pode ser reduzida.")
     janela.ShowDialog()
 
 
@@ -364,7 +395,6 @@ def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmi
                    [u"Vazão", u"{:.2f} L/min".format(q), u"{:.2f} L/min".format(Qs_lmin),
                     _pill(q >= Qs_lmin - 0.01)]],
                   alinhas=[u"left", u"right", u"right", u"left"])
-    janela.paragrafo(
-        u"Não atende: pressão ou vazão abaixo do mínimo exigido. Dica: revise o "
-        u"diâmetro/traçado do trecho {}.".format(trecho_desc))
+    janela.paragrafo(u"Não atende: pressão ou vazão abaixo do mínimo exigido.")
+    janela.dica(u"Dica: revise o diâmetro/traçado do trecho {}.".format(trecho_desc))
     janela.ShowDialog()
