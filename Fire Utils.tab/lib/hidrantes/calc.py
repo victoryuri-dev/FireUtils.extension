@@ -549,7 +549,8 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas, tolerancia_equilibrio_m
 # (chamada pelo script Dimensionar, que tem acesso ao Revit)
 # ===========================================================================
 
-def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_nome_fn):
+def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_nome_fn,
+                   get_id_fn=None):
     """
     Extrai os dados de um trecho AGRUPADOS POR DIÂMETRO NOMINAL (DN), como
     exige o passo a passo: um mesmo trecho pode ter variações de diâmetro, e
@@ -558,13 +559,18 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     retornar o diâmetro nominal do elemento, não o interno real).
 
     Recebe as funções helper como parâmetro para manter este módulo sem
-    imports Revit. Retorna:
+    imports Revit. get_id_fn é opcional (deve devolver um int, o
+    ElementId do tubo) — habilita o botão "Mostrar no Projeto" das
+    janelas de bloqueio (resultado_ui.py), selecionando exatamente os
+    tubos do diâmetro que reprovou. Retorna:
         {
-          "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos",
+          "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos", "ids",
                            "acessorios": [ {nome, qtd, leq_unit, leq_tot} ] } ],
           "L":   soma dos comprimentos reais,
           "Leq": soma dos comprimentos equivalentes,
         }
+    "ids": lista de ElementId (int) dos tubos (Pipe) daquele diâmetro —
+    vazia se get_id_fn não foi informado.
 
     Acessórios são agrupados por nome do tipo dentro de cada diâmetro.
     le_unit é a média exata dos valores acumulados (leq_tot / qtd), garantindo
@@ -578,7 +584,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     def _seg(d_mm):
         if d_mm not in segs:
             segs[d_mm] = {"d_mm": d_mm, "L": 0.0, "Leq": 0.0,
-                          "n_tubos": 0, "aces": {}}
+                          "n_tubos": 0, "ids": [], "aces": {}}
         return segs[d_mm]
 
     for elem in elems:
@@ -587,6 +593,8 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             s = _seg(d_mm)
             s["L"]       += get_comprimento_fn(elem)
             s["n_tubos"] += 1
+            if get_id_fn is not None:
+                s["ids"].append(get_id_fn(elem))
         elif isinstance(elem, FamilyInstance):
             leq = get_leq_fn(elem)
             if leq > 0:
@@ -619,6 +627,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             "Leq":        s["Leq"],
             "Ltotal":     s["L"] + s["Leq"],
             "n_tubos":    s["n_tubos"],
+            "ids":        s["ids"],
             "acessorios": acessorios,
         })
 

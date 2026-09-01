@@ -22,6 +22,7 @@ clr.AddReference("WindowsBase")
 
 from System.Windows import (
     Thickness, HorizontalAlignment, TextWrapping, FontWeights, CornerRadius,
+    Visibility,
 )
 from System.Windows.Controls import Grid, TextBlock, Border, ColumnDefinition, RowDefinition
 
@@ -76,6 +77,8 @@ class _JanelaResultado(forms.WPFWindow):
         self.TxtTitulo.Text    = titulo
         self.TxtSubtitulo.Text = subtitulo or u""
         self._primeira_secao   = True
+        self._ids_problema     = None
+        self._mostrar_no_revit = None
         self._aplicar_status(status)
 
     def _aplicar_status(self, status):
@@ -93,6 +96,22 @@ class _JanelaResultado(forms.WPFWindow):
 
     def on_fechar(self, sender, args):
         self.Close()
+
+    def habilitar_botao_mostrar(self, ids_problema, mostrar_no_revit):
+        """Mostra o botão "Mostrar no Projeto" no rodapé — usado pelas
+        janelas de bloqueio para selecionar/enquadrar, na view do Revit, os
+        elementos que causaram a reprovação. `mostrar_no_revit` é um
+        callback do chamador (que tem acesso ao uidoc); este módulo
+        continua sem importar nada do Revit diretamente."""
+        if not ids_problema or mostrar_no_revit is None:
+            return
+        self._ids_problema     = ids_problema
+        self._mostrar_no_revit = mostrar_no_revit
+        self.BtnMostrarProjeto.Visibility = Visibility.Visible
+
+    def on_mostrar_projeto(self, sender, args):
+        if self._mostrar_no_revit is not None and self._ids_problema:
+            self._mostrar_no_revit(self._ids_problema)
 
     # ------------------------------------------------------------------
     # Blocos de conteúdo
@@ -339,7 +358,7 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.ShowDialog()
 
 
-def mostrar_bloqueio_equilibrio(equilibrio, norma):
+def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None, mostrar_no_revit=None):
     """Janela mostrando que o equilíbrio hidráulico entre os ramais no
     Ponto A não convergiu dentro da variação de pressão máxima admitida
     pela norma — chamada por "Dimensionar Hidrantes" quando o
@@ -359,10 +378,12 @@ def mostrar_bloqueio_equilibrio(equilibrio, norma):
     janela.paragrafo(u"Não atende: a diferença de pressão entre os ramais no "
                      u"Ponto A passou do limite da norma.")
     janela.dica(u"Dica: revise o diâmetro dos trechos entre o Ponto A e os hidrantes.")
+    janela.habilitar_botao_mostrar(ids_problema, mostrar_no_revit)
     janela.ShowDialog()
 
 
-def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas):
+def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
+                                ids_problema=None, mostrar_no_revit=None):
     """Janela mostrando quais diâmetros do trecho passaram do limite de
     velocidade — chamada por "Dimensionar Hidrantes" quando o
     dimensionamento é interrompido nessa verificação."""
@@ -377,10 +398,12 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas):
     janela.paragrafo(u"Não atende: velocidade acima do limite normativo.")
     janela.dica(u"Dica: aumente o diâmetro do trecho. A vazão é um dado "
                 u"normativo fixo do tipo de sistema e não pode ser reduzida.")
+    janela.habilitar_botao_mostrar(ids_problema, mostrar_no_revit)
     janela.ShowDialog()
 
 
-def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin):
+def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
+                              ids_problema=None, mostrar_no_revit=None):
     """Janela mostrando por que a pressão/vazão de um hidrante mais
     desfavorável não atendeu a norma — chamada por "Dimensionar Hidrantes"
     quando o dimensionamento é interrompido nessa verificação."""
@@ -397,4 +420,5 @@ def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmi
                   alinhas=[u"left", u"right", u"right", u"left"])
     janela.paragrafo(u"Não atende: pressão ou vazão abaixo do mínimo exigido.")
     janela.dica(u"Dica: revise o diâmetro/traçado do trecho {}.".format(trecho_desc))
+    janela.habilitar_botao_mostrar(ids_problema, mostrar_no_revit)
     janela.ShowDialog()

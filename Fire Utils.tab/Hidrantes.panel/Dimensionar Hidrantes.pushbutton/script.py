@@ -28,10 +28,11 @@ import re as _re
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
-    FlowDirectionType, ConnectorType,
+    FlowDirectionType, ConnectorType, ElementId,
     LocationCurve, LocationPoint, UnitUtils,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
+from System.Collections.Generic import List
 from pyrevit import forms, script
 
 try:
@@ -67,11 +68,31 @@ except NameError:
     _txt = str
 
 doc    = __revit__.ActiveUIDocument.Document
+uidoc  = __revit__.ActiveUIDocument
 output = script.get_output()
 
 # ===========================================================================
 # HELPERS REVIT
 # ===========================================================================
+
+def get_id(elem):
+    """ElementId como int simples — para gravar no cache (JSON) e usar no
+    botão "Mostrar no Projeto" das janelas de bloqueio."""
+    try:    return elem.Id.Value
+    except: return elem.Id.IntegerValue
+
+def mostrar_no_revit(ids):
+    """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
+    ElementId (int) está em `ids` — callback do botão "Mostrar no
+    Projeto" das janelas de bloqueio (resultado_ui.py)."""
+    if not ids:
+        return
+    eids = List[ElementId]([ElementId(i) for i in ids])
+    uidoc.Selection.SetElementIds(eids)
+    try:
+        uidoc.ShowElements(eids)
+    except Exception:
+        pass
 
 def get_trecho(elem):
     try:
@@ -430,10 +451,10 @@ dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
 # --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
 trechos_data = {
-    "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome),
-    "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome),
-    "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, get_diametro, get_leq, get_nome),
-    "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome),
+    "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome, get_id),
+    "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome, get_id),
+    "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
+    "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
 }
 
 res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
@@ -448,7 +469,9 @@ res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
 # antes das demais (velocidade, pressão/vazão por hidrante), porque um
 # equilíbrio que não converge invalida os resultados por trecho abaixo.
 if not res["equilibrio"][u"convergiu"]:
-    mostrar_bloqueio_equilibrio(res["equilibrio"], req(perfil, u"norma"))
+    ids_ramais = [get_id(e) for e in trechos_elems[u"Ponto A - Hid 01"] + trechos_elems[u"Ponto A - Hid 02"]]
+    mostrar_bloqueio_equilibrio(res["equilibrio"], req(perfil, u"norma"),
+                                ids_problema=ids_ramais, mostrar_no_revit=mostrar_no_revit)
     script.exit()
 
 # Condição de sucção pelo método direto e conservador: compara a cota da RTI
@@ -515,19 +538,25 @@ def _para_por_velocidade(j, limite, nome_trecho):
     falhas = [s for s in j["segmentos"] if s["V"] > limite + 1e-9]
     if not falhas:
         return
-    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas)
+    ids_falha = [eid for s in falhas for eid in s.get("ids", [])]
+    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
+                                ids_problema=ids_falha, mostrar_no_revit=mostrar_no_revit)
     script.exit()
 
-def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc):
+def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc, elems_trecho):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
         return
-    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
+    ids_trecho = [get_id(e) for e in elems_trecho]
+    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
+                              ids_problema=ids_trecho, mostrar_no_revit=mostrar_no_revit)
     script.exit()
 
 _para_por_velocidade(res["j"]["t3"], v_max_tubo, u"Ponto A → HD01")
-_para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A → HD01")
+_para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A → HD01",
+                   trechos_elems[u"Ponto A - Hid 01"])
 _para_por_velocidade(res["j"]["t4"], v_max_tubo, u"Ponto A → HD02")
-_para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02")
+_para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02",
+                   trechos_elems[u"Ponto A - Hid 02"])
 _para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)")
 _para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)")
 

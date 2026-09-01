@@ -38,6 +38,17 @@
             <Setter Property="Foreground" Value="{StaticResource BrushWhite}"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
+
+        <Style x:Key="OutlineButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="18,0,18,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="{StaticResource BrushBg3}"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BrushBorder2}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
     </Window.Resources>
 
     <Grid Margin="26,22,26,20">
@@ -74,6 +85,9 @@
         <!-- Rodapé -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,16,0,0">
+            <Button x:Name="BtnMostrarProjeto" Content="Mostrar no Projeto"
+                    Style="{StaticResource OutlineButtonStyle}" Click="on_mostrar_projeto"
+                    Margin="0,0,10,0" Visibility="Collapsed"/>
             <Button x:Name="BtnFechar" Content="Fechar" Style="{StaticResource AccentButtonStyle}"
                     Click="on_fechar"/>
         </StackPanel>
