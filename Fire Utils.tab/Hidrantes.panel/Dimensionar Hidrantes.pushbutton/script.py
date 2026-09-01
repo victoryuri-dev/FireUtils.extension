@@ -599,4 +599,3 @@ payload_hid = {
     "_nome_projeto": doc.Title,
 }
 salvar_cache(payload_hid, projeto_dir)
-output.print_md(u"*Cache salvo em firedata.json (chave 'hidrantes').*")

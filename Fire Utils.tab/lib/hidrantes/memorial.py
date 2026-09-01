@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 memorial.py — Fire Utils · lib/hidrantes/
-Montagem do memorial de cálculo (passo a passo, método da marcha) em HTML —
-mesma lógica de formatação usada tanto no console do pyRevit quanto no
-arquivo .html salvo na pasta do projeto.
+Montagem do memorial de cálculo (passo a passo, método da marcha) em HTML,
+gravado como arquivo na pasta do projeto e aberto em janela separada — não
+imprime no console do pyRevit.
 
 Módulo puro: recebe os resultados já calculados (por calcular_rede() e
-companhia, em calc.py) e o objeto `output` do pyRevit do chamador — não
-importa nada do Revit. Usado pelo botão "Memorial de Cálculo", que relê o
-cache salvo por "Dimensionar Hidrantes" (firedata.json) e reimprime o
-memorial completo sem recalcular nada.
+companhia, em calc.py) — não importa nada do Revit. Usado pelo botão
+"Memorial de Cálculo", que relê o cache salvo por "Dimensionar Hidrantes"
+(firedata.json) e regera o memorial completo sem recalcular nada.
 
 "Dimensionar Hidrantes" não chama este módulo — ao final ele mostra só um
 resumo de verificações e resultados finais, e para o dimensionamento no
@@ -24,19 +23,17 @@ from hidrantes.calc import MCA_POR_BAR, F_DARCY, K_VALVULA, COEF_JM, G
 from hidrantes.norm_profiles import req, ref
 from hidrantes import succao as succao_calc
 
-# Simbolos de saida no output window do pyRevit (janela de output do pyRevit
-# roda em unicode e normalmente exibe ✓/✗/≤ sem problema). Se algum ambiente
-# nao renderizar esses caracteres, mude _ASCII_FALLBACK para True aqui -
-# unico lugar do arquivo que define esses simbolos.
+# Simbolos usados no arquivo .html do memorial. Se algum ambiente nao
+# renderizar esses caracteres, mude _ASCII_FALLBACK para True aqui - unico
+# lugar do arquivo que define esses simbolos.
 _ASCII_FALLBACK = False
 if _ASCII_FALLBACK:
     SIM_OK, SIM_X, SIM_LE, SIM_GE = u"OK", u"X", u"<=", u">="
 else:
     SIM_OK, SIM_X, SIM_LE, SIM_GE = u"✓", u"✗", u"≤", u"≥"
 
-# Definido por print_memorial_calculo() antes de montar o memorial (trocado
-# temporariamente por um buffer _Memorial, depois restaurado ao console real
-# do chamador) - ver a funcao mais abaixo.
+# Definido por gerar_memorial_calculo() antes de montar o memorial (trocado
+# temporariamente por um buffer _Memorial) - ver a funcao mais abaixo.
 output = None
 
 def _fmt_dh(dh):
@@ -259,9 +256,6 @@ def _css(cor_texto, cor_borda, cor_fundo, cor_suave, cor_acento):
            acento=cor_acento)
 
 
-# Console do pyRevit: herda a cor do tema (claro ou escuro), sem fundo.
-_CSS_CONSOLE = _css(u"inherit", u"rgba(128,128,128,0.6)", u"transparent",
-                    u"rgba(128,128,128,0.35)", u"rgba(120,150,180,0.85)")
 # Arquivo .html: documento próprio, pensado para leitura e impressão.
 _CSS_ARQUIVO = _css(u"#1a1a1a", u"#9aa3ad", u"transparent", u"#d8dde2", u"#4c6f8c")
 
@@ -1025,18 +1019,17 @@ def _salvar_memorial(corpo, projeto_dir, nome_projeto):
     return caminho
 
 
-def print_memorial_calculo(console, res, dados_sistema, valor_sistema,
+def gerar_memorial_calculo(res, dados_sistema, valor_sistema,
                            cotas, succao, verif_succao,
                            verif_npshd, erro_npshd, j_succao_npsh,
                            Qs_lmin, Pmin, C_HW,
                            eta, pot_cv, pot_kw, timestamp, perfil,
-                           projeto_dir=None, nome_projeto=None):
+                           projeto_dir, nome_projeto=None):
     """
-    Monta o memorial uma única vez e o entrega em dois lugares: no console
-    do pyRevit (objeto `console`, de script.get_output() no chamador; usa
-    folha de estilo própria, já que o tema do console sobrescreveria as
-    tabelas) e como arquivo .html na pasta do projeto, aberto em janela
-    separada.
+    Monta o memorial e grava como arquivo .html na pasta do projeto,
+    aberto em janela separada (fora do Revit) — não imprime mais no
+    console do pyRevit. Retorna o caminho do arquivo, ou None se não foi
+    possível gravar.
     """
     global output
     doc_mem = _Memorial()
@@ -1048,15 +1041,7 @@ def print_memorial_calculo(console, res, dados_sistema, valor_sistema,
                          Qs_lmin, Pmin, C_HW,
                          eta, pot_cv, pot_kw, timestamp, perfil)
     finally:
-        output = console
+        output = None
 
-    corpo = doc_mem.corpo()
-    console.print_html(u"<style>{}</style><div class='fu-memorial'>{}</div>".format(
-        _CSS_CONSOLE, corpo))
-
-    caminho = _salvar_memorial(corpo, projeto_dir, nome_projeto) if projeto_dir else None
-    if caminho:
-        console.print_md(u"---")
-        console.print_md(u"*Memorial salvo em* `{}` *— aberto em janela separada.*".format(
-            caminho))
+    return _salvar_memorial(doc_mem.corpo(), projeto_dir, nome_projeto)
 
