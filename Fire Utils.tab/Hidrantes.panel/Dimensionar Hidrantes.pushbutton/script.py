@@ -76,10 +76,11 @@ output = script.get_output()
 # ===========================================================================
 
 def get_id(elem):
-    """ElementId como int simples — para gravar no cache (JSON) e usar no
-    botão "Mostrar no Projeto" das janelas de bloqueio."""
-    try:    return elem.Id.Value
-    except: return elem.Id.IntegerValue
+    """ElementId como int nativo do Python — para gravar no cache (JSON,
+    que não serializa o Int64/Int32 do .NET direto) e usar no botão
+    "Mostrar no Projeto" das janelas de bloqueio."""
+    try:    return int(elem.Id.Value)
+    except: return int(elem.Id.IntegerValue)
 
 def mostrar_no_revit(ids):
     """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
