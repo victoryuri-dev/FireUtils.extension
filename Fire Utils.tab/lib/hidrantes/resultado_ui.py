@@ -274,7 +274,8 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                           pot_escolhida_cv=None, pot_escolhida_kw=None):
     """
     Resumo final mostrado ao término de "Dimensionar Hidrantes": só
-    verificações e resultados finais (velocidade nos trechos principais,
+    verificações e resultados finais (velocidade nos quatro trechos —
+    sucção, recalque e os dois ramais até os hidrantes —,
     pressão/vazão nos hidrantes mais desfavoráveis e no Ponto A, diferença
     de pressão entre os ramais após o equilíbrio, demanda do sistema e
     requisitos da bomba) — não o passo a passo completo, que é o botão
@@ -291,8 +292,10 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.secao(u"1. Velocidade nos Trechos")
     linhas_v = []
     for nome, j, limite in (
-        (u"RTI → Bomba",    res["j"]["t1"], v_max_succao),
-        (u"Bomba → Ponto A", res["j"]["t2"], v_max_tubo),
+        (u"RTI → Bomba",      res["j"]["t1"], v_max_succao),
+        (u"Bomba → Ponto A",  res["j"]["t2"], v_max_tubo),
+        (u"Ponto A → HD01",   res["j"]["t3"], v_max_tubo),
+        (u"Ponto A → HD02",   res["j"]["t4"], v_max_tubo),
     ):
         for s in j["segmentos"]:
             linhas_v.append([nome, u"{:.1f}".format(s["d_mm"]),
