@@ -31,6 +31,25 @@ _XAML_PATH = os.path.join(os.path.dirname(__file__), u"Resultado.xaml")
 
 SIM_OK, SIM_X = u"✓", u"✗"
 
+# Marcador de célula "pill" (box arredondada de verificação) dentro do texto
+# passado a tabela() — mesma convenção do "**negrito**": embutido na string,
+# decodificado em _celula(). \x00 nao aparece em texto normal, entao serve
+# de separador seguro entre a flag (0/1) e o rotulo.
+_PILL_MARK = u"\x00PILL\x00"
+
+
+def _pill(ok, texto=None):
+    """Marca um valor de tabela para renderizar como box arredondada verde
+    (atende) ou vermelha (não atende) em vez de texto simples."""
+    if texto is None:
+        texto = u"{} Atende".format(SIM_OK) if ok else u"{} Não atende".format(SIM_X)
+    return u"{}{}\x00{}".format(_PILL_MARK, u"1" if ok else u"0", texto)
+
+
+def _mca(valor):
+    """Pressão em mca, 2 casas decimais, separador decimal vírgula (ex.: 21,00 mca)."""
+    return u"{:.2f}".format(valor).replace(u".", u",") + u" mca"
+
 
 # ===========================================================================
 # Janela — casco fixo (XAML) + conteúdo dinâmico (seções/tabelas montadas
@@ -122,12 +141,29 @@ class _JanelaResultado(forms.WPFWindow):
         moldura.Child = grid
         self.ConteudoPanel.Children.Add(moldura)
 
+    def _badge(self, texto, ok):
+        """Box arredondada de verificação: borda na cor do texto, fundo na
+        mesma cor bem mais fraco (mesma paleta do banner de status)."""
+        cor  = self.Resources[u"BrushOk"]     if ok else self.Resources[u"BrushAccent"]
+        tint = self.Resources[u"BrushOkTint"] if ok else self.Resources[u"BrushAccentTint"]
+
+        pilula = Border()
+        pilula.CornerRadius = CornerRadius(10)
+        pilula.BorderBrush = cor
+        pilula.BorderThickness = Thickness(1)
+        pilula.Background = tint
+        pilula.Padding = Thickness(10, 3, 10, 3)
+
+        txt = TextBlock()
+        txt.Text = texto
+        txt.FontSize = 11
+        txt.FontWeight = FontWeights.SemiBold
+        txt.Foreground = cor
+        pilula.Child = txt
+        return pilula
+
     def _celula(self, grid, linha, coluna, texto, alinh, cabecalho, ultima_linha):
         texto = u"{}".format(texto)
-        negrito = False
-        if texto.startswith(u"**") and texto.endswith(u"**") and len(texto) >= 4:
-            negrito = True
-            texto = texto[2:-2]
 
         cel = Border()
         cel.Padding = Thickness(14, 8, 14, 8)
@@ -138,6 +174,25 @@ class _JanelaResultado(forms.WPFWindow):
         cel.BorderThickness = Thickness(0, 0, espessura_direita, espessura_baixo)
         Grid.SetRow(cel, linha)
         Grid.SetColumn(cel, coluna)
+
+        _alinh_wpf = {
+            u"left": HorizontalAlignment.Left,
+            u"right": HorizontalAlignment.Right,
+            u"center": HorizontalAlignment.Center,
+        }.get(alinh, HorizontalAlignment.Left)
+
+        if texto.startswith(_PILL_MARK):
+            ok_flag, rotulo = texto[len(_PILL_MARK):].split(u"\x00", 1)
+            badge = self._badge(rotulo, ok_flag == u"1")
+            badge.HorizontalAlignment = _alinh_wpf
+            cel.Child = badge
+            grid.Children.Add(cel)
+            return
+
+        negrito = False
+        if texto.startswith(u"**") and texto.endswith(u"**") and len(texto) >= 4:
+            negrito = True
+            texto = texto[2:-2]
 
         txt = TextBlock()
         txt.Text = texto
@@ -151,11 +206,7 @@ class _JanelaResultado(forms.WPFWindow):
             txt.Foreground = self.Resources[u"BrushText"]
         if cabecalho or negrito:
             txt.FontWeight = FontWeights.SemiBold
-        txt.HorizontalAlignment = {
-            u"left": HorizontalAlignment.Left,
-            u"right": HorizontalAlignment.Right,
-            u"center": HorizontalAlignment.Center,
-        }.get(alinh, HorizontalAlignment.Left)
+        txt.HorizontalAlignment = _alinh_wpf
         cel.Child = txt
 
         grid.Children.Add(cel)
@@ -172,12 +223,12 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                           pot_escolhida_cv=None, pot_escolhida_kw=None):
     """
     Resumo final mostrado ao término de "Dimensionar Hidrantes": só
-    verificações e resultados finais (velocidade por trecho, pressão/vazão
-    nos hidrantes mais desfavoráveis e no Ponto A, diferença de pressão
-    entre os ramais antes do equilíbrio, demanda do sistema e requisitos da
-    bomba) — não o passo a passo completo, que é o botão "Memorial de
-    Cálculo". Só é chamada depois que todas as verificações normativas
-    passaram.
+    verificações e resultados finais (velocidade nos trechos principais,
+    pressão/vazão nos hidrantes mais desfavoráveis e no Ponto A, diferença
+    de pressão entre os ramais após o equilíbrio, demanda do sistema e
+    requisitos da bomba) — não o passo a passo completo, que é o botão
+    "Memorial de Cálculo". Só é chamada depois que todas as verificações
+    normativas passaram.
     """
     janela = _JanelaResultado(
         titulo=u"Dimensionamento de Hidrantes",
@@ -189,103 +240,66 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.secao(u"1. Velocidade nos Trechos")
     linhas_v = []
     for nome, j, limite in (
-        (u"Sucção (RTI → Bomba)",       res["j"]["t1"], v_max_succao),
-        (u"Recalque (Bomba → Ponto A)", res["j"]["t2"], v_max_tubo),
-        (u"Ponto A → HD01",             res["j"]["t3"], v_max_tubo),
-        (u"Ponto A → HD02",             res["j"]["t4"], v_max_tubo),
+        (u"RTI → Bomba",    res["j"]["t1"], v_max_succao),
+        (u"Bomba → Ponto A", res["j"]["t2"], v_max_tubo),
     ):
         for s in j["segmentos"]:
             linhas_v.append([nome, u"{:.1f}".format(s["d_mm"]),
                               u"{:.2f}".format(j["Q_lmin"]),
                               u"{:.3f}".format(s["V"]),
                               u"{:.1f}".format(limite),
-                              u"{} atende".format(SIM_OK)])
+                              _pill(True)])
     janela.tabela([u"Trecho", u"DN (mm)", u"Q (L/min)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
                   linhas_v,
                   alinhas=[u"left", u"right", u"right", u"right", u"right", u"left"])
 
-    janela.secao(u"2. Pressão e Vazão Finais — Hidrantes e Ponto A")
+    janela.secao(u"2. Pressão e Vazão")
     _col_p = p_ref_desc[0].upper() + p_ref_desc[1:]
-    janela.tabela([u"Hidrante", u"{} (mca)".format(_col_p), u"Q (L/min)",
-                  u"Mínimo exigido", u"Verificação"],
-                  [[u"HD01", u"{:.4f}".format(p_hd01_ref), u"{:.2f}".format(res["Q_hd01"]),
-                    u"{:.4f} mca / {:.2f} L/min".format(Pmin, Qs_lmin),
-                    u"{} atende".format(SIM_OK)],
-                   [u"HD02", u"{:.4f}".format(p_hd02_ref), u"{:.2f}".format(res["Q_hd02"]),
-                    u"{:.4f} mca / {:.2f} L/min".format(Pmin, Qs_lmin),
-                    u"{} atende".format(SIM_OK)]],
-                  alinhas=[u"left", u"right", u"right", u"left", u"left"])
-    janela.tabela([u"Ponto A", u"Valor"],
-                  [[u"Pressão calculada no Ponto A (P_PA)", u"**{:.4f} mca**".format(res["P_PA"])],
-                   [u"Vazão total (Qt = Q_hd01 + Q_hd02)",
-                    u"**{:.2f} L/min**".format(res["Qt"])]],
-                  alinhas=[u"left", u"left"])
+    janela.tabela([u"Ponto", u"{} (mca)".format(_col_p), u"Mínimo exigido", u"Verificação"],
+                  [[u"HD01", _mca(p_hd01_ref), _mca(Pmin), _pill(True)],
+                   [u"HD02", _mca(p_hd02_ref), _mca(Pmin), _pill(True)],
+                   [u"Ponto A", _mca(res["P_PA"]), u"—", u"—"]],
+                  alinhas=[u"left", u"right", u"right", u"left"])
+    janela.tabela([u"Ponto", u"Vazão (L/min)", u"Mínimo exigido", u"Verificação"],
+                  [[u"HD01", u"{:.2f}".format(res["Q_hd01"]), u"{:.2f}".format(Qs_lmin), _pill(True)],
+                   [u"HD02", u"{:.2f}".format(res["Q_hd02"]), u"{:.2f}".format(Qs_lmin), _pill(True)],
+                   [u"Ponto A (Qt)", u"{:.2f}".format(res["Qt"]), u"—", u"—"]],
+                  alinhas=[u"left", u"right", u"right", u"left"])
 
-    janela.secao(u"3. Verificação de Diferença de Pressão entre os Ramais")
+    janela.secao(u"3. Diferença de Pressão entre os Ramais")
     equilibrio = res.get("equilibrio")
-    diferenca = abs(res["P_PA1"] - res["P_PA2"])
-    janela.tabela([u"Ramal", u"P_A inicial (mca, ambos em Qs)", u"Governante"],
-                  [[u"HD01", u"{:.4f}".format(res["P_PA1"]),
-                    SIM_OK if res["hid_governa"] == u"HD01" else u""],
-                   [u"HD02", u"{:.4f}".format(res["P_PA2"]),
-                    SIM_OK if res["hid_governa"] == u"HD02" else u""]],
-                  alinhas=[u"left", u"right", u"left"])
-    janela.paragrafo(
-        u"Diferença inicial entre os ramais (ambos calculados com a vazão mínima "
-        u"Qs, antes do equilíbrio): {:.4f} mca. Essa diferença é esperada — vem de "
-        u"variações de comprimento, comprimento equivalente (conexões/acessórios), "
-        u"diâmetro e desnível entre os dois ramais — e não indica, por si só, "
-        u"subdimensionamento da tubulação.".format(diferenca))
     if equilibrio is not None:
-        limite = equilibrio[u"tolerancia"]
         janela.tabela(
-            [u"Verificação normativa (equilíbrio no Ponto A)", u"Valor"],
-            [[u"Diferença final entre os ramais, após o equilíbrio",
-              u"{:.4f} mca".format(equilibrio[u"erro"])],
-             [u"Variação máxima admitida pela norma ({})".format(norma),
-              u"{:.2f} mca".format(limite)],
-             [u"Resultado ({} iteração(ões), ramal {})".format(
-                  len(equilibrio[u"historico"]), equilibrio[u"ramal_iterado"]),
-              u"**{} atende**".format(SIM_OK)]],
+            [u"Verificação", u"Valor"],
+            [[u"Diferença entre os ramais (após equilíbrio)", _mca(equilibrio[u"erro"])],
+             [u"Limite normativo ({})".format(norma), _mca(equilibrio[u"tolerancia"])],
+             [u"Resultado", _pill(True)]],
             alinhas=[u"left", u"left"])
-        _q_favoravel = (res["Q_hd02"] if equilibrio[u"ramal_iterado"] == u"HD02"
-                        else res["Q_hd01"])
-        _r_q = _q_favoravel / Qs_lmin if Qs_lmin else 0.0
-        janela.paragrafo(
-            u"Indicador de desequilíbrio — o quanto o equilíbrio elevou a vazão do "
-            u"ramal mais favorável acima da vazão mínima: R_Q = Q_final/Q_mín = "
-            u"{:.2f}/{:g} = {:.3f}. Não há percentual fixo como critério normativo; um "
-            u"R_Q alto indica perda de carga desproporcional no ramal governante e "
-            u"vale avaliar o diâmetro dele, desde que a diferença não seja "
-            u"predominantemente por desnível geométrico (que o diâmetro não "
-            u"corrige). Para o detalhamento completo da iteração, veja o \"Memorial "
-            u"de Cálculo\".".format(_q_favoravel, Qs_lmin, _r_q))
 
     janela.secao(u"4. Demanda do Sistema")
     janela.tabela([u"Parâmetro", u"Valor"],
-                  [[u"Vazão total (Qt)", u"**{:.2f} L/min = {:.4f} m³/h**".format(
+                  [[u"Vazão total (Qt)", u"**{:.2f} L/min = {:.2f} m³/h**".format(
                       res["Qt"], res["Qt"] * 60.0 / 1000.0)],
                    [u"Altura manométrica total (HMT = P_RTI)",
-                    u"**{:.4f} mca**".format(res["P_RTI"])]],
+                    u"**{}**".format(_mca(res["P_RTI"]))]],
                   alinhas=[u"left", u"left"])
 
     janela.secao(u"5. Requisitos da Bomba de Recalque")
     linhas_bomba = [
-        [u"Vazão de projeto (Qt)", u"{:.2f} L/min = {:.4f} m³/h".format(
-            res["Qt"], res["Qt"] * 60.0 / 1000.0)],
-        [u"Altura manométrica (Ht)", u"{:.4f} mca".format(res["P_RTI"])],
-        [u"Eficiência global (η)", u"{:.0f}%".format(eta)],
-        [u"Potência mínima calculada", u"**{:.2f} cv = {:.2f} kW**".format(pot_cv, pot_kw)],
+        [u"Vazão de projeto (Qt)", u"{:.2f} L/min = {:.2f} m³/h".format(
+            res["Qt"], res["Qt"] * 60.0 / 1000.0), u"—"],
+        [u"Altura manométrica (Ht)", _mca(res["P_RTI"]), u"—"],
+        [u"Eficiência global (η)", u"{:.0f}%".format(eta), u"—"],
+        [u"Potência mínima calculada", u"**{:.2f} cv = {:.2f} kW**".format(pot_cv, pot_kw), u"—"],
     ]
     if pot_escolhida_cv is not None:
         atende = pot_escolhida_cv >= pot_cv - 1e-6
         linhas_bomba.append(
             [u"Potência adotada",
-             u"**{:.2f} cv = {:.2f} kW**  —  {} {}".format(
-                 pot_escolhida_cv, pot_escolhida_kw,
-                 SIM_OK if atende else SIM_X,
-                 u"atende a mínima" if atende else u"ABAIXO da mínima calculada")])
-    janela.tabela([u"Parâmetro", u"Valor"], linhas_bomba, alinhas=[u"left", u"left"])
+             u"**{:.2f} cv = {:.2f} kW**".format(pot_escolhida_cv, pot_escolhida_kw),
+             _pill(atende)])
+    janela.tabela([u"Parâmetro", u"Valor", u"Verificação"], linhas_bomba,
+                  alinhas=[u"left", u"left", u"left"])
 
     janela.paragrafo(u"Para o memorial de cálculo completo (passo a passo), "
                      u"execute \"Memorial de Cálculo\".")
@@ -300,29 +314,20 @@ def mostrar_bloqueio_equilibrio(equilibrio, norma):
     dimensionamento é interrompido nessa verificação."""
     janela = _JanelaResultado(
         titulo=u"Verificação não atendida",
-        subtitulo=u"Equilíbrio hidráulico entre os ramais não atende a norma",
+        subtitulo=u"Diferença de pressão entre os ramais não atende a norma",
         status=u"erro",
     )
+    janela.tabela(
+        [u"Verificação", u"Valor"],
+        [[u"Diferença entre os ramais (após {} iteração(ões))".format(
+              len(equilibrio[u"historico"])), _mca(equilibrio[u"erro"])],
+         [u"Limite normativo ({})".format(norma), _mca(equilibrio[u"tolerancia"])],
+         [u"Resultado", _pill(False)]],
+        alinhas=[u"left", u"left"])
     janela.paragrafo(
-        u"A norma ({}) admite uma variação máxima de pressão entre o ramal mais "
-        u"favorável (**{}**) e a pressão-alvo do ramal governante (**{}**), no ponto "
-        u"de derivação da vazão total — mas a iteração não convergiu dentro dessa "
-        u"variação.".format(norma, equilibrio[u"ramal_iterado"], equilibrio[u"ramal_governante"]))
-    janela.tabela([u"n", u"P_ref (mca)", u"Q (L/min)", u"J (mca)", u"P_A (mca)", u"Erro (mca)"],
-                  [[u"{}".format(h["n"]), u"{:.4f}".format(h["P_ref"]),
-                    u"{:.2f}".format(h["Q"]), u"{:.4f}".format(h["J"]),
-                    u"{:.4f}".format(h["P_A"]), u"{:.6f}".format(h["erro"])]
-                   for h in equilibrio[u"historico"]])
-    janela.paragrafo(
-        u"**{} Não convergiu** em {} iterações — erro final de {:.6f} mca, acima "
-        u"da variação máxima admitida pela norma de {:.2f} mca.".format(
-            SIM_X, len(equilibrio[u"historico"]), equilibrio[u"erro"], equilibrio[u"tolerancia"]),
-        cor=janela.Resources[u"BrushAccent"])
-    janela.paragrafo(
-        u"Correção necessária: revise o diâmetro/traçado dos ramais entre o Ponto A "
-        u"e os hidrantes — a diferença de perda de carga entre os dois caminhos está "
-        u"grande demais para ser absorvida dentro da variação admitida pela norma. "
-        u"Ajuste no Revit e execute \"Dimensionar Hidrantes\" novamente.")
+        u"Não atende: a diferença de pressão entre os ramais no Ponto A passou do "
+        u"limite da norma. Dica: revise o diâmetro dos trechos entre o Ponto A e "
+        u"os hidrantes.")
     janela.ShowDialog()
 
 
@@ -335,16 +340,12 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas):
         subtitulo=u"Velocidade acima do limite — {}".format(nome_trecho),
         status=u"erro",
     )
-    janela.paragrafo(u"Vazão do trecho: {:.2f} L/min. Limite normativo: {:.1f} m/s.".format(
-        j["Q_lmin"], limite))
-    janela.tabela([u"DN (mm)", u"V (m/s)", u"Limite (m/s)"],
+    janela.tabela([u"DN (mm)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
                   [[u"{:.1f}".format(s["d_mm"]), u"**{:.3f}**".format(s["V"]),
-                    u"{:.1f}".format(limite)] for s in falhas])
+                    u"{:.1f}".format(limite), _pill(False)] for s in falhas])
     janela.paragrafo(
-        u"Correção necessária: aumente o diâmetro nominal do(s) tubo(s) acima nesse "
-        u"trecho (ou reduza a vazão, se possível) até a velocidade ficar dentro do "
-        u"limite normativo. Ajuste o traçado no Revit e execute \"Dimensionar "
-        u"Hidrantes\" novamente.")
+        u"Não atende: velocidade acima do limite normativo. Dica: aumente o "
+        u"diâmetro do trecho ou reduza a vazão.")
     janela.ShowDialog()
 
 
@@ -357,14 +358,13 @@ def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmi
         subtitulo=u"{} não atende a norma".format(label),
         status=u"erro",
     )
-    janela.tabela([u"Grandeza", u"Obtido", u"Mínimo exigido"],
-                  [[p_ref_desc[0].upper() + p_ref_desc[1:],
-                    u"**{:.4f} mca**".format(p), u"{:.4f} mca".format(Pmin)],
-                   [u"Vazão", u"**{:.2f} L/min**".format(q), u"{:.2f} L/min".format(Qs_lmin)]],
-                  alinhas=[u"left", u"right", u"right"])
+    janela.tabela([u"Grandeza", u"Obtido", u"Mínimo exigido", u"Verificação"],
+                  [[p_ref_desc[0].upper() + p_ref_desc[1:], _mca(p), _mca(Pmin),
+                    _pill(p >= Pmin - 0.01)],
+                   [u"Vazão", u"{:.2f} L/min".format(q), u"{:.2f} L/min".format(Qs_lmin),
+                    _pill(q >= Qs_lmin - 0.01)]],
+                  alinhas=[u"left", u"right", u"right", u"left"])
     janela.paragrafo(
-        u"Correção necessária: revise o diâmetro/traçado do trecho {} — perda de carga "
-        u"ou desnível elevados estão reduzindo a pressão disponível abaixo do mínimo "
-        u"exigido pela norma. Ajuste no Revit e execute \"Dimensionar Hidrantes\" "
-        u"novamente.".format(trecho_desc))
+        u"Não atende: pressão ou vazão abaixo do mínimo exigido. Dica: revise o "
+        u"diâmetro/traçado do trecho {}.".format(trecho_desc))
     janela.ShowDialog()
