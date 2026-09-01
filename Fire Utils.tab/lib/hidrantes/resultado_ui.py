@@ -283,7 +283,7 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     if pot_escolhida_cv is not None:
         atende = pot_escolhida_cv >= pot_cv - 1e-6
         linhas_bomba.append(
-            [u"Potência escolhida",
+            [u"Potência adotada",
              u"**{:.2f} cv = {:.2f} kW**  —  {} {}".format(
                  pot_escolhida_cv, pot_escolhida_kw,
                  SIM_OK if atende else SIM_X,

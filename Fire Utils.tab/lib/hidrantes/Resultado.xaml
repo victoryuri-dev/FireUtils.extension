@@ -6,7 +6,7 @@
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
-        Background="{StaticResource BrushBg}">
+        Background="#121214">
 
     <Window.Resources>
         <!-- Paleta — identidade Fire Utils (fundo escuro + vermelho de destaque),

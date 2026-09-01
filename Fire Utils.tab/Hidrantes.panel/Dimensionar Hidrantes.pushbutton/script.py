@@ -542,13 +542,13 @@ eta_dec = eta / 100.0
 pot_cv  = calc_potencia(res["Qt"] / 60000.0, res["P_RTI"], eta_dec)
 pot_kw  = pot_cv / 1.36
 
-# Potência da bomba escolhida para o projeto — digitada pelo usuário (não é
+# Potência adotada para a bomba do projeto — digitada pelo usuário (não é
 # calculada): a mínima acima é só a referência mostrada no prompt. Cancelar
 # ou deixar em branco segue o dimensionamento só com a potência mínima.
 pot_escolhida_str = forms.ask_for_string(
     default=u"{:.2f}".format(pot_cv),
-    prompt=u"Potência da bomba escolhida (cv)\nPotência mínima calculada: {:.2f} cv".format(pot_cv),
-    title=u"Fire Utils — Potência da Bomba"
+    prompt=u"Potência adotada (cv)\nPotência mínima calculada: {:.2f} cv".format(pot_cv),
+    title=u"Fire Utils — Potência Adotada"
 )
 pot_escolhida_cv = None
 pot_escolhida_kw = None
@@ -558,7 +558,7 @@ if pot_escolhida_str:
         if pot_escolhida_cv <= 0: raise ValueError
         pot_escolhida_kw = pot_escolhida_cv / 1.36
     except ValueError:
-        forms.alert(u"Potência escolhida inválida — seguindo só com a potência "
+        forms.alert(u"Potência adotada inválida — seguindo só com a potência "
                     u"mínima calculada.", title="Fire Utils", warn_icon=True)
         pot_escolhida_cv = None
 
