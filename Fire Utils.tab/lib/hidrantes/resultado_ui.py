@@ -216,7 +216,7 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                     u"{} atende".format(SIM_OK)]],
                   alinhas=[u"left", u"right", u"right", u"left", u"left"])
     janela.tabela([u"Ponto A", u"Valor"],
-                  [[u"Pressão adotada (P_PA,alvo)", u"**{:.4f} mca**".format(res["P_PA"])],
+                  [[u"Pressão calculada no Ponto A (P_PA)", u"**{:.4f} mca**".format(res["P_PA"])],
                    [u"Vazão total (Qt = Q_hd01 + Q_hd02)",
                     u"**{:.2f} L/min**".format(res["Qt"])]],
                   alinhas=[u"left", u"left"])
@@ -237,20 +237,17 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
         u"diâmetro e desnível entre os dois ramais — e não indica, por si só, "
         u"subdimensionamento da tubulação.".format(diferenca))
     if equilibrio is not None:
-        if equilibrio[u"convergiu"]:
-            janela.paragrafo(
-                u"{} Equilíbrio hidráulico do ramal mais favorável (**{}**) convergiu em "
-                u"{} iteração(ões) — erro final de {:.6f} mca (tolerância {:g} mca).".format(
-                    SIM_OK, equilibrio[u"ramal_iterado"], len(equilibrio[u"historico"]),
-                    equilibrio[u"erro"], equilibrio[u"tolerancia"]))
-        else:
-            janela.paragrafo(
-                u"{} Equilíbrio hidráulico do ramal mais favorável (**{}**) NÃO convergiu "
-                u"em {} iterações — erro final de {:.6f} mca (tolerância {:g} mca). "
-                u"Resultado aproximado; revisar a geometria da rede.".format(
-                    SIM_X, equilibrio[u"ramal_iterado"], len(equilibrio[u"historico"]),
-                    equilibrio[u"erro"], equilibrio[u"tolerancia"]),
-                cor=janela.Resources[u"BrushAccent"])
+        limite = equilibrio[u"tolerancia"]
+        janela.tabela(
+            [u"Verificação normativa (equilíbrio no Ponto A)", u"Valor"],
+            [[u"Diferença final entre os ramais, após o equilíbrio",
+              u"{:.4f} mca".format(equilibrio[u"erro"])],
+             [u"Variação máxima admitida pela norma ({})".format(norma),
+              u"{:.2f} mca".format(limite)],
+             [u"Resultado ({} iteração(ões), ramal {})".format(
+                  len(equilibrio[u"historico"]), equilibrio[u"ramal_iterado"]),
+              u"**{} atende**".format(SIM_OK)]],
+            alinhas=[u"left", u"left"])
         _q_favoravel = (res["Q_hd02"] if equilibrio[u"ramal_iterado"] == u"HD02"
                         else res["Q_hd01"])
         _r_q = _q_favoravel / Qs_lmin if Qs_lmin else 0.0
@@ -293,6 +290,39 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.paragrafo(u"Para o memorial de cálculo completo (passo a passo), "
                      u"execute \"Memorial de Cálculo\".")
 
+    janela.ShowDialog()
+
+
+def mostrar_bloqueio_equilibrio(equilibrio, norma):
+    """Janela mostrando que o equilíbrio hidráulico entre os ramais no
+    Ponto A não convergiu dentro da variação de pressão máxima admitida
+    pela norma — chamada por "Dimensionar Hidrantes" quando o
+    dimensionamento é interrompido nessa verificação."""
+    janela = _JanelaResultado(
+        titulo=u"Verificação não atendida",
+        subtitulo=u"Equilíbrio hidráulico entre os ramais não atende a norma",
+        status=u"erro",
+    )
+    janela.paragrafo(
+        u"A norma ({}) admite uma variação máxima de pressão entre o ramal mais "
+        u"favorável (**{}**) e a pressão-alvo do ramal governante (**{}**), no ponto "
+        u"de derivação da vazão total — mas a iteração não convergiu dentro dessa "
+        u"variação.".format(norma, equilibrio[u"ramal_iterado"], equilibrio[u"ramal_governante"]))
+    janela.tabela([u"n", u"P_ref (mca)", u"Q (L/min)", u"J (mca)", u"P_A (mca)", u"Erro (mca)"],
+                  [[u"{}".format(h["n"]), u"{:.4f}".format(h["P_ref"]),
+                    u"{:.2f}".format(h["Q"]), u"{:.4f}".format(h["J"]),
+                    u"{:.4f}".format(h["P_A"]), u"{:.6f}".format(h["erro"])]
+                   for h in equilibrio[u"historico"]])
+    janela.paragrafo(
+        u"**{} Não convergiu** em {} iterações — erro final de {:.6f} mca, acima "
+        u"da variação máxima admitida pela norma de {:.2f} mca.".format(
+            SIM_X, len(equilibrio[u"historico"]), equilibrio[u"erro"], equilibrio[u"tolerancia"]),
+        cor=janela.Resources[u"BrushAccent"])
+    janela.paragrafo(
+        u"Correção necessária: revise o diâmetro/traçado dos ramais entre o Ponto A "
+        u"e os hidrantes — a diferença de perda de carga entre os dois caminhos está "
+        u"grande demais para ser absorvida dentro da variação admitida pela norma. "
+        u"Ajuste no Revit e execute \"Dimensionar Hidrantes\" novamente.")
     janela.ShowDialog()
 
 

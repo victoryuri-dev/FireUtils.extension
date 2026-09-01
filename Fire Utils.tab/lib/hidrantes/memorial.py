@@ -694,8 +694,9 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                     u"normal — reflete a diferença de resistência hidráulica entre os "
                     u"caminhos (comprimento, diâmetro, conexões, desnível), não um erro de "
                     u"projeto. O Ponto A só tem uma pressão física, então o ramal mais "
-                    u"favorável precisa **convergir** até sua P_A bater com a "
-                    u"pressão-alvo:".format(prox()))
+                    u"favorável precisa **convergir** até sua P_A bater com a pressão-alvo, "
+                    u"dentro da variação máxima de pressão admitida pela norma{}:".format(
+                        prox(), ref(perfil, u"tolerancia_equilibrio_mca_ref")))
     _formula(u"P_ref = P_PA,alvo − J − ∆H",
              [(u"P_ref", u"Pressão de referência recalculada do ramal mais favorável")])
     _formula(u"Q = K · √P_ref",
@@ -704,8 +705,9 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                     u"uma vazão diferente")])
     _formula(u"Erro = |P_A − P_PA,alvo|",
              [(u"P_A", u"Pressão no Ponto A recalculada com a nova vazão (P_ref + J + ∆H)")])
-    output.print_md(u"Repete até **Erro ≤ tolerância** ({:g} mca). Só então soma-se a "
-                    u"vazão dos dois ramais:".format(tolerancia_equilibrio))
+    output.print_md(u"Repete até **Erro ≤ variação máxima admitida pela norma** "
+                    u"({:g} mca). Só então soma-se a vazão dos dois ramais:".format(
+                        tolerancia_equilibrio))
     _formula(u"Qt = Q_hd01 + Q_hd02")
 
     output.print_md(u"**{}) Marcha de pressões** até a bomba e a RTI, agora com a "
@@ -809,8 +811,7 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
 
     # Ponto A e vazões finais pelo Fator K (sem ciclo)
     output.print_md(u"### {}.3 Pressão no Ponto A e Vazões Finais (Fator K)".format(n7))
-    output.print_md(u"Pressão adotada no Ponto A = maior pressão calculada entre os "
-                    u"dois trechos:")
+    output.print_md(u"Pressão no Ponto A = maior pressão calculada entre os dois trechos:")
     _formula(u"P_PA = max(P_PA1; P_PA2)")
     _tabela([u"Ramal", u"P_PA (mca)", u"Governante"],
             [[u"HD01", u"{:.4f}".format(res["P_PA1"]),
@@ -834,19 +835,25 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
               u"{:.2f}".format(h[u"Q"]), u"{:.4f}".format(h[u"J"]),
               u"{:.4f}".format(h[u"P_A"]), u"{:.6f}".format(h[u"erro"])]
              for h in equilibrio[u"historico"]],
-            titulo=u"Iteração do ramal {} (tolerância = {:g} mca)".format(
-                equilibrio[u"ramal_iterado"], equilibrio[u"tolerancia"]))
+            titulo=u"Iteração do ramal {} (variação máxima admitida pela norma{} = "
+                   u"{:g} mca)".format(equilibrio[u"ramal_iterado"],
+                                       ref(perfil, u"tolerancia_equilibrio_mca_ref"),
+                                       equilibrio[u"tolerancia"]))
     if equilibrio[u"convergiu"]:
         output.print_md(u"{} **Convergiu** em {} iteração(ões) — erro final de "
-                        u"{:.6f} mca, dentro da tolerância de {:g} mca.".format(
-                            SIM_OK, len(equilibrio[u"historico"]),
-                            equilibrio[u"erro"], equilibrio[u"tolerancia"]))
+                        u"{:.6f} mca, dentro da variação máxima admitida pela norma{} "
+                        u"de {:g} mca.".format(
+                            SIM_OK, len(equilibrio[u"historico"]), equilibrio[u"erro"],
+                            ref(perfil, u"tolerancia_equilibrio_mca_ref"),
+                            equilibrio[u"tolerancia"]))
     else:
         output.print_md(u"{} **Não convergiu** em {} iterações — erro final de "
-                        u"{:.6f} mca, acima da tolerância de {:g} mca. Resultado "
-                        u"aproximado; revisar a geometria da rede.".format(
-                            SIM_X, len(equilibrio[u"historico"]),
-                            equilibrio[u"erro"], equilibrio[u"tolerancia"]))
+                        u"{:.6f} mca, acima da variação máxima admitida pela norma{} "
+                        u"de {:g} mca. Resultado fora da norma; revisar a geometria "
+                        u"da rede.".format(
+                            SIM_X, len(equilibrio[u"historico"]), equilibrio[u"erro"],
+                            ref(perfil, u"tolerancia_equilibrio_mca_ref"),
+                            equilibrio[u"tolerancia"]))
     output.print_md(u"")
 
     output.print_md(u"Pressão na válvula de cada hidrante, ao final do equilíbrio:")

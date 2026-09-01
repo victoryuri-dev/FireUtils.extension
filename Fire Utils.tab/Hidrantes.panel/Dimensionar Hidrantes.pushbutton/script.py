@@ -44,11 +44,11 @@ except ImportError:
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
     calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
-    METODO_VALVULA, METODOS_CALCULO, calc_j_trecho, TOLERANCIA_EQUILIBRIO_MCA,
+    METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
 )
 from hidrantes.resultado_ui import (
     mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
-    mostrar_resultado_ok,
+    mostrar_bloqueio_equilibrio, mostrar_resultado_ok,
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req, opt
@@ -437,11 +437,19 @@ trechos_data = {
 }
 
 res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
+                    req(perfil, u"tolerancia_equilibrio_mca"),
                     metodo=metodo_calculo,
                     mang_dn_mm=dados_sistema["mang_dn"],
-                    mang_comp_m=dados_sistema["mang_comp"],
-                    tolerancia_equilibrio_mca=opt(
-                        perfil, u"tolerancia_equilibrio_mca", TOLERANCIA_EQUILIBRIO_MCA))
+                    mang_comp_m=dados_sistema["mang_comp"])
+
+# --- Etapa 4a: verificação normativa do equilíbrio hidráulico entre HD01
+# e HD02 no Ponto A — a variação de pressão entre os ramais, após o
+# equilíbrio, precisa ficar dentro da máxima admitida pela norma. Verifica
+# antes das demais (velocidade, pressão/vazão por hidrante), porque um
+# equilíbrio que não converge invalida os resultados por trecho abaixo.
+if not res["equilibrio"][u"convergiu"]:
+    mostrar_bloqueio_equilibrio(res["equilibrio"], req(perfil, u"norma"))
+    script.exit()
 
 # Condição de sucção pelo método direto e conservador: compara a cota da RTI
 # com a cota de sucção da bomba, ambas já lidas em "Cotas Altimétricas". Não

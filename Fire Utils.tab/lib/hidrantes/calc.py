@@ -46,7 +46,10 @@ de Hidrantes"):
      muda mais. O outro ramal (mais favorável) converge iterativamente até
      sua própria P_A bater com a pressão-alvo, recalculando Hazen-Williams
      a cada passo — nunca reaproveitando a perda de carga de uma vazão
-     diferente. Só depois de convergido soma-se Qt = Q_hd01 + Q_hd02.
+     diferente. Converge dentro da variação máxima de pressão admitida
+     pela norma entre os ramais (perfil normativo ativo, chave
+     "tolerancia_equilibrio_mca" — ex.: 0,50 mca na NT 22/2021 - CBMMA).
+     Só depois de convergido soma-se Qt = Q_hd01 + Q_hd02.
   9. Marcha de pressões (do hidrante mais desfavorável até a RTI):
        P_PA  = P_hd01 + J ± ΔH
        P_SB  = P_PA   + J ± ΔH   (Qt = Q_hd01 + Q_hd02, já equilibradas)
@@ -84,11 +87,14 @@ K_VALVULA   = 5.0     # coef. de perda localizada da válvula angular
 COEF_JM     = 8.0     # coeficiente da fórmula de Jm, de Darcy-Weisbach com Vm=4Qi/(πDm²)
 
 # Equilíbrio hidráulico entre os ramais no Ponto A (ver _equilibrar_ramal).
-# Critério NUMÉRICO de convergência da iteração — não é um valor normativo,
-# é a precisão que se aceita entre a pressão do ramal mais favorável e a
-# pressão-alvo imposta pelo ramal governante.
-TOLERANCIA_EQUILIBRIO_MCA = 0.01   # mca
-MAX_ITER_EQUILIBRIO       = 30     # trava de segurança contra não-convergência
+# A variação máxima admitida entre a pressão do ramal mais favorável e a
+# pressão-alvo imposta pelo ramal governante É NORMATIVA (ex.: NT 22/2021 -
+# CBMMA: "para efeito de equilíbrio de pressão no ponto de derivação da
+# vazão total ... é admitida a variação máxima de 0,50 mca") — por isso não
+# tem default aqui: calcular_rede() exige que o chamador informe o valor do
+# perfil normativo ativo (lib/normas/<UF>/hidrantes.py, chave
+# "tolerancia_equilibrio_mca").
+MAX_ITER_EQUILIBRIO = 30   # trava de segurança contra não-convergência (não normativo)
 
 # Métodos de cálculo — a escolha é feita em "Classificar Sistema" e define
 # ONDE o par normativo (Q, Pmin) é aplicado:
@@ -291,13 +297,13 @@ def calc_j_trecho(trecho_data, q_lmin, c, label=u""):
 # ===========================================================================
 
 def _equilibrar_ramal(trecho_data, K, P_alvo, dH_ramal, C, j_inicial,
-                      tolerancia_mca=TOLERANCIA_EQUILIBRIO_MCA,
-                      max_iter=MAX_ITER_EQUILIBRIO):
+                      tolerancia_mca, max_iter=MAX_ITER_EQUILIBRIO):
     """
     Converge iterativamente a vazão do ramal MAIS FAVORÁVEL (o que não
     governa o Ponto A) até sua pressão requerida lá (P_A) coincidir com a
     pressão-alvo já fixada pelo ramal governante — P_A1 ≈ P_A2, dentro da
-    tolerância.
+    variação máxima admitida pela norma (tolerancia_mca — vem do perfil
+    normativo ativo, não é um número livre do código).
 
     O ramal governante não entra aqui: por construção (é dele que a
     pressão-alvo veio) ele já está em equilíbrio, com Q = Qs e
@@ -364,9 +370,8 @@ def _equilibrar_ramal(trecho_data, K, P_alvo, dH_ramal, C, j_inicial,
 # RESOLUÇÃO DA REDE — MÉTODO DA MARCHA COM FATOR K
 # ===========================================================================
 
-def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
+def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas, tolerancia_equilibrio_mca,
                   metodo=METODO_VALVULA, mang_dn_mm=None, mang_comp_m=None,
-                  tolerancia_equilibrio_mca=TOLERANCIA_EQUILIBRIO_MCA,
                   max_iter_equilibrio=MAX_ITER_EQUILIBRIO):
     """
     Resolve a rede de 2 hidrantes em paralelo pelo método da marcha, com
@@ -378,10 +383,15 @@ def calcular_rede(trechos_data, Qs_lmin, Pmin, C, cotas,
     Qs_lmin, Pmin: par normativo do hidrante mais desfavorável (L/min, mca).
     C: coeficiente de Hazen-Williams.
     cotas: {"z_rti","z_hd01","z_hd02","z_ponto_a","z_recalque","z_succao"} em m.
+    tolerancia_equilibrio_mca: variação máxima de pressão admitida pela
+        norma entre os ramais no Ponto A, após o equilíbrio (obrigatório —
+        vem do perfil normativo ativo, chave "tolerancia_equilibrio_mca";
+        ver _equilibrar_ramal()).
     metodo: METODO_VALVULA ou METODO_ESGUICHO — define onde (Qs, Pmin) se
         aplicam. No método do esguicho, mang_dn_mm e mang_comp_m são
         obrigatórios (mangueira entre o esguicho e a válvula).
-    tolerancia_equilibrio_mca/max_iter_equilibrio: ver _equilibrar_ramal().
+    max_iter_equilibrio: trava de segurança (não normativa) — ver
+        _equilibrar_ramal().
 
     Sequência:
       1. Ponto de referência do par normativo:
