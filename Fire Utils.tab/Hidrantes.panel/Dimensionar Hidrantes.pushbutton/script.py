@@ -489,8 +489,10 @@ res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
 # equilíbrio que não converge invalida os resultados por trecho abaixo.
 if not res["equilibrio"][u"convergiu"]:
     ids_ramais = [get_id(e) for e in trechos_elems[u"Ponto A - Hid 01"] + trechos_elems[u"Ponto A - Hid 02"]]
-    mostrar_bloqueio_equilibrio(res["equilibrio"], req(perfil, u"norma"),
-                                ids_problema=ids_ramais, mostrar_no_revit=mostrar_no_revit)
+    ids_mostrar = mostrar_bloqueio_equilibrio(res["equilibrio"], req(perfil, u"norma"),
+                                              ids_problema=ids_ramais)
+    if ids_mostrar:
+        mostrar_no_revit(ids_mostrar)
     script.exit()
 
 # Condição de sucção pelo método direto e conservador: compara a cota da RTI
@@ -558,16 +560,20 @@ def _para_por_velocidade(j, limite, nome_trecho):
     if not falhas:
         return
     ids_falha = [eid for s in falhas for eid in s.get("ids", [])]
-    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
-                                ids_problema=ids_falha, mostrar_no_revit=mostrar_no_revit)
+    ids_mostrar = mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
+                                              ids_problema=ids_falha)
+    if ids_mostrar:
+        mostrar_no_revit(ids_mostrar)
     script.exit()
 
 def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc, elems_trecho):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
         return
     ids_trecho = [get_id(e) for e in elems_trecho]
-    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
-                              ids_problema=ids_trecho, mostrar_no_revit=mostrar_no_revit)
+    ids_mostrar = mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
+                                            ids_problema=ids_trecho)
+    if ids_mostrar:
+        mostrar_no_revit(ids_mostrar)
     script.exit()
 
 _para_por_velocidade(res["j"]["t3"], v_max_tubo, u"Ponto A → HD01")

@@ -77,8 +77,8 @@ class _JanelaResultado(forms.WPFWindow):
         self.TxtTitulo.Text    = titulo
         self.TxtSubtitulo.Text = subtitulo or u""
         self._primeira_secao   = True
-        self._ids_problema     = None
-        self._mostrar_no_revit = None
+        self.ids_problema      = None
+        self.mostrar_no_revit  = False
         self._aplicar_status(status)
 
     def _aplicar_status(self, status):
@@ -97,21 +97,27 @@ class _JanelaResultado(forms.WPFWindow):
     def on_fechar(self, sender, args):
         self.Close()
 
-    def habilitar_botao_mostrar(self, ids_problema, mostrar_no_revit):
+    def habilitar_botao_mostrar(self, ids_problema):
         """Mostra o botão "Mostrar no Projeto" no rodapé — usado pelas
-        janelas de bloqueio para selecionar/enquadrar, na view do Revit, os
-        elementos que causaram a reprovação. `mostrar_no_revit` é um
-        callback do chamador (que tem acesso ao uidoc); este módulo
-        continua sem importar nada do Revit diretamente."""
-        if not ids_problema or mostrar_no_revit is None:
+        janelas de bloqueio para sinalizar quais elementos selecionar/
+        enquadrar na view do Revit quando a janela fechar.
+
+        O clique NÃO chama a API do Revit diretamente: a API não é
+        reentrante — chamá-la de dentro do Click de uma janela modal
+        (ShowDialog) trava o Revit. O botão só fecha a janela marcando
+        mostrar_no_revit=True; é o chamador (Dimensionar Hidrantes/
+        script.py), já de volta ao fluxo normal do comando depois que
+        ShowDialog() retorna, quem efetivamente seleciona os elementos —
+        mesmo motivo pelo qual o Carregador de Famílias despacha ações
+        de API por ExternalEvent em vez de por clique direto."""
+        if not ids_problema:
             return
-        self._ids_problema     = ids_problema
-        self._mostrar_no_revit = mostrar_no_revit
+        self.ids_problema = ids_problema
         self.BtnMostrarProjeto.Visibility = Visibility.Visible
 
     def on_mostrar_projeto(self, sender, args):
-        if self._mostrar_no_revit is not None and self._ids_problema:
-            self._mostrar_no_revit(self._ids_problema)
+        self.mostrar_no_revit = True
+        self.Close()
 
     # ------------------------------------------------------------------
     # Blocos de conteúdo
@@ -361,11 +367,14 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.ShowDialog()
 
 
-def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None, mostrar_no_revit=None):
+def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None):
     """Janela mostrando que o equilíbrio hidráulico entre os ramais no
     Ponto A não convergiu dentro da variação de pressão máxima admitida
     pela norma — chamada por "Dimensionar Hidrantes" quando o
-    dimensionamento é interrompido nessa verificação."""
+    dimensionamento é interrompido nessa verificação.
+
+    Retorna a lista de ElementId a selecionar no Revit se o usuário
+    clicou "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
     janela = _JanelaResultado(
         titulo=u"Verificação não atendida",
         subtitulo=u"Diferença de pressão entre os ramais não atende a norma",
@@ -381,15 +390,18 @@ def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None, mostrar_no
     janela.paragrafo(u"Não atende: a diferença de pressão entre os ramais no "
                      u"Ponto A passou do limite da norma.")
     janela.dica(u"Dica: revise o diâmetro dos trechos entre o Ponto A e os hidrantes.")
-    janela.habilitar_botao_mostrar(ids_problema, mostrar_no_revit)
+    janela.habilitar_botao_mostrar(ids_problema)
     janela.ShowDialog()
+    return janela.ids_problema if janela.mostrar_no_revit else None
 
 
-def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
-                                ids_problema=None, mostrar_no_revit=None):
+def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas, ids_problema=None):
     """Janela mostrando quais diâmetros do trecho passaram do limite de
     velocidade — chamada por "Dimensionar Hidrantes" quando o
-    dimensionamento é interrompido nessa verificação."""
+    dimensionamento é interrompido nessa verificação.
+
+    Retorna a lista de ElementId a selecionar no Revit se o usuário
+    clicou "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
     janela = _JanelaResultado(
         titulo=u"Verificação não atendida",
         subtitulo=u"Velocidade acima do limite — {}".format(nome_trecho),
@@ -401,15 +413,19 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
     janela.paragrafo(u"Não atende: velocidade acima do limite normativo.")
     janela.dica(u"Dica: aumente o diâmetro do trecho. A vazão é um dado "
                 u"normativo fixo do tipo de sistema e não pode ser reduzida.")
-    janela.habilitar_botao_mostrar(ids_problema, mostrar_no_revit)
+    janela.habilitar_botao_mostrar(ids_problema)
     janela.ShowDialog()
+    return janela.ids_problema if janela.mostrar_no_revit else None
 
 
 def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
-                              ids_problema=None, mostrar_no_revit=None):
+                              ids_problema=None):
     """Janela mostrando por que a pressão/vazão de um hidrante mais
     desfavorável não atendeu a norma — chamada por "Dimensionar Hidrantes"
-    quando o dimensionamento é interrompido nessa verificação."""
+    quando o dimensionamento é interrompido nessa verificação.
+
+    Retorna a lista de ElementId a selecionar no Revit se o usuário
+    clicou "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
     janela = _JanelaResultado(
         titulo=u"Verificação não atendida",
         subtitulo=u"{} não atende a norma".format(label),
@@ -423,5 +439,6 @@ def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmi
                   alinhas=[u"left", u"right", u"right", u"left"])
     janela.paragrafo(u"Não atende: pressão ou vazão abaixo do mínimo exigido.")
     janela.dica(u"Dica: revise o diâmetro/traçado do trecho {}.".format(trecho_desc))
-    janela.habilitar_botao_mostrar(ids_problema, mostrar_no_revit)
+    janela.habilitar_botao_mostrar(ids_problema)
     janela.ShowDialog()
+    return janela.ids_problema if janela.mostrar_no_revit else None
