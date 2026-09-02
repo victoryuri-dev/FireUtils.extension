@@ -18,6 +18,7 @@ from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script
 from collections import deque
 from System.Collections.Generic import List
+from System import Int64
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -170,7 +171,7 @@ def get_pontas_abertas(visitados):
     conector desconectado - candidatos ao ponto onde a rede quebrou."""
     pontas = []
     for eid in visitados:
-        elem = doc.GetElement(ElementId(eid))
+        elem = doc.GetElement(ElementId(Int64(eid)))
         if not elem: continue
         conns = get_conectores(elem)
         if not conns: continue
@@ -193,12 +194,12 @@ def reporta_quebra(visitados, alvo_desc):
         output.print_md(u"Possivel(is) ponto(s) de quebra (conector desconectado):")
         for eid in pontas:
             try:
-                link = output.linkify(ElementId(eid), title=u"Mostrar ID {}".format(eid))
+                link = output.linkify(ElementId(Int64(eid)), title=u"Mostrar ID {}".format(eid))
             except:
                 link = u"ID {}".format(eid)
             output.print_md(u"- {}".format(link))
         try:
-            uidoc.Selection.SetElementIds(List[ElementId]([ElementId(eid) for eid in pontas]))
+            uidoc.Selection.SetElementIds(List[ElementId]([ElementId(Int64(eid)) for eid in pontas]))
         except: pass
     else:
         output.print_md(
@@ -424,14 +425,14 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
 
         # Sucção
         for eid in ids_succao:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(ElementId(Int64(eid)))
             if elem:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
                 cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
 
         # Recalque comum
         for eid in ids_rec_comum:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(ElementId(Int64(eid)))
             if not elem: continue
             if eid == ponto_a_id:
                 set_param(elem, P_TRECHO, u"Bomba - Ponto A")
@@ -442,14 +443,14 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
 
         # Ramal HID-01
         for eid in ids_ramal_h1:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(ElementId(Int64(eid)))
             if elem:
                 set_param(elem, P_TRECHO, u"Ponto A - Hid 01")
                 cont[u"Ponto A - Hid 01"] = cont.get(u"Ponto A - Hid 01", 0) + 1
 
         # Ramal HID-02
         for eid in ids_ramal_h2:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(ElementId(Int64(eid)))
             if elem:
                 set_param(elem, P_TRECHO, u"Ponto A - Hid 02")
                 cont[u"Ponto A - Hid 02"] = cont.get(u"Ponto A - Hid 02", 0) + 1

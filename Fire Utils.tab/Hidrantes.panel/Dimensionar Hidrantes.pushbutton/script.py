@@ -33,6 +33,7 @@ from Autodesk.Revit.DB import (
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from System.Collections.Generic import List
+from System import Int64
 from pyrevit import forms, script
 
 try:
@@ -94,7 +95,10 @@ def mostrar_no_revit(ids):
     if not ids:
         return
     try:
-        eids = List[ElementId]([ElementId(i) for i in ids])
+        # ElementId(int) é ambíguo no IronPython nas versões do Revit que
+        # também têm ElementId(BuiltInParameter)/ElementId(BuiltInCategory)
+        # (2024+) — Int64(i) força o overload certo.
+        eids = List[ElementId]([ElementId(Int64(i)) for i in ids])
         uidoc.Selection.SetElementIds(eids)
         uidoc.ShowElements(eids)
         uidoc.RefreshActiveView()
