@@ -1,0 +1,15 @@
+<Page xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+      Background="#F6F6F6">
+
+    <!-- Fase 3 do plano de migração: o painel inteiro é só este WebView2 —
+         todo o layout/lógica do catálogo agora vive no frontend React
+         (webapp/), carregado pelo code-behind (family_loader_webview_forms.py)
+         via SetVirtualHostNameToFolderMapping. Nada de dinâmico é montado
+         aqui em XAML/code-behind como no painel antigo
+         (family_loader_forms.xaml) — só o host do navegador embutido. -->
+    <Grid>
+        <wv2:WebView2 x:Name="WebView"/>
+    </Grid>
+</Page>

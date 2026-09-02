@@ -35,20 +35,42 @@ _LIB_DIR = os.path.join(_EXT_ROOT, u"Fire Utils.tab", u"lib")
 if _LIB_DIR not in sys.path:
     sys.path.append(_LIB_DIR)
 
-try:
-    from family_loader_forms import PainelCarregadorFamilias
+def _registrar_dockable_pane(nome_amigavel, importar_classe_painel):
+    """
+    Registra um Dockable Pane, isolando falhas por painel — se um painel
+    falhar (ex.: falta o WebView2 SDK do painel web), os outros continuam
+    registrados normalmente, cada um reportando seu próprio erro.
+    `importar_classe_painel` é uma função (não a classe direto) pra que o
+    próprio import de cada módulo também caia dentro do try/except.
+    """
+    try:
+        classe_painel = importar_classe_painel()
+        if not forms.is_registered_dockable_panel(classe_painel):
+            forms.register_dockable_panel(classe_painel, default_visible=False)
+            print(u"[OK] Dockable Pane '{}' registrado.".format(nome_amigavel))
+        else:
+            print(u"[OK] Dockable Pane '{}' já estava registrado.".format(nome_amigavel))
+    except Exception:
+        # _mlogger.exception manda só pro log em arquivo do pyRevit (fácil
+        # de passar despercebido); o print força a abertura da output
+        # window dedicada do startup script, com o traceback bem visível.
+        _mlogger.exception(u"Falha ao registrar o Dockable Pane '{}'".format(nome_amigavel))
+        print(u"[ERRO] Falha ao registrar o Dockable Pane '{}':".format(nome_amigavel))
+        print(traceback.format_exc())
 
-    if not forms.is_registered_dockable_panel(PainelCarregadorFamilias):
-        forms.register_dockable_panel(PainelCarregadorFamilias, default_visible=False)
-        print(u"[OK] Dockable Pane do Carregador de Famílias registrado.")
-    else:
-        print(u"[OK] Dockable Pane do Carregador de Famílias já estava registrado.")
-except Exception:
-    # _mlogger.exception manda só pro log em arquivo do pyRevit (fácil de
-    # passar despercebido); o print força a abertura da output window
-    # dedicada do startup script, com o traceback completo bem visível.
-    _mlogger.exception(
-        u"Falha ao registrar o Dockable Pane do Carregador de Famílias"
-    )
-    print(u"[ERRO] Falha ao registrar o Dockable Pane do Carregador de Famílias:")
-    print(traceback.format_exc())
+
+_registrar_dockable_pane(
+    u"Carregador de Famílias",
+    lambda: __import__(u"family_loader_forms", fromlist=[u"PainelCarregadorFamilias"]).PainelCarregadorFamilias,
+)
+
+# Painel Fase 3 (webapp React + WebView2) — falha aqui (SDK do WebView2
+# ausente, build do frontend não gerado etc.) é esperada até o ambiente
+# estar totalmente configurado; não deve nunca impedir o registro do
+# painel clássico acima.
+_registrar_dockable_pane(
+    u"Carregador de Famílias (Web)",
+    lambda: __import__(
+        u"family_loader_webview_forms", fromlist=[u"PainelCarregadorFamiliasWeb"]
+    ).PainelCarregadorFamiliasWeb,
+)

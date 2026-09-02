@@ -14,7 +14,7 @@
  *     type: "LOAD_FAMILIES",
  *     payload: {
  *       posicionar: boolean,
- *       familias: [{ name, categoryId, storageKey, signedUrl }],
+ *       familias: [{ name, categoryId, storageKey, sha256, signedUrl }],
  *     },
  *   }
  *     -> Python baixa cada .rfa (com cache local em %AppData%) e chama

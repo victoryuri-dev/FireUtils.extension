@@ -91,6 +91,7 @@ export default function App() {
           name: familia.name,
           categoryId: familia.category_id,
           storageKey: familia.storage_key,
+          sha256: familia.sha256,
           signedUrl: await criarSignedUrlFamilia(familia.storage_key),
         }))
       );

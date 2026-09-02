@@ -68,7 +68,7 @@ Só existe um tipo de mensagem por enquanto, em `src/lib/bridge.js`:
   "payload": {
     "posicionar": false,
     "familias": [
-      { "name": "Extintor Portátil - ABC", "categoryId": "extintor-de-incendio", "storageKey": "extintor-de-incendio/extintor-portatil-abc.rfa", "signedUrl": "https://..." }
+      { "name": "Extintor Portátil - ABC", "categoryId": "extintor-de-incendio", "storageKey": "extintor-de-incendio/extintor-portatil-abc.rfa", "sha256": "...", "signedUrl": "https://..." }
     ]
   }
 }
@@ -76,10 +76,14 @@ Só existe um tipo de mensagem por enquanto, em `src/lib/bridge.js`:
 
 O React já gera a Signed URL (via `supabase.storage.from('revit-families').createSignedUrl(...)`,
 válida por 60s) antes de mandar a mensagem — o lado Python só precisa
-baixar cada `signedUrl` (com cache local por `storageKey`, Fase 4) e chamar
-`Document.LoadFamily`; se `posicionar` for `true`, encadear um
-`PromptForFamilyInstancePlacement` por família carregada, na mesma ordem da
-lista.
+baixar cada `signedUrl` e chamar `Document.LoadFamily`; se `posicionar` for
+`true`, encadear um `PromptForFamilyInstancePlacement` por família
+carregada, na mesma ordem da lista.
+
+Cache local (Fase 4, já implementada em `family_cache.py`): antes de baixar,
+verifica se já existe um `.rfa` em `%AppData%/FireUtils/FamilyCache/<storageKey>`
+cujo SHA-256 bate com o campo `sha256` do catálogo — se bater, usa o arquivo
+em cache sem rebaixar; senão baixa via `System.Net.WebClient` e sobrescreve.
 
 No WebView2, essa mensagem chega no evento `CoreWebView2.WebMessageReceived`
 como `args.WebMessageAsJson` (string JSON — precisa de `json.loads` do lado
