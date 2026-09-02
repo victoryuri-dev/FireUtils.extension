@@ -85,13 +85,26 @@ def get_id(elem):
 def mostrar_no_revit(ids):
     """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
     ElementId (int) está em `ids` — callback do botão "Mostrar no
-    Projeto" das janelas de bloqueio (resultado_ui.py)."""
+    Projeto" das janelas de bloqueio (resultado_ui.py). Qualquer falha
+    aparece num alert (nunca engolida em silêncio, senão o clique some
+    sem dar pista nenhuma do que houve) e ao final o foco volta para a
+    janela principal do Revit — depois que a janela de bloqueio (WPF)
+    fecha, o foco costuma ficar com o console do pyRevit, não com o
+    Revit, então a seleção acontece mas ninguém vê."""
     if not ids:
         return
-    eids = List[ElementId]([ElementId(i) for i in ids])
-    uidoc.Selection.SetElementIds(eids)
     try:
+        eids = List[ElementId]([ElementId(i) for i in ids])
+        uidoc.Selection.SetElementIds(eids)
         uidoc.ShowElements(eids)
+        uidoc.RefreshActiveView()
+    except Exception as _e:
+        forms.alert(u"Não foi possível selecionar os elementos no Revit:\n{}".format(_e),
+                    title="Fire Utils", warn_icon=True)
+        return
+    try:
+        import ctypes
+        ctypes.windll.user32.SetForegroundWindow(__revit__.MainWindowHandle)
     except Exception:
         pass
 
