@@ -22,3 +22,7 @@ desktop.ini
 .idea/
 *.suo
 *.user
+
+# Migração pro Supabase (migration/) — credenciais e artefatos gerados
+migration/.env
+migration/output/
