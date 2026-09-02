@@ -40,6 +40,13 @@ def _fmt_dh(dh):
     """ΔH com sinal explícito para as equações da marcha (J ± ΔH)."""
     return (u"+ {:.4f}" if dh >= 0 else u"− {:.4f}").format(abs(dh))
 
+
+def _mca2(valor):
+    """Pressão em mca, 2 casas decimais, separador decimal vírgula (ex.: 32,55 mca) —
+    usado no comparativo de pressões entre os ramais, mais legível que as 4 casas
+    com ponto do resto do memorial."""
+    return u"{:.2f}".format(valor).replace(u".", u",") + u" mca"
+
 # IronPython 2.7 (engine do pyRevit) tem 'unicode'; CPython 3 não.
 try:
     _txt = unicode
@@ -817,12 +824,21 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     output.print_md(u"### {}.3 Pressão no Ponto A e Vazões Finais (Fator K)".format(n7))
     output.print_md(u"Pressão no Ponto A = maior pressão calculada entre os dois trechos:")
     _formula(u"P_PA = max(P_PA1; P_PA2)")
-    _tabela([u"Ramal", u"P_PA (mca)", u"Governante"],
-            [[u"HD01", u"{:.4f}".format(res["P_PA1"]),
+
+    _ramal_it = equilibrio[u"ramal_iterado"]
+    if _ramal_it == u"HD01":
+        _p_depois_hd01, _p_depois_hd02 = equilibrio[u"P_A"], res["P_PA2"]
+    else:
+        _p_depois_hd01, _p_depois_hd02 = res["P_PA1"], equilibrio[u"P_A"]
+
+    output.print_md(u"**Comparativo de pressões entre os ramais**, antes e depois do "
+                    u"equilíbrio hidráulico:")
+    _tabela([u"Ramal", u"P_A antes do equilíbrio", u"P_A depois do equilíbrio", u"Governante"],
+            [[u"HD01", _mca2(res["P_PA1"]), _mca2(_p_depois_hd01),
               SIM_OK if res["hid_governa"] == u"HD01" else u""],
-             [u"HD02", u"{:.4f}".format(res["P_PA2"]),
+             [u"HD02", _mca2(res["P_PA2"]), _mca2(_p_depois_hd02),
               SIM_OK if res["hid_governa"] == u"HD02" else u""]],
-            alinhas=[u"left", u"right", u"left"])
+            alinhas=[u"left", u"right", u"right", u"left"])
     output.print_md(u"P_PA,alvo = **{:.4f} mca** (ramal governante: **{}**)".format(
         res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
