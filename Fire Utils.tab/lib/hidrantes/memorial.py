@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 memorial.py — Fire Utils · lib/hidrantes/
-Montagem do memorial de cálculo (passo a passo, método da marcha) em HTML —
-mesma lógica de formatação usada tanto no console do pyRevit quanto no
-arquivo .html salvo na pasta do projeto.
+Montagem do memorial de cálculo (passo a passo, método da marcha) em HTML,
+gravado como arquivo na pasta do projeto e aberto em janela separada — não
+imprime no console do pyRevit.
 
 Módulo puro: recebe os resultados já calculados (por calcular_rede() e
-companhia, em calc.py) e o objeto `output` do pyRevit do chamador — não
-importa nada do Revit. Usado pelo botão "Memorial de Cálculo", que relê o
-cache salvo por "Dimensionar Hidrantes" (firedata.json) e reimprime o
-memorial completo sem recalcular nada.
+companhia, em calc.py) — não importa nada do Revit. Usado pelo botão
+"Memorial de Cálculo", que relê o cache salvo por "Dimensionar Hidrantes"
+(firedata.json) e regera o memorial completo sem recalcular nada.
 
 "Dimensionar Hidrantes" não chama este módulo — ao final ele mostra só um
 resumo de verificações e resultados finais, e para o dimensionamento no
@@ -24,24 +23,29 @@ from hidrantes.calc import MCA_POR_BAR, F_DARCY, K_VALVULA, COEF_JM, G
 from hidrantes.norm_profiles import req, ref
 from hidrantes import succao as succao_calc
 
-# Simbolos de saida no output window do pyRevit (janela de output do pyRevit
-# roda em unicode e normalmente exibe ✓/✗/≤ sem problema). Se algum ambiente
-# nao renderizar esses caracteres, mude _ASCII_FALLBACK para True aqui -
-# unico lugar do arquivo que define esses simbolos.
+# Simbolos usados no arquivo .html do memorial. Se algum ambiente nao
+# renderizar esses caracteres, mude _ASCII_FALLBACK para True aqui - unico
+# lugar do arquivo que define esses simbolos.
 _ASCII_FALLBACK = False
 if _ASCII_FALLBACK:
     SIM_OK, SIM_X, SIM_LE, SIM_GE = u"OK", u"X", u"<=", u">="
 else:
     SIM_OK, SIM_X, SIM_LE, SIM_GE = u"✓", u"✗", u"≤", u"≥"
 
-# Definido por print_memorial_calculo() antes de montar o memorial (trocado
-# temporariamente por um buffer _Memorial, depois restaurado ao console real
-# do chamador) - ver a funcao mais abaixo.
+# Definido por gerar_memorial_calculo() antes de montar o memorial (trocado
+# temporariamente por um buffer _Memorial) - ver a funcao mais abaixo.
 output = None
 
 def _fmt_dh(dh):
     """ΔH com sinal explícito para as equações da marcha (J ± ΔH)."""
     return (u"+ {:.4f}" if dh >= 0 else u"− {:.4f}").format(abs(dh))
+
+
+def _mca2(valor):
+    """Pressão em mca, 2 casas decimais, separador decimal vírgula (ex.: 32,55 mca) —
+    usado no comparativo de pressões entre os ramais, mais legível que as 4 casas
+    com ponto do resto do memorial."""
+    return u"{:.2f}".format(valor).replace(u".", u",") + u" mca"
 
 # IronPython 2.7 (engine do pyRevit) tem 'unicode'; CPython 3 não.
 try:
@@ -259,9 +263,6 @@ def _css(cor_texto, cor_borda, cor_fundo, cor_suave, cor_acento):
            acento=cor_acento)
 
 
-# Console do pyRevit: herda a cor do tema (claro ou escuro), sem fundo.
-_CSS_CONSOLE = _css(u"inherit", u"rgba(128,128,128,0.6)", u"transparent",
-                    u"rgba(128,128,128,0.35)", u"rgba(120,150,180,0.85)")
 # Arquivo .html: documento próprio, pensado para leitura e impressão.
 _CSS_ARQUIVO = _css(u"#1a1a1a", u"#9aa3ad", u"transparent", u"#d8dde2", u"#4c6f8c")
 
@@ -479,12 +480,15 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
 
     v_max_succao = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
 
-    K        = res["K"]
-    dH       = res["dH"]
-    j        = res["j"]
-    metodo   = res["metodo"]
-    esguicho = res["esguicho"]
-    esg      = res["esg"]
+    K          = res["K"]
+    dH         = res["dH"]
+    j          = res["j"]
+    j_inicial  = res["j_inicial"]   # t3/t4 ANTES do equilíbrio, ambos em Qs
+    metodo     = res["metodo"]
+    esguicho   = res["esguicho"]
+    esg        = res["esg"]
+    equilibrio = res["equilibrio"]
+    tolerancia_equilibrio = equilibrio["tolerancia"]
 
     # Ponto de aplicação do par normativo (Q, Pmin), conforme o método
     ponto_ref = u"ponta do esguicho" if esguicho else u"válvula do hidrante"
@@ -679,25 +683,40 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                     u"demais hidrantes: **Q = K·√P**.")
     output.print_md(u"")
 
-    output.print_md(u"**{}) Pressão no Ponto A**, por ramal:".format(prox()))
+    output.print_md(u"**{}) Pressão no Ponto A**, por ramal — os dois calculados "
+                    u"inicialmente com a mesma vazão normativa Qs:".format(prox()))
     _formula(u"P_PA = P_ref + J ± ∆H",
              [(u"P_PA", u"Pressão necessária no Ponto A pelo ramal"),
               (u"P_ref", u"Pressão de referência do hidrante — Pmin ou P_valv, "
                         u"conforme o método"),
               (u"J", u"Perda de carga do ramal (hidrante → Ponto A)"),
               (u"∆H", u"Desnível geométrico do trecho (Hi − Hf)")])
-    output.print_md(u"A pressão adotada no Ponto A é a **maior** entre os ramais "
-                    u"calculados — o ramal dessa pressão é o **ramal governante**.")
+    output.print_md(u"A **maior** pressão entre os dois ramais vira a **pressão-alvo** do "
+                    u"Ponto A, e o ramal dela é o **ramal governante** — ele não muda mais: "
+                    u"por construção, já está com a vazão normativa Qs e a pressão de "
+                    u"referência P_ref.")
     output.print_md(u"")
 
-    output.print_md(u"**{}) Pressão e vazão final em cada hidrante**:".format(prox()))
-    _formula(u"P_hd = P_PA − J ∓ ∆H",
-             [(u"P_hd", u"Pressão resultante em cada hidrante — marcha inversa, "
-                       u"partindo do Ponto A (o ramal governante retorna "
-                       u"exatamente à pressão de referência)")])
-    _formula(u"Q = K · √P",
-             [(u"Q", u"Vazão final de cada hidrante, a partir do Fator K e de P_hd"),
-              (u"Qt", u"Vazão total = soma das vazões dos hidrantes (Qt = ΣQ)")])
+    output.print_md(u"**{}) Equilíbrio hidráulico do ramal mais favorável**: uma diferença "
+                    u"de pressão entre os ramais, calculados os dois com a mesma vazão, é "
+                    u"normal — reflete a diferença de resistência hidráulica entre os "
+                    u"caminhos (comprimento, diâmetro, conexões, desnível), não um erro de "
+                    u"projeto. O Ponto A só tem uma pressão física, então o ramal mais "
+                    u"favorável precisa **convergir** até sua P_A bater com a pressão-alvo, "
+                    u"dentro da variação máxima de pressão admitida pela norma{}:".format(
+                        prox(), ref(perfil, u"tolerancia_equilibrio_mca_ref")))
+    _formula(u"P_ref = P_PA,alvo − J − ∆H",
+             [(u"P_ref", u"Pressão de referência recalculada do ramal mais favorável")])
+    _formula(u"Q = K · √P_ref",
+             [(u"Q", u"Vazão recalculada — muda a cada passo, então a perda de carga "
+                    u"TEM que ser recalculada com ela; nunca reaproveitar a perda de "
+                    u"uma vazão diferente")])
+    _formula(u"Erro = |P_A − P_PA,alvo|",
+             [(u"P_A", u"Pressão no Ponto A recalculada com a nova vazão (P_ref + J + ∆H)")])
+    output.print_md(u"Repete até **Erro ≤ variação máxima admitida pela norma** "
+                    u"({:g} mca). Só então soma-se a vazão dos dois ramais:".format(
+                        tolerancia_equilibrio))
+    _formula(u"Qt = Q_hd01 + Q_hd02")
 
     output.print_md(u"**{}) Marcha de pressões** até a bomba e a RTI, agora com a "
                     u"vazão total Qt:".format(prox()))
@@ -762,9 +781,9 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                             Pmin, _ref["Jm"], _ref["Jvalv"], P_ref))
         output.print_md(u"")
 
-    _passo_ltotal(j["t3"], prox())
-    _passo_perda(j["t3"], C_HW, prox())
-    _passo_velocidade(j["t3"], v_max_tubo, prox())
+    _passo_ltotal(j_inicial["t3"], prox())
+    _passo_perda(j_inicial["t3"], C_HW, prox())
+    _passo_velocidade(j_inicial["t3"], v_max_tubo, prox())
 
     output.print_md(u"**{}) Fator K** — calculado aqui, no 1º hidrante mais "
                     u"desfavorável, e reaproveitado nos demais trechos.".format(prox()))
@@ -775,52 +794,142 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                         P_ref / MCA_POR_BAR, K))
     output.print_md(u"")
 
-    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD01:".format(prox()))
+    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD01, "
+                    u"ainda com a vazão normativa Qs:".format(prox()))
     _formula(u"P_PA = {} + J ± ∆H".format(_P_ref_lbl))
     _tabela([_P_ref_lbl + u" (mca)", u"J (mca)", u"∆H (m)", u"P_PA (mca)"],
-            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j["t3"]["J"]),
+            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j_inicial["t3"]["J"]),
               _fmt_dh(dH["t3"]), u"**{:.4f}**".format(res["P_PA1"])]])
     output.print_md(u"")
 
     # --- Trecho HD02 -------------------------------------------------------
     output.print_md(u"### {}.2 Trecho HD02 ao Ponto A".format(n7))
-    output.print_md(u"Ramal do 2º hidrante mais desfavorável, calculado com a mesma "
-                    u"vazão normativa Q = {:g} L/min.".format(Qs_lmin))
+    output.print_md(u"Ramal do 2º hidrante mais desfavorável — **primeiro cálculo**, "
+                    u"ainda com a mesma vazão normativa Qs = {:g} L/min dos dois "
+                    u"ramais, antes de qualquer equilíbrio.".format(Qs_lmin))
     output.print_md(u"")
     prox = _contador_letras()
-    _passo_ltotal(j["t4"], prox())
-    _passo_perda(j["t4"], C_HW, prox())
-    _passo_velocidade(j["t4"], v_max_tubo, prox())
-    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD02:".format(prox()))
+    _passo_ltotal(j_inicial["t4"], prox())
+    _passo_perda(j_inicial["t4"], C_HW, prox())
+    _passo_velocidade(j_inicial["t4"], v_max_tubo, prox())
+    output.print_md(u"**{}) Pressão necessária no Ponto A** pelo ramal do HD02, "
+                    u"ainda com a vazão normativa Qs:".format(prox()))
     _formula(u"P_PA = {} + J ± ∆H".format(_P_ref_lbl))
     _tabela([_P_ref_lbl + u" (mca)", u"J (mca)", u"∆H (m)", u"P_PA (mca)"],
-            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j["t4"]["J"]),
+            [[u"{:.4f}".format(P_ref), u"{:.4f}".format(j_inicial["t4"]["J"]),
               _fmt_dh(dH["t4"]), u"**{:.4f}**".format(res["P_PA2"])]])
     output.print_md(u"")
 
     # Ponto A e vazões finais pelo Fator K (sem ciclo)
     output.print_md(u"### {}.3 Pressão no Ponto A e Vazões Finais (Fator K)".format(n7))
-    output.print_md(u"Pressão adotada no Ponto A = maior pressão calculada entre os "
-                    u"dois trechos:")
+    output.print_md(u"Pressão no Ponto A = maior pressão calculada entre os dois trechos:")
     _formula(u"P_PA = max(P_PA1; P_PA2)")
-    _tabela([u"Ramal", u"P_PA (mca)", u"Governante"],
-            [[u"HD01", u"{:.4f}".format(res["P_PA1"]),
+
+    _ramal_it = equilibrio[u"ramal_iterado"]
+    if _ramal_it == u"HD01":
+        _p_depois_hd01, _p_depois_hd02 = equilibrio[u"P_A"], res["P_PA2"]
+    else:
+        _p_depois_hd01, _p_depois_hd02 = res["P_PA1"], equilibrio[u"P_A"]
+
+    output.print_md(u"**Comparativo de pressões entre os ramais**, antes e depois do "
+                    u"equilíbrio hidráulico:")
+    _tabela([u"Ramal", u"P_A antes do equilíbrio", u"P_A depois do equilíbrio", u"Governante"],
+            [[u"HD01", _mca2(res["P_PA1"]), _mca2(_p_depois_hd01),
               SIM_OK if res["hid_governa"] == u"HD01" else u""],
-             [u"HD02", u"{:.4f}".format(res["P_PA2"]),
+             [u"HD02", _mca2(res["P_PA2"]), _mca2(_p_depois_hd02),
               SIM_OK if res["hid_governa"] == u"HD02" else u""]],
-            alinhas=[u"left", u"right", u"left"])
-    output.print_md(u"P_PA adotado = **{:.4f} mca** (ramal governante: **{}**)".format(
+            alinhas=[u"left", u"right", u"right", u"left"])
+    output.print_md(u"P_PA,alvo = **{:.4f} mca** (ramal governante: **{}**)".format(
         res["P_PA"], res["hid_governa"]))
     output.print_md(u"")
-    output.print_md(u"Com o Ponto A nessa pressão, a pressão na válvula de cada hidrante "
-                    u"vem da marcha inversa (o ramal governante retorna, por construção, "
-                    u"exatamente à pressão de referência):")
-    _formula(u"P_hd = P_PA − J ∓ ∆H")
-    _tabela([u"Hidrante", u"P_PA (mca)", u"J (mca)", u"∆H (m)", u"P_hd (mca)"],
-            [[u"HD01", u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t3"]["J"]),
-              _fmt_dh(-dH["t3"]), u"**{:.4f}**".format(res["P_hd01"])],
-             [u"HD02", u"{:.4f}".format(res["P_PA"]), u"{:.4f}".format(j["t4"]["J"]),
-              _fmt_dh(-dH["t4"]), u"**{:.4f}**".format(res["P_hd02"])]])
+
+    ramal_it        = equilibrio[u"ramal_iterado"]
+    ramal_gov       = equilibrio[u"ramal_governante"]
+    trecho_it       = u"t3" if ramal_it == u"HD01" else u"t4"
+    dH_it           = dH[trecho_it]
+    P_PA_it_inicial = res["P_PA1"] if ramal_it == u"HD01" else res["P_PA2"]
+
+    output.print_md(u"O ramal governante (**{}**) não muda — permanece com a vazão "
+                    u"normativa Qs = {:g} L/min e a pressão de referência P_ref = "
+                    u"{:.4f} mca, por construção.".format(
+                        ramal_gov, Qs_lmin, res["P_valv_ref"]))
+    output.print_md(u"")
+
+    output.print_md(u"**Diferença de pressão entre os ramais**, ambos calculados com "
+                    u"a mesma vazão normativa Qs — é essa diferença que o ramal mais "
+                    u"favorável (**{}**) precisa absorver, subindo sua vazão até sua "
+                    u"P_A bater com a pressão-alvo:".format(ramal_it))
+    _formula(u"∆P = |P_PA,alvo − P_PA,{}|".format(ramal_it.lower()))
+    output.print_md(u"∆P = |{:.4f} − {:.4f}| = **{:.4f} mca**".format(
+        res["P_PA"], P_PA_it_inicial, abs(res["P_PA"] - P_PA_it_inicial)))
+    output.print_md(u"")
+
+    J_atual = j_inicial[trecho_it][u"J"]
+    for h in equilibrio[u"historico"]:
+        output.print_md(u"**Iteração {} do ramal {}**".format(h[u"n"], ramal_it))
+        output.print_md(u"")
+
+        output.print_md(u"Pressão de referência recalculada — a pressão-alvo do "
+                        u"Ponto A menos a perda de carga e o desnível deste ramal:")
+        _formula(u"P_ref = P_PA,alvo − J − ∆H")
+        output.print_md(u"P_ref = {:.4f} − {:.4f} {} = **{:.4f} mca**".format(
+            res["P_PA"], J_atual, _fmt_dh(dH_it), h[u"P_ref"]))
+        output.print_md(u"")
+
+        output.print_md(u"Vazão recalculada pelo Fator K, com essa nova pressão de "
+                        u"referência — **nunca** a vazão de uma iteração anterior:")
+        _formula(u"Q = K · √(P_ref / {:g})".format(MCA_POR_BAR))
+        output.print_md(u"Q = {:.4f} · √({:.4f} / {:g}) = **{:.2f} L/min**".format(
+            K, h[u"P_ref"], MCA_POR_BAR, h[u"Q"]))
+        output.print_md(u"")
+
+        output.print_md(u"Perda de carga recalculada por Hazen-Williams — Jun muda "
+                        u"porque a vazão mudou; nunca reaproveita a perda de uma "
+                        u"vazão diferente:")
+        _formula(u"Jun = 605·10⁴ · Q^1,85 · C^−1,85 · D^−4,87   [m/m]")
+        _formula(u"J = Ltotal · Jun   [mca]")
+        _tabela([u"DN (mm)", u"Ltotal (m)", u"Jun (m/m)", u"J (mca)"],
+                [[u"{:.1f}".format(s["d_mm"]), u"{:.4f}".format(s["Ltotal"]),
+                  u"{:.6f}".format(s["Jun"]), u"**{:.4f}**".format(s["J"])]
+                 for s in h[u"j"][u"segmentos"]])
+        output.print_md(u"**J recalculado (soma dos diâmetros) = {:.4f} mca**".format(
+            h[u"j"][u"J"]))
+        output.print_md(u"")
+
+        output.print_md(u"Nova pressão no Ponto A, com o J recalculado:")
+        _formula(u"P_A = P_ref + J ± ∆H")
+        output.print_md(u"P_A = {:.4f} + {:.4f} {} = **{:.4f} mca**".format(
+            h[u"P_ref"], h[u"j"][u"J"], _fmt_dh(dH_it), h[u"P_A"]))
+        output.print_md(u"")
+
+        output.print_md(u"Erro = |P_A − P_PA,alvo| = |{:.4f} − {:.4f}| = "
+                        u"**{:.6f} mca**".format(h[u"P_A"], res["P_PA"], h[u"erro"]))
+        output.print_md(u"")
+
+        J_atual = h[u"j"][u"J"]
+
+    if equilibrio[u"convergiu"]:
+        output.print_md(u"{} **Convergiu** em {} iteração(ões) — erro final de "
+                        u"{:.6f} mca, dentro da variação máxima admitida pela norma{} "
+                        u"de {:g} mca. Resultado esperado: a diferença de pressão "
+                        u"entre os ramais no Ponto A fica, na prática, eliminada.".format(
+                            SIM_OK, len(equilibrio[u"historico"]), equilibrio[u"erro"],
+                            ref(perfil, u"tolerancia_equilibrio_mca_ref"),
+                            equilibrio[u"tolerancia"]))
+    else:
+        output.print_md(u"{} **Não convergiu** em {} iterações — erro final de "
+                        u"{:.6f} mca, acima da variação máxima admitida pela norma{} "
+                        u"de {:g} mca. Resultado fora da norma; revisar a geometria "
+                        u"da rede.".format(
+                            SIM_X, len(equilibrio[u"historico"]), equilibrio[u"erro"],
+                            ref(perfil, u"tolerancia_equilibrio_mca_ref"),
+                            equilibrio[u"tolerancia"]))
+    output.print_md(u"")
+
+    output.print_md(u"Pressão na válvula de cada hidrante, ao final do equilíbrio:")
+    _tabela([u"Hidrante", u"P_hd (mca)"],
+            [[u"HD01", u"**{:.4f}**".format(res["P_hd01"])],
+             [u"HD02", u"**{:.4f}**".format(res["P_hd02"])]])
     output.print_md(u"")
     _formula(u"Q = K · √P")
     _tabela([u"Hidrante", u"K", u"P (bar)", u"Q (L/min)"],
@@ -831,6 +940,20 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     output.print_md(u"")
     output.print_md(u"**Qt = Q_hd01 + Q_hd02 = {:.2f} + {:.2f} = {:.2f} L/min**".format(
         res["Q_hd01"], res["Q_hd02"], res["Qt"]))
+    output.print_md(u"")
+
+    _q_favoravel = (res["Q_hd02"] if equilibrio[u"ramal_iterado"] == u"HD02"
+                    else res["Q_hd01"])
+    _r_q = _q_favoravel / Qs_lmin if Qs_lmin else 0.0
+    output.print_md(u"_Indicador de desequilíbrio entre os ramais — o quanto o equilíbrio "
+                    u"elevou a vazão do ramal mais favorável acima da vazão mínima: "
+                    u"R_Q = Q_final/Q_mín = {:.2f}/{:g} = **{:.3f}**. Não há um percentual "
+                    u"fixo como critério normativo; um R_Q alto indica que o ramal "
+                    u"governante está sofrendo perda de carga desproporcional em relação "
+                    u"ao mais favorável, e vale avaliar o diâmetro dele — mas só depois de "
+                    u"conferir a velocidade de escoamento (próximo passo) e verificar se a "
+                    u"diferença não é predominantemente por desnível geométrico, que o "
+                    u"diâmetro não corrige._".format(_q_favoravel, Qs_lmin, _r_q))
     output.print_md(u"")
 
     if esguicho:
@@ -973,18 +1096,17 @@ def _salvar_memorial(corpo, projeto_dir, nome_projeto):
     return caminho
 
 
-def print_memorial_calculo(console, res, dados_sistema, valor_sistema,
+def gerar_memorial_calculo(res, dados_sistema, valor_sistema,
                            cotas, succao, verif_succao,
                            verif_npshd, erro_npshd, j_succao_npsh,
                            Qs_lmin, Pmin, C_HW,
                            eta, pot_cv, pot_kw, timestamp, perfil,
-                           projeto_dir=None, nome_projeto=None):
+                           projeto_dir, nome_projeto=None):
     """
-    Monta o memorial uma única vez e o entrega em dois lugares: no console
-    do pyRevit (objeto `console`, de script.get_output() no chamador; usa
-    folha de estilo própria, já que o tema do console sobrescreveria as
-    tabelas) e como arquivo .html na pasta do projeto, aberto em janela
-    separada.
+    Monta o memorial e grava como arquivo .html na pasta do projeto,
+    aberto em janela separada (fora do Revit) — não imprime mais no
+    console do pyRevit. Retorna o caminho do arquivo, ou None se não foi
+    possível gravar.
     """
     global output
     doc_mem = _Memorial()
@@ -996,15 +1118,7 @@ def print_memorial_calculo(console, res, dados_sistema, valor_sistema,
                          Qs_lmin, Pmin, C_HW,
                          eta, pot_cv, pot_kw, timestamp, perfil)
     finally:
-        output = console
+        output = None
 
-    corpo = doc_mem.corpo()
-    console.print_html(u"<style>{}</style><div class='fu-memorial'>{}</div>".format(
-        _CSS_CONSOLE, corpo))
-
-    caminho = _salvar_memorial(corpo, projeto_dir, nome_projeto) if projeto_dir else None
-    if caminho:
-        console.print_md(u"---")
-        console.print_md(u"*Memorial salvo em* `{}` *— aberto em janela separada.*".format(
-            caminho))
+    return _salvar_memorial(doc_mem.corpo(), projeto_dir, nome_projeto)
 

@@ -28,10 +28,11 @@ import re as _re
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInParameter,
-    FlowDirectionType, ConnectorType,
+    FlowDirectionType, ConnectorType, ElementId,
     LocationCurve, LocationPoint, UnitUtils,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
+from System.Collections.Generic import List
 from pyrevit import forms, script
 
 try:
@@ -48,7 +49,7 @@ from hidrantes.calc import (
 )
 from hidrantes.resultado_ui import (
     mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
-    mostrar_resultado_ok,
+    mostrar_bloqueio_equilibrio, mostrar_resultado_ok,
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req, opt
@@ -67,11 +68,32 @@ except NameError:
     _txt = str
 
 doc    = __revit__.ActiveUIDocument.Document
+uidoc  = __revit__.ActiveUIDocument
 output = script.get_output()
 
 # ===========================================================================
 # HELPERS REVIT
 # ===========================================================================
+
+def get_id(elem):
+    """ElementId como int nativo do Python — para gravar no cache (JSON,
+    que não serializa o Int64/Int32 do .NET direto) e usar no botão
+    "Mostrar no Projeto" das janelas de bloqueio."""
+    try:    return int(elem.Id.Value)
+    except: return int(elem.Id.IntegerValue)
+
+def mostrar_no_revit(ids):
+    """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
+    ElementId (int) está em `ids` — callback do botão "Mostrar no
+    Projeto" das janelas de bloqueio (resultado_ui.py)."""
+    if not ids:
+        return
+    eids = List[ElementId]([ElementId(i) for i in ids])
+    uidoc.Selection.SetElementIds(eids)
+    try:
+        uidoc.ShowElements(eids)
+    except Exception:
+        pass
 
 def get_trecho(elem):
     try:
@@ -93,22 +115,36 @@ def get_comprimento(pipe):
         return to_m(p.AsDouble()) if p else 0.0
     except: return 0.0
 
-def get_diametro(pipe):
+def get_diametro(elem):
     """
     Diâmetro NOMINAL (DN) do elemento — não o diâmetro interno real medido
     pelo schedule/material. Ex.: um tubo DN 65 pode ter diâmetro interno
     de 68,8 mm; o cálculo (Jun, J, V) usa o nominal, como no dimensionamento
     de referência. RBS_PIPE_DIAMETER_PARAM é o parâmetro "Diâmetro" do tubo
     (o tamanho nominal da lista de segmentos/tipos de tubo do Revit).
+
+    Para um Pipe o diâmetro TEM que ser lido com sucesso: um fallback
+    silencioso aqui faria dois tubos de tamanhos diferentes caírem no
+    mesmo valor "adivinhado" e o dimensionamento perderia a diferença
+    real de velocidade entre eles sem avisar. Por isso lança erro em vez
+    de chutar — o chamador mostra qual elemento é. Só um acessório
+    (FamilyInstance sem "Diâmetro" cadastrado, ex.: conexão atípica) usa
+    o diâmetro interno e, na falta dele, um valor padrão.
     """
     try:
-        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
-        if p and p.AsDouble() > 0: return to_m(p.AsDouble())
-        # Fallback: elemento sem "Diâmetro" nominal (ex.: acessório atípico)
-        # usa o diâmetro interno, melhor que nada.
-        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
-        return to_m(p.AsDouble()) if p else 0.065
-    except: return 0.065
+        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
+        if p and p.AsDouble() > 0:
+            return to_m(p.AsDouble())
+    except Exception: pass
+    if isinstance(elem, Pipe):
+        raise ValueError(
+            u"Não foi possível ler o diâmetro nominal do tubo ID {} "
+            u"(parâmetro 'Diâmetro' ausente ou zerado). Verifique o tipo "
+            u"de tubo/segmento desse trecho no Revit.".format(elem.Id))
+    try:
+        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
+        return to_m(p.AsDouble()) if p and p.AsDouble() > 0 else 0.065
+    except Exception: return 0.065
 
 def get_leq(elem):
     try:
@@ -429,17 +465,33 @@ if _chaves_erro:
 dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
 # --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
-trechos_data = {
-    "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome),
-    "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome),
-    "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, get_diametro, get_leq, get_nome),
-    "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome),
-}
+try:
+    trechos_data = {
+        "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome, get_id),
+        "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome, get_id),
+        "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
+        "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
+    }
+except ValueError as _e:
+    forms.alert(_txt(_e), title="Fire Utils", warn_icon=True)
+    script.exit()
 
 res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
+                    req(perfil, u"tolerancia_equilibrio_mca"),
                     metodo=metodo_calculo,
                     mang_dn_mm=dados_sistema["mang_dn"],
                     mang_comp_m=dados_sistema["mang_comp"])
+
+# --- Etapa 4a: verificação normativa do equilíbrio hidráulico entre HD01
+# e HD02 no Ponto A — a variação de pressão entre os ramais, após o
+# equilíbrio, precisa ficar dentro da máxima admitida pela norma. Verifica
+# antes das demais (velocidade, pressão/vazão por hidrante), porque um
+# equilíbrio que não converge invalida os resultados por trecho abaixo.
+if not res["equilibrio"][u"convergiu"]:
+    ids_ramais = [get_id(e) for e in trechos_elems[u"Ponto A - Hid 01"] + trechos_elems[u"Ponto A - Hid 02"]]
+    mostrar_bloqueio_equilibrio(res["equilibrio"], req(perfil, u"norma"),
+                                ids_problema=ids_ramais, mostrar_no_revit=mostrar_no_revit)
+    script.exit()
 
 # Condição de sucção pelo método direto e conservador: compara a cota da RTI
 # com a cota de sucção da bomba, ambas já lidas em "Cotas Altimétricas". Não
@@ -505,19 +557,25 @@ def _para_por_velocidade(j, limite, nome_trecho):
     falhas = [s for s in j["segmentos"] if s["V"] > limite + 1e-9]
     if not falhas:
         return
-    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas)
+    ids_falha = [eid for s in falhas for eid in s.get("ids", [])]
+    mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
+                                ids_problema=ids_falha, mostrar_no_revit=mostrar_no_revit)
     script.exit()
 
-def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc):
+def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc, elems_trecho):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
         return
-    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
+    ids_trecho = [get_id(e) for e in elems_trecho]
+    mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
+                              ids_problema=ids_trecho, mostrar_no_revit=mostrar_no_revit)
     script.exit()
 
 _para_por_velocidade(res["j"]["t3"], v_max_tubo, u"Ponto A → HD01")
-_para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A → HD01")
+_para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A → HD01",
+                   trechos_elems[u"Ponto A - Hid 01"])
 _para_por_velocidade(res["j"]["t4"], v_max_tubo, u"Ponto A → HD02")
-_para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02")
+_para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02",
+                   trechos_elems[u"Ponto A - Hid 02"])
 _para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)")
 _para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)")
 
@@ -540,6 +598,26 @@ eta_dec = eta / 100.0
 pot_cv  = calc_potencia(res["Qt"] / 60000.0, res["P_RTI"], eta_dec)
 pot_kw  = pot_cv / 1.36
 
+# Potência adotada para a bomba do projeto — digitada pelo usuário (não é
+# calculada): a mínima acima é só a referência mostrada no prompt. Cancelar
+# ou deixar em branco segue o dimensionamento só com a potência mínima.
+pot_escolhida_str = forms.ask_for_string(
+    default=u"{:.2f}".format(pot_cv),
+    prompt=u"Potência adotada (cv)\nPotência mínima calculada: {:.2f} cv".format(pot_cv),
+    title=u"Fire Utils — Potência Adotada"
+)
+pot_escolhida_cv = None
+pot_escolhida_kw = None
+if pot_escolhida_str:
+    try:
+        pot_escolhida_cv = float(pot_escolhida_str.replace(",", "."))
+        if pot_escolhida_cv <= 0: raise ValueError
+        pot_escolhida_kw = pot_escolhida_cv / 1.36
+    except ValueError:
+        forms.alert(u"Potência adotada inválida — seguindo só com a potência "
+                    u"mínima calculada.", title="Fire Utils", warn_icon=True)
+        pot_escolhida_cv = None
+
 # ===========================================================================
 # Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
 # completo agora é o botão separado "Memorial de Cálculo")
@@ -548,6 +626,7 @@ mostrar_resultado_ok(
     res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
     Pmin, Qs_lmin, eta, pot_cv, pot_kw,
+    pot_escolhida_cv=pot_escolhida_cv, pot_escolhida_kw=pot_escolhida_kw,
 )
 
 # --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
@@ -567,11 +646,12 @@ payload_hid = {
     "j_succao_npsh": j_succao_npsh,
     "C_HW":          C_HW,
     "uf":            perfil.get(u"_uf_efetiva"),
-    "eta":           eta,
-    "pot_cv":        pot_cv,
-    "pot_kw":        pot_kw,
+    "eta":              eta,
+    "pot_cv":           pot_cv,
+    "pot_kw":           pot_kw,
+    "pot_escolhida_cv": pot_escolhida_cv,
+    "pot_escolhida_kw": pot_escolhida_kw,
     "timestamp":     timestamp,
     "_nome_projeto": doc.Title,
 }
 salvar_cache(payload_hid, projeto_dir)
-output.print_md(u"*Cache salvo em firedata.json (chave 'hidrantes').*")

@@ -64,6 +64,15 @@ DADOS_HIDRANTES = {
     u"v_max_succao_negativa": 2.0,
     u"v_max_succao_ref": u"NT 22 item 5.8.12",
 
+    # -- Equilibrio hidraulico entre os ramais no Ponto A -----------------
+    # Variacao maxima de pressao admitida entre o ramal mais favoravel e a
+    # pressao-alvo do ramal governante, apos o equilibrio hidraulico: "Para
+    # efeito de equilibrio de pressao no ponto de derivacao da vazao total,
+    # em direcao as valvulas dos dois hidrantes mais desfavoraveis, e
+    # admitida a variacao maxima de 0,50 mca (5,0 kPa)."
+    u"tolerancia_equilibrio_mca": 0.50,
+    u"tolerancia_equilibrio_mca_ref": u"NT 22/2021 - CBMMA",
+
     # -- NPSH disponivel (exigido quando a succao e negativa) ------------
     # Majoracao normativa da vazao usada SO nesta verificacao.
     u"npshd_fator_vazao": 1.5,

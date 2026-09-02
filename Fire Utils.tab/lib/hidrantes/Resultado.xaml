@@ -6,7 +6,7 @@
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
-        Background="{StaticResource BrushBg}">
+        Background="#121214">
 
     <Window.Resources>
         <!-- Paleta — identidade Fire Utils (fundo escuro + vermelho de destaque),
@@ -24,6 +24,8 @@
         <SolidColorBrush x:Key="BrushAccentTint" Color="#33E03A2E"/>
         <SolidColorBrush x:Key="BrushOk"         Color="#2FA84F"/>
         <SolidColorBrush x:Key="BrushOkTint"     Color="#332FA84F"/>
+        <SolidColorBrush x:Key="BrushInfo"       Color="#3B82F6"/>
+        <SolidColorBrush x:Key="BrushInfoTint"   Color="#333B82F6"/>
         <SolidColorBrush x:Key="BrushWhite"      Color="#FFFFFF"/>
 
         <Style x:Key="AccentButtonStyle" TargetType="Button">
@@ -35,6 +37,17 @@
             <Setter Property="Background" Value="{StaticResource BrushAccent}"/>
             <Setter Property="Foreground" Value="{StaticResource BrushWhite}"/>
             <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="OutlineButtonStyle" TargetType="Button">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="18,0,18,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="{StaticResource BrushBg3}"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BrushBorder2}"/>
+            <Setter Property="BorderThickness" Value="1"/>
         </Style>
     </Window.Resources>
 
@@ -72,6 +85,9 @@
         <!-- Rodapé -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,16,0,0">
+            <Button x:Name="BtnMostrarProjeto" Content="Mostrar no Projeto"
+                    Style="{StaticResource OutlineButtonStyle}" Click="on_mostrar_projeto"
+                    Margin="0,0,10,0" Visibility="Collapsed"/>
             <Button x:Name="BtnFechar" Content="Fechar" Style="{StaticResource AccentButtonStyle}"
                     Click="on_fechar"/>
         </StackPanel>
