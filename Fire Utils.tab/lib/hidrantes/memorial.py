@@ -19,7 +19,10 @@ import os
 import io as _io
 import re as _re
 
-from hidrantes.calc import MCA_POR_BAR, F_DARCY, K_VALVULA, COEF_JM, G
+from hidrantes.calc import (
+    MCA_POR_BAR, F_DARCY, K_VALVULA, COEF_JM, G,
+    COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
+)
 from hidrantes.norm_profiles import req, ref
 from hidrantes import succao as succao_calc
 
@@ -350,24 +353,44 @@ def _passo_perda(jt, c_hw, letra):
     output.print_md(u"")
 
 
-def _passo_velocidade(jt, v_limite, letra):
-    """Velocidade de escoamento do trecho, por diâmetro, com verificação."""
+def _passo_velocidade(jt, v_limite, letra, comprimento_min=None):
+    """
+    Velocidade de escoamento do trecho, por diâmetro, com verificação.
+
+    comprimento_min (m), quando informado: sub-trechos mais curtos que
+    isso (ex.: redução na entrada/saída da bomba) aparecem na tabela mas
+    ficam de fora da verificação de velocidade — comprimento curto
+    demais para representar escoamento sustentado, só o ponto de
+    conexão (ver COMPRIMENTO_MIN_VERIF_VELOCIDADE_M em calc.py).
+    """
     output.print_md(u"**{}) Velocidade de escoamento**".format(letra))
     _formula_frac(u"V", u"21,22 · Q", u"D²", sufixo=u"[m/s]")
     output.print_md(u"")
     linhas = []
+    tem_curto = False
     for s in jt["segmentos"]:
-        ok = s["V"] <= v_limite
+        if comprimento_min is not None and s["L"] < comprimento_min:
+            tem_curto = True
+            verificacao = u"— não verificado"
+        else:
+            ok = s["V"] <= v_limite
+            verificacao = (u"{} atende".format(SIM_OK) if ok
+                           else u"{} NÃO atende".format(SIM_X))
         linhas.append([u"{:.1f}".format(s["d_mm"]),
                        u"{:.2f}".format(jt["Q_lmin"]),
                        u"**{:.3f}**".format(s["V"]),
                        u"{:.1f}".format(v_limite),
-                       u"{} atende".format(SIM_OK) if ok
-                       else u"{} NÃO atende".format(SIM_X)])
+                       verificacao])
     _tabela([u"DN (mm)", u"Q (L/min)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
             linhas,
             alinhas=[u"right", u"right", u"right", u"right", u"left"])
     output.print_md(u"")
+    if tem_curto:
+        output.print_md(u"_Sub-trecho(s) com menos de {:g} cm de tubo (ex.: redução na "
+                        u"entrada/saída da bomba) não entram na verificação de "
+                        u"velocidade — comprimento curto demais para representar "
+                        u"escoamento sustentado._".format(comprimento_min * 100))
+        output.print_md(u"")
 
 def _secao_condicao_succao(v, perfil):
     """
@@ -1000,7 +1023,8 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     prox = _contador_letras()
     _passo_ltotal(j["t2"], prox())
     _passo_perda(j["t2"], C_HW, prox())
-    _passo_velocidade(j["t2"], v_max_tubo, prox())
+    _passo_velocidade(j["t2"], v_max_tubo, prox(),
+                      comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
     output.print_md(u"**{}) Pressão na saída da bomba**".format(prox()))
     _formula(u"P_SB = P_PA + J ± ∆H")
     _tabela([u"P_PA (mca)", u"J (mca)", u"∆H (m)", u"P_SB (mca)"],
@@ -1017,7 +1041,8 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     prox = _contador_letras()
     _passo_ltotal(j["t1"], prox())
     _passo_perda(j["t1"], C_HW, prox())
-    _passo_velocidade(j["t1"], v_max_succao, prox())
+    _passo_velocidade(j["t1"], v_max_succao, prox(),
+                      comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
     output.print_md(u"**{}) Pressão de demanda referida à RTI**".format(prox()))
     _formula(u"P_RTI = P_SB + J ± ∆H")
     _tabela([u"P_SB (mca)", u"J (mca)", u"∆H (m)", u"P_RTI (mca)"],

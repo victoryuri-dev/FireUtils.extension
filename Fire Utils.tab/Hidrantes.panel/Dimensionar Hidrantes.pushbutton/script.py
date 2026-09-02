@@ -47,6 +47,7 @@ from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
     calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
+    COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
 from hidrantes.resultado_ui import (
     mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
@@ -572,8 +573,14 @@ else:
     p_hd02_ref = res["P_hd02"]
     p_ref_desc = u"pressão na válvula"
 
-def _para_por_velocidade(j, limite, nome_trecho):
-    falhas = [s for s in j["segmentos"] if s["V"] > limite + 1e-9]
+def _para_por_velocidade(j, limite, nome_trecho, comprimento_min=None):
+    """comprimento_min (m), quando informado: sub-trechos mais curtos que
+    isso (ex.: redução na entrada/saída da bomba) ficam fora da
+    verificação — ver COMPRIMENTO_MIN_VERIF_VELOCIDADE_M em calc.py."""
+    segmentos = j["segmentos"]
+    if comprimento_min is not None:
+        segmentos = [s for s in segmentos if s["L"] >= comprimento_min]
+    falhas = [s for s in segmentos if s["V"] > limite + 1e-9]
     if not falhas:
         return
     ids_falha = [eid for s in falhas for eid in s.get("ids", [])]
@@ -599,8 +606,10 @@ _para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A →
 _para_por_velocidade(res["j"]["t4"], v_max_tubo, u"Ponto A → HD02")
 _para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02",
                    trechos_elems[u"Ponto A - Hid 02"])
-_para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)")
-_para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)")
+_para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)",
+                     comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
+_para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)",
+                     comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
 
 # --- Etapa 6: eficiência e potência da bomba ---
 eta_str = forms.ask_for_string(
@@ -650,6 +659,7 @@ mostrar_resultado_ok(
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
     Pmin, Qs_lmin, eta, pot_cv, pot_kw,
     pot_escolhida_cv=pot_escolhida_cv, pot_escolhida_kw=pot_escolhida_kw,
+    comprimento_min_velocidade=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
 
 # --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
