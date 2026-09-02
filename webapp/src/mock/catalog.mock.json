@@ -1,0 +1,118 @@
+{
+  "generated_at": "2026-09-02T17:42:09Z",
+  "todas_icon_key": "icons/todas.png",
+  "categories": [
+    {
+      "id": "alarme-de-incendio",
+      "name": "Alarme de Incêndio",
+      "icon_key": null
+    },
+    {
+      "id": "detector-de-incendio",
+      "name": "Detector de Incêndio",
+      "icon_key": "icons/detector-de-incendio.png"
+    },
+    {
+      "id": "extintor-de-incendio",
+      "name": "Extintor de Incêndio",
+      "icon_key": "icons/extintor-de-incendio.png"
+    },
+    {
+      "id": "hidrantes",
+      "name": "Hidrantes",
+      "icon_key": "icons/hidrantes.png"
+    }
+  ],
+  "families": [
+    {
+      "id": "alarme-de-incendio__acionador-manual-do-sistema-de-deteccao-e-alarme",
+      "name": "Acionador Manual do Sistema de Detecção e Alarme",
+      "category_id": "alarme-de-incendio",
+      "category": "Alarme de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "alarme-de-incendio/acionador-manual-do-sistema-de-deteccao-e-alarme.rfa",
+      "size_bytes": 839680,
+      "sha256": "9b304540baa60dc52ed5c2c6145bf17181cf45cec16210d4dd01d83b3c5ddc05"
+    },
+    {
+      "id": "alarme-de-incendio__avisador-sonoro-e-visual",
+      "name": "Avisador Sonoro e Visual",
+      "category_id": "alarme-de-incendio",
+      "category": "Alarme de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "alarme-de-incendio/avisador-sonoro-e-visual.rfa",
+      "size_bytes": 884736,
+      "sha256": "98111015314a15541fd09f98ab5ce6d7f2c0a0046e57201ec56240ed677d425c"
+    },
+    {
+      "id": "extintor-de-incendio__extintor-portatil-a",
+      "name": "Extintor Portátil - A",
+      "category_id": "extintor-de-incendio",
+      "category": "Extintor de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "extintor-de-incendio/extintor-portatil-a.rfa",
+      "size_bytes": 2379776,
+      "sha256": "fd128719a530decb9a76aa374255a83a24eb8c89dfa96c97c2da975bf5974d13"
+    },
+    {
+      "id": "extintor-de-incendio__extintor-portatil-abc",
+      "name": "Extintor Portátil - ABC",
+      "category_id": "extintor-de-incendio",
+      "category": "Extintor de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "extintor-de-incendio/extintor-portatil-abc.rfa",
+      "size_bytes": 2625536,
+      "sha256": "040b11c799e034d0d9860e6db39c02ae55a39b935cec14fd60946a3ae6846656"
+    },
+    {
+      "id": "extintor-de-incendio__extintor-portatil-bc",
+      "name": "Extintor Portátil - BC",
+      "category_id": "extintor-de-incendio",
+      "category": "Extintor de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "extintor-de-incendio/extintor-portatil-bc.rfa",
+      "size_bytes": 2355200,
+      "sha256": "5d3f00292ea57b93bebbb912173c794ca54b5525cfb0041935ed562692a89a83"
+    },
+    {
+      "id": "extintor-de-incendio__extintor-portatil-co2",
+      "name": "Extintor Portátil - CO2",
+      "category_id": "extintor-de-incendio",
+      "category": "Extintor de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "extintor-de-incendio/extintor-portatil-co2.rfa",
+      "size_bytes": 2363392,
+      "sha256": "e240157460180f31d6b80b3498d041306287d3419f8f48621e6652ff6a7d475f"
+    },
+    {
+      "id": "extintor-de-incendio__extintor-portatil-k",
+      "name": "Extintor Portátil - K",
+      "category_id": "extintor-de-incendio",
+      "category": "Extintor de Incêndio",
+      "thumbnail_key": null,
+      "storage_key": "extintor-de-incendio/extintor-portatil-k.rfa",
+      "size_bytes": 2330624,
+      "sha256": "8c5ac8536eda88c66ecfd87b4f0a3e57fb983346a250236fe116a01c209f23a7"
+    },
+    {
+      "id": "hidrantes__abrigo-de-mangueira-para-hidrante",
+      "name": "Abrigo de Mangueira para Hidrante",
+      "category_id": "hidrantes",
+      "category": "Hidrantes",
+      "thumbnail_key": null,
+      "storage_key": "hidrantes/abrigo-de-mangueira-para-hidrante.rfa",
+      "size_bytes": 31006720,
+      "sha256": "db1d31b719264556bf22170777d7014e947383c1d444c98660ddd3d4d39e87ba"
+    },
+    {
+      "id": "hidrantes__valvula-para-hidrante",
+      "name": "Valvula para Hidrante",
+      "category_id": "hidrantes",
+      "category": "Hidrantes",
+      "thumbnail_key": null,
+      "storage_key": "hidrantes/valvula-para-hidrante.rfa",
+      "size_bytes": 1433600,
+      "sha256": "18cb9d38ae69ff787b616790881524d7d24d5f6d99b7c1dabf37c61602e28314"
+    }
+  ]
+}
