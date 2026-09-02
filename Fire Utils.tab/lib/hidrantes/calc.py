@@ -96,6 +96,14 @@ COEF_JM     = 8.0     # coeficiente da fórmula de Jm, de Darcy-Weisbach com Vm=
 # "tolerancia_equilibrio_mca").
 MAX_ITER_EQUILIBRIO = 30   # trava de segurança contra não-convergência (não normativo)
 
+# Exceção prática (NÃO normativa) à verificação de velocidade nos trechos
+# de sucção e recalque (RTI → Bomba, Bomba → Ponto A) — os mais próximos
+# da bomba: um sub-trecho de tubo mais curto que isso (ex.: redução na
+# entrada/saída da bomba) fica de fora da verificação, porque um
+# comprimento tão pequeno não representa escoamento sustentado, só o
+# ponto de conexão. Não vale para os ramais até os hidrantes.
+COMPRIMENTO_MIN_VERIF_VELOCIDADE_M = 0.20   # m
+
 # Métodos de cálculo — a escolha é feita em "Classificar Sistema" e define
 # ONDE o par normativo (Q, Pmin) é aplicado:
 #   Válvula do Hidrante        → Q e Pmin na válvula (não há mangueira no cálculo)

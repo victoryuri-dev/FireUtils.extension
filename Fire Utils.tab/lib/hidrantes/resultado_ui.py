@@ -277,7 +277,8 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                           v_max_tubo, v_max_succao, p_ref_desc,
                           p_hd01_ref, p_hd02_ref, Pmin, Qs_lmin,
                           eta, pot_cv, pot_kw,
-                          pot_escolhida_cv=None, pot_escolhida_kw=None):
+                          pot_escolhida_cv=None, pot_escolhida_kw=None,
+                          comprimento_min_velocidade=None):
     """
     Resumo final mostrado ao término de "Dimensionar Hidrantes": só
     verificações e resultados finais (velocidade nos quatro trechos —
@@ -287,6 +288,11 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     requisitos da bomba) — não o passo a passo completo, que é o botão
     "Memorial de Cálculo". Só é chamada depois que todas as verificações
     normativas passaram.
+
+    comprimento_min_velocidade (m), quando informado: sub-trechos de
+    sucção/recalque mais curtos que isso (ex.: redução na entrada/saída
+    da bomba) ficam de fora da tabela — não foram verificados, não é que
+    passaram. Não vale para os ramais até os hidrantes.
     """
     janela = _JanelaResultado(
         titulo=u"Dimensionamento de Hidrantes",
@@ -297,13 +303,15 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
 
     janela.secao(u"1. Velocidade nos Trechos")
     linhas_v = []
-    for nome, j, limite in (
-        (u"RTI → Bomba",      res["j"]["t1"], v_max_succao),
-        (u"Bomba → Ponto A",  res["j"]["t2"], v_max_tubo),
-        (u"Ponto A → HD01",   res["j"]["t3"], v_max_tubo),
-        (u"Ponto A → HD02",   res["j"]["t4"], v_max_tubo),
+    for nome, j, limite, comp_min in (
+        (u"RTI → Bomba",      res["j"]["t1"], v_max_succao, comprimento_min_velocidade),
+        (u"Bomba → Ponto A",  res["j"]["t2"], v_max_tubo,   comprimento_min_velocidade),
+        (u"Ponto A → HD01",   res["j"]["t3"], v_max_tubo,   None),
+        (u"Ponto A → HD02",   res["j"]["t4"], v_max_tubo,   None),
     ):
         for s in j["segmentos"]:
+            if comp_min is not None and s["L"] < comp_min:
+                continue   # sub-trecho curto (ex.: redução na bomba) — não verificado
             linhas_v.append([nome, u"{:.1f}".format(s["d_mm"]),
                               u"{:.2f}".format(j["Q_lmin"]),
                               u"{:.3f}".format(s["V"]),
