@@ -5,36 +5,59 @@ Fase 3 do plano de migração: Dockable Pane que hospeda o frontend React
 (webapp/) num Microsoft.Web.WebView2.Wpf.WebView2, substituindo aos poucos
 o catálogo WPF/XAML puro (family_loader_forms.py).
 
+Reestruturado a partir de um template pyRevit+WebView2 já validado
+(GUIA_DOCKPANE_PYREVIT.md), que documenta e resolve de antemão os 4 erros
+mais comuns desse tipo de integração — o mais importante sendo a falta de
+um DispatcherSynchronizationContext na thread de UI do Revit (ver
+comentário no __init__), que fazia a inicialização do WebView2 ficar
+pendurada pra sempre, sem erro nenhum.
+
 Convive lado a lado com o painel antigo durante a migração — botão
 separado na faixa de opções ("Carregador de Famílias (Web)"), pra não
 quebrar o fluxo em produção enquanto Supabase/webapp ainda são validados.
 Quando a migração estiver 100% validada, o botão antigo pode ser removido.
 
-Dependências externas que NÃO vêm com o pyRevit/Revit (se qualquer uma
-faltar, o registro do painel falha e é reportado no console do startup,
-igual ao painel antigo — ver startup.py):
+Dependências externas que NÃO vêm com o pyRevit/Revit:
 
   1. Assemblies do WebView2 SDK em Fire Utils.tab/lib/webview2_runtime/
-     — ver o README.md dessa pasta pra como obtê-los.
-  2. Build estático do frontend em webapp/dist/ (rodar `npm install &&
-     npm run build` dentro de webapp/ — ver webapp/README.md).
-  3. WebView2 Runtime instalado na máquina (já vem por padrão no Windows
-     10/11 com o Edge atualizado; em máquinas mais antigas precisa
-     instalar o "Evergreen Bootstrapper" da Microsoft).
-
-AVISO: a inicialização do WebView2 (EnsureCoreWebView2Async) não pôde ser
-testada de ponta a ponta no ambiente onde este código foi escrito (sem
-Windows/Revit/WebView2 disponíveis) — validar na prática assim que os itens
-1-3 acima estiverem prontos.
+     — já commitados no repositório (ver README.md dessa pasta).
+  2. Build estático do frontend em webapp/dist/ — já commitado no
+     repositório (rodar `npm install && npm run build` dentro de webapp/
+     só se for atualizar o frontend — ver webapp/README.md).
+  3. WebView2 Runtime instalado na máquina (Windows 10/11 atualizado já
+     vem com ele via Edge; senão, instalar o "Evergreen Bootstrapper" da
+     Microsoft).
 """
 
 import os
 
 import clr
+
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
+
+# Precisa rodar ANTES de qualquer AddReference/uso do WebView2: o
+# Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
+# WebView2Loader.dll (nativo) sem caminho absoluto — carregar só o
+# assembly gerenciado via AddReferenceToFileAndPath não é suficiente pro
+# Windows achar a DLL nativa correspondente.
+os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
+
+clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Core.dll"))
+clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Wpf.dll"))
+
 clr.AddReference(u"System")
 clr.AddReference(u"PresentationFramework")
 clr.AddReference(u"PresentationCore")
 clr.AddReference(u"WindowsBase")
+
+import System
+import System.Threading
+import System.Windows.Threading
+from System import Uri, Environment as DotNetEnvironment
+
+from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
 
 from pyrevit import forms
 from pyrevit.coreutils.logger import get_logger
@@ -44,9 +67,7 @@ from family_webview_bridge import processar_mensagem_webview
 
 _mlogger = get_logger(__name__)
 
-_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 _XAML_PATH = os.path.join(_LIB_DIR, u"family_loader_webview.xaml")
-_WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
 
 # Fire Utils.tab/lib/ -> Fire Utils.tab/ -> raiz da extensão -> webapp/dist/
 # (webapp/ fica fora de "Fire Utils.tab", na raiz do repositório).
@@ -54,87 +75,14 @@ _EXT_ROOT = os.path.dirname(os.path.dirname(_LIB_DIR))
 _WEBAPP_DIST_DIR = os.path.join(_EXT_ROOT, u"webapp", u"dist")
 
 _VIRTUAL_HOST = u"appassets"
-_ASSEMBLIES_WEBVIEW2 = (u"Microsoft.Web.WebView2.Core.dll", u"Microsoft.Web.WebView2.Wpf.dll")
 
-_webview2_carregado = False
-
-
-def _carregar_assemblies_webview2():
-    """clr.AddReferenceToFileAndPath em vez de clr.AddReference — os
-    assemblies do WebView2 não estão no GAC nem em nenhum diretório que o
-    IronPython resolva sozinho, então precisam do caminho absoluto. Tem que
-    rodar ANTES de forms.WPFPanel.__init__ (que carrega e interpreta o
-    XAML) — o XAML referencia o namespace Microsoft.Web.WebView2.Wpf, que
-    só existe depois desse AddReference.
-
-    Também adiciona webview2_runtime/ ao PATH do processo: o
-    Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
-    WebView2Loader.dll (nativo) sem caminho absoluto — o carregamento de
-    DLL nativa não herda automaticamente o diretório de onde carregamos um
-    assembly .NET via AddReferenceToFileAndPath, então sem isso o Windows
-    procura o WebView2Loader.dll só no diretório do Revit.exe/System32,
-    não acha, e a inicialização do CoreWebView2 fica pendurada pra sempre
-    (sem erro nenhum) em vez de falhar de forma visível."""
-    global _webview2_carregado
-    if _webview2_carregado:
-        return
-    for nome_dll in _ASSEMBLIES_WEBVIEW2:
-        caminho = os.path.join(_WEBVIEW2_RUNTIME_DIR, nome_dll)
-        if not os.path.isfile(caminho):
-            raise IOError(
-                u"Assembly do WebView2 não encontrado: {}\n"
-                u"Baixe o pacote NuGet Microsoft.Web.WebView2 e copie os "
-                u".dll pra essa pasta — ver "
-                u"Fire Utils.tab/lib/webview2_runtime/README.md".format(caminho)
-            )
-        clr.AddReferenceToFileAndPath(caminho)
-
-    caminho_loader = os.path.join(_WEBVIEW2_RUNTIME_DIR, u"WebView2Loader.dll")
-    if not os.path.isfile(caminho_loader):
-        raise IOError(
-            u"WebView2Loader.dll não encontrado em: {}\n"
-            u"Baixe o pacote NuGet Microsoft.Web.WebView2 e copie o "
-            u"arquivo (runtimes/win-x64/native/WebView2Loader.dll) pra "
-            u"essa pasta — ver "
-            u"Fire Utils.tab/lib/webview2_runtime/README.md".format(caminho_loader)
-        )
-    if _WEBVIEW2_RUNTIME_DIR not in os.environ.get(u"PATH", u""):
-        os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
-
-    # Reforço: SetDllDirectory é a API do Windows feita especificamente
-    # pra esse cenário (achar DLL nativa fora do diretório do processo) e
-    # tem prioridade mais garantida que o PATH quando o "Safe DLL Search
-    # Mode" está ativo (padrão desde Windows XP SP2). Best-effort — se
-    # ctypes não estiver disponível nessa build do IronPython, o PATH
-    # ajustado acima já cobre a maioria dos casos.
-    try:
-        import ctypes
-        ctypes.windll.kernel32.SetDllDirectoryW(_WEBVIEW2_RUNTIME_DIR)
-    except Exception as ex:
-        _mlogger.warning(u"SetDllDirectory falhou (seguindo só com PATH): %s", ex)
-
-    _webview2_carregado = True
-
-
-def _obter_user_data_dir():
-    """
-    Pasta gravável em %LOCALAPPDATA% pro WebView2 guardar seus dados
-    (cache, cookies, perfil).
-
-    Sem configurar isso, o WebView2 tenta criar essa pasta ao lado do
-    executável do processo host — Revit.exe, dentro de "Program Files" —
-    e falha com UnauthorizedAccessException/E_ACCESSDENIED, porque o
-    usuário normalmente não tem permissão de escrita lá.
-    """
-    from System import Environment as DotNetEnvironment
-
-    caminho = os.path.join(
-        DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
-        u"FireUtils", u"WebView2UserData",
-    )
-    if not os.path.isdir(caminho):
-        os.makedirs(caminho)
-    return caminho
+# Pasta gravável onde o WebView2 guarda seu profile (cache, cookies) — sem
+# isso, ele tenta criar essa pasta ao lado do Revit.exe (dentro de
+# "Program Files") e falha por falta de permissão de escrita.
+_USER_DATA_FOLDER = os.path.join(
+    DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
+    u"FireUtils", u"WebView2UserData",
+)
 
 
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
@@ -144,7 +92,6 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
     panel_title = u"Fire Utils — Carregador de Famílias (Web)"
 
     def __init__(self):
-        _carregar_assemblies_webview2()
         forms.WPFPanel.__init__(self)
 
         self.fila_acoes = criar_fila_acoes()
@@ -156,63 +103,40 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             return  # painel abre em branco — sem WebView configurado
 
-        # A pasta de dados é configurada via CreationProperties do próprio
-        # controle (não criando um CoreWebView2Environment manualmente) —
-        # criar o Environment "na mão" causa
-        # "expected CoreWebView2Environment, got CoreWebView2Environment"
-        # quando o assembly Microsoft.Web.WebView2.Core.dll acaba carregado
-        # em dois contextos diferentes (um pela nossa criação manual, outro
-        # pelo próprio WebView2Base internamente); CreationProperties deixa
-        # o controle criar o Environment sozinho, sem esse conflito.
-        #
-        # IMPORTANTE: já tentamos bloquear com Dispatcher.PushFrame
-        # esperando a Task de EnsureCoreWebView2Async completar — travou o
-        # Revit inteiro, porque PushFrame cria um loop de mensagens
-        # aninhado que só devolve o controle quando a Task completa, e a
-        # Task nunca completou. Isso é pior que a tela em branco (que pelo
-        # menos deixa o resto do Revit usável), então voltamos ao modelo de
-        # evento (não bloqueante) + um timer de segurança: se a
-        # inicialização não terminar em alguns segundos, mostra um popup
-        # em vez de ficar esperando pra sempre.
-        self._core_inicializado = False
-        try:
-            from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+        if not os.path.isdir(_USER_DATA_FOLDER):
+            os.makedirs(_USER_DATA_FOLDER)
 
-            propriedades = CoreWebView2CreationProperties()
-            propriedades.UserDataFolder = _obter_user_data_dir()
-            self.WebView.CreationProperties = propriedades
+        propriedades = CoreWebView2CreationProperties()
+        propriedades.UserDataFolder = _USER_DATA_FOLDER
+        self.WebView.CreationProperties = propriedades
 
-            self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
-            self.WebView.EnsureCoreWebView2Async(None)
-            self._iniciar_timeout_diagnostico()
-        except Exception as ex:
-            self._erro_fatal(u"Falha ao iniciar o CoreWebView2: {}".format(ex))
+        # A thread de UI do Revit nunca instala um
+        # DispatcherSynchronizationContext (isso normalmente é feito por
+        # System.Windows.Application, que não existe aqui — o Revit é um
+        # app Win32 nativo hospedando conteúdo WPF por baixo, não uma
+        # aplicação WPF "de verdade"). Sem esse contexto, a continuação
+        # assíncrona de EnsureCoreWebView2Async (código gerado pelo
+        # compilador C# dentro do próprio Microsoft.Web.WebView2.Wpf.dll)
+        # tenta retomar numa thread do thread-pool em vez desta thread —
+        # e como ela não é dona dos objetos WPF, a Task nunca completa de
+        # volta (nem sucesso, nem erro): fica pendurada pra sempre, e o
+        # painel simplesmente nunca mostra nada. Instalando o contexto
+        # manualmente, uma vez, a continuação passa a ser despachada de
+        # volta pra esta mesma thread via Dispatcher, como uma aplicação
+        # WPF normal já ganharia de graça.
+        contexto_atual = System.Threading.SynchronizationContext.Current
+        if not isinstance(contexto_atual, System.Windows.Threading.DispatcherSynchronizationContext):
+            System.Threading.SynchronizationContext.SetSynchronizationContext(
+                System.Windows.Threading.DispatcherSynchronizationContext(self.Dispatcher)
+            )
 
-    def _iniciar_timeout_diagnostico(self):
-        from System.Windows.Threading import DispatcherTimer
-        from System import TimeSpan
-
-        self._timer_timeout = DispatcherTimer()
-        self._timer_timeout.Interval = TimeSpan.FromSeconds(12)
-        self._timer_timeout.Tick += self._ao_estourar_timeout
-        self._timer_timeout.Start()
-
-    def _ao_estourar_timeout(self, sender, args):
-        self._timer_timeout.Stop()
-        if self._core_inicializado:
-            return
-        self._erro_fatal(
-            u"O CoreWebView2 não terminou de inicializar depois de 12 "
-            u"segundos (nem sucesso, nem falha).\n\n"
-            u"Isso geralmente indica que o processo interno do WebView2 "
-            u"(msedgewebview2.exe) não conseguiu subir. Verifique:\n"
-            u"1. Se o 'Microsoft Edge WebView2 Runtime' está instalado "
-            u"(Painel de Controle > Programas e Recursos).\n"
-            u"2. Se algum antivírus/política do sistema está bloqueando "
-            u"o processo msedgewebview2.exe.\n"
-            u"3. Abra o Gerenciador de Tarefas ao clicar no botão do "
-            u"painel e veja se msedgewebview2.exe chega a aparecer."
-        )
+        # Não confiar em Source sozinho: a dockpane é instanciada no
+        # registro (startup.py), no boot do pyRevit — antes de estar
+        # anexada a uma janela de verdade. Atribuir Source nesse momento
+        # pode ser silenciosamente descartado. Dispara a inicialização
+        # explicitamente e só navega quando ela realmente terminar.
+        self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
+        self.WebView.EnsureCoreWebView2Async(None)
 
     def _erro_fatal(self, mensagem):
         """Popup (forms.alert) em vez de só print — mais garantido de
@@ -227,25 +151,14 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         )
 
     def _ao_inicializar_core(self, sender, args):
-        self._core_inicializado = True
-        if hasattr(self, u"_timer_timeout"):
-            self._timer_timeout.Stop()
+        if not args.IsSuccess:
+            self._erro_fatal(
+                u"Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException)
+            )
+            return
 
         try:
-            if not args.IsSuccess:
-                self._erro_fatal(
-                    u"Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException)
-                )
-                return
-
-            from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
-            from System import Uri
-
             core = self.WebView.CoreWebView2
-
-            # Normalmente já vêm True por padrão, mas alguma política do
-            # sistema/versão do runtime pode ter mudado isso — setar
-            # explícito garante que o botão direito e o DevTools funcionem.
             core.Settings.AreDefaultContextMenusEnabled = True
             core.Settings.AreDevToolsEnabled = True
 
@@ -254,13 +167,6 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             core.WebMessageReceived += self._ao_receber_mensagem
             core.NavigationCompleted += self._ao_navegar
-
-            # TEMPORÁRIO (fase de depuração): abre o DevTools sozinho, sem
-            # depender de clique com botão direito no painel (que não
-            # reage a cliques quando hospedado dentro do Dockable Pane do
-            # Revit). Remover essa linha quando o carregamento estiver
-            # validado ponta a ponta.
-            core.OpenDevToolsWindow()
 
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
