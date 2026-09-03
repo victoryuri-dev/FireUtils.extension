@@ -57,7 +57,6 @@ import System.Windows.Threading
 from System import Uri, Environment as DotNetEnvironment
 
 from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
-from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
 
 from pyrevit import forms
 from pyrevit.coreutils.logger import get_logger
@@ -83,6 +82,31 @@ _USER_DATA_FOLDER = os.path.join(
     DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
     u"FireUtils", u"WebView2UserData",
 )
+
+
+def _valor_enum_allow(core):
+    """
+    Resolve o valor "Allow" do enum CoreWebView2HostResourceAccessKind a
+    partir do tipo que o próprio método SetVirtualHostNameToFolderMapping
+    de `core` espera (via reflection), em vez de um import estático de
+    nível de módulo.
+
+    O pyRevit roda o startup.py (que registra/instancia o painel) e o
+    script.py do botão (que só localiza essa instância já existente) em
+    engines IronPython separados; cada engine reimporta este módulo do
+    zero e refaz os clr.AddReferenceToFileAndPath, o que pode carregar
+    duas cópias distintas do assembly Microsoft.Web.WebView2.Core.dll no
+    mesmo processo. Um import estático do enum aqui pode acabar vindo de
+    uma cópia diferente da que o `core` em mãos realmente espera — mesmo
+    nome de tipo, mas identidades .NET diferentes — causando
+    "expected CoreWebView2HostResourceAccessKind, got
+    CoreWebView2HostResourceAccessKind". Resolver via reflection a partir
+    do método do objeto que já temos em mãos garante que é sempre a
+    cópia certa.
+    """
+    metodo = core.GetType().GetMethod(u"SetVirtualHostNameToFolderMapping")
+    tipo_enum = metodo.GetParameters()[2].ParameterType
+    return System.Enum.Parse(tipo_enum, u"Allow")
 
 
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
@@ -163,7 +187,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.Settings.AreDevToolsEnabled = True
 
             core.SetVirtualHostNameToFolderMapping(
-                _VIRTUAL_HOST, _WEBAPP_DIST_DIR, CoreWebView2HostResourceAccessKind.Allow
+                _VIRTUAL_HOST, _WEBAPP_DIST_DIR, _valor_enum_allow(core)
             )
             core.WebMessageReceived += self._ao_receber_mensagem
             core.NavigationCompleted += self._ao_navegar
