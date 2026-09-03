@@ -174,6 +174,13 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             from System import Uri
 
             core = self.WebView.CoreWebView2
+
+            # Normalmente já vêm True por padrão, mas alguma política do
+            # sistema/versão do runtime pode ter mudado isso — setar
+            # explícito garante que o botão direito e o DevTools funcionem.
+            core.Settings.AreDefaultContextMenusEnabled = True
+            core.Settings.AreDevToolsEnabled = True
+
             core.SetVirtualHostNameToFolderMapping(
                 _VIRTUAL_HOST, _WEBAPP_DIST_DIR, CoreWebView2HostResourceAccessKind.Allow
             )
