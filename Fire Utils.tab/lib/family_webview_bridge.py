@@ -69,7 +69,7 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
     for item in familias:
         try:
             caminho_local = baixar_temporario(
-                item[u"storageKey"], item[u"signedUrl"], item.get(u"sha256")
+                item[u"storageKey"], item[u"signedUrl"], item[u"name"], item.get(u"sha256")
             )
         except Exception as ex:
             print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), ex))

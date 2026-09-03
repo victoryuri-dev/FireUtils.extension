@@ -24,9 +24,21 @@ Download via System.Net.WebClient (.NET) em vez de urllib/requests: dentro
 do IronPython do pyRevit, é a forma mais confiável de baixar HTTPS sem
 depender de pacotes extra nem lidar com bugs conhecidos do urllib2 do
 IronPython com TLS.
+
+IMPORTANTE sobre o NOME do arquivo temporário: o Revit usa o nome do
+ARQUIVO (sem a extensão) no momento do Document.LoadFamily() como o nome
+da Family dentro do projeto — não existe metadado interno separado que
+preserve um "nome bonito" independente disso. Por isso o arquivo baixado
+precisa se chamar como a família do catálogo (ex.: "Extintor Portátil -
+ABC.rfa"), nunca um nome gerado (como um uuid4) — do contrário toda
+família carregada por aqui ganhava um nome gigante e ilegível no projeto,
+e a checagem de "já existe" em family_loader.carregar_familias (que
+compara pelo nome do catálogo) nunca batia, gerando uma família NOVA a
+cada clique em vez de reaproveitar a já carregada.
 """
 
 import os
+import re
 import tempfile
 import uuid
 
@@ -34,6 +46,8 @@ import clr
 clr.AddReference(u"System")
 from System import Uri
 from System.Net import WebClient
+
+_CARACTERES_INVALIDOS_EM_ARQUIVO = re.compile(u'[<>:"/\\\\|?*]')
 
 
 def _sha256_arquivo(caminho):
@@ -48,21 +62,34 @@ def _sha256_arquivo(caminho):
     return h.hexdigest()
 
 
-def baixar_temporario(storage_key, signed_url, sha256_esperado=None):
+def _nome_arquivo_seguro(nome):
+    """Remove caracteres inválidos em nome de arquivo do Windows — o nome
+    da família no catálogo é definido por quem gerencia o acervo, mas
+    sanear aqui evita que um caractere inesperado quebre o download."""
+    nome = _CARACTERES_INVALIDOS_EM_ARQUIVO.sub(u"_", nome).strip(u" .")
+    return nome or u"familia"
+
+
+def baixar_temporario(storage_key, signed_url, nome_familia, sha256_esperado=None):
     """
-    Baixa `signed_url` para um arquivo temporário exclusivo desta chamada
-    (nome único por uuid4, sem reaproveitar nada de execuções anteriores)
-    e retorna o caminho. Levanta exceção se o download falhar ou (quando
-    `sha256_esperado` for informado) se o checksum não bater — quem chama
-    decide como reportar (ver family_webview_bridge.py).
+    Baixa `signed_url` para um arquivo temporário e retorna o caminho.
+    Levanta exceção se o download falhar ou (quando `sha256_esperado` for
+    informado) se o checksum não bater — quem chama decide como reportar
+    (ver family_webview_bridge.py).
+
+    O arquivo é nomeado como `nome_familia` (o nome do catálogo — ver nota
+    no topo do módulo sobre por que isso importa pro Revit), dentro de uma
+    subpasta com nome único (uuid4) só pra garantir que dois downloads não
+    colidam no mesmo arquivo; a unicidade não entra no nome do arquivo em
+    si.
 
     Quem chamar é responsável por apagar o arquivo depois de usar — ver
     remover_temporario.
     """
     extensao = os.path.splitext(storage_key)[1] or u".rfa"
-    caminho_temp = os.path.join(
-        tempfile.gettempdir(), u"FireUtils_{}{}".format(uuid.uuid4().hex, extensao)
-    )
+    pasta_unica = os.path.join(tempfile.gettempdir(), u"FireUtils_{}".format(uuid.uuid4().hex))
+    os.makedirs(pasta_unica)
+    caminho_temp = os.path.join(pasta_unica, _nome_arquivo_seguro(nome_familia) + extensao)
 
     cliente = WebClient()
     try:
@@ -81,11 +108,19 @@ def baixar_temporario(storage_key, signed_url, sha256_esperado=None):
 
 
 def remover_temporario(caminho):
-    """Apaga o arquivo temporário baixado por baixar_temporario. Best-effort
-    — se falhar (arquivo em uso, já removido etc.), não interrompe o fluxo;
-    o SO limpa a pasta temp eventualmente de qualquer forma."""
+    """Apaga o arquivo temporário baixado por baixar_temporario (e a
+    subpasta única que o continha). Best-effort — se falhar (arquivo em
+    uso, já removido etc.), não interrompe o fluxo; o SO limpa a pasta
+    temp eventualmente de qualquer forma."""
+    if not caminho:
+        return
+    pasta = os.path.dirname(caminho)
     try:
-        if caminho and os.path.isfile(caminho):
+        if os.path.isfile(caminho):
             os.remove(caminho)
+    except OSError:
+        pass
+    try:
+        os.rmdir(pasta)
     except OSError:
         pass
