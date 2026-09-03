@@ -4,6 +4,7 @@ import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import extintorIconSvg from "../assets/icons/extintor-icon.svg?raw";
 import hidranteIconSvg from "../assets/icons/hidrante-icon.svg?raw";
 import sireneIconSvg from "../assets/icons/sirene-icon.svg?raw";
+import detectorIconSvg from "../assets/icons/detector-icon.svg?raw";
 
 const TODAS_ID = "__todas__";
 
@@ -17,6 +18,7 @@ const ICONES_LOCAIS_POR_CATEGORIA = {
   "extintor-de-incendio": extintorIconSvg,
   "hidrantes": hidranteIconSvg,
   "alarme-de-incendio": sireneIconSvg,
+  "detector-de-incendio": detectorIconSvg,
 };
 
 // Rótulos curtos do mockup — só cosméticos, o filtro continua usando
@@ -25,6 +27,7 @@ export const ROTULO_CURTO_POR_CATEGORIA = {
   "extintor-de-incendio": "Extintor",
   "hidrantes": "Sistema de Hidrante",
   "alarme-de-incendio": "Alarme",
+  "detector-de-incendio": "Detector",
 };
 
 function IconePill({ categoryId, iconKey, nomeCategoria }) {

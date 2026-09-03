@@ -4,7 +4,7 @@ import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
 import pastaIconSvg from "../assets/icons/pasta-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
-import configuracoesIconSvg from "../assets/icons/configuracoes-icon-placeholder.svg?raw";
+import configuracoesIconSvg from "../assets/icons/config-icon.svg?raw";
 
 // Só a Biblioteca de Famílias existe de verdade por enquanto — as outras
 // abas são placeholders desabilitados (novas abas futuras, ainda sem
@@ -38,7 +38,6 @@ export default function Sidebar({ abaAtual }) {
       </div>
 
       <div className="sidebar-rodape">
-        {/* Engrenagem: ícone provisório, ainda sem asset definitivo. */}
         <button type="button" className="sidebar-item" disabled title="Configurações (em breve)">
           <Icon svg={configuracoesIconSvg} title="Configurações" />
         </button>

@@ -11,6 +11,7 @@ import FamilyCard from "./components/FamilyCard";
 import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
 import checkIconSvg from "./assets/icons/check-icon.svg?raw";
 import xIconSvg from "./assets/icons/x-icon.svg?raw";
+import searchIconSvg from "./assets/icons/search-icon.svg?raw";
 
 // Título da seção usa o mesmo rótulo curto exibido no pill (ex.: "Extintor"
 // -> "EXTINTOR"), conforme o mockup — categorias sem rótulo curto caem no
@@ -154,7 +155,7 @@ export default function App() {
         </header>
 
         <div className="search-bar">
-          <span className="icone">⌕</span>
+          <Icon svg={searchIconSvg} className="icone" />
           <input
             type="text"
             placeholder="Que equipamento você procura?"
