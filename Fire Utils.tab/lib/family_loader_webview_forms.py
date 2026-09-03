@@ -178,12 +178,31 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
                 _VIRTUAL_HOST, _WEBAPP_DIST_DIR, CoreWebView2HostResourceAccessKind.Allow
             )
             core.WebMessageReceived += self._ao_receber_mensagem
+            core.NavigationCompleted += self._ao_navegar
+
+            # TEMPORÁRIO (fase de depuração): abre o DevTools sozinho, sem
+            # depender de clique com botão direito no painel (que não
+            # reage a cliques quando hospedado dentro do Dockable Pane do
+            # Revit). Remover essa linha quando o carregamento estiver
+            # validado ponta a ponta.
+            core.OpenDevToolsWindow()
+
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
             self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(ex))
 
     def _ao_receber_mensagem(self, sender, args):
         processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes)
+
+    def _ao_navegar(self, sender, args):
+        """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho
+        errado no SetVirtualHostNameToFolderMapping, dist/ incompleto),
+        args.IsSuccess vem False com o motivo em WebErrorStatus — sem isso,
+        o painel só ficaria em branco, sem nenhuma pista do porquê."""
+        if not args.IsSuccess:
+            self._erro_fatal(
+                u"Falha ao carregar a página do Carregador de Famílias: {}".format(args.WebErrorStatus)
+            )
 
 
 # ---------------------------------------------------------------------------
