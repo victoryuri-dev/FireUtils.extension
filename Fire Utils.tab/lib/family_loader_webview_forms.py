@@ -7,7 +7,7 @@ incêndio consumindo o acervo do Supabase.
 
 Substitui o antigo catálogo WPF/XAML puro (que lia a pasta local
 family_library/), aposentado depois que a migração pro Supabase foi
-validada de ponta a ponta (login, catálogo, cache local, carregamento e
+validada de ponta a ponta (login, catálogo, download, carregamento e
 posicionamento das famílias).
 
 Reestruturado a partir de um template pyRevit+WebView2 já validado

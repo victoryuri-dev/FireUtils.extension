@@ -89,10 +89,15 @@ baixar cada `signedUrl` e chamar `Document.LoadFamily`; se `posicionar` for
 `true`, encadear um `PromptForFamilyInstancePlacement` por família
 carregada, na mesma ordem da lista.
 
-Cache local (Fase 4, já implementada em `family_cache.py`): antes de baixar,
-verifica se já existe um `.rfa` em `%AppData%/FireUtils/FamilyCache/<storageKey>`
-cujo SHA-256 bate com o campo `sha256` do catálogo — se bater, usa o arquivo
-em cache sem rebaixar; senão baixa via `System.Net.WebClient` e sobrescreve.
+Download (`family_cache.py`): sem cache persistente, de propósito — o
+`.rfa` é baixado pra um arquivo temporário via `System.Net.WebClient`,
+carregado com `Document.LoadFamily`, e apagado logo em seguida (o Revit já
+embute a família no `.rvt` a partir do `LoadFamily`, então o arquivo
+original não faz falta depois disso). Cada carregamento sempre busca a
+versão mais recente do Supabase — sem isso, um cache local poderia ficar
+preso numa versão desatualizada da família, ou virar lixo acumulado no
+disco do usuário para famílias que saíram do catálogo. O campo `sha256` do
+catálogo ainda é usado pra validar a integridade do download.
 
 No WebView2, essa mensagem chega no evento `CoreWebView2.WebMessageReceived`
 como `args.WebMessageAsJson` (string JSON — precisa de `json.loads` do lado

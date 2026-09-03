@@ -1,12 +1,24 @@
 # -*- coding: utf-8 -*-
 """
 family_cache.py — Fire Utils · lib/
-Fase 4 do plano de migração: cache local dos .rfa baixados do Supabase
-(bucket privado revit-families, via Signed URL) — evita rebaixar o mesmo
-arquivo em toda sessão do Revit.
+Download dos .rfa vindos do Supabase (bucket privado revit-families, via
+Signed URL) para um arquivo TEMPORÁRIO — sem cache persistente.
 
-Fica em %AppData%/FireUtils/FamilyCache/<category_id>/<family_id>.rfa,
-espelhando a chave de storage usada no bucket (ver migration/generate_catalog.py).
+Decisão deliberada de não manter cache em disco entre carregamentos:
+
+  1. Depois que Document.LoadFamily() roda com sucesso, o Revit embute a
+     família inteira dentro do próprio arquivo .rvt — o .rfa original não
+     é mais necessário a partir daí, então não há motivo pra guardá-lo.
+  2. Cache persistente só cresce, nunca some sozinho (família removida do
+     catálogo vira lixo esquecido no disco do usuário para sempre).
+  3. Sempre baixar de novo garante pegar a versão mais recente da família
+     no Supabase — sem isso, o cache local poderia ficar "preso" numa
+     versão desatualizada mesmo depois de o gestor da biblioteca subir
+     uma família corrigida.
+
+O arquivo temporário é responsabilidade de quem chama remover depois de
+usar (ver remover_temporario) — normalmente logo após o LoadFamily, sem
+esperar o posicionamento manual terminar.
 
 Download via System.Net.WebClient (.NET) em vez de urllib/requests: dentro
 do IronPython do pyRevit, é a forma mais confiável de baixar HTTPS sem
@@ -15,21 +27,13 @@ IronPython com TLS.
 """
 
 import os
+import tempfile
+import uuid
 
 import clr
 clr.AddReference(u"System")
-from System import Environment, Uri
+from System import Uri
 from System.Net import WebClient
-
-_APPDATA_DIR = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-CACHE_DIR = os.path.join(_APPDATA_DIR, u"FireUtils", u"FamilyCache")
-
-
-def _caminho_cache(storage_key):
-    """'extintor-de-incendio/extintor-portatil-abc.rfa' -> caminho local
-    dentro de CACHE_DIR, preservando a mesma subpasta por categoria."""
-    relativo = storage_key.replace(u"/", os.sep)
-    return os.path.join(CACHE_DIR, relativo)
 
 
 def _sha256_arquivo(caminho):
@@ -44,52 +48,44 @@ def _sha256_arquivo(caminho):
     return h.hexdigest()
 
 
-def obter_ou_baixar(storage_key, signed_url, sha256_esperado=None):
+def baixar_temporario(storage_key, signed_url, sha256_esperado=None):
     """
-    Retorna o caminho local do .rfa referente a `storage_key`, baixando de
-    `signed_url` se ainda não estiver em cache (ou se `sha256_esperado` não
-    bater com o que já está em disco — arquivo trocado no Supabase).
+    Baixa `signed_url` para um arquivo temporário exclusivo desta chamada
+    (nome único por uuid4, sem reaproveitar nada de execuções anteriores)
+    e retorna o caminho. Levanta exceção se o download falhar ou (quando
+    `sha256_esperado` for informado) se o checksum não bater — quem chama
+    decide como reportar (ver family_webview_bridge.py).
 
-    Levanta exceção se o download falhar; quem chama decide como reportar
-    (ver family_webview_bridge.py).
+    Quem chamar é responsável por apagar o arquivo depois de usar — ver
+    remover_temporario.
     """
-    caminho = _caminho_cache(storage_key)
+    extensao = os.path.splitext(storage_key)[1] or u".rfa"
+    caminho_temp = os.path.join(
+        tempfile.gettempdir(), u"FireUtils_{}{}".format(uuid.uuid4().hex, extensao)
+    )
 
-    if os.path.isfile(caminho):
-        if sha256_esperado is None:
-            return caminho  # sem hash pra conferir, confia na presença do arquivo
-        try:
-            if _sha256_arquivo(caminho) == sha256_esperado:
-                return caminho
-        except OSError:
-            pass  # arquivo ilegível por algum motivo — trata como cache-miss e rebaixa
-
-    pasta = os.path.dirname(caminho)
-    if not os.path.isdir(pasta):
-        os.makedirs(pasta)
-
-    caminho_temporario = caminho + u".part"
     cliente = WebClient()
     try:
-        cliente.DownloadFile(Uri(signed_url), caminho_temporario)
+        cliente.DownloadFile(Uri(signed_url), caminho_temp)
     finally:
         cliente.Dispose()
 
-    if sha256_esperado is not None and _sha256_arquivo(caminho_temporario) != sha256_esperado:
-        os.remove(caminho_temporario)
+    if sha256_esperado is not None and _sha256_arquivo(caminho_temp) != sha256_esperado:
+        os.remove(caminho_temp)
         raise ValueError(
             u"Checksum do arquivo baixado não confere com o catálogo "
             u"(storage_key={}).".format(storage_key)
         )
 
-    if os.path.isfile(caminho):
-        os.remove(caminho)
-    os.rename(caminho_temporario, caminho)
-    return caminho
+    return caminho_temp
 
 
-def limpar_cache():
-    """Apaga todo o cache local — útil pra depuração/forçar re-download geral."""
-    import shutil
-    if os.path.isdir(CACHE_DIR):
-        shutil.rmtree(CACHE_DIR)
+def remover_temporario(caminho):
+    """Apaga o arquivo temporário baixado por baixar_temporario. Best-effort
+    — se falhar (arquivo em uso, já removido etc.), não interrompe o fluxo;
+    o SO limpa a pasta temp eventualmente de qualquer forma."""
+    try:
+        if caminho and os.path.isfile(caminho):
+            os.remove(caminho)
+    except OSError:
+        pass

@@ -1,21 +1,25 @@
 # -*- coding: utf-8 -*-
 """
 family_webview_bridge.py — Fire Utils · lib/
-Fase 3/4 do plano de migração: processa as mensagens que chegam do frontend
-React (webapp/) via WebView2 CoreWebView2.WebMessageReceived. Contrato de
-mensagens documentado em webapp/README.md.
+Processa as mensagens que chegam do frontend React (webapp/) via WebView2
+CoreWebView2.WebMessageReceived. Contrato de mensagens documentado em
+webapp/README.md.
 
 Fluxo de uma mensagem LOAD_FAMILIES:
-  1. Download de cada .rfa (com cache, family_cache.py) — roda numa thread
-     separada da UI, porque WebMessageReceived dispara na mesma UI thread
-     do Revit/WPF, e um .rfa grande (dezenas de MB) levaria vários segundos
-     via rede, travando a interface inteira nesse meio tempo.
+  1. Download de cada .rfa pra um arquivo temporário (family_cache.py, sem
+     cache persistente — ver docstring de lá pro porquê) — roda numa
+     thread separada da UI, porque WebMessageReceived dispara na mesma UI
+     thread do Revit/WPF, e um .rfa grande (dezenas de MB) levaria vários
+     segundos via rede, travando a interface inteira nesse meio tempo.
   2. Só depois que os arquivos já estão em disco, a ação de
      Document.LoadFamily (e o posicionamento, se pedido) é enfileirada via
-     ExternalEvent (family_loader_events.py) — igual ao painel WPF antigo,
-     porque tocar a API do Revit exige contexto de API válido, que só o
-     ExternalEvent garante. ExternalEvent.Raise() é seguro de chamar de
-     qualquer thread, então a thread de download pode enfileirar direto.
+     ExternalEvent (family_loader_events.py), porque tocar a API do Revit
+     exige contexto de API válido, que só o ExternalEvent garante.
+     ExternalEvent.Raise() é seguro de chamar de qualquer thread, então a
+     thread de download pode enfileirar direto.
+  3. Os arquivos temporários são apagados logo depois do LoadFamily rodar
+     (a família já está embutida no .rvt a partir daí) — sem esperar o
+     posicionamento manual terminar, que pode levar bem mais tempo.
 """
 
 import json
@@ -28,7 +32,7 @@ from Autodesk.Revit.Exceptions import OperationCanceledException
 from pyrevit import forms
 
 from family_loader import FamilyEntry, carregar_familias, obter_symbol_de_familia
-from family_cache import obter_ou_baixar
+from family_cache import baixar_temporario, remover_temporario
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -39,16 +43,24 @@ def _montar_entrada(item_familia, caminho_local):
     )
 
 
-def _carregar_e_posicionar(uiapp, entradas, posicionar):
+def _carregar_e_posicionar(uiapp, entradas, posicionar, caminhos_temporarios):
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None:
         print(u"[AVISO] Nenhum documento ativo para carregar as famílias (bridge web).")
+        for caminho in caminhos_temporarios:
+            remover_temporario(caminho)
         return
     doc = uidoc.Document
 
     carregadas, ja_existentes, erros, familias_por_nome = carregar_familias(doc, entradas)
     for nome, msg in erros:
         print(u"[AVISO] Falha ao carregar '{}': {}".format(nome, msg))
+
+    # A partir daqui a família já está embutida no documento (.rvt) — o
+    # .rfa baixado não é mais necessário, mesmo que o posicionamento
+    # abaixo ainda vá rodar (pode levar bem mais tempo, é interativo).
+    for caminho in caminhos_temporarios:
+        remover_temporario(caminho)
 
     if not posicionar:
         return
@@ -74,7 +86,7 @@ def _carregar_e_posicionar(uiapp, entradas, posicionar):
             print(u"[ERRO] Falha ao posicionar '{}': {}".format(entrada.name, ex))
             forms.alert(
                 u"Não foi possível posicionar '{}':\n{}".format(entrada.name, ex),
-                title=u"Fire Utils - Carregador de Famílias (Web)",
+                title=u"Fire Utils - Carregador de Famílias",
                 warn_icon=True,
             )
             break
@@ -82,20 +94,24 @@ def _carregar_e_posicionar(uiapp, entradas, posicionar):
 
 def _baixar_em_background(familias, posicionar, fila_acoes):
     entradas = []
+    caminhos_temporarios = []
     for item in familias:
         try:
-            caminho_local = obter_ou_baixar(
+            caminho_local = baixar_temporario(
                 item[u"storageKey"], item[u"signedUrl"], item.get(u"sha256")
             )
         except Exception as ex:
             print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), ex))
             continue
+        caminhos_temporarios.append(caminho_local)
         entradas.append(_montar_entrada(item, caminho_local))
 
     if not entradas:
         return
 
-    fila_acoes.enfileirar(lambda uiapp: _carregar_e_posicionar(uiapp, entradas, posicionar))
+    fila_acoes.enfileirar(
+        lambda uiapp: _carregar_e_posicionar(uiapp, entradas, posicionar, caminhos_temporarios)
+    )
 
 
 def processar_mensagem_webview(mensagem_json, fila_acoes):
