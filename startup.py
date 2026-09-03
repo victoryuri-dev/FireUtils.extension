@@ -14,8 +14,7 @@ mostra/esconde a instância já registrada.
 
 pyRevit roda este script isolado, num engine e output window próprios: um
 erro aqui não derruba o carregamento do resto da extensão, só faz o painel
-ficar indisponível (o botão cai para o formulário padrão do pyRevit nesse
-caso — ver family_loader_forms.alternar_painel).
+ficar indisponível — ver family_loader_webview_forms.alternar_painel.
 """
 
 import os
@@ -38,10 +37,10 @@ if _LIB_DIR not in sys.path:
 def _registrar_dockable_pane(nome_amigavel, importar_classe_painel):
     """
     Registra um Dockable Pane, isolando falhas por painel — se um painel
-    falhar (ex.: falta o WebView2 SDK do painel web), os outros continuam
+    falhar, os outros (se houver mais de um no futuro) continuam
     registrados normalmente, cada um reportando seu próprio erro.
     `importar_classe_painel` é uma função (não a classe direto) pra que o
-    próprio import de cada módulo também caia dentro do try/except.
+    próprio import do módulo também caia dentro do try/except.
     """
     try:
         classe_painel = importar_classe_painel()
@@ -61,15 +60,6 @@ def _registrar_dockable_pane(nome_amigavel, importar_classe_painel):
 
 _registrar_dockable_pane(
     u"Carregador de Famílias",
-    lambda: __import__(u"family_loader_forms", fromlist=[u"PainelCarregadorFamilias"]).PainelCarregadorFamilias,
-)
-
-# Painel Fase 3 (webapp React + WebView2) — falha aqui (SDK do WebView2
-# ausente, build do frontend não gerado etc.) é esperada até o ambiente
-# estar totalmente configurado; não deve nunca impedir o registro do
-# painel clássico acima.
-_registrar_dockable_pane(
-    u"Carregador de Famílias (Web)",
     lambda: __import__(
         u"family_loader_webview_forms", fromlist=[u"PainelCarregadorFamiliasWeb"]
     ).PainelCarregadorFamiliasWeb,

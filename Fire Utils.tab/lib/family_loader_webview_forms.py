@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 family_loader_webview_forms.py — Fire Utils · lib/
-Fase 3 do plano de migração: Dockable Pane que hospeda o frontend React
-(webapp/) num Microsoft.Web.WebView2.Wpf.WebView2, substituindo aos poucos
-o catálogo WPF/XAML puro (family_loader_forms.py).
+Dockable Pane que hospeda o frontend React (webapp/) num
+Microsoft.Web.WebView2.Wpf.WebView2 — catálogo de famílias de combate a
+incêndio consumindo o acervo do Supabase.
+
+Substitui o antigo catálogo WPF/XAML puro (que lia a pasta local
+family_library/), aposentado depois que a migração pro Supabase foi
+validada de ponta a ponta (login, catálogo, cache local, carregamento e
+posicionamento das famílias).
 
 Reestruturado a partir de um template pyRevit+WebView2 já validado
 (GUIA_DOCKPANE_PYREVIT.md), que documenta e resolve de antemão os 4 erros
@@ -11,11 +16,6 @@ mais comuns desse tipo de integração — o mais importante sendo a falta de
 um DispatcherSynchronizationContext na thread de UI do Revit (ver
 comentário no __init__), que fazia a inicialização do WebView2 ficar
 pendurada pra sempre, sem erro nenhum.
-
-Convive lado a lado com o painel antigo durante a migração — botão
-separado na faixa de opções ("Carregador de Famílias (Web)"), pra não
-quebrar o fluxo em produção enquanto Supabase/webapp ainda são validados.
-Quando a migração estiver 100% validada, o botão antigo pode ser removido.
 
 Dependências externas que NÃO vêm com o pyRevit/Revit:
 
@@ -113,7 +113,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
     panel_id = u"9f2f6d4a-9d63-4d3b-8c2a-9b6f8b6a1c7e"
     panel_source = _XAML_PATH
-    panel_title = u"Fire Utils — Carregador de Famílias (Web)"
+    panel_title = u"Fire Utils — Carregador de Famílias"
 
     def __init__(self):
         forms.WPFPanel.__init__(self)
@@ -170,7 +170,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         print(u"[ERRO] {}".format(mensagem))
         forms.alert(
             mensagem,
-            title=u"Fire Utils - Carregador de Famílias (Web)",
+            title=u"Fire Utils - Carregador de Famílias",
             warn_icon=True,
         )
 
@@ -214,17 +214,25 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 # Entrada pública — chamada pelo botão da faixa de opções
 # ---------------------------------------------------------------------------
 def alternar_painel(uiapp):
-    """Mostra/esconde o painel web — mesmo padrão de
-    family_loader_forms.alternar_painel (ver aquele módulo pros comentários
-    completos sobre o motivo de cada checagem)."""
+    """
+    Mostra/esconde o Carregador de Famílias como Dockable Pane. Um novo
+    clique no botão da faixa de opções alterna entre mostrar e esconder o
+    mesmo painel (com sessão/filtro/seleção intactos), em vez de recriar
+    ou abrir uma nova instância.
+
+    Com nenhum projeto aberto (ex.: tela inicial do Revit), a API às vezes
+    reporta o painel como registrado mas ainda não "criado" de fato —
+    GetDockablePane pode lançar exceção nesse caso; por isso a checagem de
+    ActiveUIDocument acontece antes de tentar mostrar o painel.
+    """
     if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb):
         forms.alert(
-            u"O painel web do Carregador de Famílias não foi registrado.\n\n"
+            u"O painel do Carregador de Famílias não foi registrado.\n\n"
             u"Confira o output do pyRevit na inicialização da extensão — "
             u"provavelmente falta o WebView2 SDK "
             u"(Fire Utils.tab/lib/webview2_runtime/) ou o build do "
             u"frontend (webapp/dist/).",
-            title=u"Fire Utils - Carregador de Famílias (Web)",
+            title=u"Fire Utils - Carregador de Famílias",
             warn_icon=True,
         )
         return
@@ -233,7 +241,7 @@ def alternar_painel(uiapp):
         forms.alert(
             u"Abra ou crie um projeto no Revit antes de abrir o Carregador "
             u"de Famílias.",
-            title=u"Fire Utils - Carregador de Famílias (Web)",
+            title=u"Fire Utils - Carregador de Famílias",
             warn_icon=True,
         )
         return
@@ -246,9 +254,9 @@ def alternar_painel(uiapp):
             painel.Show()
     except Exception as ex:
         forms.alert(
-            u"Não foi possível abrir o painel web do Carregador de "
-            u"Famílias agora ({}).\n\nTente novamente; se persistir, "
-            u"reinicie o Revit.".format(ex),
-            title=u"Fire Utils - Carregador de Famílias (Web)",
+            u"Não foi possível abrir o painel do Carregador de Famílias "
+            u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
+            u"Revit.".format(ex),
+            title=u"Fire Utils - Carregador de Famílias",
             warn_icon=True,
         )
