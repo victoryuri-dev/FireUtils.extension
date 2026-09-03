@@ -21,6 +21,12 @@ Fluxo de uma mensagem LOAD_FAMILIES:
 import json
 import threading
 
+import clr
+clr.AddReference(u"RevitAPI")
+from Autodesk.Revit.Exceptions import OperationCanceledException
+
+from pyrevit import forms
+
 from family_loader import FamilyEntry, carregar_familias, obter_symbol_para_posicionar
 from family_cache import obter_ou_baixar
 
@@ -50,14 +56,28 @@ def _carregar_e_posicionar(uiapp, entradas, posicionar):
     nomes_prontos = set(carregadas) | set(ja_existentes)
     for entrada in entradas:
         if entrada.name not in nomes_prontos:
+            print(u"[AVISO] '{}' não está pronta pra posicionar (falhou ao carregar).".format(entrada.name))
             continue
         simbolo = obter_symbol_para_posicionar(doc, entrada.name)
         if simbolo is None:
+            print(u"[AVISO] Nenhum tipo (FamilySymbol) encontrado pra posicionar '{}'.".format(entrada.name))
             continue
         try:
             uidoc.PromptForFamilyInstancePlacement(simbolo)
-        except Exception:
-            break  # Esc pressionado — encerra o posicionamento em lote
+        except OperationCanceledException:
+            break  # Esc pressionado — encerra o posicionamento em lote, sem erro
+        except Exception as ex:
+            # Antes isso caía num "except Exception: break" genérico, que
+            # engolia silenciosamente qualquer erro real (não só o Esc
+            # esperado) — por isso "carrega mas não posiciona" não dava
+            # pista nenhuma do motivo.
+            print(u"[ERRO] Falha ao posicionar '{}': {}".format(entrada.name, ex))
+            forms.alert(
+                u"Não foi possível posicionar '{}':\n{}".format(entrada.name, ex),
+                title=u"Fire Utils - Carregador de Famílias (Web)",
+                warn_icon=True,
+            )
+            break
 
 
 def _baixar_em_background(familias, posicionar, fila_acoes):
