@@ -1,5 +1,6 @@
 import { publicAssetUrl } from "../lib/supabaseClient";
 import Icon from "./Icon";
+import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import extintorIconSvg from "../assets/icons/extintor-icon.svg?raw";
 import hidranteIconSvg from "../assets/icons/hidrante-icon.svg?raw";
 import sireneIconSvg from "../assets/icons/sirene-icon.svg?raw";
@@ -12,9 +13,18 @@ export { TODAS_ID };
 // no pacote entregue — as categorias sem entrada aqui caem no ícone remoto
 // do Supabase (icon_key do catálogo) ou, na falta dele, no monograma.
 const ICONES_LOCAIS_POR_CATEGORIA = {
+  [TODAS_ID]: libraryIconSvg,
   "extintor-de-incendio": extintorIconSvg,
   "hidrantes": hidranteIconSvg,
   "alarme-de-incendio": sireneIconSvg,
+};
+
+// Rótulos curtos do mockup — só cosméticos, o filtro continua usando
+// categoria.id; category_id sem entrada aqui cai no nome cheio do catálogo.
+export const ROTULO_CURTO_POR_CATEGORIA = {
+  "extintor-de-incendio": "Extintor",
+  "hidrantes": "Sistema de Hidrante",
+  "alarme-de-incendio": "Alarme",
 };
 
 function IconePill({ categoryId, iconKey, nomeCategoria }) {
@@ -54,7 +64,7 @@ export default function CategoryPills({ categorias, todasIconKey, categoriaAtual
           onClick={() => onSelect(categoria.id)}
         >
           <IconePill categoryId={categoria.id} iconKey={categoria.icon_key} nomeCategoria={categoria.name} />
-          {categoria.name}
+          {ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name}
         </button>
       ))}
     </div>

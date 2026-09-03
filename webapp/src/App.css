@@ -15,9 +15,9 @@
 }
 
 .sidebar-logo {
-  width: 32px;
-  height: 32px;
-  color: var(--white);
+  width: 30px;
+  height: 30px;
+  color: var(--black);
   margin-bottom: 28px;
 }
 
@@ -31,6 +31,7 @@
 .sidebar-rodape {
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .sidebar-item {
@@ -52,7 +53,6 @@
 
 .sidebar-item:not(:disabled):hover {
   background: var(--sidebar-bg-hover);
-  color: var(--white);
 }
 
 .sidebar-item.ativa {
@@ -62,7 +62,18 @@
 
 .sidebar-item:disabled {
   cursor: default;
-  opacity: 0.45;
+}
+
+/* Avatar de perfil — sempre um círculo preto sólido, ícone branco, mesmo
+   desabilitado (é um placeholder de identidade, não uma ação). */
+.sidebar-item-avatar {
+  border-radius: 50%;
+  background: var(--black);
+  color: var(--white);
+}
+
+.sidebar-item-avatar:not(:disabled):hover {
+  background: var(--black);
 }
 
 /* Área principal ---------------------------------------------------------- */
@@ -72,6 +83,8 @@
   display: flex;
   flex-direction: column;
   padding: 22px 26px 20px;
+  position: relative;
+  background: var(--bg);
 }
 
 /* Cabeçalho ------------------------------------------------------------ */
@@ -79,28 +92,22 @@
   margin-bottom: 16px;
 }
 
-.header .eyebrow {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--accent);
-  margin: 0 0 4px;
-  letter-spacing: 0.06em;
-}
-
 .header h1 {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
   margin: 0;
   color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
 }
 
 /* Busca ------------------------------------------------------------------ */
 .search-bar {
   display: flex;
   align-items: center;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 18px;
+  background: var(--pill-bg);
+  border: none;
+  border-radius: 10px;
   height: 40px;
   padding: 0 14px;
   margin-bottom: 18px;
@@ -127,6 +134,12 @@
 }
 
 /* Categorias (pills) ------------------------------------------------------ */
+.categorias-rotulo {
+  font-size: 12px;
+  color: var(--text-2);
+  margin: 0 0 10px;
+}
+
 .pills {
   display: flex;
   flex-wrap: wrap;
@@ -139,9 +152,9 @@
   align-items: center;
   height: 44px;
   padding: 0 18px 0 16px;
-  border-radius: 22px;
-  border: 1px solid var(--border);
-  background: var(--bg-2);
+  border-radius: 8px;
+  border: none;
+  background: var(--pill-bg);
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -150,8 +163,8 @@
 .pill img,
 .pill .icone-fallback,
 .pill .icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   margin-right: 10px;
   object-fit: contain;
 }
@@ -161,12 +174,11 @@
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  color: var(--accent);
+  color: var(--text);
 }
 
 .pill.ativa {
   background: var(--accent);
-  border-color: var(--accent);
   color: var(--white);
 }
 
@@ -187,6 +199,7 @@
   font-weight: 700;
   letter-spacing: 0.03em;
   color: var(--text);
+  text-transform: uppercase;
   margin: 0;
 }
 
@@ -201,7 +214,7 @@
 }
 
 .contador strong {
-  color: var(--accent);
+  color: var(--text-2);
   font-size: 13px;
   margin-right: 4px;
 }
@@ -224,7 +237,7 @@
   width: 138px;
   height: 190px;
   background: var(--bg-2);
-  border: 2px solid transparent;
+  border: 2px solid var(--border);
   border-radius: 10px;
   padding: 9px;
 }
@@ -243,10 +256,6 @@
   justify-content: center;
 }
 
-.cartao.selecionado .preview-tile {
-  background: var(--accent-tint);
-}
-
 .cartao .preview-tile img {
   width: 100%;
   height: 100%;
@@ -259,15 +268,11 @@
   color: var(--text-3);
 }
 
-.cartao.selecionado .preview-tile .monograma {
-  color: var(--accent);
-}
-
 .cartao .nome {
   font-size: 11px;
   font-weight: 600;
   color: var(--text);
-  text-align: center;
+  text-align: left;
   margin-top: 8px;
   max-height: 34px;
   overflow: hidden;
@@ -276,55 +281,43 @@
   -webkit-box-orient: vertical;
 }
 
-/* Checkbox no canto: some por padrão, contorno vazio no hover, preenchido
-   e com check quando selecionado. */
-.checkbox-cartao {
+/* Indicador no canto do card — um slot só, nunca dois ao mesmo tempo:
+   vazio por padrão, contorno vazio no hover, vermelho preenchido (check)
+   quando selecionado, preto (pasta) quando já carregada no projeto. */
+.indicador-cartao {
   position: absolute;
   top: 6px;
   right: 6px;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  border: 2px solid var(--border-2);
-  background: var(--bg-2);
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   display: none;
   align-items: center;
   justify-content: center;
 }
 
-.checkbox-cartao .icon {
-  width: 11px;
-  height: 11px;
+.indicador-cartao .icon {
+  width: 12px;
+  height: 12px;
   color: var(--white);
 }
 
-.cartao:hover .checkbox-cartao {
+.cartao:hover .indicador-cartao {
   display: flex;
+  border: 2px solid var(--border-2);
+  background: var(--bg-2);
 }
 
-.cartao.selecionado .checkbox-cartao {
+.cartao.selecionado .indicador-cartao {
   display: flex;
-  border-color: var(--accent);
+  border: none;
   background: var(--accent);
 }
 
-/* Indicador de "já carregada no projeto" — só informativo, sem borda
-   vermelha e sem ação ao clicar. */
-.indicador-carregada {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  width: 20px;
-  height: 20px;
+.cartao.carregada:not(.selecionado) .indicador-cartao {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text);
-}
-
-.indicador-carregada .icon {
-  width: 14px;
-  height: 14px;
+  border: none;
+  background: var(--black);
 }
 
 .vazio {
@@ -333,31 +326,42 @@
   margin-top: 20px;
 }
 
-/* Botões de ação — só aparecem quando há alguma família selecionada -------- */
+/* Botões de ação — só aparecem quando há alguma família selecionada;
+   flutuam empilhados no canto inferior esquerdo, por cima da grade. */
 .acoes {
+  position: absolute;
+  left: 26px;
+  bottom: 20px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
-  margin-top: 14px;
+  z-index: 2;
 }
 
 .botao {
-  height: 34px;
-  padding: 0 14px;
-  font-size: 11px;
-  border-radius: 4px;
-  border: 1px solid var(--border-2);
-  background: var(--bg);
-  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-radius: 20px;
+  border: none;
+  background: var(--black);
+  color: var(--white);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.botao .icon {
+  width: 14px;
+  height: 14px;
 }
 
 .botao.accent {
-  height: 36px;
-  padding: 0 18px;
-  font-size: 12px;
-  font-weight: 600;
   background: var(--accent);
-  border: none;
   color: var(--white);
 }
 

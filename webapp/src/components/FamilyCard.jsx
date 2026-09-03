@@ -1,7 +1,7 @@
 import { publicAssetUrl } from "../lib/supabaseClient";
 import Icon from "./Icon";
 import checkIconSvg from "../assets/icons/check-icon.svg?raw";
-import carregadoIconSvg from "../assets/icons/carregado-icon-placeholder.svg?raw";
+import carregadaIconSvg from "../assets/icons/pasta-icon.svg?raw";
 
 function monograma(nome) {
   const palavras = nome
@@ -14,14 +14,15 @@ function monograma(nome) {
 }
 
 /**
- * Estados visuais (conforme fluxograma do mockup):
- *  - padrão: liso, sem badge.
- *  - hover (não selecionado, não carregada): checkbox vazio (contorno) —
- *    só CSS (:hover), não precisa de estado em React.
- *  - selecionada: borda vermelha + checkbox vermelho preenchido com check.
- *  - carregada no projeto ativo: ícone de download no canto — só
- *    indicador visual, clicar no card não faz nada com ele (não existe
- *    ação de "remover família do projeto" neste app).
+ * Estados visuais (conforme fluxograma do mockup) — um único indicador no
+ * canto superior direito, nunca dois ao mesmo tempo:
+ *  - selecionada: borda vermelha + indicador vermelho preenchido com check
+ *    (tem prioridade mesmo se a família já estiver carregada — permite
+ *    selecionar de novo pra recarregar uma versão atualizada).
+ *  - carregada no projeto ativo (e não selecionada): indicador preto —
+ *    só visual, clicar no card não remove nem faz nada com o projeto.
+ *  - padrão / hover: sem indicador; no hover aparece um contorno vazio
+ *    (só CSS, sem estado em React).
  */
 export default function FamilyCard({ familia, selecionado, carregada, onToggle }) {
   const thumbUrl = publicAssetUrl(familia.thumbnail_key);
@@ -33,13 +34,12 @@ export default function FamilyCard({ familia, selecionado, carregada, onToggle }
       role="button"
       tabIndex={0}
     >
-      {carregada && (
-        <div className="indicador-carregada" title="Já carregada no projeto">
-          <Icon svg={carregadoIconSvg} />
-        </div>
-      )}
-      <div className="checkbox-cartao">
-        {selecionado && <Icon svg={checkIconSvg} />}
+      <div className="indicador-cartao">
+        {selecionado ? (
+          <Icon svg={checkIconSvg} />
+        ) : carregada ? (
+          <Icon svg={carregadaIconSvg} title="Já carregada no projeto" />
+        ) : null}
       </div>
 
       <div className="preview-tile">

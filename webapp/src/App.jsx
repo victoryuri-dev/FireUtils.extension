@@ -5,17 +5,21 @@ import { fetchCatalog } from "./lib/catalog";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "./lib/bridge";
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
-import CategoryPills, { TODAS_ID } from "./components/CategoryPills";
+import Icon from "./components/Icon";
+import CategoryPills, { TODAS_ID, ROTULO_CURTO_POR_CATEGORIA } from "./components/CategoryPills";
 import FamilyCard from "./components/FamilyCard";
+import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
+import checkIconSvg from "./assets/icons/check-icon.svg?raw";
+import xIconSvg from "./assets/icons/x-icon.svg?raw";
 
-// Título da seção muda pra bater com o nome curto da categoria ativa (ex.:
-// "Extintor de Incêndio" -> "EXTINTOR"), conforme o mockup — a primeira
-// palavra já cobre os nomes de categoria atuais do catálogo.
+// Título da seção usa o mesmo rótulo curto exibido no pill (ex.: "Extintor"
+// -> "EXTINTOR"), conforme o mockup — categorias sem rótulo curto caem no
+// nome cheio do catálogo, só em maiúsculas.
 function tituloDaSecao(categorias, categoriaAtual) {
   if (categoriaAtual === TODAS_ID) return "FAMÍLIAS";
   const categoria = categorias.find((c) => c.id === categoriaAtual);
   if (!categoria) return "FAMÍLIAS";
-  return categoria.name.split(/\s+/)[0].toUpperCase();
+  return (ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name).toUpperCase();
 }
 
 export default function App() {
@@ -146,7 +150,6 @@ export default function App() {
 
       <div className="app">
         <header className="header">
-          <p className="eyebrow">FIRE UTILS</p>
           <h1>Biblioteca de Famílias</h1>
         </header>
 
@@ -164,6 +167,7 @@ export default function App() {
           <p className="vazio">Carregando catálogo...</p>
         ) : (
           <>
+            <p className="categorias-rotulo">Categorias</p>
             <CategoryPills
               categorias={catalogo.categories}
               todasIconKey={catalogo.todas_icon_key}
@@ -207,19 +211,22 @@ export default function App() {
 
             {selecionadas.size > 0 && (
               <div className="acoes">
-                <button type="button" className="botao" onClick={marcarTodosFiltrados}>
-                  Selecionar todos
-                </button>
-                <button type="button" className="botao" onClick={desmarcarTodos}>
-                  Desmarcar todos
-                </button>
                 <button
                   type="button"
                   className="botao accent"
                   disabled={enviando}
                   onClick={carregarSelecionadas}
                 >
+                  <Icon svg={carregarIconSvg} />
                   Carregar no projeto
+                </button>
+                <button type="button" className="botao" onClick={marcarTodosFiltrados}>
+                  <Icon svg={checkIconSvg} />
+                  Selecionar todos
+                </button>
+                <button type="button" className="botao" onClick={desmarcarTodos}>
+                  <Icon svg={xIconSvg} />
+                  Desmarcar todos
                 </button>
               </div>
             )}
