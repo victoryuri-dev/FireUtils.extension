@@ -82,44 +82,25 @@ def _carregar_assemblies_webview2():
     _webview2_carregado = True
 
 
-def _criar_ambiente_webview2():
+def _obter_user_data_dir():
     """
-    Cria o CoreWebView2Environment apontando explicitamente pra um
-    userDataFolder gravável em %LOCALAPPDATA%.
+    Pasta gravável em %LOCALAPPDATA% pro WebView2 guardar seus dados
+    (cache, cookies, perfil).
 
-    Sem isso (EnsureCoreWebView2Async(None) direto), o WebView2 tenta criar
-    essa pasta de dados (cache, cookies, perfil) ao lado do executável do
-    processo host — Revit.exe, dentro de "Program Files" — e falha com
-    UnauthorizedAccessException/E_ACCESSDENIED, porque o usuário normalmente
-    não tem permissão de escrita lá.
-
-    CoreWebView2Environment.CreateAsync é assíncrono (retorna uma Task); só
-    é chamado uma vez, na inicialização do painel, então usamos `.Result`
-    pra bloquear até completar em vez de lidar com callback — o
-    IronPython 2.7 não tem await, e essa chamada é rápida (só monta o
-    ambiente, não carrega nenhuma página).
+    Sem configurar isso, o WebView2 tenta criar essa pasta ao lado do
+    executável do processo host — Revit.exe, dentro de "Program Files" —
+    e falha com UnauthorizedAccessException/E_ACCESSDENIED, porque o
+    usuário normalmente não tem permissão de escrita lá.
     """
-    from Microsoft.Web.WebView2.Core import CoreWebView2Environment
     from System import Environment as DotNetEnvironment
 
-    user_data_dir = os.path.join(
+    caminho = os.path.join(
         DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
         u"FireUtils", u"WebView2UserData",
     )
-    if not os.path.isdir(user_data_dir):
-        os.makedirs(user_data_dir)
-
-    tarefa = CoreWebView2Environment.CreateAsync(None, user_data_dir, None)
-    return tarefa.Result
-
-
-def _desembrulhar_excecao(ex):
-    """Acessar Task.Result de uma Task que falhou embrulha a exceção real
-    numa System.AggregateException genérica ("One or more errors
-    occurred.") — desembrulha pra InnerException, que tem a mensagem útil
-    de verdade (ex.: o UnauthorizedAccessException do E_ACCESSDENIED)."""
-    interna = getattr(ex, u"InnerException", None)
-    return interna if interna is not None else ex
+    if not os.path.isdir(caminho):
+        os.makedirs(caminho)
+    return caminho
 
 
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
@@ -141,17 +122,31 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             return  # painel abre em branco — sem WebView configurado
 
-        # EnsureCoreWebView2Async(environment) é assíncrono (retorna uma
-        # Task) e o IronPython 2.7 não tem await — em vez de esperar o
-        # resultado, reagimos ao evento CoreWebView2InitializationCompleted,
-        # que dispara tanto pro caminho síncrono quanto assíncrono da
+        # EnsureCoreWebView2Async é assíncrono (retorna uma Task) e o
+        # IronPython 2.7 não tem await — em vez de esperar o resultado,
+        # reagimos ao evento CoreWebView2InitializationCompleted, que
+        # dispara tanto pro caminho síncrono quanto assíncrono da
         # inicialização, sem precisar lidar com Task nenhuma.
+        #
+        # A pasta de dados é configurada via CreationProperties do próprio
+        # controle (não criando um CoreWebView2Environment manualmente) —
+        # criar o Environment "na mão" causa
+        # "expected CoreWebView2Environment, got CoreWebView2Environment"
+        # quando o assembly Microsoft.Web.WebView2.Core.dll acaba carregado
+        # em dois contextos diferentes (um pela nossa criação manual, outro
+        # pelo próprio WebView2Base internamente); CreationProperties deixa
+        # o controle criar o Environment sozinho, sem esse conflito.
         try:
+            from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+
+            propriedades = CoreWebView2CreationProperties()
+            propriedades.UserDataFolder = _obter_user_data_dir()
+            self.WebView.CreationProperties = propriedades
+
             self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
-            ambiente = _criar_ambiente_webview2()
-            self.WebView.EnsureCoreWebView2Async(ambiente)
+            self.WebView.EnsureCoreWebView2Async(None)
         except Exception as ex:
-            self._erro_fatal(u"Falha ao iniciar o CoreWebView2: {}".format(_desembrulhar_excecao(ex)))
+            self._erro_fatal(u"Falha ao iniciar o CoreWebView2: {}".format(ex))
 
     def _erro_fatal(self, mensagem):
         """Popup (forms.alert) em vez de só print — um print dentro de um
