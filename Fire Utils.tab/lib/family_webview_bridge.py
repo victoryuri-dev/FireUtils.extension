@@ -27,7 +27,7 @@ from Autodesk.Revit.Exceptions import OperationCanceledException
 
 from pyrevit import forms
 
-from family_loader import FamilyEntry, carregar_familias, obter_symbol_para_posicionar
+from family_loader import FamilyEntry, carregar_familias, obter_symbol_de_familia
 from family_cache import obter_ou_baixar
 
 
@@ -46,7 +46,7 @@ def _carregar_e_posicionar(uiapp, entradas, posicionar):
         return
     doc = uidoc.Document
 
-    carregadas, ja_existentes, erros = carregar_familias(doc, entradas)
+    carregadas, ja_existentes, erros, familias_por_nome = carregar_familias(doc, entradas)
     for nome, msg in erros:
         print(u"[AVISO] Falha ao carregar '{}': {}".format(nome, msg))
 
@@ -58,7 +58,7 @@ def _carregar_e_posicionar(uiapp, entradas, posicionar):
         if entrada.name not in nomes_prontos:
             print(u"[AVISO] '{}' não está pronta pra posicionar (falhou ao carregar).".format(entrada.name))
             continue
-        simbolo = obter_symbol_para_posicionar(doc, entrada.name)
+        simbolo = obter_symbol_de_familia(doc, familias_por_nome.get(entrada.name))
         if simbolo is None:
             print(u"[AVISO] Nenhum tipo (FamilySymbol) encontrado pra posicionar '{}'.".format(entrada.name))
             continue

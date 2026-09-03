@@ -57,7 +57,7 @@ from pyrevit import forms
 
 from family_loader import (
     listar_familias, listar_categorias, carregar_familias,
-    obter_symbol_para_posicionar, preview_valido, FAMILY_LIBRARY_DIR,
+    obter_symbol_de_familia, preview_valido, FAMILY_LIBRARY_DIR,
 )
 from family_loader_events import criar_fila_acoes
 
@@ -154,10 +154,10 @@ def _carregar_bitmap_icone(caminho):
 # fluxo do usuário com uma mensagem a cada família carregada.
 # ---------------------------------------------------------------------------
 def _carregar_familias_silenciosamente(doc, entradas_selecionadas):
-    carregadas, ja_existentes, erros = carregar_familias(doc, entradas_selecionadas)
+    carregadas, ja_existentes, erros, familias_por_nome = carregar_familias(doc, entradas_selecionadas)
     for nome, msg in erros:
         print(u"[AVISO] Falha ao carregar '{}': {}".format(nome, msg))
-    return carregadas, ja_existentes, erros
+    return carregadas, ja_existentes, erros, familias_por_nome
 
 
 # ---------------------------------------------------------------------------
@@ -583,7 +583,7 @@ class PainelCarregadorFamilias(forms.WPFPanel):
                 return
             doc = uidoc_ativo.Document
 
-            carregadas, ja_existentes, _erros = _carregar_familias_silenciosamente(
+            carregadas, ja_existentes, _erros, familias_por_nome = _carregar_familias_silenciosamente(
                 doc, entradas_para_carregar
             )
             nomes_prontos = set(carregadas) | set(ja_existentes)
@@ -592,14 +592,17 @@ class PainelCarregadorFamilias(forms.WPFPanel):
 
             for entrada in entradas_para_carregar:
                 if entrada.name not in nomes_prontos:
+                    print(u"[AVISO] '{}' não está pronta pra posicionar (falhou ao carregar).".format(entrada.name))
                     continue
-                simbolo = obter_symbol_para_posicionar(doc, entrada.name)
+                simbolo = obter_symbol_de_familia(doc, familias_por_nome.get(entrada.name))
                 if simbolo is None:
+                    print(u"[AVISO] Nenhum tipo (FamilySymbol) encontrado pra posicionar '{}'.".format(entrada.name))
                     continue
                 try:
                     uidoc_ativo.PromptForFamilyInstancePlacement(simbolo)
-                except Exception:
-                    break  # Esc pressionado — encerra o posicionamento
+                except Exception as ex:
+                    print(u"[AVISO] Posicionamento de '{}' interrompido: {}".format(entrada.name, ex))
+                    break  # Esc pressionado (ou outro erro) — encerra o posicionamento em lote
 
         self.fila_acoes.enfileirar(_acao)
 

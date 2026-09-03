@@ -141,25 +141,38 @@ def carregar_familias(doc, entradas):
     """
     Carrega a lista de FamilyEntry no documento ativo.
 
-    Retorno: (carregadas, ja_existentes, erros)
-      carregadas    : lista de nomes carregados com sucesso
-      ja_existentes : lista de nomes que já estavam no projeto (não recarregados)
-      erros         : lista de tuplas (nome, mensagem_de_erro)
+    Retorno: (carregadas, ja_existentes, erros, familias_por_nome)
+      carregadas         : lista de FamilyEntry.name carregados com sucesso
+      ja_existentes      : lista de FamilyEntry.name que já estavam no
+                           projeto (não recarregados)
+      erros              : lista de tuplas (nome, mensagem_de_erro)
+      familias_por_nome  : dict {FamilyEntry.name: Family} com o objeto
+                           Family de verdade carregado (ou já existente) —
+                           o nome do arquivo .rfa (FamilyEntry.name) nem
+                           sempre bate com o "nome da família" salvo
+                           internamente no arquivo (definido no Editor de
+                           Famílias), então quem for posicionar a família
+                           em seguida (ver obter_symbol_de_familia) deve
+                           usar esse objeto direto, sem procurar de novo
+                           por nome — buscar por FamilyEntry.name depois de
+                           carregada pode simplesmente não encontrar nada.
     """
-    existentes = set(
-        f.Name for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
-    )
+    existentes_por_nome = {
+        f.Name: f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
+    }
 
     carregadas = []
     ja_existentes = []
     erros = []
+    familias_por_nome = {}
 
     with Transaction(doc, u"FireUtils - Carregar Familias") as t:
         t.Start()
         try:
             for entrada in entradas:
-                if entrada.name in existentes:
+                if entrada.name in existentes_por_nome:
                     ja_existentes.append(entrada.name)
+                    familias_por_nome[entrada.name] = existentes_por_nome[entrada.name]
                     continue
                 if not os.path.exists(entrada.path):
                     erros.append((entrada.name, u"Arquivo não encontrado em disco."))
@@ -168,6 +181,7 @@ def carregar_familias(doc, entradas):
                     ref_familia = clr.Reference[Family]()
                     if doc.LoadFamily(entrada.path, ref_familia):
                         carregadas.append(entrada.name)
+                        familias_por_nome[entrada.name] = ref_familia.Value
                     else:
                         erros.append((entrada.name, u"LoadFamily retornou False."))
                 except Exception as e:
@@ -177,21 +191,22 @@ def carregar_familias(doc, entradas):
             t.RollBack()
             erros.append((u"(transação)", str(e)))
 
-    return carregadas, ja_existentes, erros
+    return carregadas, ja_existentes, erros, familias_por_nome
 
 
-def obter_symbol_para_posicionar(doc, nome_familia):
+def obter_symbol_de_familia(doc, familia):
     """
-    Retorna o primeiro FamilySymbol (tipo) da família `nome_familia`, já
-    carregada em `doc`, garantindo que esteja ativo — pronto para uso em
-    uidoc.PromptForFamilyInstancePlacement(). Retorna None se a família ou
-    algum tipo não for encontrado.
+    Retorna o primeiro FamilySymbol (tipo) do objeto `familia` (Family) já
+    carregado em `doc`, garantindo que esteja ativo — pronto para uso em
+    uidoc.PromptForFamilyInstancePlacement(). Retorna None se `familia` for
+    None ou não tiver nenhum tipo.
+
+    Recebe o objeto Family direto (ver carregar_familias) em vez de
+    localizar pelo nome — o nome do arquivo .rfa nem sempre bate com o
+    nome interno da família, então buscar de novo por nome depois de
+    carregada pode não encontrar nada mesmo com a família carregada com
+    sucesso.
     """
-    familia = next(
-        (f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
-         if f.Name == nome_familia),
-        None
-    )
     if familia is None:
         return None
 
