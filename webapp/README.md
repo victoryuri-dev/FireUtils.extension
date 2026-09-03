@@ -67,15 +67,17 @@ Sempre que mudar algo em `src/`, rode `npm run build` de novo e **comite o
 `dist/` atualizado junto** — sem isso, o plugin instalado continua rodando
 a versão antiga da interface.
 
-## Contrato da ponte JS → Python (Fase 3/4)
+## Contrato da ponte JS ↔ Python (Fase 3/4)
 
-Só existe um tipo de mensagem por enquanto, em `src/lib/bridge.js`:
+Em `src/lib/bridge.js`. JS → Python chega via `WebMessageReceived`; Python →
+JS chega via `PostWebMessageAsJson`, escutado com `escutarMensagensDoHost`.
+
+**JS → Python**
 
 ```json
 {
   "type": "LOAD_FAMILIES",
   "payload": {
-    "posicionar": false,
     "familias": [
       { "name": "Extintor Portátil - ABC", "categoryId": "extintor-de-incendio", "storageKey": "extintor-de-incendio/extintor-portatil-abc.rfa", "sha256": "...", "signedUrl": "https://..." }
     ]
@@ -85,9 +87,27 @@ Só existe um tipo de mensagem por enquanto, em `src/lib/bridge.js`:
 
 O React já gera a Signed URL (via `supabase.storage.from('revit-families').createSignedUrl(...)`,
 válida por 60s) antes de mandar a mensagem — o lado Python só precisa
-baixar cada `signedUrl` e chamar `Document.LoadFamily`; se `posicionar` for
-`true`, encadear um `PromptForFamilyInstancePlacement` por família
-carregada, na mesma ordem da lista.
+baixar cada `signedUrl` e chamar `Document.LoadFamily`. Não há
+posicionamento automático (sem `PromptForFamilyInstancePlacement`) — o
+único botão do app carrega a família no projeto, sem posicionar.
+
+```json
+{ "type": "REQUEST_LOADED_FAMILIES", "payload": {} }
+```
+
+Pede ao host a lista de famílias do catálogo já carregadas no documento
+ativo — usado pra popular o indicador "carregada" nos cards e o contador
+correspondente. Disparado sempre que o catálogo termina de carregar.
+
+**Python → JS**
+
+```json
+{ "type": "LOADED_FAMILIES", "payload": { "names": ["Extintor Portátil - ABC"] } }
+```
+
+Mandado em resposta a `REQUEST_LOADED_FAMILIES` e de novo, já atualizado,
+logo depois de qualquer `LOAD_FAMILIES` processado — o frontend não
+precisa pedir de novo pra saber que a família recém-carregada já conta.
 
 Download (`family_cache.py`): sem cache persistente, de propósito — o
 `.rfa` é baixado pra um arquivo temporário via `System.Net.WebClient`,
@@ -110,11 +130,14 @@ src/
 ├── lib/
 │   ├── supabaseClient.js   cliente Supabase + helpers de URL pública/assinada
 │   ├── catalog.js          busca catalog.json (com fallback pro mock local)
-│   └── bridge.js           postMessage pro host WebView2
+│   └── bridge.js           postMessage <-> host WebView2 (JS <-> Python)
 ├── components/
 │   ├── LoginScreen.jsx
+│   ├── Sidebar.jsx         navegação lateral (só Biblioteca de Famílias ativa)
 │   ├── CategoryPills.jsx
-│   └── FamilyCard.jsx
+│   ├── FamilyCard.jsx
+│   └── Icon.jsx            SVG local inline (permite cor via CSS)
+├── assets/icons/           SVGs exportados do Figma (fill/stroke="currentColor")
 ├── mock/catalog.mock.json  exemplo pra dev sem depender do Supabase
 ├── App.jsx                 tela principal (busca, categorias, grade, ações)
 └── main.jsx

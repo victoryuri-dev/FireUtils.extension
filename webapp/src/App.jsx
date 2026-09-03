@@ -2,10 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { supabase, criarSignedUrlFamilia } from "./lib/supabaseClient";
 import { fetchCatalog } from "./lib/catalog";
-import { postToHost, BridgeMessageTypes } from "./lib/bridge";
+import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "./lib/bridge";
 import LoginScreen from "./components/LoginScreen";
+import Sidebar from "./components/Sidebar";
 import CategoryPills, { TODAS_ID } from "./components/CategoryPills";
 import FamilyCard from "./components/FamilyCard";
+
+// Título da seção muda pra bater com o nome curto da categoria ativa (ex.:
+// "Extintor de Incêndio" -> "EXTINTOR"), conforme o mockup — a primeira
+// palavra já cobre os nomes de categoria atuais do catálogo.
+function tituloDaSecao(categorias, categoriaAtual) {
+  if (categoriaAtual === TODAS_ID) return "FAMÍLIAS";
+  const categoria = categorias.find((c) => c.id === categoriaAtual);
+  if (!categoria) return "FAMÍLIAS";
+  return categoria.name.split(/\s+/)[0].toUpperCase();
+}
 
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
@@ -13,6 +24,7 @@ export default function App() {
   const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
   const [busca, setBusca] = useState("");
   const [selecionadas, setSelecionadas] = useState(() => new Set());
+  const [carregadas, setCarregadas] = useState(() => new Set());
   const [enviando, setEnviando] = useState(false);
 
   // Sessão do Supabase: verifica a atual e escuta login/logout. Sem
@@ -35,6 +47,23 @@ export default function App() {
       fetchCatalog().then(setCatalogo);
     }
   }, [sessao]);
+
+  // Assim que o catálogo estiver pronto, pergunta ao host quais famílias já
+  // estão no documento ativo do Revit — popula o indicador "carregada" nos
+  // cards e o contador correspondente.
+  useEffect(() => {
+    if (catalogo) {
+      postToHost(BridgeMessageTypes.REQUEST_LOADED_FAMILIES, {});
+    }
+  }, [catalogo]);
+
+  useEffect(() => {
+    return escutarMensagensDoHost((mensagem) => {
+      if (mensagem && mensagem.type === BridgeMessageTypes.LOADED_FAMILIES) {
+        setCarregadas(new Set(mensagem.payload?.names || []));
+      }
+    });
+  }, []);
 
   const secoesVisiveis = useMemo(() => {
     if (!catalogo) return [];
@@ -81,7 +110,7 @@ export default function App() {
     setSelecionadas(new Set());
   }
 
-  async function enviarSelecionadas(posicionar) {
+  async function carregarSelecionadas() {
     if (selecionadas.size === 0 || enviando) return;
     setEnviando(true);
     try {
@@ -95,7 +124,7 @@ export default function App() {
           signedUrl: await criarSignedUrlFamilia(familia.storage_key),
         }))
       );
-      postToHost(BridgeMessageTypes.LOAD_FAMILIES, { posicionar, familias: familiasComUrl });
+      postToHost(BridgeMessageTypes.LOAD_FAMILIES, { familias: familiasComUrl });
     } catch (erro) {
       console.error("[App] Falha ao gerar Signed URL / enviar pro host:", erro);
       window.alert(`Não foi possível carregar as famílias selecionadas: ${erro.message}`);
@@ -110,106 +139,92 @@ export default function App() {
   if (!sessao) {
     return <LoginScreen onLogin={setSessao} />;
   }
-  if (!catalogo) {
-    return (
-      <div className="app" style={{ alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "var(--text-2)" }}>Carregando catálogo...</p>
-      </div>
-    );
-  }
 
   return (
-    <div className="app">
-      <header className="header">
-        <div className="logo">{/* logo entra aqui quando tivermos um asset público pra ela */}</div>
-        <div className="titulos">
-          <p className="eyebrow">FIRE UTILS · BIBLIOTECA</p>
-          <h1>Carregador de Famílias</h1>
-          <p>Combate a incêndio — pesquise, filtre por categoria e carregue no projeto</p>
+    <div className="app-shell">
+      <Sidebar abaAtual="biblioteca" />
+
+      <div className="app">
+        <header className="header">
+          <p className="eyebrow">FIRE UTILS</p>
+          <h1>Biblioteca de Famílias</h1>
+        </header>
+
+        <div className="search-bar">
+          <span className="icone">⌕</span>
+          <input
+            type="text"
+            placeholder="Que equipamento você procura?"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
         </div>
-      </header>
 
-      <div className="search-bar">
-        <span className="icone">⌕</span>
-        <input
-          type="text"
-          placeholder="Pesquisar famílias..."
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-        />
-      </div>
-
-      <div className="categorias">
-        <div className="cabecalho">
-          <span className="rotulo">CATEGORIAS</span>
-          <button type="button" className="atualizar" onClick={() => fetchCatalog().then(setCatalogo)}>
-            ↻ Atualizar catálogo
-          </button>
-        </div>
-        <CategoryPills
-          categorias={catalogo.categories}
-          todasIconKey={catalogo.todas_icon_key}
-          categoriaAtual={categoriaAtual}
-          onSelect={setCategoriaAtual}
-        />
-      </div>
-
-      <div className="catalogo">
-        {secoesVisiveis.length === 0 ? (
-          <p className="vazio">
-            {catalogo.families.length === 0
-              ? "Nenhuma família encontrada na biblioteca."
-              : "Nenhuma família encontrada com esse filtro."}
-          </p>
+        {!catalogo ? (
+          <p className="vazio">Carregando catálogo...</p>
         ) : (
-          secoesVisiveis.map(([categoria, familias]) => (
-            <section key={categoria}>
-              <div className="secao-header">
-                {categoria} ({familias.length})
+          <>
+            <CategoryPills
+              categorias={catalogo.categories}
+              todasIconKey={catalogo.todas_icon_key}
+              categoriaAtual={categoriaAtual}
+              onSelect={setCategoriaAtual}
+            />
+
+            <div className="secao-titulo-linha">
+              <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
+              <div className="contadores">
+                <span className="contador">
+                  <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
+                </span>
+                <span className="contador">
+                  <strong>{String(carregadas.size).padStart(2, "0")}</strong> carregadas
+                </span>
               </div>
-              <div className="grade">
-                {familias.map((familia) => (
-                  <FamilyCard
-                    key={familia.id}
-                    familia={familia}
-                    selecionado={selecionadas.has(familia.id)}
-                    onToggle={alternarSelecao}
-                  />
-                ))}
+            </div>
+
+            <div className="catalogo">
+              {familiasFiltradas.length === 0 ? (
+                <p className="vazio">
+                  {catalogo.families.length === 0
+                    ? "Nenhuma família encontrada na biblioteca."
+                    : "Nenhuma família encontrada com esse filtro."}
+                </p>
+              ) : (
+                <div className="grade">
+                  {familiasFiltradas.map((familia) => (
+                    <FamilyCard
+                      key={familia.id}
+                      familia={familia}
+                      selecionado={selecionadas.has(familia.id)}
+                      carregada={carregadas.has(familia.name)}
+                      onToggle={alternarSelecao}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {selecionadas.size > 0 && (
+              <div className="acoes">
+                <button type="button" className="botao" onClick={marcarTodosFiltrados}>
+                  Selecionar todos
+                </button>
+                <button type="button" className="botao" onClick={desmarcarTodos}>
+                  Desmarcar todos
+                </button>
+                <button
+                  type="button"
+                  className="botao accent"
+                  disabled={enviando}
+                  onClick={carregarSelecionadas}
+                >
+                  Carregar no projeto
+                </button>
               </div>
-            </section>
-          ))
+            )}
+          </>
         )}
-      </div>
-
-      <p className="status">
-        {selecionadas.size} selecionada(s) · {familiasFiltradas.length} exibida(s) de {catalogo.families.length} no
-        total
-      </p>
-
-      <div className="acoes">
-        <button type="button" className="botao" onClick={marcarTodosFiltrados}>
-          Marcar todos (filtrados)
-        </button>
-        <button type="button" className="botao" onClick={desmarcarTodos}>
-          Desmarcar todos
-        </button>
-        <button
-          type="button"
-          className="botao accent-outline"
-          disabled={selecionadas.size === 0 || enviando}
-          onClick={() => enviarSelecionadas(true)}
-        >
-          Carregar e posicionar
-        </button>
-        <button
-          type="button"
-          className="botao accent"
-          disabled={selecionadas.size === 0 || enviando}
-          onClick={() => enviarSelecionadas(false)}
-        >
-          Carregar selecionadas
-        </button>
       </div>
     </div>
   );

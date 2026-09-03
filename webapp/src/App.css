@@ -1,55 +1,97 @@
-.app {
+.app-shell {
+  display: flex;
+  height: 100vh;
+}
+
+/* Sidebar --------------------------------------------------------------- */
+.sidebar {
+  width: 64px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  align-items: center;
+  padding: 16px 0;
+}
+
+.sidebar-logo {
+  width: 32px;
+  height: 32px;
+  color: var(--white);
+  margin-bottom: 28px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.sidebar-rodape {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-item {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  color: var(--sidebar-icon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-item .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-item:not(:disabled):hover {
+  background: var(--sidebar-bg-hover);
+  color: var(--white);
+}
+
+.sidebar-item.ativa {
+  background: var(--accent);
+  color: var(--white);
+}
+
+.sidebar-item:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* Área principal ---------------------------------------------------------- */
+.app {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   padding: 22px 26px 20px;
 }
 
 /* Cabeçalho ------------------------------------------------------------ */
 .header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
-.header .logo {
-  width: 170px;
-  height: 48px;
-  border-radius: 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  margin-right: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.header .logo img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.header .titulos .eyebrow {
+.header .eyebrow {
   font-size: 10px;
   font-weight: 600;
   color: var(--accent);
-  margin-bottom: 4px;
-  letter-spacing: 0.02em;
+  margin: 0 0 4px;
+  letter-spacing: 0.06em;
 }
 
-.header .titulos h1 {
+.header h1 {
   font-size: 22px;
-  font-weight: 300;
+  font-weight: 600;
   margin: 0;
   color: var(--text);
-}
-
-.header .titulos p {
-  font-size: 11px;
-  color: var(--text-2);
-  margin: 4px 0 0;
 }
 
 /* Busca ------------------------------------------------------------------ */
@@ -59,7 +101,7 @@
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 18px;
-  height: 38px;
+  height: 40px;
   padding: 0 14px;
   margin-bottom: 18px;
 }
@@ -85,36 +127,11 @@
 }
 
 /* Categorias (pills) ------------------------------------------------------ */
-.categorias {
-  margin-bottom: 18px;
-}
-
-.categorias .cabecalho {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.categorias .rotulo {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-3);
-  letter-spacing: 0.02em;
-}
-
-.categorias .atualizar {
-  border: none;
-  background: transparent;
-  color: var(--accent);
-  font-size: 10px;
-  padding: 0;
-}
-
 .pills {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  margin-bottom: 18px;
 }
 
 .pill {
@@ -131,7 +148,8 @@
 }
 
 .pill img,
-.pill .icone-fallback {
+.pill .icone-fallback,
+.pill .icon {
   width: 22px;
   height: 22px;
   margin-right: 10px;
@@ -156,22 +174,43 @@
   color: var(--white);
 }
 
+/* Título da seção + contadores -------------------------------------------- */
+.secao-titulo-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.secao-titulo {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  margin: 0;
+}
+
+.contadores {
+  display: flex;
+  gap: 16px;
+}
+
+.contador {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.contador strong {
+  color: var(--accent);
+  font-size: 13px;
+  margin-right: 4px;
+}
+
 /* Catálogo / grade de cartões --------------------------------------------- */
 .catalogo {
   flex: 1;
   overflow-y: auto;
   padding-right: 6px;
-}
-
-.secao-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-  margin: 16px 0 10px;
-}
-
-.secao-header:first-child {
-  margin-top: 0;
 }
 
 .grade {
@@ -185,14 +224,13 @@
   width: 138px;
   height: 190px;
   background: var(--bg-2);
-  border: 1px solid var(--border);
+  border: 2px solid transparent;
   border-radius: 10px;
-  padding: 10px;
+  padding: 9px;
 }
 
 .cartao.selecionado {
-  border: 2px solid var(--accent);
-  padding: 9px;
+  border-color: var(--accent);
 }
 
 .cartao .preview-tile {
@@ -238,20 +276,55 @@
   -webkit-box-orient: vertical;
 }
 
-.cartao .badge {
+/* Checkbox no canto: some por padrão, contorno vazio no hover, preenchido
+   e com check quando selecionado. */
+.checkbox-cartao {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  background: var(--accent);
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 2px solid var(--border-2);
+  background: var(--bg-2);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-cartao .icon {
+  width: 11px;
+  height: 11px;
   color: var(--white);
-  font-size: 10px;
-  font-weight: bold;
+}
+
+.cartao:hover .checkbox-cartao {
+  display: flex;
+}
+
+.cartao.selecionado .checkbox-cartao {
+  display: flex;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* Indicador de "já carregada no projeto" — só informativo, sem borda
+   vermelha e sem ação ao clicar. */
+.indicador-carregada {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text);
+}
+
+.indicador-carregada .icon {
+  width: 14px;
+  height: 14px;
 }
 
 .vazio {
@@ -260,22 +333,16 @@
   margin-top: 20px;
 }
 
-/* Status + botões ---------------------------------------------------------- */
-.status {
-  font-size: 11px;
-  color: var(--text-3);
-  margin: 10px 0;
-}
-
+/* Botões de ação — só aparecem quando há alguma família selecionada -------- */
 .acoes {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 14px;
 }
 
 .botao {
-  height: 32px;
+  height: 34px;
   padding: 0 14px;
   font-size: 11px;
   border-radius: 4px;
@@ -284,13 +351,8 @@
   color: var(--text-2);
 }
 
-.botao.accent-outline {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
 .botao.accent {
-  height: 34px;
+  height: 36px;
   padding: 0 18px;
   font-size: 12px;
   font-weight: 600;

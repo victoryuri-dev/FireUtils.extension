@@ -151,11 +151,7 @@ def carregar_familias(doc, entradas):
                            o nome do arquivo .rfa (FamilyEntry.name) nem
                            sempre bate com o "nome da família" salvo
                            internamente no arquivo (definido no Editor de
-                           Famílias), então quem for posicionar a família
-                           em seguida (ver obter_symbol_de_familia) deve
-                           usar esse objeto direto, sem procurar de novo
-                           por nome — buscar por FamilyEntry.name depois de
-                           carregada pode simplesmente não encontrar nada.
+                           Famílias).
     """
     existentes_por_nome = {
         f.Name: f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
@@ -194,33 +190,16 @@ def carregar_familias(doc, entradas):
     return carregadas, ja_existentes, erros, familias_por_nome
 
 
-def obter_symbol_de_familia(doc, familia):
+def listar_nomes_familias_carregadas(doc):
     """
-    Retorna o primeiro FamilySymbol (tipo) do objeto `familia` (Family) já
-    carregado em `doc`, garantindo que esteja ativo — pronto para uso em
-    uidoc.PromptForFamilyInstancePlacement(). Retorna None se `familia` for
-    None ou não tiver nenhum tipo.
+    Retorna o conjunto de Family.Name de todas as famílias já presentes em
+    `doc` — usado pra informar o frontend web quais famílias do catálogo já
+    estão carregadas no projeto ativo (indicador visual + contador de
+    "carregadas" nos cards).
 
-    Recebe o objeto Family direto (ver carregar_familias) em vez de
-    localizar pelo nome — o nome do arquivo .rfa nem sempre bate com o
-    nome interno da família, então buscar de novo por nome depois de
-    carregada pode não encontrar nada mesmo com a família carregada com
-    sucesso.
+    Mesma convenção de nome usada em carregar_familias (compara contra o
+    campo "name" do catálogo, que é o nome do arquivo .rfa) — pode não
+    bater com famílias cujo nome interno diverge do nome do arquivo, mas é
+    a mesma aproximação que a checagem de "já existentes" já faz ali.
     """
-    if familia is None:
-        return None
-
-    simbolo = next(
-        (doc.GetElement(sid) for sid in familia.GetFamilySymbolIds()),
-        None
-    )
-    if simbolo is None:
-        return None
-
-    if not simbolo.IsActive:
-        with Transaction(doc, u"FireUtils - Ativar tipo") as t:
-            t.Start()
-            simbolo.Activate()
-            t.Commit()
-
-    return simbolo
+    return set(f.Name for f in FilteredElementCollector(doc).OfClass(Family).ToElements())
