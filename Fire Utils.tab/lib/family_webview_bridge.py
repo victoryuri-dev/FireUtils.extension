@@ -77,7 +77,13 @@ def _carregar_e_posicionar(uiapp, entradas, posicionar, caminhos_temporarios):
         try:
             uidoc.PromptForFamilyInstancePlacement(simbolo)
         except OperationCanceledException:
-            break  # Esc pressionado — encerra o posicionamento em lote, sem erro
+            # PromptForFamilyInstancePlacement deixa o usuário posicionar
+            # QUANTAS instâncias quiser da mesma família, e só retorna
+            # quando ele aperta Esc — ou seja, o Esc aqui significa
+            # "terminei com essa família", não "cancele a lista inteira".
+            # `continue` (não `break`) avança pra próxima família
+            # selecionada em vez de abortar o lote inteiro.
+            continue
         except Exception as ex:
             # Antes isso caía num "except Exception: break" genérico, que
             # engolia silenciosamente qualquer erro real (não só o Esc
