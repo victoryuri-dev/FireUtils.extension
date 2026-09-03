@@ -95,9 +95,8 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         self.fila_acoes = criar_fila_acoes()
 
         if not os.path.isdir(_WEBAPP_DIST_DIR):
-            _mlogger.error(u"Build do frontend não encontrado em: %s", _WEBAPP_DIST_DIR)
-            print(
-                u"[ERRO] Build do frontend não encontrado em:\n{}\n\n"
+            self._erro_fatal(
+                u"Build do frontend não encontrado em:\n{}\n\n"
                 u"Rode `npm install && npm run build` dentro de webapp/.".format(_WEBAPP_DIST_DIR)
             )
             return  # painel abre em branco — sem WebView configurado
@@ -107,24 +106,45 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         # reagimos ao evento CoreWebView2InitializationCompleted, que
         # dispara tanto pro caminho síncrono quanto assíncrono da
         # inicialização, sem precisar lidar com Task nenhuma.
-        self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
-        self.WebView.EnsureCoreWebView2Async(None)
+        try:
+            self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
+            self.WebView.EnsureCoreWebView2Async(None)
+        except Exception as ex:
+            self._erro_fatal(u"Falha ao chamar EnsureCoreWebView2Async: {}".format(ex))
+
+    def _erro_fatal(self, mensagem):
+        """Popup (forms.alert) em vez de só print — um print dentro de um
+        callback assíncrono (como CoreWebView2InitializationCompleted, que
+        dispara bem depois do script do botão já ter retornado) pode não
+        ter uma output window do pyRevit visível pra aparecer. Um alert
+        sempre aparece na tela, garantido."""
+        _mlogger.error(mensagem)
+        print(u"[ERRO] {}".format(mensagem))
+        forms.alert(
+            mensagem,
+            title=u"Fire Utils - Carregador de Famílias (Web)",
+            warn_icon=True,
+        )
 
     def _ao_inicializar_core(self, sender, args):
-        if not args.IsSuccess:
-            _mlogger.error(u"Falha ao inicializar o CoreWebView2: %s", args.InitializationException)
-            print(u"[ERRO] Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException))
-            return
+        try:
+            if not args.IsSuccess:
+                self._erro_fatal(
+                    u"Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException)
+                )
+                return
 
-        from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
-        from System import Uri
+            from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
+            from System import Uri
 
-        core = self.WebView.CoreWebView2
-        core.SetVirtualHostNameToFolderMapping(
-            _VIRTUAL_HOST, _WEBAPP_DIST_DIR, CoreWebView2HostResourceAccessKind.Allow
-        )
-        core.WebMessageReceived += self._ao_receber_mensagem
-        self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
+            core = self.WebView.CoreWebView2
+            core.SetVirtualHostNameToFolderMapping(
+                _VIRTUAL_HOST, _WEBAPP_DIST_DIR, CoreWebView2HostResourceAccessKind.Allow
+            )
+            core.WebMessageReceived += self._ao_receber_mensagem
+            self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
+        except Exception as ex:
+            self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(ex))
 
     def _ao_receber_mensagem(self, sender, args):
         processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes)
