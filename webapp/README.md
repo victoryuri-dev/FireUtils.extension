@@ -45,18 +45,27 @@ npm run dev
 controle de acesso de verdade é a política de RLS do bucket privado no
 Supabase.
 
-## Build de produção (o que a Fase 3 vai consumir)
+## Build de produção (o que a Fase 3 consome)
 
 ```bash
 npm run build
 ```
 
 Gera `dist/` — um `index.html` + assets estáticos, sem servidor Node
-nenhum por trás. É essa pasta que o pyRevit vai apontar o WebView2 pra
-carregar (Fase 3), idealmente via
+nenhum por trás. É essa pasta que o pyRevit aponta o WebView2 pra carregar
+(Fase 3), via
 [`SetVirtualHostNameToFolderMapping`](https://learn.microsoft.com/microsoft-edge/webview2/how-to/hostnametofoldermapping)
 em vez de abrir o `index.html` direto com `file://` (evita restrições de
 CORS/módulos ES do Chromium com `file://`).
+
+**`dist/` é commitado no git** (não está no `.gitignore`), de propósito:
+este plugin é distribuído via `git clone`/`git pull` direto pra cada
+computador, sem CI/CD nem instalador — se `dist/` não fosse versionado,
+cada máquina nova precisaria de Node/npm instalados só pra rodar o
+Carregador de Famílias, o que não faz sentido pro usuário final do plugin.
+Sempre que mudar algo em `src/`, rode `npm run build` de novo e **comite o
+`dist/` atualizado junto** — sem isso, o plugin instalado continua rodando
+a versão antiga da interface.
 
 ## Contrato da ponte JS → Python (Fase 3/4)
 

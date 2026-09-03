@@ -27,10 +27,11 @@ desktop.ini
 migration/.env
 migration/output/
 
-# WebView2 SDK — binários redistribuíveis de terceiros, baixados manualmente
-# (ver Fire Utils.tab/lib/webview2_runtime/README.md)
-Fire Utils.tab/lib/webview2_runtime/*.dll
+# WebView2 SDK (Fire Utils.tab/lib/webview2_runtime/*.dll) e o build do
+# frontend (webapp/dist/) SÃO commitados de propósito, apesar de serem
+# binário/artefato gerado — este plugin é distribuído via git clone/pull
+# direto pra cada computador (sem CI/CD nem instalador), então esses
+# arquivos precisam estar no repo pra instalar em uma máquina nova sem
+# repetir o download do NuGet e o `npm run build` toda vez.
 
-# Build do frontend (webapp/) — gerado por `npm run build`, não versionado
 webapp/node_modules/
-webapp/dist/

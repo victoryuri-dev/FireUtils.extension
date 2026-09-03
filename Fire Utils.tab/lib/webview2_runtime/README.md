@@ -1,9 +1,16 @@
 # WebView2 SDK — assemblies necessários
 
 O `family_loader_webview_forms.py` (Fase 3 do plano de migração) precisa de
-dois `.dll` do SDK do WebView2 que **não vêm com o Revit/pyRevit** e por
-isso não são commitados aqui (binários de terceiros, ~1-2 MB cada) — baixe
-e copie pra esta pasta antes de usar o painel web.
+três arquivos do SDK do WebView2 que **não vêm com o Revit/pyRevit**. Eles
+**são commitados nesta pasta** (apesar de serem binário de terceiro, não
+código do projeto) — o plugin é distribuído via `git clone`/`git pull`
+direto pra cada computador, sem instalador nem CI/CD, então instalar numa
+máquina nova precisa funcionar só com o clone do repositório, sem depender
+de NuGet/Visual Studio disponíveis ali.
+
+As instruções abaixo são pra quando for **atualizar a versão do SDK** (ou
+se por algum motivo os `.dll` sumirem daqui) — no dia a dia, quem só
+instala o plugin não precisa fazer nada disso.
 
 ## Onde conseguir
 
@@ -53,8 +60,8 @@ precisa ter o WebView2 Runtime instalado. Windows 10/11 atualizados com
 Edge já vêm com ele. Se necessário, instale o "Evergreen Bootstrapper":
 https://developer.microsoft.com/microsoft-edge/webview2/
 
-## Por que esses arquivos não estão no git
+## Atualizando pra uma versão nova do SDK
 
-São binários redistribuíveis da Microsoft, não código deste projeto — indo
-pro `.gitignore` (`*.dll` nesta pasta) pra não inchar o repositório com
-binário de terceiros a cada atualização de versão do SDK.
+Baixe a nova versão pelos passos acima, substitua os 3 arquivos nesta
+pasta e comite a mudança — sem isso, os computadores que só fazem `git
+pull` continuam usando os `.dll` antigos.
