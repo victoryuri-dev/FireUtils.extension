@@ -82,6 +82,37 @@ def _carregar_assemblies_webview2():
     _webview2_carregado = True
 
 
+def _aguardar_task(tarefa):
+    """
+    Bloqueia a thread atual até `tarefa` (System.Threading.Tasks.Task)
+    completar — sem travar a UI enquanto espera: usa Dispatcher.PushFrame
+    pra continuar bombeando mensagens (processando outros eventos,
+    inclusive os que a própria Task precisa pra avançar) durante a espera,
+    em vez de Task.Wait()/.Result puro.
+
+    Necessário porque, hospedado dentro do Revit via pyRevit/IronPython, a
+    Task de EnsureCoreWebView2Async pode nunca completar "sozinha": falta
+    o SynchronizationContext que o async/await do C# (usado internamente
+    pelo SDK do WebView2) precisa pra agendar a continuação de volta na UI
+    thread — sem ele, o evento CoreWebView2InitializationCompleted nunca
+    dispara, e a Task fica pendurada pra sempre.
+    """
+    from System.Windows.Threading import Dispatcher, DispatcherFrame
+
+    frame = DispatcherFrame()
+
+    def _finalizar(t):
+        frame.Continue = False
+
+    tarefa.ContinueWith(_finalizar)
+    Dispatcher.PushFrame(frame)
+
+    if tarefa.IsFaulted:
+        excecao = tarefa.Exception
+        interna = getattr(excecao, u"InnerException", None)
+        raise (interna if interna is not None else excecao)
+
+
 def _obter_user_data_dir():
     """
     Pasta gravável em %LOCALAPPDATA% pro WebView2 guardar seus dados
@@ -122,12 +153,6 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             return  # painel abre em branco — sem WebView configurado
 
-        # EnsureCoreWebView2Async é assíncrono (retorna uma Task) e o
-        # IronPython 2.7 não tem await — em vez de esperar o resultado,
-        # reagimos ao evento CoreWebView2InitializationCompleted, que
-        # dispara tanto pro caminho síncrono quanto assíncrono da
-        # inicialização, sem precisar lidar com Task nenhuma.
-        #
         # A pasta de dados é configurada via CreationProperties do próprio
         # controle (não criando um CoreWebView2Environment manualmente) —
         # criar o Environment "na mão" causa
@@ -136,42 +161,24 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         # em dois contextos diferentes (um pela nossa criação manual, outro
         # pelo próprio WebView2Base internamente); CreationProperties deixa
         # o controle criar o Environment sozinho, sem esse conflito.
+        #
+        # EnsureCoreWebView2Async retorna uma Task; em vez de assinar
+        # CoreWebView2InitializationCompleted e torcer pra ela disparar
+        # sozinha (o que nunca aconteceu neste ambiente — provável deadlock
+        # de SynchronizationContext hospedado dentro do Revit), bloqueamos
+        # de forma explícita com _aguardar_task, que continua bombeando o
+        # Dispatcher enquanto espera em vez de travar a UI.
         try:
             from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+            from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
+            from System import Uri
 
             propriedades = CoreWebView2CreationProperties()
             propriedades.UserDataFolder = _obter_user_data_dir()
             self.WebView.CreationProperties = propriedades
 
-            self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
-            self.WebView.EnsureCoreWebView2Async(None)
-        except Exception as ex:
-            self._erro_fatal(u"Falha ao iniciar o CoreWebView2: {}".format(ex))
-
-    def _erro_fatal(self, mensagem):
-        """Popup (forms.alert) em vez de só print — um print dentro de um
-        callback assíncrono (como CoreWebView2InitializationCompleted, que
-        dispara bem depois do script do botão já ter retornado) pode não
-        ter uma output window do pyRevit visível pra aparecer. Um alert
-        sempre aparece na tela, garantido."""
-        _mlogger.error(mensagem)
-        print(u"[ERRO] {}".format(mensagem))
-        forms.alert(
-            mensagem,
-            title=u"Fire Utils - Carregador de Famílias (Web)",
-            warn_icon=True,
-        )
-
-    def _ao_inicializar_core(self, sender, args):
-        try:
-            if not args.IsSuccess:
-                self._erro_fatal(
-                    u"Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException)
-                )
-                return
-
-            from Microsoft.Web.WebView2.Core import CoreWebView2HostResourceAccessKind
-            from System import Uri
+            tarefa = self.WebView.EnsureCoreWebView2Async(None)
+            _aguardar_task(tarefa)
 
             core = self.WebView.CoreWebView2
 
@@ -196,7 +203,19 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
-            self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(ex))
+            self._erro_fatal(u"Falha ao iniciar o CoreWebView2: {}".format(ex))
+
+    def _erro_fatal(self, mensagem):
+        """Popup (forms.alert) em vez de só print — mais garantido de
+        aparecer na tela do que uma print que talvez não tenha nenhuma
+        output window do pyRevit visível pra ir."""
+        _mlogger.error(mensagem)
+        print(u"[ERRO] {}".format(mensagem))
+        forms.alert(
+            mensagem,
+            title=u"Fire Utils - Carregador de Famílias (Web)",
+            warn_icon=True,
+        )
 
     def _ao_receber_mensagem(self, sender, args):
         processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes)
