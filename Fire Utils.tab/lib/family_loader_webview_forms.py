@@ -65,7 +65,16 @@ def _carregar_assemblies_webview2():
     IronPython resolva sozinho, então precisam do caminho absoluto. Tem que
     rodar ANTES de forms.WPFPanel.__init__ (que carrega e interpreta o
     XAML) — o XAML referencia o namespace Microsoft.Web.WebView2.Wpf, que
-    só existe depois desse AddReference."""
+    só existe depois desse AddReference.
+
+    Também adiciona webview2_runtime/ ao PATH do processo: o
+    Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
+    WebView2Loader.dll (nativo) sem caminho absoluto — o carregamento de
+    DLL nativa não herda automaticamente o diretório de onde carregamos um
+    assembly .NET via AddReferenceToFileAndPath, então sem isso o Windows
+    procura o WebView2Loader.dll só no diretório do Revit.exe/System32,
+    não acha, e a inicialização do CoreWebView2 fica pendurada pra sempre
+    (sem erro nenhum) em vez de falhar de forma visível."""
     global _webview2_carregado
     if _webview2_carregado:
         return
@@ -79,6 +88,31 @@ def _carregar_assemblies_webview2():
                 u"Fire Utils.tab/lib/webview2_runtime/README.md".format(caminho)
             )
         clr.AddReferenceToFileAndPath(caminho)
+
+    caminho_loader = os.path.join(_WEBVIEW2_RUNTIME_DIR, u"WebView2Loader.dll")
+    if not os.path.isfile(caminho_loader):
+        raise IOError(
+            u"WebView2Loader.dll não encontrado em: {}\n"
+            u"Baixe o pacote NuGet Microsoft.Web.WebView2 e copie o "
+            u"arquivo (runtimes/win-x64/native/WebView2Loader.dll) pra "
+            u"essa pasta — ver "
+            u"Fire Utils.tab/lib/webview2_runtime/README.md".format(caminho_loader)
+        )
+    if _WEBVIEW2_RUNTIME_DIR not in os.environ.get(u"PATH", u""):
+        os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
+
+    # Reforço: SetDllDirectory é a API do Windows feita especificamente
+    # pra esse cenário (achar DLL nativa fora do diretório do processo) e
+    # tem prioridade mais garantida que o PATH quando o "Safe DLL Search
+    # Mode" está ativo (padrão desde Windows XP SP2). Best-effort — se
+    # ctypes não estiver disponível nessa build do IronPython, o PATH
+    # ajustado acima já cobre a maioria dos casos.
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetDllDirectoryW(_WEBVIEW2_RUNTIME_DIR)
+    except Exception as ex:
+        _mlogger.warning(u"SetDllDirectory falhou (seguindo só com PATH): %s", ex)
+
     _webview2_carregado = True
 
 
