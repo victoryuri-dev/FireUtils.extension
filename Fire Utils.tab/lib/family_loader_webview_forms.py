@@ -82,6 +82,46 @@ def _carregar_assemblies_webview2():
     _webview2_carregado = True
 
 
+def _criar_ambiente_webview2():
+    """
+    Cria o CoreWebView2Environment apontando explicitamente pra um
+    userDataFolder gravável em %LOCALAPPDATA%.
+
+    Sem isso (EnsureCoreWebView2Async(None) direto), o WebView2 tenta criar
+    essa pasta de dados (cache, cookies, perfil) ao lado do executável do
+    processo host — Revit.exe, dentro de "Program Files" — e falha com
+    UnauthorizedAccessException/E_ACCESSDENIED, porque o usuário normalmente
+    não tem permissão de escrita lá.
+
+    CoreWebView2Environment.CreateAsync é assíncrono (retorna uma Task); só
+    é chamado uma vez, na inicialização do painel, então usamos `.Result`
+    pra bloquear até completar em vez de lidar com callback — o
+    IronPython 2.7 não tem await, e essa chamada é rápida (só monta o
+    ambiente, não carrega nenhuma página).
+    """
+    from Microsoft.Web.WebView2.Core import CoreWebView2Environment
+    from System import Environment as DotNetEnvironment
+
+    user_data_dir = os.path.join(
+        DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
+        u"FireUtils", u"WebView2UserData",
+    )
+    if not os.path.isdir(user_data_dir):
+        os.makedirs(user_data_dir)
+
+    tarefa = CoreWebView2Environment.CreateAsync(None, user_data_dir, None)
+    return tarefa.Result
+
+
+def _desembrulhar_excecao(ex):
+    """Acessar Task.Result de uma Task que falhou embrulha a exceção real
+    numa System.AggregateException genérica ("One or more errors
+    occurred.") — desembrulha pra InnerException, que tem a mensagem útil
+    de verdade (ex.: o UnauthorizedAccessException do E_ACCESSDENIED)."""
+    interna = getattr(ex, u"InnerException", None)
+    return interna if interna is not None else ex
+
+
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
     panel_id = u"9f2f6d4a-9d63-4d3b-8c2a-9b6f8b6a1c7e"
@@ -101,16 +141,17 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             return  # painel abre em branco — sem WebView configurado
 
-        # EnsureCoreWebView2Async é assíncrono (retorna uma Task) e o
-        # IronPython 2.7 não tem await — em vez de esperar o resultado,
-        # reagimos ao evento CoreWebView2InitializationCompleted, que
-        # dispara tanto pro caminho síncrono quanto assíncrono da
+        # EnsureCoreWebView2Async(environment) é assíncrono (retorna uma
+        # Task) e o IronPython 2.7 não tem await — em vez de esperar o
+        # resultado, reagimos ao evento CoreWebView2InitializationCompleted,
+        # que dispara tanto pro caminho síncrono quanto assíncrono da
         # inicialização, sem precisar lidar com Task nenhuma.
         try:
             self.WebView.CoreWebView2InitializationCompleted += self._ao_inicializar_core
-            self.WebView.EnsureCoreWebView2Async(None)
+            ambiente = _criar_ambiente_webview2()
+            self.WebView.EnsureCoreWebView2Async(ambiente)
         except Exception as ex:
-            self._erro_fatal(u"Falha ao chamar EnsureCoreWebView2Async: {}".format(ex))
+            self._erro_fatal(u"Falha ao iniciar o CoreWebView2: {}".format(_desembrulhar_excecao(ex)))
 
     def _erro_fatal(self, mensagem):
         """Popup (forms.alert) em vez de só print — um print dentro de um
