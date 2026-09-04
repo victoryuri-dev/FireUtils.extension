@@ -17,10 +17,11 @@ clr.AddReference("RevitAPI")
 from collections import deque
 
 from Autodesk.Revit.DB import (
-    FamilyInstance, BuiltInCategory, BuiltInParameter,
+    FamilyInstance, BuiltInCategory, BuiltInParameter, ElementId,
     ConnectorType, LocationCurve, LocationPoint, UnitUtils,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
+from System import Int64
 
 from hydrant_family import NOME_FAMILIA as _NOME_FAMILIA_VALVULA
 
@@ -42,8 +43,19 @@ PROFUNDIDADE_MAX = 500
 # ===========================================================================
 
 def get_id(elem):
-    try:    return elem.Id.Value
-    except: return elem.Id.IntegerValue
+    """ElementId como int nativo do Python — para gravar no cache (JSON,
+    que não serializa o Int64/Int32 do .NET direto) e para reconstruir o
+    ElementId depois com to_element_id()."""
+    try:    return int(elem.Id.Value)
+    except: return int(elem.Id.IntegerValue)
+
+
+def to_element_id(eid):
+    """ElementId a partir de um int puro do Python. ElementId(int) é
+    ambíguo no IronPython nas versões do Revit que também têm
+    ElementId(BuiltInParameter)/ElementId(BuiltInCategory) (2024+) —
+    Int64(eid) força o overload certo."""
+    return ElementId(Int64(eid))
 
 
 def get_conectores(elem):
@@ -129,12 +141,16 @@ def get_cota_conector(elem, direcoes=None):
 
 
 def get_cota_rti(elem):
-    """Cota da RTI: acha a ponta solta de `elem` (o elemento marcado
-    "RTI" pelo "Mapear Trechos" - familia da RTI ou, no fallback manual,
-    o proprio tubo) e le a elevacao dela. Ponta solta = conector fisico
-    (nao Logical) que nao esta conectado a nada - o mesmo criterio tanto
-    para a familia quanto para o tubo, sem tentar adivinhar Direction.
-    None se nao achar nenhuma ponta solta."""
+    """Cota da RTI: le a elevacao de um conector fisico de `elem` (o
+    elemento marcado "RTI" pelo "Mapear Trechos" - familia da RTI ou, no
+    fallback manual, o proprio tubo). Preferencia pela ponta solta (conector
+    nao Logical e nao conectado a nada) - normalmente e ela que fica virada
+    para dentro do reservatorio. Mas nem todo modelo tem uma ponta solta ali
+    (o elemento pode estar plenamente conectado nos dois lados da rede, com
+    a cota do RTI vindo so da posicao dele) - nesse caso cai para qualquer
+    conector fisico, mesmo criterio de get_cota_conector() para os demais
+    pontos (succao/recalque/hidrantes). None so se nao achar conector
+    nenhum."""
     cm = None
     if hasattr(elem, "ConnectorManager") and elem.ConnectorManager:
         cm = elem.ConnectorManager
@@ -142,11 +158,17 @@ def get_cota_rti(elem):
         cm = elem.MEPModel.ConnectorManager
     if not cm:
         return None
-    for conn in cm.Connectors:
+    conns = list(cm.Connectors)
+    for conn in conns:
         try:
             if conn.ConnectorType == ConnectorType.Logical: continue
             if not conn.IsConnected:
                 return to_m(conn.Origin.Z)
+        except: continue
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            return to_m(conn.Origin.Z)
         except: continue
     return None
 
@@ -272,10 +294,9 @@ def get_pontas_abertas(doc, visitados):
     """Dentre os elementos alcancados por uma travessia (bfs_ate ou
     percorre_rotas_hidrantes), retorna os que tem conector desconectado -
     candidatos ao ponto onde a rede quebrou. Usado so para diagnostico."""
-    from Autodesk.Revit.DB import ElementId
     pontas = []
     for eid in visitados:
-        elem = doc.GetElement(ElementId(eid))
+        elem = doc.GetElement(to_element_id(eid))
         if not elem: continue
         conns = get_conectores(elem)
         if not conns: continue
@@ -299,22 +320,36 @@ def get_comprimento(pipe):
     except: return 0.0
 
 
-def get_diametro(pipe):
+def get_diametro(elem):
     """
     Diâmetro NOMINAL (DN) do elemento — não o diâmetro interno real medido
     pelo schedule/material. Ex.: um tubo DN 65 pode ter diâmetro interno
     de 68,8 mm; o cálculo (Jun, J, V) usa o nominal, como no dimensionamento
     de referência. RBS_PIPE_DIAMETER_PARAM é o parâmetro "Diâmetro" do tubo
     (o tamanho nominal da lista de segmentos/tipos de tubo do Revit).
+
+    Para um Pipe o diâmetro TEM que ser lido com sucesso: um fallback
+    silencioso aqui faria dois tubos de tamanhos diferentes caírem no
+    mesmo valor "adivinhado" e a pontuação da rota (ou o dimensionamento)
+    perderia a diferença real sem avisar. Por isso lança erro em vez de
+    chutar — o chamador mostra qual elemento é. Só um acessório
+    (FamilyInstance sem "Diâmetro" cadastrado, ex.: conexão atípica) usa
+    o diâmetro interno e, na falta dele, um valor padrão.
     """
     try:
-        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
-        if p and p.AsDouble() > 0: return to_m(p.AsDouble())
-        # Fallback: elemento sem "Diâmetro" nominal (ex.: acessório atípico)
-        # usa o diâmetro interno, melhor que nada.
-        p = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
-        return to_m(p.AsDouble()) if p else 0.065
-    except: return 0.065
+        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
+        if p and p.AsDouble() > 0:
+            return to_m(p.AsDouble())
+    except Exception: pass
+    if isinstance(elem, Pipe):
+        raise ValueError(
+            u"Não foi possível ler o diâmetro nominal do tubo ID {} "
+            u"(parâmetro 'Diâmetro' ausente ou zerado). Verifique o tipo "
+            u"de tubo/segmento desse trecho no Revit.".format(elem.Id))
+    try:
+        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
+        return to_m(p.AsDouble()) if p and p.AsDouble() > 0 else 0.065
+    except Exception: return 0.065
 
 
 def get_leq(elem):

@@ -42,7 +42,7 @@ from hidrantes.norm_profiles import get_profile, req
 from hidrantes.sistema import resolver_dados_sistema
 from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
 from hidrantes.rede import (
-    get_id, get_cota_conector, get_primeiro_tubo, bfs_ate,
+    get_id, to_element_id, get_cota_conector, get_primeiro_tubo, bfs_ate,
     percorre_rotas_hidrantes, get_pontas_abertas, diagnostico_conectores,
     get_comprimento, get_diametro, get_leq, get_nome,
 )
@@ -81,12 +81,12 @@ def reporta_quebra(visitados, alvo_desc):
         output.print_md(u"Possivel(is) ponto(s) de quebra (conector desconectado):")
         for eid in pontas:
             try:
-                link = output.linkify(ElementId(eid), title=u"Mostrar ID {}".format(eid))
+                link = output.linkify(to_element_id(eid), title=u"Mostrar ID {}".format(eid))
             except:
                 link = u"ID {}".format(eid)
             output.print_md(u"- {}".format(link))
         try:
-            uidoc.Selection.SetElementIds(List[ElementId]([ElementId(eid) for eid in pontas]))
+            uidoc.Selection.SetElementIds(List[ElementId]([to_element_id(eid) for eid in pontas]))
         except: pass
     else:
         output.print_md(
@@ -271,7 +271,7 @@ if z_recalque_bomba is None:
 
 candidatas = []
 for rota in rotas:
-    valvula = doc.GetElement(ElementId(rota[-1]))
+    valvula = doc.GetElement(to_element_id(rota[-1]))
     z_valvula = get_cota_conector(valvula)
     if z_valvula is None:
         detalhes = [u"Nao foi possivel ler a elevacao da valvula (ID {}):".format(valvula.Id)]
@@ -279,8 +279,12 @@ for rota in rotas:
         forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
         script.exit()
 
-    elems = [doc.GetElement(ElementId(eid)) for eid in rota]
-    trecho_data = extrair_trecho(elems, get_comprimento, get_diametro, get_leq, get_nome)
+    elems = [doc.GetElement(to_element_id(eid)) for eid in rota]
+    try:
+        trecho_data = extrair_trecho(elems, get_comprimento, get_diametro, get_leq, get_nome)
+    except ValueError as _e:
+        forms.alert(u"{}".format(_e), title="Fire Utils", warn_icon=True)
+        script.exit()
     jt = calc_j_trecho(trecho_data, Qs_lmin, C_HW, u"Bomba > Valvula (score)")
     score = jt["J"] + (z_valvula - z_recalque_bomba)
 
@@ -355,14 +359,14 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
 
         # Sucção
         for eid in ids_succao:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(to_element_id(eid))
             if elem:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
                 cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
 
         # Recalque comum
         for eid in ids_rec_comum:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(to_element_id(eid))
             if not elem: continue
             set_param(elem, P_TRECHO, u"Bomba - Ponto A")
             if eid == ponto_a_id:
@@ -371,14 +375,14 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
 
         # Ramal H-01
         for eid in ids_ramal_h1:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(to_element_id(eid))
             if elem:
                 set_param(elem, P_TRECHO, u"Ponto A - Hid 01")
                 cont[u"Ponto A - Hid 01"] = cont.get(u"Ponto A - Hid 01", 0) + 1
 
         # Ramal H-02
         for eid in ids_ramal_h2:
-            elem = doc.GetElement(ElementId(eid))
+            elem = doc.GetElement(to_element_id(eid))
             if elem:
                 set_param(elem, P_TRECHO, u"Ponto A - Hid 02")
                 cont[u"Ponto A - Hid 02"] = cont.get(u"Ponto A - Hid 02", 0) + 1
