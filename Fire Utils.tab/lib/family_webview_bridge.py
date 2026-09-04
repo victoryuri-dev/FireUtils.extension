@@ -34,6 +34,7 @@ import threading
 
 from family_loader import FamilyEntry, carregar_familias, listar_nomes_familias_carregadas
 from family_cache import baixar_temporario, remover_temporario
+from family_error_utils import texto_erro
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -90,8 +91,9 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
                 item[u"storageKey"], item[u"signedUrl"], item[u"name"], item.get(u"sha256")
             )
         except Exception as ex:
-            print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), ex))
-            erros_download.append((item.get(u"name") or u"?", str(ex)))
+            mensagem_ex = texto_erro(ex)
+            print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), mensagem_ex))
+            erros_download.append((item.get(u"name") or u"?", mensagem_ex))
             continue
         caminhos_temporarios.append(caminho_local)
         entradas.append(_montar_entrada(item, caminho_local))

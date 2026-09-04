@@ -35,16 +35,28 @@ família carregada por aqui ganhava um nome gigante e ilegível no projeto,
 e a checagem de "já existe" em family_loader.carregar_familias (que
 compara pelo nome do catálogo) nunca batia, gerando uma família NOVA a
 cada clique em vez de reaproveitar a já carregada.
+
+IMPORTANTE sobre a PASTA temporária: usa System.IO.Path.GetTempPath()
+(.NET) em vez de tempfile.gettempdir() (Python) de propósito.
+tempfile.gettempdir() sob o IronPython do pyRevit devolve um `str` (bytes)
+em vez de um `unicode`, decodificado pela codepage ANSI do Windows — em
+máquinas com o nome do usuário acentuado (comum em Windows em
+português, ex. "C:\\Users\\Usuário\\AppData\\Local\\Temp"), juntar esse
+`str` com qualquer `unicode` (via os.path.join) força uma decodificação
+implícita que o IronPython não sabe fazer ("'unknown' codec can't decode
+byte 0xe1..."), derrubando a ação inteira sem nenhuma pista melhor que
+essa mensagem genérica. Path.GetTempPath() já devolve uma
+System.String — sempre Unicode de verdade, sem essa ambiguidade.
 """
 
 import os
 import re
-import tempfile
 import uuid
 
 import clr
 clr.AddReference(u"System")
 from System import Uri
+from System.IO import Path
 from System.Net import WebClient
 
 _CARACTERES_INVALIDOS_EM_ARQUIVO = re.compile(u'[<>:"/\\\\|?*]')
@@ -87,7 +99,7 @@ def baixar_temporario(storage_key, signed_url, nome_familia, sha256_esperado=Non
     remover_temporario.
     """
     extensao = os.path.splitext(storage_key)[1] or u".rfa"
-    pasta_unica = os.path.join(tempfile.gettempdir(), u"FireUtils_{}".format(uuid.uuid4().hex))
+    pasta_unica = os.path.join(Path.GetTempPath(), u"FireUtils_{}".format(uuid.uuid4().hex))
     os.makedirs(pasta_unica)
     caminho_temp = os.path.join(pasta_unica, _nome_arquivo_seguro(nome_familia) + extensao)
 

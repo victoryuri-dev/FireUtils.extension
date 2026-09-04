@@ -19,6 +19,8 @@ import clr
 clr.AddReference("RevitAPI")
 from Autodesk.Revit.DB import Transaction, Family, FilteredElementCollector
 
+from family_error_utils import texto_erro
+
 _LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 FAMILY_LIBRARY_DIR = os.path.join(_LIB_DIR, u"family_library")
 
@@ -181,11 +183,11 @@ def carregar_familias(doc, entradas):
                     else:
                         erros.append((entrada.name, u"LoadFamily retornou False."))
                 except Exception as e:
-                    erros.append((entrada.name, str(e)))
+                    erros.append((entrada.name, texto_erro(e)))
             t.Commit()
         except Exception as e:
             t.RollBack()
-            erros.append((u"(transação)", str(e)))
+            erros.append((u"(transação)", texto_erro(e)))
 
     return carregadas, ja_existentes, erros, familias_por_nome
 

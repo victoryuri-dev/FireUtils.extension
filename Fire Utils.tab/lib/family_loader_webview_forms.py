@@ -64,6 +64,7 @@ from pyrevit.coreutils.logger import get_logger
 
 from family_loader_events import criar_fila_acoes
 from family_webview_bridge import processar_mensagem_webview
+from family_error_utils import texto_erro
 
 _mlogger = get_logger(__name__)
 
@@ -178,7 +179,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
     def _ao_inicializar_core(self, sender, args):
         if not args.IsSuccess:
             self._erro_fatal(
-                u"Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException)
+                u"Falha ao inicializar o CoreWebView2: {}".format(texto_erro(args.InitializationException))
             )
             return
 
@@ -195,7 +196,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
-            self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(ex))
+            self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(texto_erro(ex)))
 
     def _ao_receber_mensagem(self, sender, args):
         processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes, self._postar_mensagem)
@@ -270,7 +271,7 @@ def alternar_painel(uiapp):
         forms.alert(
             u"Não foi possível abrir o painel do Carregador de Famílias "
             u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
-            u"Revit.".format(ex),
+            u"Revit.".format(texto_erro(ex)),
             title=u"Fire Utils - Biblioteca de Famílias",
             warn_icon=True,
         )
