@@ -30,11 +30,9 @@ function tituloDaSecao(categorias, categoriaAtual) {
   return (ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name).toUpperCase();
 }
 
-// Lista até 3 nomes por extenso na notificação; a partir daí só o total,
-// pra não estourar o card de toast com um parágrafo inteiro.
-function listarNomes(nomes) {
-  return nomes.length <= 3 ? nomes.join(", ") : `${nomes.length} famílias`;
-}
+// Notificações de sucesso/aviso somem sozinhas rápido — uma por família,
+// só pra confirmar rapidamente o que aconteceu com cada uma.
+const DURACAO_TOAST_FAMILIA_MS = 3000;
 
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
@@ -81,20 +79,25 @@ export default function App() {
 
       const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};
 
-      if (nomesCarregados.length > 0) {
+      // Uma notificação por família (não agrupada) — empilham conforme vão
+      // sendo criadas e somem sozinhas rápido, só pra confirmar o que
+      // aconteceu com cada uma.
+      nomesCarregados.forEach((nome) => {
         adicionarToast({
           tipo: "sucesso",
-          titulo: nomesCarregados.length === 1 ? "Família carregada no projeto" : `${nomesCarregados.length} famílias carregadas no projeto`,
-          mensagem: listarNomes(nomesCarregados),
+          titulo: nome,
+          mensagem: "Carregada no projeto",
+          duracaoMs: DURACAO_TOAST_FAMILIA_MS,
         });
-      }
-      if (jaExistentes.length > 0) {
+      });
+      jaExistentes.forEach((nome) => {
         adicionarToast({
           tipo: "aviso",
-          titulo: jaExistentes.length === 1 ? "Já estava no projeto" : `${jaExistentes.length} já estavam no projeto`,
-          mensagem: `${listarNomes(jaExistentes)} — não recarregada${jaExistentes.length === 1 ? "" : "s"} de novo.`,
+          titulo: nome,
+          mensagem: "Já existe no projeto",
+          duracaoMs: DURACAO_TOAST_FAMILIA_MS,
         });
-      }
+      });
       erros.forEach((erro) => {
         adicionarToast({
           tipo: "erro",

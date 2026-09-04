@@ -101,6 +101,7 @@
   font-weight: 700;
   color: var(--text);
   margin: 0;
+  overflow-wrap: break-word;
 }
 
 .toast-mensagem {
