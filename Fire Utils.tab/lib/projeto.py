@@ -11,6 +11,7 @@ Uso em qualquer script:
 import os
 import io
 import json
+import datetime
 
 _CACHE_NOME = u"firedata.json"
 _TEMP       = os.environ.get("TEMP") or os.environ.get("TMP") or os.path.expanduser("~")
@@ -48,6 +49,43 @@ def carregar_cache(projeto_dir):
 def carregar_dados_projeto(projeto_dir):
     """Retorna o dict dados_projeto salvo no firedata.json, ou None."""
     return carregar_cache(projeto_dir).get(u"dados_projeto")
+
+
+def salvar_dados_projeto(projeto_dir, identificador, estado_nome, uf, ocupacao_principal, area_construida):
+    """Grava a chave 'dados_projeto' do firedata.json — mesmo formato que
+    exigir_projeto_e_estado() (abaixo) e os módulos de dimensionamento
+    (hidrantes/saidas/extintores) já esperam. Usada pelo vínculo de
+    projeto/estrutura escolhido no Dashboard da dockpane (ver
+    project_link_bridge.py) — substitui o antigo formulário "Dados do
+    Projeto", que gravava isso a partir de campos digitados manualmente."""
+    dados = {
+        u"identificador":      identificador,
+        u"estado":             estado_nome,
+        u"uf":                 uf,
+        u"ocupacao_principal": ocupacao_principal,
+        u"area_construida":    area_construida,
+        u"_timestamp":         datetime.datetime.now().strftime(u"%Y-%m-%d %H:%M:%S"),
+    }
+    path = cache_path(projeto_dir)
+    arquivo = carregar_cache(projeto_dir)
+    arquivo[u"dados_projeto"] = dados
+    with io.open(path, u"w", encoding=u"utf-8") as f:
+        json.dump(arquivo, f, ensure_ascii=False, indent=2)
+    salvar_ponteiro(projeto_dir)
+
+
+def limpar_vinculo_projeto(projeto_dir):
+    """Remove 'dados_projeto' e 'sync' do firedata.json — usado ao
+    desconectar o projeto pelo Dashboard da dockpane. Não mexe nas demais
+    chaves (hidrantes, saidas_emergencia, extintores, ...): desconectar o
+    vínculo com o site não apaga os dimensionamentos já calculados
+    localmente."""
+    path = cache_path(projeto_dir)
+    arquivo = carregar_cache(projeto_dir)
+    arquivo.pop(u"dados_projeto", None)
+    arquivo.pop(u"sync", None)
+    with io.open(path, u"w", encoding=u"utf-8") as f:
+        json.dump(arquivo, f, ensure_ascii=False, indent=2)
 
 
 # ── Verificação principal ─────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { fetchCatalog } from "./lib/catalog";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "./lib/bridge";
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
+import Dashboard from "./components/Dashboard";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
 import { useToasts } from "./lib/toasts";
@@ -36,11 +37,14 @@ const DURACAO_TOAST_FAMILIA_MS = 3000;
 
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
+  const [abaAtual, setAbaAtual] = useState("biblioteca");
   const [catalogo, setCatalogo] = useState(null);
   const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
   const [busca, setBusca] = useState("");
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [carregando, setCarregando] = useState(false);
+  const [vinculo, setVinculo] = useState(undefined); // undefined = ainda não respondeu
+  const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const { toasts, adicionarToast, removerToast } = useToasts();
   const timeoutCarregamentoRef = useRef(null);
 
@@ -70,12 +74,38 @@ export default function App() {
   useEffect(() => {
     if (sessao) {
       fetchCatalog().then(setCatalogo);
+      postToHost(BridgeMessageTypes.GET_PROJECT_LINK, {});
     }
   }, [sessao]);
 
   useEffect(() => {
     return escutarMensagensDoHost((mensagem) => {
-      if (!mensagem || mensagem.type !== BridgeMessageTypes.LOAD_RESULT) return;
+      if (!mensagem) return;
+
+      if (mensagem.type === BridgeMessageTypes.PROJECT_LINK) {
+        setVinculo(mensagem.payload || {});
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.PROJECT_LINK_SAVED) {
+        const { ok, erro } = mensagem.payload || {};
+        if (!ok) {
+          adicionarToast({
+            tipo: "erro",
+            titulo: "Não foi possível salvar o vínculo do projeto",
+            mensagem: erro,
+            duracaoMs: 9000,
+          });
+        }
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.DIMENSIONAMENTOS_STATUS) {
+        setDimensionamentos(mensagem.payload || {});
+        return;
+      }
+
+      if (mensagem.type !== BridgeMessageTypes.LOAD_RESULT) return;
 
       const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};
 
@@ -225,87 +255,103 @@ export default function App() {
         )}
         <ToastStack toasts={toasts} onDismiss={removerToast} />
       </div>
-      <Sidebar abaAtual="biblioteca" />
+      <Sidebar
+        abaAtual={abaAtual}
+        onSelecionarAba={setAbaAtual}
+        projetoVinculado={!!vinculo?.projetoId}
+        onDesconectar={() => postToHost(BridgeMessageTypes.DISCONNECT_PROJECT, {})}
+      />
 
       <div className="app">
-        <header className="header">
-          <h1>Biblioteca de Famílias</h1>
-        </header>
-
-        <div className="search-bar">
-          <Icon svg={searchIconSvg} className="icone" />
-          <input
-            type="text"
-            placeholder="Que equipamento você procura?"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-        </div>
-
-        {!catalogo ? (
-          <p className="vazio">Carregando catálogo...</p>
+        {abaAtual === "dashboard" ? (
+          <>
+            <header className="header">
+              <h1>Dashboard</h1>
+            </header>
+            <Dashboard vinculo={vinculo} dimensionamentos={dimensionamentos} adicionarToast={adicionarToast} />
+          </>
         ) : (
           <>
-            <p className="categorias-rotulo">Categorias</p>
-            <CategoryPills
-              categorias={catalogo.categories}
-              todasIconKey={catalogo.todas_icon_key}
-              categoriaAtual={categoriaAtual}
-              onSelect={setCategoriaAtual}
-            />
+            <header className="header">
+              <h1>Biblioteca de Famílias</h1>
+            </header>
 
-            <div className="secao-titulo-linha">
-              <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
-              {selecionadas.size > 0 && (
-                <div className="contadores">
-                  <span className="contador">
-                    <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
-                  </span>
-                </div>
-              )}
+            <div className="search-bar">
+              <Icon svg={searchIconSvg} className="icone" />
+              <input
+                type="text"
+                placeholder="Que equipamento você procura?"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
             </div>
 
-            <div className="catalogo">
-              {familiasFiltradas.length === 0 ? (
-                <p className="vazio">
-                  {catalogo.families.length === 0
-                    ? "Nenhuma família encontrada na biblioteca."
-                    : "Nenhuma família encontrada com esse filtro."}
-                </p>
-              ) : (
-                <div className="grade">
-                  {familiasFiltradas.map((familia) => (
-                    <FamilyCard
-                      key={familia.id}
-                      familia={familia}
-                      selecionado={selecionadas.has(familia.id)}
-                      onToggle={alternarSelecao}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            {!catalogo ? (
+              <p className="vazio">Carregando catálogo...</p>
+            ) : (
+              <>
+                <p className="categorias-rotulo">Categorias</p>
+                <CategoryPills
+                  categorias={catalogo.categories}
+                  todasIconKey={catalogo.todas_icon_key}
+                  categoriaAtual={categoriaAtual}
+                  onSelect={setCategoriaAtual}
+                />
 
-            {selecionadas.size > 0 && (
-              <div className="acoes">
-                <button
-                  type="button"
-                  className="botao accent"
-                  disabled={carregando}
-                  onClick={carregarSelecionadas}
-                >
-                  <Icon svg={carregarIconSvg} />
-                  Carregar no projeto
-                </button>
-                <button type="button" className="botao" onClick={marcarTodosFiltrados}>
-                  <Icon svg={checkIconSvg} />
-                  Selecionar todos
-                </button>
-                <button type="button" className="botao" onClick={desmarcarTodos}>
-                  <Icon svg={xIconSvg} />
-                  Desmarcar todos
-                </button>
-              </div>
+                <div className="secao-titulo-linha">
+                  <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
+                  {selecionadas.size > 0 && (
+                    <div className="contadores">
+                      <span className="contador">
+                        <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="catalogo">
+                  {familiasFiltradas.length === 0 ? (
+                    <p className="vazio">
+                      {catalogo.families.length === 0
+                        ? "Nenhuma família encontrada na biblioteca."
+                        : "Nenhuma família encontrada com esse filtro."}
+                    </p>
+                  ) : (
+                    <div className="grade">
+                      {familiasFiltradas.map((familia) => (
+                        <FamilyCard
+                          key={familia.id}
+                          familia={familia}
+                          selecionado={selecionadas.has(familia.id)}
+                          onToggle={alternarSelecao}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {selecionadas.size > 0 && (
+                  <div className="acoes">
+                    <button
+                      type="button"
+                      className="botao accent"
+                      disabled={carregando}
+                      onClick={carregarSelecionadas}
+                    >
+                      <Icon svg={carregarIconSvg} />
+                      Carregar no projeto
+                    </button>
+                    <button type="button" className="botao" onClick={marcarTodosFiltrados}>
+                      <Icon svg={checkIconSvg} />
+                      Selecionar todos
+                    </button>
+                    <button type="button" className="botao" onClick={desmarcarTodos}>
+                      <Icon svg={xIconSvg} />
+                      Desmarcar todos
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

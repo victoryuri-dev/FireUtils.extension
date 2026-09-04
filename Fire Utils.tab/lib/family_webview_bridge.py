@@ -34,6 +34,7 @@ import threading
 from family_loader import FamilyEntry, carregar_familias
 from family_cache import baixar_temporario, remover_temporario
 from family_error_utils import texto_erro
+import project_link_bridge
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -143,5 +144,21 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             target=_baixar_em_background,
             args=(familias, fila_acoes, postar_mensagem),
         ).start()
+    elif tipo == u"GET_PROJECT_LINK":
+        fila_acoes.enfileirar(
+            lambda uiapp: project_link_bridge.tratar_get_project_link(uiapp, postar_mensagem)
+        )
+    elif tipo == u"SET_PROJECT_LINK":
+        fila_acoes.enfileirar(
+            lambda uiapp: project_link_bridge.tratar_set_project_link(uiapp, payload, postar_mensagem)
+        )
+    elif tipo == u"DISCONNECT_PROJECT":
+        fila_acoes.enfileirar(
+            lambda uiapp: project_link_bridge.tratar_disconnect_project(uiapp, postar_mensagem)
+        )
+    elif tipo == u"GET_DIMENSIONAMENTOS_STATUS":
+        fila_acoes.enfileirar(
+            lambda uiapp: project_link_bridge.tratar_get_dimensionamentos_status(uiapp, postar_mensagem)
+        )
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

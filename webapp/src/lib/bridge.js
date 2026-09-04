@@ -27,10 +27,55 @@
  *        tira da seleção as famílias já resolvidas (carregadas ou já
  *        existentes), deixando só as que falharam marcadas pra tentar de
  *        novo.
+ *
+ * Mensagens do Dashboard (vínculo projeto/estrutura — ver
+ * lib/projectData.js e project_link_bridge.py do lado Python):
+ *
+ *   { type: "GET_PROJECT_LINK" }
+ *     JS -> Python: pede o vínculo salvo no firedata.json do documento
+ *     Revit ativo (a busca de projetos/estruturas em si é direto no
+ *     Supabase, do lado do React — isto só lê o que já foi vinculado).
+ *
+ *   { type: "PROJECT_LINK", payload: { docSalvo, projetoId, projetoNome, estruturaId, estruturaNome } }
+ *     Python -> JS: resposta de GET_PROJECT_LINK (e também reenviada depois
+ *     de um SET_PROJECT_LINK ou DISCONNECT_PROJECT bem-sucedido).
+ *     `docSalvo: false` quando não há documento Revit aberto ou ele ainda
+ *     não foi salvo em disco — nesse caso os demais campos vêm null e o
+ *     Dashboard deve pedir pra salvar o projeto antes de vincular.
+ *
+ *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturaId, estruturaNome, uf, ocupacaoPrincipal, areaConstruida } }
+ *     JS -> Python: grava o vínculo escolhido (projeto + estrutura, já
+ *     resolvidos no Supabase) no firedata.json do documento ativo — mesmo
+ *     formato que o antigo pushbutton "Dados do Projeto" gravava, pra não
+ *     quebrar os módulos de dimensionamento (hidrantes/saidas/extintores).
+ *
+ *   { type: "PROJECT_LINK_SAVED", payload: { ok, erro? } }
+ *     Python -> JS: resultado de um SET_PROJECT_LINK ou DISCONNECT_PROJECT
+ *     que falhou antes de conseguir persistir (ex.: documento não salvo).
+ *     Em caso de sucesso, um PROJECT_LINK também é reenviado logo em
+ *     seguida com o estado atualizado.
+ *
+ *   { type: "DISCONNECT_PROJECT" }
+ *     JS -> Python: apaga o vínculo (projeto + estrutura) do documento
+ *     ativo — usado pelo botão "Desconectar projeto" da sidebar.
+ *
+ *   { type: "GET_DIMENSIONAMENTOS_STATUS" }
+ *     JS -> Python: pede o status (feito/não feito) dos dimensionamentos
+ *     já calculados localmente pra estrutura vinculada.
+ *
+ *   { type: "DIMENSIONAMENTOS_STATUS", payload: { hidrantes: boolean, saidaEmergencia: boolean } }
+ *     Python -> JS: resposta de GET_DIMENSIONAMENTOS_STATUS.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
   LOAD_RESULT: "LOAD_RESULT",
+  GET_PROJECT_LINK: "GET_PROJECT_LINK",
+  PROJECT_LINK: "PROJECT_LINK",
+  SET_PROJECT_LINK: "SET_PROJECT_LINK",
+  PROJECT_LINK_SAVED: "PROJECT_LINK_SAVED",
+  DISCONNECT_PROJECT: "DISCONNECT_PROJECT",
+  GET_DIMENSIONAMENTOS_STATUS: "GET_DIMENSIONAMENTOS_STATUS",
+  DIMENSIONAMENTOS_STATUS: "DIMENSIONAMENTOS_STATUS",
 };
 
 function obterWebView() {

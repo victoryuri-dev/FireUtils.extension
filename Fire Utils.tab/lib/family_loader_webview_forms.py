@@ -193,6 +193,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             core.WebMessageReceived += self._ao_receber_mensagem
             core.NavigationCompleted += self._ao_navegar
+            core.NewWindowRequested += self._ao_pedir_nova_janela
 
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
@@ -222,6 +223,20 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         if core is None:
             return
         core.PostWebMessageAsJson(unicode(json.dumps({u"type": tipo, u"payload": payload}, ensure_ascii=True)))
+
+    def _ao_pedir_nova_janela(self, sender, args):
+        """Um <a target="_blank"> do React (ex.: "abrir no site" do
+        Dashboard) dispara isso — sem tratar, o WebView2 abriria uma janela
+        popup própria, sem barra de endereço nem forma fácil de fechar.
+        Cancela o comportamento padrão e abre no navegador padrão do
+        sistema em vez disso."""
+        args.Handled = True
+        try:
+            info = System.Diagnostics.ProcessStartInfo(args.Uri)
+            info.UseShellExecute = True
+            System.Diagnostics.Process.Start(info)
+        except Exception as ex:
+            _mlogger.warning(u"Falha ao abrir link externo ({}): {}".format(args.Uri, texto_erro(ex)))
 
     def _ao_navegar(self, sender, args):
         """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho

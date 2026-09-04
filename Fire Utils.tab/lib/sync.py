@@ -7,7 +7,13 @@ Ponte HTTP com o site (Supabase) nos dois sentidos:
   - buscar(): pull sob demanda de dados cadastrados no site (estruturas,
     ocupação/área por pavimento) via Edge Function `site-sync`.
 
-Config de vínculo (token + estrutura escolhida) fica na chave 'sync' do
+Identificação por projetoId (não mais por token): o vínculo agora é
+escolhido direto no Dashboard da dockpane, consultando o Supabase com a
+sessão do usuário logado (RLS) — não existe mais um token secreto colado
+manualmente. `projetoId` é o uuid interno do projeto na tabela `projetos`
+do Supabase (ver webapp/src/lib/projectData.js e webapp/README.md).
+
+Config de vínculo (projetoId + estrutura escolhida) fica na chave 'sync' do
 próprio firedata.json — mesmo padrão ler-arquivo-inteiro → mesclar chave
 → regravar que extintores/calc.py, hidrantes/calc.py e saidas/calc.py
 já usam.
@@ -35,7 +41,8 @@ def _cache_path(projeto_dir):
 
 def config_sync(projeto_dir):
     """Retorna o dict salvo na chave 'sync' do firedata.json
-    (token, estruturaId, estruturaNome), ou {} se não houver nada."""
+    (projetoId, estruturaId, estruturaNome, projetoNome), ou {} se não
+    houver nada."""
     try:
         with io.open(_cache_path(projeto_dir), u"r", encoding=u"utf-8") as f:
             dados = json.loads(f.read())
@@ -45,7 +52,7 @@ def config_sync(projeto_dir):
 
 
 def salvar_config_sync(projeto_dir, **campos):
-    """Mescla `campos` (token, estruturaId, estruturaNome, ...) na chave
+    """Mescla `campos` (projetoId, estruturaId, estruturaNome, ...) na chave
     'sync' do firedata.json, preservando as demais chaves do arquivo —
     mesmo padrão ler-arquivo-inteiro→mesclar→regravar dos outros
     salvar_cache* deste plugin."""
@@ -130,17 +137,17 @@ def enviar(medida, payload, projeto_dir, estruturaId=None):
     compartilhada entre todas as estruturas do projeto.
 
     Nunca lança exceção nem retorna nada útil pro chamador — qualquer
-    falha (sem token configurado, sem rede, timeout, erro do servidor,
+    falha (sem projeto vinculado, sem rede, timeout, erro do servidor,
     estruturaId desatualizado) é silenciosamente ignorada, porque o
     firedata.json local já foi gravado antes desta chamada e continua
     sendo a fonte de verdade offline.
     """
     if medida not in _MEDIDAS_VALIDAS:
         return
-    token = config_sync(projeto_dir).get(u"token")
-    if not token:
+    projeto_id = config_sync(projeto_dir).get(u"projetoId")
+    if not projeto_id:
         return
-    corpo = {u"token": token, u"medida": medida, u"payload": payload}
+    corpo = {u"projetoId": projeto_id, u"medida": medida, u"payload": payload}
     if estruturaId:
         corpo[u"estruturaId"] = estruturaId
     try:
@@ -156,10 +163,10 @@ def buscar(acao, projeto_dir, **params):
     de `enviar`, o resultado importa pro chamador, então os erros não são
     engolidos — só nunca viram exceção não tratada.
     """
-    token = config_sync(projeto_dir).get(u"token")
-    if not token:
-        return None, u"Nenhum token de sincronização configurado."
-    corpo = {u"token": token, u"acao": acao}
+    projeto_id = config_sync(projeto_dir).get(u"projetoId")
+    if not projeto_id:
+        return None, u"Nenhum projeto vinculado a este arquivo Revit."
+    corpo = {u"projetoId": projeto_id, u"acao": acao}
     corpo.update(params)
     try:
         return _post_json(_BUSCA_URL, corpo)
