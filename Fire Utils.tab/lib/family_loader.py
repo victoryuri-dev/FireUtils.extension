@@ -209,18 +209,3 @@ def carregar_familias(doc, entradas):
             erros.append((u"(transação)", texto_erro(e)))
 
     return carregadas, ja_existentes, erros, familias_por_nome
-
-
-def listar_nomes_familias_carregadas(doc):
-    """
-    Retorna o conjunto de Family.Name de todas as famílias já presentes em
-    `doc` — usado pra informar o frontend web quais famílias do catálogo já
-    estão carregadas no projeto ativo (indicador visual + contador de
-    "carregadas" nos cards).
-
-    Mesma convenção de nome usada em carregar_familias (compara contra o
-    campo "name" do catálogo, que é o nome do arquivo .rfa) — pode não
-    bater com famílias cujo nome interno diverge do nome do arquivo, mas é
-    a mesma aproximação que a checagem de "já existentes" já faz ali.
-    """
-    return set(_familias_por_nome_no_documento(doc).keys())

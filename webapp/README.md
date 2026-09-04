@@ -91,23 +91,7 @@ baixar cada `signedUrl` e chamar `Document.LoadFamily`. Não há
 posicionamento automático (sem `PromptForFamilyInstancePlacement`) — o
 único botão do app carrega a família no projeto, sem posicionar.
 
-```json
-{ "type": "REQUEST_LOADED_FAMILIES", "payload": {} }
-```
-
-Pede ao host a lista de famílias do catálogo já carregadas no documento
-ativo — usado pra popular o indicador "carregada" nos cards e o contador
-correspondente. Disparado sempre que o catálogo termina de carregar.
-
 **Python → JS**
-
-```json
-{ "type": "LOADED_FAMILIES", "payload": { "names": ["Extintor Portátil - ABC"] } }
-```
-
-Mandado em resposta a `REQUEST_LOADED_FAMILIES` e de novo, já atualizado,
-logo depois de qualquer `LOAD_FAMILIES` processado — o frontend não
-precisa pedir de novo pra saber que a família recém-carregada já conta.
 
 ```json
 {
@@ -125,9 +109,19 @@ existia no documento ativo (`family_loader.carregar_familias` verifica por
 nome antes de chamar `LoadFamily` — se já existe, pula em vez de recarregar
 e duplicar) e o que falhou, com o motivo (download, checksum ou
 `LoadFamily`). O React usa isso pra gerar as notificações (toasts) no
-canto superior direito (`components/ToastStack.jsx`); nunca é usado pra
-popular o indicador "carregada" — isso é sempre papel do `LOADED_FAMILIES`
-que vem logo em seguida.
+canto superior direito (`components/ToastStack.jsx`) e pra tirar da
+seleção as famílias já resolvidas (carregadas ou já existentes), deixando
+só as que falharam marcadas pra facilitar tentar de novo.
+
+Não existe um indicador de "família já carregada no projeto" nos cards —
+já foi tentado (`LOADED_FAMILIES`/`REQUEST_LOADED_FAMILIES`, removidos),
+mas listar TODAS as famílias do documento ativo pra isso se mostrou frágil
+demais: uma única família pré-existente com o nome salvo de um jeito que
+o Revit/IronPython não conseguem traduzir de volta pra texto derrubava a
+leitura inteira (ver `family_loader._familias_por_nome_no_documento`, que
+ainda pula esse tipo de família individualmente, mas só é chamada durante
+um carregamento de verdade — nunca mais pra listar o documento inteiro só
+pra exibição).
 
 Download (`family_cache.py`): sem cache persistente, de propósito — o
 `.rfa` é baixado pra um arquivo temporário via `System.Net.WebClient`,

@@ -16,29 +16,20 @@
  *   { type: "LOAD_FAMILIES", payload: { familias: [{ name, categoryId, storageKey, sha256, signedUrl }] } }
  *     -> Python baixa cada .rfa pra um arquivo temporário e chama
  *        Document.LoadFamily (sem posicionar — ver family_loader.py).
- *        Ao terminar, o host manda de volta um LOAD_RESULT (pras
- *        notificações) e um LOADED_FAMILIES atualizado.
- *
- *   { type: "REQUEST_LOADED_FAMILIES", payload: {} }
- *     -> Pede ao host a lista de famílias do catálogo já carregadas no
- *        documento ativo do Revit (pra popular o indicador "carregada" nos
- *        cards e o contador correspondente).
+ *        Ao terminar, o host manda de volta um LOAD_RESULT.
  *
  * Mensagens Python -> JS:
- *
- *   { type: "LOADED_FAMILIES", payload: { names: string[] } }
- *     -> nomes (Family.Name, mesma convenção do campo "name" do catálogo)
- *        de todas as famílias do catálogo já presentes no documento ativo.
  *
  *   { type: "LOAD_RESULT", payload: { carregadas: string[], jaExistentes: string[], erros: [{ name, mensagem }] } }
  *     -> resultado de um LOAD_FAMILIES: o que foi carregado de verdade, o
  *        que já existia no projeto (não recarregado) e o que falhou (com
- *        o motivo) — vira notificação (ver components/ToastStack.jsx).
+ *        o motivo) — vira notificação (ver components/ToastStack.jsx) e
+ *        tira da seleção as famílias já resolvidas (carregadas ou já
+ *        existentes), deixando só as que falharam marcadas pra tentar de
+ *        novo.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
-  REQUEST_LOADED_FAMILIES: "REQUEST_LOADED_FAMILIES",
-  LOADED_FAMILIES: "LOADED_FAMILIES",
   LOAD_RESULT: "LOAD_RESULT",
 };
 

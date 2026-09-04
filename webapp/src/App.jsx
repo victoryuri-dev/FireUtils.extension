@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { supabase, criarSignedUrlFamilia } from "./lib/supabaseClient";
 import { fetchCatalog } from "./lib/catalog";
@@ -14,6 +14,11 @@ import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
 import checkIconSvg from "./assets/icons/check-icon.svg?raw";
 import xIconSvg from "./assets/icons/x-icon.svg?raw";
 import searchIconSvg from "./assets/icons/search-icon.svg?raw";
+
+// Tempo máximo esperando o LOAD_RESULT antes de desistir do indicador de
+// carregamento — rede de segurança pra não deixar o spinner girando pra
+// sempre se o host nunca responder (ex.: falha inesperada do lado Python).
+const TIMEOUT_CARREGAMENTO_MS = 30000;
 
 // Título da seção usa o mesmo rótulo curto exibido no pill (ex.: "Extintor"
 // -> "EXTINTOR"), conforme o mockup — categorias sem rótulo curto caem no
@@ -37,9 +42,17 @@ export default function App() {
   const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
   const [busca, setBusca] = useState("");
   const [selecionadas, setSelecionadas] = useState(() => new Set());
-  const [carregadas, setCarregadas] = useState(() => new Set());
-  const [enviando, setEnviando] = useState(false);
+  const [carregando, setCarregando] = useState(false);
   const { toasts, adicionarToast, removerToast } = useToasts();
+  const timeoutCarregamentoRef = useRef(null);
+
+  function pararCarregamento() {
+    setCarregando(false);
+    if (timeoutCarregamentoRef.current) {
+      clearTimeout(timeoutCarregamentoRef.current);
+      timeoutCarregamentoRef.current = null;
+    }
+  }
 
   // Sessão do Supabase: verifica a atual e escuta login/logout. Sem
   // Supabase configurado, trata como "sem sessão nenhuma" — LoginScreen já
@@ -62,52 +75,52 @@ export default function App() {
     }
   }, [sessao]);
 
-  // Assim que o catálogo estiver pronto, pergunta ao host quais famílias já
-  // estão no documento ativo do Revit — popula o indicador "carregada" nos
-  // cards e o contador correspondente.
-  useEffect(() => {
-    if (catalogo) {
-      postToHost(BridgeMessageTypes.REQUEST_LOADED_FAMILIES, {});
-    }
-  }, [catalogo]);
-
   useEffect(() => {
     return escutarMensagensDoHost((mensagem) => {
-      if (!mensagem) return;
+      if (!mensagem || mensagem.type !== BridgeMessageTypes.LOAD_RESULT) return;
 
-      if (mensagem.type === BridgeMessageTypes.LOADED_FAMILIES) {
-        setCarregadas(new Set(mensagem.payload?.names || []));
-        return;
-      }
+      const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};
 
-      if (mensagem.type === BridgeMessageTypes.LOAD_RESULT) {
-        const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};
-
-        if (nomesCarregados.length > 0) {
-          adicionarToast({
-            tipo: "sucesso",
-            titulo: nomesCarregados.length === 1 ? "Família carregada no projeto" : `${nomesCarregados.length} famílias carregadas no projeto`,
-            mensagem: listarNomes(nomesCarregados),
-          });
-        }
-        if (jaExistentes.length > 0) {
-          adicionarToast({
-            tipo: "aviso",
-            titulo: jaExistentes.length === 1 ? "Já estava no projeto" : `${jaExistentes.length} já estavam no projeto`,
-            mensagem: `${listarNomes(jaExistentes)} — não recarregada${jaExistentes.length === 1 ? "" : "s"} de novo.`,
-          });
-        }
-        erros.forEach((erro) => {
-          adicionarToast({
-            tipo: "erro",
-            titulo: erro.name ? `Falha ao carregar "${erro.name}"` : "Falha ao carregar",
-            mensagem: erro.mensagem,
-            duracaoMs: 9000,
-          });
+      if (nomesCarregados.length > 0) {
+        adicionarToast({
+          tipo: "sucesso",
+          titulo: nomesCarregados.length === 1 ? "Família carregada no projeto" : `${nomesCarregados.length} famílias carregadas no projeto`,
+          mensagem: listarNomes(nomesCarregados),
         });
       }
+      if (jaExistentes.length > 0) {
+        adicionarToast({
+          tipo: "aviso",
+          titulo: jaExistentes.length === 1 ? "Já estava no projeto" : `${jaExistentes.length} já estavam no projeto`,
+          mensagem: `${listarNomes(jaExistentes)} — não recarregada${jaExistentes.length === 1 ? "" : "s"} de novo.`,
+        });
+      }
+      erros.forEach((erro) => {
+        adicionarToast({
+          tipo: "erro",
+          titulo: erro.name ? `Falha ao carregar "${erro.name}"` : "Falha ao carregar",
+          mensagem: erro.mensagem,
+          duracaoMs: 9000,
+        });
+      });
+
+      // As famílias que a gente pediu pra carregar (com sucesso ou porque
+      // já existiam) saem da seleção — só ficam marcadas as que falharam,
+      // prontas pra tentar de novo.
+      const nomesProcessados = new Set([...nomesCarregados, ...jaExistentes]);
+      if (nomesProcessados.size > 0 && catalogo) {
+        setSelecionadas((atual) => {
+          const nova = new Set(atual);
+          catalogo.families.forEach((familia) => {
+            if (nomesProcessados.has(familia.name)) nova.delete(familia.id);
+          });
+          return nova;
+        });
+      }
+
+      pararCarregamento();
     });
-  }, [adicionarToast]);
+  }, [adicionarToast, catalogo]);
 
   const secoesVisiveis = useMemo(() => {
     if (!catalogo) return [];
@@ -155,8 +168,18 @@ export default function App() {
   }
 
   async function carregarSelecionadas() {
-    if (selecionadas.size === 0 || enviando) return;
-    setEnviando(true);
+    if (selecionadas.size === 0 || carregando) return;
+    setCarregando(true);
+    timeoutCarregamentoRef.current = setTimeout(() => {
+      pararCarregamento();
+      adicionarToast({
+        tipo: "erro",
+        titulo: "O carregamento demorou demais pra responder",
+        mensagem: "Confira o projeto — as famílias podem ter sido carregadas mesmo assim.",
+        duracaoMs: 9000,
+      });
+    }, TIMEOUT_CARREGAMENTO_MS);
+
     try {
       const alvo = catalogo.families.filter((f) => selecionadas.has(f.id));
       const familiasComUrl = await Promise.all(
@@ -177,8 +200,7 @@ export default function App() {
         mensagem: erro.message,
         duracaoMs: 9000,
       });
-    } finally {
-      setEnviando(false);
+      pararCarregamento();
     }
   }
 
@@ -191,7 +213,15 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <ToastStack toasts={toasts} onDismiss={removerToast} />
+      <div className="notificacoes-topo">
+        {carregando && (
+          <div className="loading-badge">
+            <span>Carregando Famílias</span>
+            <span className="loading-spinner" />
+          </div>
+        )}
+        <ToastStack toasts={toasts} onDismiss={removerToast} />
+      </div>
       <Sidebar abaAtual="biblioteca" />
 
       <div className="app">
@@ -223,14 +253,13 @@ export default function App() {
 
             <div className="secao-titulo-linha">
               <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
-              <div className="contadores">
-                <span className="contador">
-                  <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
-                </span>
-                <span className="contador">
-                  <strong>{String(carregadas.size).padStart(2, "0")}</strong> carregadas
-                </span>
-              </div>
+              {selecionadas.size > 0 && (
+                <div className="contadores">
+                  <span className="contador">
+                    <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="catalogo">
@@ -247,7 +276,6 @@ export default function App() {
                       key={familia.id}
                       familia={familia}
                       selecionado={selecionadas.has(familia.id)}
-                      carregada={carregadas.has(familia.name)}
                       onToggle={alternarSelecao}
                     />
                   ))}
@@ -260,7 +288,7 @@ export default function App() {
                 <button
                   type="button"
                   className="botao accent"
-                  disabled={enviando}
+                  disabled={carregando}
                   onClick={carregarSelecionadas}
                 >
                   <Icon svg={carregarIconSvg} />

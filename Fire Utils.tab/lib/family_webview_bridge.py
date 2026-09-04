@@ -23,16 +23,14 @@ Fluxo de uma mensagem LOAD_FAMILIES:
   3. Os arquivos temporários são apagados logo depois do LoadFamily rodar
      (a família já está embutida no .rvt a partir daí).
   4. Em seguida, manda de volta um LOAD_RESULT (o que carregou, o que já
-     existia e o que falhou — vira notificação no React) e um
-     LOADED_FAMILIES atualizado, que o frontend usa pra atualizar o
-     indicador "carregada" nos cards e o contador, sem precisar de um
-     round-trip extra.
+     existia e o que falhou) — o frontend usa isso pras notificações e pra
+     tirar da seleção as famílias já resolvidas.
 """
 
 import json
 import threading
 
-from family_loader import FamilyEntry, carregar_familias, listar_nomes_familias_carregadas
+from family_loader import FamilyEntry, carregar_familias
 from family_cache import baixar_temporario, remover_temporario
 from family_error_utils import texto_erro
 
@@ -78,7 +76,6 @@ def _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mens
         u"jaExistentes": ja_existentes,
         u"erros": _formatar_erros(erros + erros_download),
     })
-    postar_mensagem(u"LOADED_FAMILIES", {u"names": list(listar_nomes_familias_carregadas(doc))})
 
 
 def _baixar_em_background(familias, fila_acoes, postar_mensagem):
@@ -112,12 +109,6 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
     )
 
 
-def _enviar_familias_carregadas(uiapp, postar_mensagem):
-    uidoc = uiapp.ActiveUIDocument
-    nomes = list(listar_nomes_familias_carregadas(uidoc.Document)) if uidoc is not None else []
-    postar_mensagem(u"LOADED_FAMILIES", {u"names": nomes})
-
-
 def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     """
     `mensagem_json`: string JSON crua recebida em
@@ -144,7 +135,5 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             target=_baixar_em_background,
             args=(familias, fila_acoes, postar_mensagem),
         ).start()
-    elif tipo == u"REQUEST_LOADED_FAMILIES":
-        fila_acoes.enfileirar(lambda uiapp: _enviar_familias_carregadas(uiapp, postar_mensagem))
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

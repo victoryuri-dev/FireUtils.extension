@@ -13,8 +13,8 @@
   position: relative;
 }
 
-/* Notificações (toasts) --------------------------------------------------- */
-.toasts {
+/* Notificações + indicador de carregamento (canto superior direito) ------- */
+.notificacoes-topo {
   position: fixed;
   top: 18px;
   right: 18px;
@@ -23,6 +23,43 @@
   flex-direction: column;
   gap: 10px;
   width: 300px;
+}
+
+.toasts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.loading-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--white);
+  border-radius: 10px;
+  padding: 10px 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  animation: toast-entrada 0.18s ease-out;
+}
+
+.loading-spinner {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border-2);
+  border-top-color: var(--accent);
+  animation: girar 0.7s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .toast {
@@ -428,9 +465,8 @@
   -webkit-box-orient: vertical;
 }
 
-/* Indicador no canto do card — um slot só, nunca dois ao mesmo tempo:
-   vazio por padrão, contorno vazio no hover, vermelho preenchido (check)
-   quando selecionado, preto (pasta) quando já carregada no projeto. */
+/* Indicador no canto do card: vazio por padrão, contorno vazio no hover,
+   vermelho preenchido (check) quando selecionado. */
 .indicador-cartao {
   position: absolute;
   top: 6px;
@@ -461,12 +497,6 @@
   display: flex;
   border: none;
   background: var(--accent);
-}
-
-.cartao.carregada:not(.selecionado) .indicador-cartao {
-  display: flex;
-  border: none;
-  background: var(--black);
 }
 
 .vazio {

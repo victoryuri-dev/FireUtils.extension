@@ -1,7 +1,6 @@
 import { publicAssetUrl } from "../lib/supabaseClient";
 import Icon from "./Icon";
 import checkIconSvg from "../assets/icons/check-icon.svg?raw";
-import carregadaIconSvg from "../assets/icons/pasta-icon.svg?raw";
 
 function monograma(nome) {
   const palavras = nome
@@ -14,33 +13,22 @@ function monograma(nome) {
 }
 
 /**
- * Estados visuais (conforme fluxograma do mockup) — um único indicador no
- * canto superior direito, nunca dois ao mesmo tempo:
- *  - selecionada: borda vermelha + indicador vermelho preenchido com check
- *    (tem prioridade mesmo se a família já estiver carregada — permite
- *    selecionar de novo pra recarregar uma versão atualizada).
- *  - carregada no projeto ativo (e não selecionada): indicador preto —
- *    só visual, clicar no card não remove nem faz nada com o projeto.
+ * Estados visuais do indicador no canto superior direito:
+ *  - selecionada: borda vermelha + indicador vermelho preenchido com check.
  *  - padrão / hover: sem indicador; no hover aparece um contorno vazio
  *    (só CSS, sem estado em React).
  */
-export default function FamilyCard({ familia, selecionado, carregada, onToggle }) {
+export default function FamilyCard({ familia, selecionado, onToggle }) {
   const thumbUrl = publicAssetUrl(familia.thumbnail_key);
 
   return (
     <div
-      className={`cartao ${selecionado ? "selecionado" : ""} ${carregada ? "carregada" : ""}`}
+      className={`cartao ${selecionado ? "selecionado" : ""}`}
       onClick={() => onToggle(familia)}
       role="button"
       tabIndex={0}
     >
-      <div className="indicador-cartao">
-        {selecionado ? (
-          <Icon svg={checkIconSvg} />
-        ) : carregada ? (
-          <Icon svg={carregadaIconSvg} title="Já carregada no projeto" />
-        ) : null}
-      </div>
+      <div className="indicador-cartao">{selecionado && <Icon svg={checkIconSvg} />}</div>
 
       <div className="preview-tile">
         {thumbUrl ? (
