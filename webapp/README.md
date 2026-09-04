@@ -109,6 +109,26 @@ Mandado em resposta a `REQUEST_LOADED_FAMILIES` e de novo, já atualizado,
 logo depois de qualquer `LOAD_FAMILIES` processado — o frontend não
 precisa pedir de novo pra saber que a família recém-carregada já conta.
 
+```json
+{
+  "type": "LOAD_RESULT",
+  "payload": {
+    "carregadas": ["Extintor Portátil - ABC"],
+    "jaExistentes": ["Extintor Portátil - BC"],
+    "erros": [{ "name": "Extintor Portátil - K", "mensagem": "Checksum do arquivo baixado não confere com o catálogo (storage_key=...)." }]
+  }
+}
+```
+
+Resultado de um `LOAD_FAMILIES`: o que foi carregado de verdade, o que já
+existia no documento ativo (`family_loader.carregar_familias` verifica por
+nome antes de chamar `LoadFamily` — se já existe, pula em vez de recarregar
+e duplicar) e o que falhou, com o motivo (download, checksum ou
+`LoadFamily`). O React usa isso pra gerar as notificações (toasts) no
+canto superior direito (`components/ToastStack.jsx`); nunca é usado pra
+popular o indicador "carregada" — isso é sempre papel do `LOADED_FAMILIES`
+que vem logo em seguida.
+
 Download (`family_cache.py`): sem cache persistente, de propósito — o
 `.rfa` é baixado pra um arquivo temporário via `System.Net.WebClient`,
 carregado com `Document.LoadFamily`, e apagado logo em seguida (o Revit já
@@ -130,12 +150,14 @@ src/
 ├── lib/
 │   ├── supabaseClient.js   cliente Supabase + helpers de URL pública/assinada
 │   ├── catalog.js          busca catalog.json (com fallback pro mock local)
-│   └── bridge.js           postMessage <-> host WebView2 (JS <-> Python)
+│   ├── bridge.js           postMessage <-> host WebView2 (JS <-> Python)
+│   └── toasts.js           hook useToasts() — fila de notificações
 ├── components/
 │   ├── LoginScreen.jsx
 │   ├── Sidebar.jsx         navegação lateral (só Biblioteca de Famílias ativa)
 │   ├── CategoryPills.jsx
 │   ├── FamilyCard.jsx
+│   ├── ToastStack.jsx      notificações (canto superior direito)
 │   └── Icon.jsx            SVG local inline (permite cor via CSS)
 ├── assets/icons/           SVGs exportados do Figma (fill/stroke="currentColor")
 ├── mock/catalog.mock.json  exemplo pra dev sem depender do Supabase

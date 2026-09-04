@@ -10,6 +10,120 @@
 .app-shell {
   display: flex;
   height: 100vh;
+  position: relative;
+}
+
+/* Notificações (toasts) --------------------------------------------------- */
+.toasts {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+}
+
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--white);
+  border-radius: 10px;
+  padding: 12px 12px 12px 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  border-left: 4px solid var(--border-2);
+  animation: toast-entrada 0.18s ease-out;
+}
+
+.toast-icone {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--white);
+  margin-top: 1px;
+}
+
+.toast-icone .icon {
+  width: 10px;
+  height: 10px;
+}
+
+.toast-corpo {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.toast-mensagem {
+  font-size: 11px;
+  color: var(--text-2);
+  margin: 2px 0 0;
+  overflow-wrap: break-word;
+}
+
+.toast-fechar {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-fechar .icon {
+  width: 8px;
+  height: 8px;
+}
+
+.toast-sucesso {
+  border-left-color: #1f9d55;
+}
+
+.toast-sucesso .toast-icone {
+  background: #1f9d55;
+}
+
+.toast-erro {
+  border-left-color: var(--accent);
+}
+
+.toast-erro .toast-icone {
+  background: var(--accent);
+}
+
+.toast-aviso {
+  border-left-color: var(--black);
+}
+
+.toast-aviso .toast-icone {
+  background: var(--black);
+}
+
+@keyframes toast-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Sidebar --------------------------------------------------------------- */

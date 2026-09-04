@@ -22,9 +22,11 @@ Fluxo de uma mensagem LOAD_FAMILIES:
      manual, fora deste app.
   3. Os arquivos temporários são apagados logo depois do LoadFamily rodar
      (a família já está embutida no .rvt a partir daí).
-  4. Em seguida, manda de volta um LOADED_FAMILIES atualizado — o frontend
-     usa isso pra atualizar o indicador "carregada" nos cards e o contador,
-     sem precisar de um round-trip extra.
+  4. Em seguida, manda de volta um LOAD_RESULT (o que carregou, o que já
+     existia e o que falhou — vira notificação no React) e um
+     LOADED_FAMILIES atualizado, que o frontend usa pra atualizar o
+     indicador "carregada" nos cards e o contador, sem precisar de um
+     round-trip extra.
 """
 
 import json
@@ -42,12 +44,22 @@ def _montar_entrada(item_familia, caminho_local):
     )
 
 
-def _carregar(uiapp, entradas, caminhos_temporarios, postar_mensagem):
+def _formatar_erros(erros):
+    return [{u"name": nome, u"mensagem": msg} for nome, msg in erros]
+
+
+def _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mensagem):
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None:
         print(u"[AVISO] Nenhum documento ativo para carregar as famílias (bridge web).")
         for caminho in caminhos_temporarios:
             remover_temporario(caminho)
+        erros_sem_doc = [(e.name, u"Nenhum documento ativo no Revit.") for e in entradas]
+        postar_mensagem(u"LOAD_RESULT", {
+            u"carregadas": [],
+            u"jaExistentes": [],
+            u"erros": _formatar_erros(erros_sem_doc + erros_download),
+        })
         return
     doc = uidoc.Document
 
@@ -60,12 +72,18 @@ def _carregar(uiapp, entradas, caminhos_temporarios, postar_mensagem):
     for caminho in caminhos_temporarios:
         remover_temporario(caminho)
 
+    postar_mensagem(u"LOAD_RESULT", {
+        u"carregadas": carregadas,
+        u"jaExistentes": ja_existentes,
+        u"erros": _formatar_erros(erros + erros_download),
+    })
     postar_mensagem(u"LOADED_FAMILIES", {u"names": list(listar_nomes_familias_carregadas(doc))})
 
 
 def _baixar_em_background(familias, fila_acoes, postar_mensagem):
     entradas = []
     caminhos_temporarios = []
+    erros_download = []
     for item in familias:
         try:
             caminho_local = baixar_temporario(
@@ -73,15 +91,22 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
             )
         except Exception as ex:
             print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), ex))
+            erros_download.append((item.get(u"name") or u"?", str(ex)))
             continue
         caminhos_temporarios.append(caminho_local)
         entradas.append(_montar_entrada(item, caminho_local))
 
     if not entradas:
+        if erros_download:
+            fila_acoes.enfileirar(lambda uiapp: postar_mensagem(u"LOAD_RESULT", {
+                u"carregadas": [],
+                u"jaExistentes": [],
+                u"erros": _formatar_erros(erros_download),
+            }))
         return
 
     fila_acoes.enfileirar(
-        lambda uiapp: _carregar(uiapp, entradas, caminhos_temporarios, postar_mensagem)
+        lambda uiapp: _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mensagem)
     )
 
 

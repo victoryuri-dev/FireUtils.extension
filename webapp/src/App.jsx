@@ -6,6 +6,8 @@ import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "./lib/br
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import Icon from "./components/Icon";
+import ToastStack from "./components/ToastStack";
+import { useToasts } from "./lib/toasts";
 import CategoryPills, { TODAS_ID, ROTULO_CURTO_POR_CATEGORIA } from "./components/CategoryPills";
 import FamilyCard from "./components/FamilyCard";
 import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
@@ -23,6 +25,12 @@ function tituloDaSecao(categorias, categoriaAtual) {
   return (ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name).toUpperCase();
 }
 
+// Lista até 3 nomes por extenso na notificação; a partir daí só o total,
+// pra não estourar o card de toast com um parágrafo inteiro.
+function listarNomes(nomes) {
+  return nomes.length <= 3 ? nomes.join(", ") : `${nomes.length} famílias`;
+}
+
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
   const [catalogo, setCatalogo] = useState(null);
@@ -31,6 +39,7 @@ export default function App() {
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [carregadas, setCarregadas] = useState(() => new Set());
   const [enviando, setEnviando] = useState(false);
+  const { toasts, adicionarToast, removerToast } = useToasts();
 
   // Sessão do Supabase: verifica a atual e escuta login/logout. Sem
   // Supabase configurado, trata como "sem sessão nenhuma" — LoginScreen já
@@ -64,11 +73,41 @@ export default function App() {
 
   useEffect(() => {
     return escutarMensagensDoHost((mensagem) => {
-      if (mensagem && mensagem.type === BridgeMessageTypes.LOADED_FAMILIES) {
+      if (!mensagem) return;
+
+      if (mensagem.type === BridgeMessageTypes.LOADED_FAMILIES) {
         setCarregadas(new Set(mensagem.payload?.names || []));
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.LOAD_RESULT) {
+        const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};
+
+        if (nomesCarregados.length > 0) {
+          adicionarToast({
+            tipo: "sucesso",
+            titulo: nomesCarregados.length === 1 ? "Família carregada no projeto" : `${nomesCarregados.length} famílias carregadas no projeto`,
+            mensagem: listarNomes(nomesCarregados),
+          });
+        }
+        if (jaExistentes.length > 0) {
+          adicionarToast({
+            tipo: "aviso",
+            titulo: jaExistentes.length === 1 ? "Já estava no projeto" : `${jaExistentes.length} já estavam no projeto`,
+            mensagem: `${listarNomes(jaExistentes)} — não recarregada${jaExistentes.length === 1 ? "" : "s"} de novo.`,
+          });
+        }
+        erros.forEach((erro) => {
+          adicionarToast({
+            tipo: "erro",
+            titulo: erro.name ? `Falha ao carregar "${erro.name}"` : "Falha ao carregar",
+            mensagem: erro.mensagem,
+            duracaoMs: 9000,
+          });
+        });
       }
     });
-  }, []);
+  }, [adicionarToast]);
 
   const secoesVisiveis = useMemo(() => {
     if (!catalogo) return [];
@@ -132,7 +171,12 @@ export default function App() {
       postToHost(BridgeMessageTypes.LOAD_FAMILIES, { familias: familiasComUrl });
     } catch (erro) {
       console.error("[App] Falha ao gerar Signed URL / enviar pro host:", erro);
-      window.alert(`Não foi possível carregar as famílias selecionadas: ${erro.message}`);
+      adicionarToast({
+        tipo: "erro",
+        titulo: "Não foi possível carregar as famílias selecionadas",
+        mensagem: erro.message,
+        duracaoMs: 9000,
+      });
     } finally {
       setEnviando(false);
     }
@@ -147,6 +191,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <ToastStack toasts={toasts} onDismiss={removerToast} />
       <Sidebar abaAtual="biblioteca" />
 
       <div className="app">
