@@ -171,10 +171,11 @@ def carregar_familias(doc, entradas):
       erros              : lista de tuplas (nome, mensagem_de_erro)
       familias_por_nome  : dict {FamilyEntry.name: Family} com o objeto
                            Family de verdade carregado (ou já existente) —
-                           o nome do arquivo .rfa (FamilyEntry.name) nem
-                           sempre bate com o "nome da família" salvo
-                           internamente no arquivo (definido no Editor de
-                           Famílias).
+                           depois do LoadFamily, a família é renomeada
+                           (Family.Name) pra bater com FamilyEntry.name,
+                           já que o arquivo baixado usa um nome de
+                           arquivo diferente (o slug do storage_key, ver
+                           family_cache.py).
     """
     existentes_por_nome = _familias_por_nome_no_documento(doc)
 
@@ -197,8 +198,27 @@ def carregar_familias(doc, entradas):
                 try:
                     ref_familia = clr.Reference[Family]()
                     if doc.LoadFamily(entrada.path, ref_familia):
+                        familia_carregada = ref_familia.Value
+                        # O arquivo é baixado com um nome sempre seguro (o
+                        # slug do storage_key — ver family_cache.py), então
+                        # o Revit dá à família esse mesmo nome de início.
+                        # Renomear aqui é uma operação só da API (em
+                        # memória, via Family.Name), nunca toca um caminho
+                        # de disco acentuado — ao contrário de nomear o
+                        # ARQUIVO com o nome de verdade da família (o que
+                        # já fazíamos antes), essa troca não sofre da
+                        # classe de erro de codificação documentada em
+                        # family_error_utils.py. Se por algum motivo o
+                        # rename falhar (ex.: nome já em uso por outra
+                        # família), a família já carregou de qualquer
+                        # forma — só mantém o nome do slug.
+                        if familia_carregada.Name != entrada.name:
+                            try:
+                                familia_carregada.Name = entrada.name
+                            except Exception:
+                                pass
                         carregadas.append(entrada.name)
-                        familias_por_nome[entrada.name] = ref_familia.Value
+                        familias_por_nome[entrada.name] = familia_carregada
                     else:
                         erros.append((entrada.name, u"LoadFamily retornou False."))
                 except Exception as e:

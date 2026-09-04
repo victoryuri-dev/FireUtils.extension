@@ -85,7 +85,7 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
     for item in familias:
         try:
             caminho_local = baixar_temporario(
-                item[u"storageKey"], item[u"signedUrl"], item[u"name"], item.get(u"sha256")
+                item[u"storageKey"], item[u"signedUrl"], item.get(u"sha256")
             )
         except Exception as ex:
             mensagem_ex = texto_erro(ex)
