@@ -139,6 +139,27 @@ def preview_valido(entrada):
     return caminho_png
 
 
+def _familias_por_nome_no_documento(doc):
+    """
+    Devolve {Family.Name: Family} de cada família já presente em `doc`.
+
+    Uma família cujo .Name não puder ser lido é simplesmente pulada (em
+    vez de derrubar a chamada inteira) — em projetos reais e antigos, às
+    vezes uma família específica tem o nome salvo internamente de um jeito
+    que o Revit/.NET não consegue traduzir de volta pra texto num
+    ambiente IronPython (mesma classe de erro de codificação documentada
+    em family_error_utils.py); isso não deveria impedir de listar as
+    outras centenas de famílias normais do projeto.
+    """
+    resultado = {}
+    for familia in FilteredElementCollector(doc).OfClass(Family).ToElements():
+        try:
+            resultado[familia.Name] = familia
+        except Exception:
+            continue
+    return resultado
+
+
 def carregar_familias(doc, entradas):
     """
     Carrega a lista de FamilyEntry no documento ativo.
@@ -155,9 +176,7 @@ def carregar_familias(doc, entradas):
                            internamente no arquivo (definido no Editor de
                            Famílias).
     """
-    existentes_por_nome = {
-        f.Name: f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
-    }
+    existentes_por_nome = _familias_por_nome_no_documento(doc)
 
     carregadas = []
     ja_existentes = []
@@ -204,4 +223,4 @@ def listar_nomes_familias_carregadas(doc):
     bater com famílias cujo nome interno diverge do nome do arquivo, mas é
     a mesma aproximação que a checagem de "já existentes" já faz ali.
     """
-    return set(f.Name for f in FilteredElementCollector(doc).OfClass(Family).ToElements())
+    return set(_familias_por_nome_no_documento(doc).keys())
