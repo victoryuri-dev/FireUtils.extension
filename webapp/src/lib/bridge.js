@@ -1,30 +1,36 @@
 /**
- * Ponte JS -> Python (Fase 3/4 do plano de migração): o host pyRevit hospeda
- * este app num Microsoft.Web.WebView2.Wpf.WebView2 e escuta o evento
- * WebMessageReceived. Cada mensagem enviada daqui chega lá como uma string
- * JSON (CoreWebView2.WebMessageReceived -> args.WebMessageAsJson).
+ * Ponte JS <-> Python (Fase 3/4 do plano de migração): o host pyRevit hospeda
+ * este app num Microsoft.Web.WebView2.Wpf.WebView2.
+ *
+ * JS -> Python via CoreWebView2.WebMessageReceived (args.WebMessageAsJson,
+ * string JSON). Python -> JS via CoreWebView2.PostWebMessageAsJson, que
+ * chega aqui em window.chrome.webview "message" (event.data já vem
+ * desserializado do JSON, sem precisar de JSON.parse).
  *
  * Fora do WebView2 (ex.: `npm run dev` no navegador comum, durante o
- * desenvolvimento isolado do frontend), só loga no console em vez de
- * quebrar — permite testar a UI sem o Revit aberto.
+ * desenvolvimento isolado do frontend), postToHost só loga no console em
+ * vez de quebrar — permite testar a UI sem o Revit aberto.
  *
- * Contrato de mensagens (payload sempre um objeto serializável em JSON):
+ * Mensagens JS -> Python (payload sempre um objeto serializável em JSON):
  *
- *   {
- *     type: "LOAD_FAMILIES",
- *     payload: {
- *       posicionar: boolean,
- *       familias: [{ name, categoryId, storageKey, sha256, signedUrl }],
- *     },
- *   }
- *     -> Python baixa cada .rfa (com cache local em %AppData%) e chama
- *        Document.LoadFamily via IExternalEventHandler; se posicionar for
- *        true, encadeia um PromptForFamilyInstancePlacement por família
- *        carregada, na mesma ordem da lista (equivalente ao antigo botão
- *        "Carregar e posicionar" do painel WPF).
+ *   { type: "LOAD_FAMILIES", payload: { familias: [{ name, categoryId, storageKey, sha256, signedUrl }] } }
+ *     -> Python baixa cada .rfa pra um arquivo temporário e chama
+ *        Document.LoadFamily (sem posicionar — ver family_loader.py).
+ *        Ao terminar, o host manda de volta um LOAD_RESULT.
+ *
+ * Mensagens Python -> JS:
+ *
+ *   { type: "LOAD_RESULT", payload: { carregadas: string[], jaExistentes: string[], erros: [{ name, mensagem }] } }
+ *     -> resultado de um LOAD_FAMILIES: o que foi carregado de verdade, o
+ *        que já existia no projeto (não recarregado) e o que falhou (com
+ *        o motivo) — vira notificação (ver components/ToastStack.jsx) e
+ *        tira da seleção as famílias já resolvidas (carregadas ou já
+ *        existentes), deixando só as que falharam marcadas pra tentar de
+ *        novo.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
+  LOAD_RESULT: "LOAD_RESULT",
 };
 
 function obterWebView() {
@@ -45,4 +51,19 @@ export function postToHost(type, payload) {
 
 export function estaDentroDoWebView2() {
   return obterWebView() !== null;
+}
+
+/**
+ * Escuta mensagens vindas do host (Python -> JS). Retorna uma função pra
+ * cancelar a inscrição (chamar no cleanup de um useEffect). Fora do
+ * WebView2, não há nada pra escutar — retorna um no-op.
+ */
+export function escutarMensagensDoHost(aoReceber) {
+  const webview = obterWebView();
+  if (!webview || typeof webview.addEventListener !== "function") {
+    return () => {};
+  }
+  const handler = (evento) => aoReceber(evento.data);
+  webview.addEventListener("message", handler);
+  return () => webview.removeEventListener("message", handler);
 }

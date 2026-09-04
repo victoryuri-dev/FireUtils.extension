@@ -1,10 +1,41 @@
 import { publicAssetUrl } from "../lib/supabaseClient";
+import Icon from "./Icon";
+import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
+import extintorIconSvg from "../assets/icons/extintor-icon.svg?raw";
+import hidranteIconSvg from "../assets/icons/hidrante-icon.svg?raw";
+import sireneIconSvg from "../assets/icons/sirene-icon.svg?raw";
+import detectorIconSvg from "../assets/icons/detector-icon.svg?raw";
 
 const TODAS_ID = "__todas__";
 
 export { TODAS_ID };
 
-function IconePill({ iconKey, ativa, nomeCategoria }) {
+// Ícones locais (SVG, cor controlada por CSS) pra quem já tem um desenhado
+// no pacote entregue — as categorias sem entrada aqui caem no ícone remoto
+// do Supabase (icon_key do catálogo) ou, na falta dele, no monograma.
+const ICONES_LOCAIS_POR_CATEGORIA = {
+  [TODAS_ID]: libraryIconSvg,
+  "extintor-de-incendio": extintorIconSvg,
+  "hidrantes": hidranteIconSvg,
+  "alarme-de-incendio": sireneIconSvg,
+  "detector-de-incendio": detectorIconSvg,
+};
+
+// Rótulos curtos do mockup — só cosméticos, o filtro continua usando
+// categoria.id; category_id sem entrada aqui cai no nome cheio do catálogo.
+export const ROTULO_CURTO_POR_CATEGORIA = {
+  "extintor-de-incendio": "Extintor",
+  "hidrantes": "Sistema de Hidrante",
+  "alarme-de-incendio": "Alarme",
+  "detector-de-incendio": "Detector",
+};
+
+function IconePill({ categoryId, iconKey, nomeCategoria }) {
+  const svgLocal = ICONES_LOCAIS_POR_CATEGORIA[categoryId];
+  if (svgLocal) {
+    return <Icon svg={svgLocal} />;
+  }
+
   const url = publicAssetUrl(iconKey);
   if (url) {
     return (
@@ -35,8 +66,8 @@ export default function CategoryPills({ categorias, todasIconKey, categoriaAtual
           className={`pill ${categoria.id === categoriaAtual ? "ativa" : ""}`}
           onClick={() => onSelect(categoria.id)}
         >
-          <IconePill iconKey={categoria.icon_key} ativa={categoria.id === categoriaAtual} nomeCategoria={categoria.name} />
-          {categoria.name}
+          <IconePill categoryId={categoria.id} iconKey={categoria.icon_key} nomeCategoria={categoria.name} />
+          {ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name}
         </button>
       ))}
     </div>

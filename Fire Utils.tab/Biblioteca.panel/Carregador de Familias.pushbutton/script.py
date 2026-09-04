@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__title__ = "Carregador\nde Familias"
+__title__ = "Biblioteca\nde Familias"
 __doc__ = (
     "Pesquisa, filtra por categoria e carrega familias de combate a "
     "incendio a partir do acervo no Supabase diretamente no projeto "

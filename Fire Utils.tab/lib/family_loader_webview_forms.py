@@ -29,6 +29,7 @@ Dependências externas que NÃO vêm com o pyRevit/Revit:
      Microsoft).
 """
 
+import json
 import os
 
 import clr
@@ -63,6 +64,7 @@ from pyrevit.coreutils.logger import get_logger
 
 from family_loader_events import criar_fila_acoes
 from family_webview_bridge import processar_mensagem_webview
+from family_error_utils import texto_erro
 
 _mlogger = get_logger(__name__)
 
@@ -113,7 +115,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
     panel_id = u"9f2f6d4a-9d63-4d3b-8c2a-9b6f8b6a1c7e"
     panel_source = _XAML_PATH
-    panel_title = u"Fire Utils — Carregador de Famílias"
+    panel_title = u"Fire Utils — Biblioteca de Famílias"
 
     def __init__(self):
         forms.WPFPanel.__init__(self)
@@ -170,14 +172,14 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         print(u"[ERRO] {}".format(mensagem))
         forms.alert(
             mensagem,
-            title=u"Fire Utils - Carregador de Famílias",
+            title=u"Fire Utils - Biblioteca de Famílias",
             warn_icon=True,
         )
 
     def _ao_inicializar_core(self, sender, args):
         if not args.IsSuccess:
             self._erro_fatal(
-                u"Falha ao inicializar o CoreWebView2: {}".format(args.InitializationException)
+                u"Falha ao inicializar o CoreWebView2: {}".format(texto_erro(args.InitializationException))
             )
             return
 
@@ -194,10 +196,32 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
-            self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(ex))
+            self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(texto_erro(ex)))
 
     def _ao_receber_mensagem(self, sender, args):
-        processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes)
+        processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes, self._postar_mensagem)
+
+    def _postar_mensagem(self, tipo, payload):
+        """
+        Callback passado pra bridge (Python -> JS): manda uma mensagem de
+        volta pro React via CoreWebView2.PostWebMessageAsJson. Chamado a
+        partir de funções enfileiradas em self.fila_acoes, que sempre rodam
+        na UI thread do Revit (mesma thread dona deste WebView) — seguro
+        de tocar o WebView diretamente daqui.
+
+        `ensure_ascii=True` explícito (é o padrão do json.dumps, mas
+        deixamos claro de propósito) + `unicode(...)` no resultado: o
+        payload pode ter nome de família com acento (ex.: "Extintor
+        Portátil - A"), e isso garante que o texto que efetivamente
+        cruza pro lado .NET é sempre puro ASCII — sem isso corre o
+        mesmo risco de erro de codificação do IronPython documentado em
+        family_error_utils.py, só que na hora de mandar a notificação em
+        vez de na hora de carregar a família.
+        """
+        core = self.WebView.CoreWebView2
+        if core is None:
+            return
+        core.PostWebMessageAsJson(unicode(json.dumps({u"type": tipo, u"payload": payload}, ensure_ascii=True)))
 
     def _ao_navegar(self, sender, args):
         """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho
@@ -232,7 +256,7 @@ def alternar_painel(uiapp):
             u"provavelmente falta o WebView2 SDK "
             u"(Fire Utils.tab/lib/webview2_runtime/) ou o build do "
             u"frontend (webapp/dist/).",
-            title=u"Fire Utils - Carregador de Famílias",
+            title=u"Fire Utils - Biblioteca de Famílias",
             warn_icon=True,
         )
         return
@@ -241,7 +265,7 @@ def alternar_painel(uiapp):
         forms.alert(
             u"Abra ou crie um projeto no Revit antes de abrir o Carregador "
             u"de Famílias.",
-            title=u"Fire Utils - Carregador de Famílias",
+            title=u"Fire Utils - Biblioteca de Famílias",
             warn_icon=True,
         )
         return
@@ -256,7 +280,7 @@ def alternar_painel(uiapp):
         forms.alert(
             u"Não foi possível abrir o painel do Carregador de Famílias "
             u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
-            u"Revit.".format(ex),
-            title=u"Fire Utils - Carregador de Famílias",
+            u"Revit.".format(texto_erro(ex)),
+            title=u"Fire Utils - Biblioteca de Famílias",
             warn_icon=True,
         )

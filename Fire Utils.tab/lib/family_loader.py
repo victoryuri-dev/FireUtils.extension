@@ -19,6 +19,8 @@ import clr
 clr.AddReference("RevitAPI")
 from Autodesk.Revit.DB import Transaction, Family, FilteredElementCollector
 
+from family_error_utils import texto_erro
+
 _LIB_DIR = os.path.dirname(os.path.abspath(__file__))
 FAMILY_LIBRARY_DIR = os.path.join(_LIB_DIR, u"family_library")
 
@@ -33,12 +35,22 @@ PREVIEWS_DIR = os.path.join(FAMILY_LIBRARY_DIR, _PREVIEWS_DIRNAME)
 
 
 class FamilyEntry(object):
-    """Representa uma família (.rfa) encontrada na biblioteca."""
+    """Representa uma família (.rfa) encontrada na biblioteca.
 
-    def __init__(self, name, category, path):
+    `nome_revit` é o nome que o Revit vai atribuir à família ao carregar
+    o arquivo em `path` (normalmente o nome do arquivo sem extensão) —
+    usado internamente pra achar a família de novo no documento (checagem
+    de "já existe" e o rename cosmético depois do load). Pra quem chama
+    de fora do bridge (ex.: o scan local legado abaixo), o nome do
+    arquivo já É o nome de exibição, então por padrão `nome_revit` cai
+    pra `name`.
+    """
+
+    def __init__(self, name, category, path, nome_revit=None):
         self.name = name
         self.category = category
         self.path = path
+        self.nome_revit = nome_revit if nome_revit is not None else name
 
     def __repr__(self):
         return u"<FamilyEntry {} [{}]>".format(self.name, self.category)
@@ -137,6 +149,27 @@ def preview_valido(entrada):
     return caminho_png
 
 
+def _familias_por_nome_no_documento(doc):
+    """
+    Devolve {Family.Name: Family} de cada família já presente em `doc`.
+
+    Uma família cujo .Name não puder ser lido é simplesmente pulada (em
+    vez de derrubar a chamada inteira) — em projetos reais e antigos, às
+    vezes uma família específica tem o nome salvo internamente de um jeito
+    que o Revit/.NET não consegue traduzir de volta pra texto num
+    ambiente IronPython (mesma classe de erro de codificação documentada
+    em family_error_utils.py); isso não deveria impedir de listar as
+    outras centenas de famílias normais do projeto.
+    """
+    resultado = {}
+    for familia in FilteredElementCollector(doc).OfClass(Family).ToElements():
+        try:
+            resultado[familia.Name] = familia
+        except Exception:
+            continue
+    return resultado
+
+
 def carregar_familias(doc, entradas):
     """
     Carrega a lista de FamilyEntry no documento ativo.
@@ -147,32 +180,44 @@ def carregar_familias(doc, entradas):
                            projeto (não recarregados)
       erros              : lista de tuplas (nome, mensagem_de_erro)
       familias_por_nome  : dict {FamilyEntry.name: Family} com o objeto
-                           Family de verdade carregado (ou já existente) —
-                           o nome do arquivo .rfa (FamilyEntry.name) nem
-                           sempre bate com o "nome da família" salvo
-                           internamente no arquivo (definido no Editor de
-                           Famílias), então quem for posicionar a família
-                           em seguida (ver obter_symbol_de_familia) deve
-                           usar esse objeto direto, sem procurar de novo
-                           por nome — buscar por FamilyEntry.name depois de
-                           carregada pode simplesmente não encontrar nada.
+                           Family de verdade carregado (ou já existente).
+
+    O LoadFamily em si usa sempre FamilyEntry.nome_revit (o nome que o
+    arquivo dá à família — um slug ASCII, ver family_cache.py), nunca
+    FamilyEntry.name (o nome de exibição, que pode ter acento) — só
+    depois do Commit desta função é que uma tentativa (best-effort, numa
+    transação própria) troca Family.Name pro nome de exibição de
+    verdade, via _tentar_renomear_para_exibicao. Motivo: um Family.Name
+    acentuado, na prática, ainda conseguia disparar a mesma classe de
+    erro de codificação do IronPython durante o Commit em algumas
+    máquinas — ao manter o load principal inteiramente livre de texto
+    acentuado e isolar o rename cosmético depois, uma falha no rename
+    nunca mais atrasa nem quebra o aviso de "carregamento concluído" que
+    o frontend já está esperando.
+
+    A checagem de "já existe" testa os dois nomes possíveis
+    (nome_revit — o slug, se um carregamento anterior não chegou a
+    renomear — e name — o nome de exibição, se já renomeou com sucesso),
+    porque depois de uma renomeação bem-sucedida o slug fica livre de
+    novo, e sem essa checagem dupla um carregamento seguinte recriaria a
+    família como duplicata em vez de reconhecer a já existente.
     """
-    existentes_por_nome = {
-        f.Name: f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
-    }
+    existentes_por_nome = _familias_por_nome_no_documento(doc)
 
     carregadas = []
     ja_existentes = []
     erros = []
     familias_por_nome = {}
+    para_renomear = []  # [(Family, nome_de_exibicao)]
 
     with Transaction(doc, u"FireUtils - Carregar Familias") as t:
         t.Start()
         try:
             for entrada in entradas:
-                if entrada.name in existentes_por_nome:
+                familia_existente = existentes_por_nome.get(entrada.nome_revit) or existentes_por_nome.get(entrada.name)
+                if familia_existente is not None:
                     ja_existentes.append(entrada.name)
-                    familias_por_nome[entrada.name] = existentes_por_nome[entrada.name]
+                    familias_por_nome[entrada.name] = familia_existente
                     continue
                 if not os.path.exists(entrada.path):
                     erros.append((entrada.name, u"Arquivo não encontrado em disco."))
@@ -180,47 +225,45 @@ def carregar_familias(doc, entradas):
                 try:
                     ref_familia = clr.Reference[Family]()
                     if doc.LoadFamily(entrada.path, ref_familia):
+                        familia_carregada = ref_familia.Value
                         carregadas.append(entrada.name)
-                        familias_por_nome[entrada.name] = ref_familia.Value
+                        familias_por_nome[entrada.name] = familia_carregada
+                        if familia_carregada.Name != entrada.name:
+                            para_renomear.append((familia_carregada, entrada.name))
                     else:
                         erros.append((entrada.name, u"LoadFamily retornou False."))
                 except Exception as e:
-                    erros.append((entrada.name, str(e)))
+                    erros.append((entrada.name, texto_erro(e)))
             t.Commit()
         except Exception as e:
             t.RollBack()
-            erros.append((u"(transação)", str(e)))
+            erros.append((u"(transação)", texto_erro(e)))
+
+    if para_renomear:
+        _tentar_renomear_para_exibicao(doc, para_renomear)
 
     return carregadas, ja_existentes, erros, familias_por_nome
 
 
-def obter_symbol_de_familia(doc, familia):
+def _tentar_renomear_para_exibicao(doc, pares):
     """
-    Retorna o primeiro FamilySymbol (tipo) do objeto `familia` (Family) já
-    carregado em `doc`, garantindo que esteja ativo — pronto para uso em
-    uidoc.PromptForFamilyInstancePlacement(). Retorna None se `familia` for
-    None ou não tiver nenhum tipo.
-
-    Recebe o objeto Family direto (ver carregar_familias) em vez de
-    localizar pelo nome — o nome do arquivo .rfa nem sempre bate com o
-    nome interno da família, então buscar de novo por nome depois de
-    carregada pode não encontrar nada mesmo com a família carregada com
-    sucesso.
+    Troca Family.Name pro nome de exibição de verdade do catálogo (pode
+    ter acento), numa transação separada, DEPOIS que o carregamento
+    principal já commitou com sucesso. Só cosmético — a família já está
+    carregada e funcional mesmo se isso falhar ou nem rodar — por isso
+    fica isolado aqui, com uma rede de segurança em volta da transação
+    inteira: se travar (a mesma classe de erro de codificação pode
+    aparecer aqui, dependendo da máquina), fica só sem o nome bonito,
+    sem afetar o resultado que o usuário já viu.
     """
-    if familia is None:
-        return None
-
-    simbolo = next(
-        (doc.GetElement(sid) for sid in familia.GetFamilySymbolIds()),
-        None
-    )
-    if simbolo is None:
-        return None
-
-    if not simbolo.IsActive:
-        with Transaction(doc, u"FireUtils - Ativar tipo") as t:
+    try:
+        with Transaction(doc, u"FireUtils - Renomear Familias") as t:
             t.Start()
-            simbolo.Activate()
+            for familia, nome_exibicao in pares:
+                try:
+                    familia.Name = nome_exibicao
+                except Exception:
+                    pass
             t.Commit()
-
-    return simbolo
+    except Exception:
+        pass

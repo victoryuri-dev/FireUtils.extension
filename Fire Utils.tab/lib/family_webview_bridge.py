@@ -2,7 +2,8 @@
 """
 family_webview_bridge.py — Fire Utils · lib/
 Processa as mensagens que chegam do frontend React (webapp/) via WebView2
-CoreWebView2.WebMessageReceived. Contrato de mensagens documentado em
+CoreWebView2.WebMessageReceived, e as respostas que vão de volta via
+CoreWebView2.PostWebMessageAsJson. Contrato de mensagens documentado em
 webapp/README.md.
 
 Fluxo de uma mensagem LOAD_FAMILIES:
@@ -12,120 +13,118 @@ Fluxo de uma mensagem LOAD_FAMILIES:
      thread do Revit/WPF, e um .rfa grande (dezenas de MB) levaria vários
      segundos via rede, travando a interface inteira nesse meio tempo.
   2. Só depois que os arquivos já estão em disco, a ação de
-     Document.LoadFamily (e o posicionamento, se pedido) é enfileirada via
-     ExternalEvent (family_loader_events.py), porque tocar a API do Revit
-     exige contexto de API válido, que só o ExternalEvent garante.
-     ExternalEvent.Raise() é seguro de chamar de qualquer thread, então a
-     thread de download pode enfileirar direto.
+     Document.LoadFamily é enfileirada via ExternalEvent
+     (family_loader_events.py), porque tocar a API do Revit exige contexto
+     de API válido, que só o ExternalEvent garante. ExternalEvent.Raise()
+     é seguro de chamar de qualquer thread, então a thread de download pode
+     enfileirar direto. Não há posicionamento automático (PromptForFamily-
+     InstancePlacement) — só carrega a família no documento; posicionar é
+     manual, fora deste app.
   3. Os arquivos temporários são apagados logo depois do LoadFamily rodar
-     (a família já está embutida no .rvt a partir daí) — sem esperar o
-     posicionamento manual terminar, que pode levar bem mais tempo.
+     (a família já está embutida no .rvt a partir daí).
+  4. Em seguida, manda de volta um LOAD_RESULT (o que carregou, o que já
+     existia e o que falhou) — o frontend usa isso pras notificações e pra
+     tirar da seleção as famílias já resolvidas.
 """
 
 import json
+import os
 import threading
 
-import clr
-clr.AddReference(u"RevitAPI")
-from Autodesk.Revit.Exceptions import OperationCanceledException
-
-from pyrevit import forms
-
-from family_loader import FamilyEntry, carregar_familias, obter_symbol_de_familia
+from family_loader import FamilyEntry, carregar_familias
 from family_cache import baixar_temporario, remover_temporario
+from family_error_utils import texto_erro
 
 
 def _montar_entrada(item_familia, caminho_local):
+    # nome_revit é o nome que o Revit vai dar à família ao carregar (o
+    # slug do storage_key, sempre ASCII — ver family_cache.py), usado só
+    # pra achar a família de novo depois (checagem de "já existe" e
+    # rename cosmético); `name` (o nome de exibição real, com acento) é
+    # o que aparece nas notificações.
+    nome_revit = os.path.splitext(os.path.basename(item_familia[u"storageKey"]))[0]
     return FamilyEntry(
         name=item_familia[u"name"],
         category=item_familia.get(u"categoryId") or u"Geral",
         path=caminho_local,
+        nome_revit=nome_revit,
     )
 
 
-def _carregar_e_posicionar(uiapp, entradas, posicionar, caminhos_temporarios):
+def _formatar_erros(erros):
+    return [{u"name": nome, u"mensagem": msg} for nome, msg in erros]
+
+
+def _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mensagem):
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None:
         print(u"[AVISO] Nenhum documento ativo para carregar as famílias (bridge web).")
         for caminho in caminhos_temporarios:
             remover_temporario(caminho)
+        erros_sem_doc = [(e.name, u"Nenhum documento ativo no Revit.") for e in entradas]
+        postar_mensagem(u"LOAD_RESULT", {
+            u"carregadas": [],
+            u"jaExistentes": [],
+            u"erros": _formatar_erros(erros_sem_doc + erros_download),
+        })
         return
     doc = uidoc.Document
 
-    carregadas, ja_existentes, erros, familias_por_nome = carregar_familias(doc, entradas)
+    carregadas, ja_existentes, erros, _familias_por_nome = carregar_familias(doc, entradas)
     for nome, msg in erros:
         print(u"[AVISO] Falha ao carregar '{}': {}".format(nome, msg))
 
     # A partir daqui a família já está embutida no documento (.rvt) — o
-    # .rfa baixado não é mais necessário, mesmo que o posicionamento
-    # abaixo ainda vá rodar (pode levar bem mais tempo, é interativo).
+    # .rfa baixado não é mais necessário.
     for caminho in caminhos_temporarios:
         remover_temporario(caminho)
 
-    if not posicionar:
-        return
-
-    nomes_prontos = set(carregadas) | set(ja_existentes)
-    for entrada in entradas:
-        if entrada.name not in nomes_prontos:
-            print(u"[AVISO] '{}' não está pronta pra posicionar (falhou ao carregar).".format(entrada.name))
-            continue
-        simbolo = obter_symbol_de_familia(doc, familias_por_nome.get(entrada.name))
-        if simbolo is None:
-            print(u"[AVISO] Nenhum tipo (FamilySymbol) encontrado pra posicionar '{}'.".format(entrada.name))
-            continue
-        try:
-            uidoc.PromptForFamilyInstancePlacement(simbolo)
-        except OperationCanceledException:
-            # PromptForFamilyInstancePlacement deixa o usuário posicionar
-            # QUANTAS instâncias quiser da mesma família, e só retorna
-            # quando ele aperta Esc — ou seja, o Esc aqui significa
-            # "terminei com essa família", não "cancele a lista inteira".
-            # `continue` (não `break`) avança pra próxima família
-            # selecionada em vez de abortar o lote inteiro.
-            continue
-        except Exception as ex:
-            # Antes isso caía num "except Exception: break" genérico, que
-            # engolia silenciosamente qualquer erro real (não só o Esc
-            # esperado) — por isso "carrega mas não posiciona" não dava
-            # pista nenhuma do motivo.
-            print(u"[ERRO] Falha ao posicionar '{}': {}".format(entrada.name, ex))
-            forms.alert(
-                u"Não foi possível posicionar '{}':\n{}".format(entrada.name, ex),
-                title=u"Fire Utils - Carregador de Famílias",
-                warn_icon=True,
-            )
-            break
+    postar_mensagem(u"LOAD_RESULT", {
+        u"carregadas": carregadas,
+        u"jaExistentes": ja_existentes,
+        u"erros": _formatar_erros(erros + erros_download),
+    })
 
 
-def _baixar_em_background(familias, posicionar, fila_acoes):
+def _baixar_em_background(familias, fila_acoes, postar_mensagem):
     entradas = []
     caminhos_temporarios = []
+    erros_download = []
     for item in familias:
         try:
             caminho_local = baixar_temporario(
                 item[u"storageKey"], item[u"signedUrl"], item.get(u"sha256")
             )
         except Exception as ex:
-            print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), ex))
+            mensagem_ex = texto_erro(ex)
+            print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), mensagem_ex))
+            erros_download.append((item.get(u"name") or u"?", mensagem_ex))
             continue
         caminhos_temporarios.append(caminho_local)
         entradas.append(_montar_entrada(item, caminho_local))
 
     if not entradas:
+        if erros_download:
+            fila_acoes.enfileirar(lambda uiapp: postar_mensagem(u"LOAD_RESULT", {
+                u"carregadas": [],
+                u"jaExistentes": [],
+                u"erros": _formatar_erros(erros_download),
+            }))
         return
 
     fila_acoes.enfileirar(
-        lambda uiapp: _carregar_e_posicionar(uiapp, entradas, posicionar, caminhos_temporarios)
+        lambda uiapp: _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mensagem)
     )
 
 
-def processar_mensagem_webview(mensagem_json, fila_acoes):
+def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     """
     `mensagem_json`: string JSON crua recebida em
     CoreWebView2.WebMessageReceived (args.WebMessageAsJson).
     `fila_acoes`: instância de family_loader_events.criar_fila_acoes(),
     criada junto do painel (precisa de contexto de API válido pra existir).
+    `postar_mensagem(tipo, payload)`: callback do painel que manda uma
+    mensagem de volta pro React via CoreWebView2.PostWebMessageAsJson.
     """
     try:
         mensagem = json.loads(mensagem_json)
@@ -140,10 +139,9 @@ def processar_mensagem_webview(mensagem_json, fila_acoes):
         familias = payload.get(u"familias") or []
         if not familias:
             return
-        posicionar = bool(payload.get(u"posicionar"))
         threading.Thread(
             target=_baixar_em_background,
-            args=(familias, posicionar, fila_acoes),
+            args=(familias, fila_acoes, postar_mensagem),
         ).start()
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

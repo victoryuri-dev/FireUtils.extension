@@ -67,15 +67,17 @@ Sempre que mudar algo em `src/`, rode `npm run build` de novo e **comite o
 `dist/` atualizado junto** — sem isso, o plugin instalado continua rodando
 a versão antiga da interface.
 
-## Contrato da ponte JS → Python (Fase 3/4)
+## Contrato da ponte JS ↔ Python (Fase 3/4)
 
-Só existe um tipo de mensagem por enquanto, em `src/lib/bridge.js`:
+Em `src/lib/bridge.js`. JS → Python chega via `WebMessageReceived`; Python →
+JS chega via `PostWebMessageAsJson`, escutado com `escutarMensagensDoHost`.
+
+**JS → Python**
 
 ```json
 {
   "type": "LOAD_FAMILIES",
   "payload": {
-    "posicionar": false,
     "familias": [
       { "name": "Extintor Portátil - ABC", "categoryId": "extintor-de-incendio", "storageKey": "extintor-de-incendio/extintor-portatil-abc.rfa", "sha256": "...", "signedUrl": "https://..." }
     ]
@@ -85,9 +87,41 @@ Só existe um tipo de mensagem por enquanto, em `src/lib/bridge.js`:
 
 O React já gera a Signed URL (via `supabase.storage.from('revit-families').createSignedUrl(...)`,
 válida por 60s) antes de mandar a mensagem — o lado Python só precisa
-baixar cada `signedUrl` e chamar `Document.LoadFamily`; se `posicionar` for
-`true`, encadear um `PromptForFamilyInstancePlacement` por família
-carregada, na mesma ordem da lista.
+baixar cada `signedUrl` e chamar `Document.LoadFamily`. Não há
+posicionamento automático (sem `PromptForFamilyInstancePlacement`) — o
+único botão do app carrega a família no projeto, sem posicionar.
+
+**Python → JS**
+
+```json
+{
+  "type": "LOAD_RESULT",
+  "payload": {
+    "carregadas": ["Extintor Portátil - ABC"],
+    "jaExistentes": ["Extintor Portátil - BC"],
+    "erros": [{ "name": "Extintor Portátil - K", "mensagem": "Checksum do arquivo baixado não confere com o catálogo (storage_key=...)." }]
+  }
+}
+```
+
+Resultado de um `LOAD_FAMILIES`: o que foi carregado de verdade, o que já
+existia no documento ativo (`family_loader.carregar_familias` verifica por
+nome antes de chamar `LoadFamily` — se já existe, pula em vez de recarregar
+e duplicar) e o que falhou, com o motivo (download, checksum ou
+`LoadFamily`). O React usa isso pra gerar as notificações (toasts) no
+canto superior direito (`components/ToastStack.jsx`) e pra tirar da
+seleção as famílias já resolvidas (carregadas ou já existentes), deixando
+só as que falharam marcadas pra facilitar tentar de novo.
+
+Não existe um indicador de "família já carregada no projeto" nos cards —
+já foi tentado (`LOADED_FAMILIES`/`REQUEST_LOADED_FAMILIES`, removidos),
+mas listar TODAS as famílias do documento ativo pra isso se mostrou frágil
+demais: uma única família pré-existente com o nome salvo de um jeito que
+o Revit/IronPython não conseguem traduzir de volta pra texto derrubava a
+leitura inteira (ver `family_loader._familias_por_nome_no_documento`, que
+ainda pula esse tipo de família individualmente, mas só é chamada durante
+um carregamento de verdade — nunca mais pra listar o documento inteiro só
+pra exibição).
 
 Download (`family_cache.py`): sem cache persistente, de propósito — o
 `.rfa` é baixado pra um arquivo temporário via `System.Net.WebClient`,
@@ -110,11 +144,16 @@ src/
 ├── lib/
 │   ├── supabaseClient.js   cliente Supabase + helpers de URL pública/assinada
 │   ├── catalog.js          busca catalog.json (com fallback pro mock local)
-│   └── bridge.js           postMessage pro host WebView2
+│   ├── bridge.js           postMessage <-> host WebView2 (JS <-> Python)
+│   └── toasts.js           hook useToasts() — fila de notificações
 ├── components/
 │   ├── LoginScreen.jsx
+│   ├── Sidebar.jsx         navegação lateral (só Biblioteca de Famílias ativa)
 │   ├── CategoryPills.jsx
-│   └── FamilyCard.jsx
+│   ├── FamilyCard.jsx
+│   ├── ToastStack.jsx      notificações (canto superior direito)
+│   └── Icon.jsx            SVG local inline (permite cor via CSS)
+├── assets/icons/           SVGs exportados do Figma (fill/stroke="currentColor")
 ├── mock/catalog.mock.json  exemplo pra dev sem depender do Supabase
 ├── App.jsx                 tela principal (busca, categorias, grade, ações)
 └── main.jsx

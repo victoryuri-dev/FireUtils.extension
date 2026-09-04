@@ -1,17 +1,20 @@
-/* Paleta compartilhada com o painel WPF (Fire Utils.tab/lib/family_loader_forms.xaml)
-   — mesma identidade visual clara, só reimplementada em CSS. */
+/* Paleta calibrada pelos mockups do redesign (Biblioteca de Famílias). */
 :root {
-  --bg: #f6f6f6;
+  --bg: #ffffff;
   --bg-2: #ffffff;
-  --bg-3: #e8e8e8;
-  --border: #d9d9d9;
-  --border-2: #cccccc;
-  --text: #333333;
+  --bg-3: #eeeeee;
+  --border: #e6e6e6;
+  --border-2: #d4d4d4;
+  --text: #1a1a1a;
   --text-2: #666666;
   --text-3: #999999;
-  --accent: #cc1a32;
-  --accent-tint: #cc1a3220;
+  --accent: #EA1330;
   --white: #ffffff;
+  --black: #1a1a1a;
+  --pill-bg: #EAEAEA;
+  --sidebar-bg: #eaeaea;
+  --sidebar-bg-hover: #dcdcdc;
+  --sidebar-icon: #737373;
 }
 
 * {
@@ -28,11 +31,26 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
 }
 
 button {
   font-family: inherit;
   cursor: pointer;
+}
+
+/* Ícones SVG inline (ver components/Icon.jsx) — cor controlada via `color`
+   porque os arquivos fonte usam fill="currentColor"/stroke="currentColor". */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
