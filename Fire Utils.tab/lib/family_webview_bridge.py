@@ -28,6 +28,7 @@ Fluxo de uma mensagem LOAD_FAMILIES:
 """
 
 import json
+import os
 import threading
 
 from family_loader import FamilyEntry, carregar_familias
@@ -36,10 +37,17 @@ from family_error_utils import texto_erro
 
 
 def _montar_entrada(item_familia, caminho_local):
+    # nome_revit é o nome que o Revit vai dar à família ao carregar (o
+    # slug do storage_key, sempre ASCII — ver family_cache.py), usado só
+    # pra achar a família de novo depois (checagem de "já existe" e
+    # rename cosmético); `name` (o nome de exibição real, com acento) é
+    # o que aparece nas notificações.
+    nome_revit = os.path.splitext(os.path.basename(item_familia[u"storageKey"]))[0]
     return FamilyEntry(
         name=item_familia[u"name"],
         category=item_familia.get(u"categoryId") or u"Geral",
         path=caminho_local,
+        nome_revit=nome_revit,
     )
 
 

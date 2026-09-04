@@ -208,11 +208,20 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         partir de funções enfileiradas em self.fila_acoes, que sempre rodam
         na UI thread do Revit (mesma thread dona deste WebView) — seguro
         de tocar o WebView diretamente daqui.
+
+        `ensure_ascii=True` explícito (é o padrão do json.dumps, mas
+        deixamos claro de propósito) + `unicode(...)` no resultado: o
+        payload pode ter nome de família com acento (ex.: "Extintor
+        Portátil - A"), e isso garante que o texto que efetivamente
+        cruza pro lado .NET é sempre puro ASCII — sem isso corre o
+        mesmo risco de erro de codificação do IronPython documentado em
+        family_error_utils.py, só que na hora de mandar a notificação em
+        vez de na hora de carregar a família.
         """
         core = self.WebView.CoreWebView2
         if core is None:
             return
-        core.PostWebMessageAsJson(json.dumps({u"type": tipo, u"payload": payload}))
+        core.PostWebMessageAsJson(unicode(json.dumps({u"type": tipo, u"payload": payload}, ensure_ascii=True)))
 
     def _ao_navegar(self, sender, args):
         """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho
