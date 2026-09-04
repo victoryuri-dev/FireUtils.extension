@@ -123,16 +123,26 @@ def remover_temporario(caminho):
     """Apaga o arquivo temporário baixado por baixar_temporario (e a
     subpasta única que o continha). Best-effort — se falhar (arquivo em
     uso, já removido etc.), não interrompe o fluxo; o SO limpa a pasta
-    temp eventualmente de qualquer forma."""
+    temp eventualmente de qualquer forma.
+
+    Captura `Exception` largo, não só `OSError`: como o arquivo agora se
+    chama como a família (ver nota no topo do módulo), um caminho com
+    caractere acentuado pode fazer o os.remove/os.path.isfile do
+    IronPython lançar a mesma classe de erro de codificação documentada
+    em family_error_utils.py — que não é um OSError, então escapava
+    daqui, abortava o carregamento inteiro ANTES de avisar o frontend
+    (LOAD_RESULT nunca chegava), mesmo com a família já carregada com
+    sucesso no projeto.
+    """
     if not caminho:
         return
     pasta = os.path.dirname(caminho)
     try:
         if os.path.isfile(caminho):
             os.remove(caminho)
-    except OSError:
+    except Exception:
         pass
     try:
         os.rmdir(pasta)
-    except OSError:
+    except Exception:
         pass
