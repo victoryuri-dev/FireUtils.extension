@@ -1,4 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
+import { supabase } from "../lib/supabaseClient";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
@@ -17,7 +19,24 @@ const ITENS_NAV = [
   { id: "saidas", label: "Saídas de Emergência (em breve)", svg: exitIconSvg, disabled: true },
 ];
 
-export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar }) {
+export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar, email }) {
+  const [menuAberto, setMenuAberto] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!menuAberto) return;
+    function aoClicarFora(evento) {
+      if (menuRef.current && !menuRef.current.contains(evento.target)) setMenuAberto(false);
+    }
+    document.addEventListener("mousedown", aoClicarFora);
+    return () => document.removeEventListener("mousedown", aoClicarFora);
+  }, [menuAberto]);
+
+  async function sair() {
+    setMenuAberto(false);
+    await supabase?.auth.signOut();
+  }
+
   return (
     <nav className="sidebar">
       <div className="sidebar-logo">
@@ -40,21 +59,37 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
       </div>
 
       <div className="sidebar-rodape">
-        <button type="button" className="sidebar-item" disabled title="Configurações (em breve)">
+        <button type="button" className="sidebar-item sidebar-item-neutro" disabled title="Configurações (em breve)">
           <Icon svg={configuracoesIconSvg} title="Configurações" />
         </button>
         <button
           type="button"
-          className="sidebar-item"
+          className="sidebar-item sidebar-item-neutro"
           disabled={!projetoVinculado}
           onClick={onDesconectar}
           title={projetoVinculado ? "Desconectar projeto" : "Nenhum projeto conectado"}
         >
           <Icon svg={unlinkIconSvg} title="Desconectar projeto" />
         </button>
-        <button type="button" className="sidebar-item sidebar-item-avatar" disabled title="Perfil (em breve)">
-          <Icon svg={perfilIconSvg} title="Perfil" />
-        </button>
+        <div className="sidebar-avatar-wrap" ref={menuRef}>
+          <button
+            type="button"
+            className="sidebar-item sidebar-item-avatar"
+            onClick={() => setMenuAberto((v) => !v)}
+            title="Perfil"
+          >
+            <Icon svg={perfilIconSvg} title="Perfil" />
+          </button>
+          {menuAberto && (
+            <div className="avatar-popover">
+              <p className="avatar-popover-email">{email}</p>
+              <button type="button" className="avatar-popover-sair" onClick={sair}>
+                <Icon svg={exitIconSvg} />
+                Sair
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );

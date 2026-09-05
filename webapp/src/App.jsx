@@ -272,6 +272,7 @@ export default function App() {
         onSelecionarAba={setAbaAtual}
         projetoVinculado={!!vinculo?.projetoId}
         onDesconectar={() => postToHost(BridgeMessageTypes.DISCONNECT_PROJECT, {})}
+        email={sessao?.user?.email}
       />
 
       <div className="app">

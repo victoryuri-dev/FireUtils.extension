@@ -223,16 +223,84 @@
 
 .sidebar-item:disabled {
   cursor: default;
-  opacity: 0.45;
 }
 
-/* Avatar de perfil — sempre um círculo branco sólido, ícone escuro, mesmo
-   desabilitado (é um placeholder de identidade, não uma ação). */
+/* Configurações e Desconectar projeto — cinza por padrão, branco no hover
+   (diferente dos demais ícones da sidebar, que já são brancos). */
+.sidebar-item-neutro {
+  color: var(--sidebar-icon-neutro);
+}
+
+.sidebar-item-neutro:hover {
+  color: var(--sidebar-icon);
+}
+
+/* Avatar de perfil — sempre um círculo branco sólido, ícone escuro. */
 .sidebar-item-avatar {
   border-radius: 50%;
   background: var(--sidebar-avatar-bg);
   color: var(--sidebar-avatar-icon);
-  opacity: 1;
+}
+
+/* Popover do avatar (email + Sair) ---------------------------------------- */
+.sidebar-avatar-wrap {
+  position: relative;
+}
+
+.avatar-popover {
+  position: absolute;
+  left: calc(100% + 12px);
+  bottom: 0;
+  min-width: 210px;
+  background: #1f1f1f;
+  border-radius: 8px;
+  padding: 6px 0;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  animation: surgir 0.15s;
+}
+
+.avatar-popover::after {
+  content: "";
+  position: absolute;
+  left: -5px;
+  bottom: 14px;
+  width: 10px;
+  height: 10px;
+  background: #1f1f1f;
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+
+.avatar-popover-email {
+  margin: 0;
+  padding: 6px 16px 10px;
+  font-size: 12px;
+  color: var(--white);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  overflow-wrap: break-word;
+}
+
+.avatar-popover-sair {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--white);
+  font-size: 13px;
+}
+
+.avatar-popover-sair .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.avatar-popover-sair:hover {
+  color: var(--accent);
 }
 
 .sidebar-item-avatar:not(:disabled):hover {

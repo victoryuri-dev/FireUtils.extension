@@ -16,6 +16,7 @@
   --sidebar-bg-hover: #2a2a2a;
   --sidebar-icon: #ffffff;
   --sidebar-icon-ativo: var(--accent);
+  --sidebar-icon-neutro: #737373;
   --sidebar-avatar-bg: #ffffff;
   --sidebar-avatar-icon: #141414;
 }
