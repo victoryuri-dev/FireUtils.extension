@@ -581,14 +581,6 @@
   color: var(--text);
 }
 
-.dashboard-cabecalho-linha {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
 .dashboard-subtitulo {
   font-size: 12px;
   font-weight: 700;
@@ -599,6 +591,10 @@
 }
 
 /* Cabeçalho de projeto (código + status + nome + link externo) ---------- */
+.projeto-cabecalho {
+  margin-bottom: 18px;
+}
+
 .projeto-cabecalho-linha {
   display: flex;
   align-items: center;
@@ -739,17 +735,6 @@
 }
 
 /* Dashboard do projeto/estrutura ------------------------------------------ */
-.seletor-estrutura {
-  height: 34px;
-  padding: 0 10px;
-  border-radius: 4px;
-  border: 1px solid var(--border-2);
-  background: var(--bg-2);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .grade-cartoes-info {
   display: grid;
   grid-template-columns: 1fr 1fr;

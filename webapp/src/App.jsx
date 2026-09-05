@@ -276,12 +276,12 @@ export default function App() {
 
       <div className="app">
         {abaAtual === "dashboard" ? (
-          <>
-            <header className="header">
-              <h1>Dashboard</h1>
-            </header>
-            <Dashboard vinculo={vinculo} dimensionamentos={dimensionamentos} adicionarToast={adicionarToast} />
-          </>
+          // Sem <header> genérico aqui de propósito: cada tela do Dashboard
+          // (ConectarProjeto/SelecionarEstrutura/DashboardEstrutura) já
+          // mostra o próprio título ("Conectar um projeto", nome do
+          // projeto...) — um "Dashboard" fixo por cima ficaria redundante
+          // e nunca bateria com o passo atual do fluxo.
+          <Dashboard vinculo={vinculo} dimensionamentos={dimensionamentos} adicionarToast={adicionarToast} />
         ) : (
           <>
             <header className="header">

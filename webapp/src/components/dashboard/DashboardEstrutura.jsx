@@ -26,25 +26,10 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado }) {
   );
 }
 
-export default function DashboardEstrutura({ projeto, estrutura, estruturas, onTrocarEstrutura, dimensionamentos }) {
+export default function DashboardEstrutura({ projeto, estrutura, dimensionamentos }) {
   return (
     <div className="dashboard-tela">
-      <div className="dashboard-cabecalho-linha">
-        <ProjetoCabecalho projeto={projeto} />
-        {estruturas && estruturas.length > 1 && (
-          <select
-            className="seletor-estrutura"
-            value={estrutura.id}
-            onChange={(e) => onTrocarEstrutura(e.target.value)}
-          >
-            {estruturas.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.nome}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+      <ProjetoCabecalho projeto={projeto} />
 
       <div className="grade-cartoes-info">
         <div className="cartao-info">

@@ -134,24 +134,24 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
     return <ConectarProjeto onSelecionar={(projeto) => carregarProjeto(projeto.id, null)} />;
   }
 
-  const estruturas = estruturasDoProjeto(estado.linha);
-
   if (!estado.estruturaId) {
     return (
       <SelecionarEstrutura
         projeto={estado.linha}
-        estruturas={estruturas}
+        estruturas={estruturasDoProjeto(estado.linha)}
         onSelecionar={(estrutura) => carregarProjeto(estado.linha.id, estrutura.id)}
       />
     );
   }
 
+  // A estrutura vinculada não pode mais ser trocada por aqui depois de
+  // escolhida — só desconectando o projeto inteiro (botão da sidebar) e
+  // conectando de novo. Por isso nem a lista de estruturas é passada pro
+  // DashboardEstrutura: sem ela, não tem como montar um seletor.
   return (
     <DashboardEstrutura
       projeto={estado.linha}
       estrutura={dashboardEstrutura(estado.linha, estado.estruturaId)}
-      estruturas={estruturas}
-      onTrocarEstrutura={(novoEstruturaId) => carregarProjeto(estado.linha.id, novoEstruturaId)}
       dimensionamentos={dimensionamentos}
     />
   );
