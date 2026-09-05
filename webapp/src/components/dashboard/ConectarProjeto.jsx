@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listarProjetosDoUsuario } from "../../lib/projectData";
+import { resumoProjeto } from "../../lib/projetoDados";
 import { formatarArea, formatarEditadoHa } from "../../lib/format";
 import Icon from "../Icon";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
@@ -20,7 +21,7 @@ export default function ConectarProjeto({ onSelecionar }) {
       () => {
         listarProjetosDoUsuario(busca)
           .then((lista) => {
-            if (!cancelado) setProjetos(lista);
+            if (!cancelado) setProjetos(lista.map(resumoProjeto));
           })
           .catch((ex) => {
             console.error("[ConectarProjeto] Falha ao listar projetos:", ex);
@@ -73,17 +74,17 @@ export default function ConectarProjeto({ onSelecionar }) {
                   <span className="rotulo">UF</span> <strong>{projeto.uf || "—"}</strong>
                 </span>
                 <span>
-                  <span className="rotulo">Ocupação:</span> <strong>{projeto.ocupacao_principal || "—"}</strong>
+                  <span className="rotulo">Ocupação:</span> <strong>{projeto.ocupacao || "—"}</strong>
                 </span>
                 <span>
-                  <span className="rotulo">Área Construída:</span> <strong>{formatarArea(projeto.area_construida)}</strong>
+                  <span className="rotulo">Área Construída:</span> <strong>{formatarArea(projeto.areaConstruida)}</strong>
                 </span>
                 <span>
-                  <span className="rotulo">Pavimentos:</span> <strong>{projeto.pavimentos_label || "—"}</strong>
+                  <span className="rotulo">Pavimentos:</span> <strong>{projeto.pavimentosLabel || "—"}</strong>
                 </span>
               </div>
-              {projeto.updated_at && (
-                <p className="cartao-projeto-rodape">{formatarEditadoHa(projeto.updated_at)}</p>
+              {projeto.updatedAt && (
+                <p className="cartao-projeto-rodape">{formatarEditadoHa(projeto.updatedAt)}</p>
               )}
             </button>
           ))}

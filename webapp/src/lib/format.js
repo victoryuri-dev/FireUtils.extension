@@ -12,6 +12,13 @@ export function formatarMetros(valor) {
   return `${numero.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m`;
 }
 
+export function formatarCargaIncendio(valor) {
+  if (valor === null || valor === undefined || valor === "") return "—";
+  const numero = Number(valor);
+  if (Number.isNaN(numero)) return "—";
+  return `${numero.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} MJ/m²`;
+}
+
 /** "Editado há Xh" / "Editado há Xd" a partir de um timestamp ISO. */
 export function formatarEditadoHa(dataIso) {
   if (!dataIso) return null;

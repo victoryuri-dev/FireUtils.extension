@@ -1,6 +1,6 @@
 import ProjetoCabecalho from "./ProjetoCabecalho";
 import Icon from "../Icon";
-import { formatarArea, formatarMetros } from "../../lib/format";
+import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
 import hidranteIconSvg from "../../assets/icons/hidrante-icon.svg?raw";
 import saidaIconSvg from "../../assets/icons/saida-icon-placeholder.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
@@ -56,15 +56,15 @@ export default function DashboardEstrutura({ projeto, estrutura, estruturas, onT
             </div>
             <div>
               <dt>Área construída:</dt>
-              <dd>{formatarArea(estrutura.area_construida)}</dd>
+              <dd>{formatarArea(estrutura.areaConstruida)}</dd>
             </div>
             <div>
               <dt>Área terreno:</dt>
-              <dd>{formatarArea(estrutura.area_terreno)}</dd>
+              <dd>{formatarArea(estrutura.areaTerreno)}</dd>
             </div>
             <div>
               <dt>Altura piso a piso:</dt>
-              <dd>{formatarMetros(estrutura.altura_piso_a_piso)}</dd>
+              <dd>{formatarMetros(estrutura.alturaPisoAPiso)}</dd>
             </div>
           </dl>
         </div>
@@ -74,15 +74,15 @@ export default function DashboardEstrutura({ projeto, estrutura, estruturas, onT
           <dl>
             <div>
               <dt>Ocupação:</dt>
-              <dd>{estrutura.ocupacao_label || estrutura.ocupacao_principal || "—"}</dd>
+              <dd>{estrutura.ocupacao || "—"}</dd>
             </div>
             <div>
-              <dt>Risco:</dt>
-              <dd>{estrutura.risco_label || "—"}</dd>
+              <dt>Carga de incêndio:</dt>
+              <dd>{formatarCargaIncendio(estrutura.cargaIncendio)}</dd>
             </div>
             <div>
-              <dt>Altura:</dt>
-              <dd>{estrutura.altura_label || "—"}</dd>
+              <dt>Altura da edificação:</dt>
+              <dd>{formatarMetros(estrutura.alturaEdificacao)}</dd>
             </div>
           </dl>
         </div>

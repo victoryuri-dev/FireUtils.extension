@@ -6,18 +6,21 @@ import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 const SITE_URL = import.meta.env.VITE_SITE_URL || "";
 
 /** Cabeçalho reaproveitado nas telas "Selecione uma estrutura" e Dashboard:
- * código público do projeto + status "Salvo" + nome com link pro site. */
+ * id do projeto + status "Salvo" + nome com link pro site. `projeto` é a
+ * linha crua da tabela `projetos` (id/nome/dados/updated_at, ver
+ * lib/projectData.js) — não há uma coluna separada de "código público",
+ * o `id` (text) já cumpre esse papel. */
 export default function ProjetoCabecalho({ projeto }) {
   if (!projeto) return null;
-  const urlProjeto = SITE_URL && projeto.codigo ? `${SITE_URL}/${projeto.codigo}` : null;
+  const urlProjeto = SITE_URL && projeto.id ? `${SITE_URL}/${projeto.id}` : null;
 
   return (
     <div className="projeto-cabecalho">
       <div className="projeto-cabecalho-linha">
-        {projeto.codigo && (
+        {projeto.id && (
           <span className="projeto-codigo">
             <Icon svg={linkIconSvg} />
-            {projeto.codigo}
+            {projeto.id}
           </span>
         )}
         <span className="projeto-status-salvo">

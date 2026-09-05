@@ -164,52 +164,91 @@ mesmo formato que o pushbutton antigo gravava (`dados_projeto` + `sync`),
 pra não quebrar os módulos de dimensionamento (hidrantes/saidas/extintores,
 que continuam lendo esses dados sem nenhuma mudança neles).
 
-### Schema do Dashboard (Supabase — assumido)
+### Schema do Dashboard (Supabase — real)
 
-`lib/projectData.js` assume as tabelas abaixo. Como a busca é direto no
-Supabase (não passa por Edge Function), **ajuste os nomes de
-tabela/coluna nesse arquivo se o schema real do seu projeto Supabase for
-diferente** — o resto do app (componentes, bridge) não depende dos nomes
-exatos, só desse um arquivo.
+Uma tabela só, sem `estruturas` separada — tudo (projeto e suas
+estruturas) mora dentro da coluna `dados` (jsonb):
 
-```
-projetos
-  id                  uuid   PK — é o "ID do projeto" (guardado localmente
-                              como sync.projetoId no firedata.json)
-  owner_id            uuid   dono do projeto (RLS: owner_id = auth.uid())
-  nome                text
-  codigo              text   slug curto público (ex.: "mtnc34gp-iwp"),
-                              só exibição/link — não é o identificador
-                              usado internamente
-  uf                  text
-  ocupacao_principal  text   código (ex.: "D-1") — resumo pro card da
-                              grade "Conectar um projeto"
-  area_construida     numeric
-  pavimentos_label    text   texto livre pro card (ex.: "Térrea")
-  updated_at          timestamptz
-
-estruturas
-  id                  uuid   PK
-  projeto_id          uuid   FK -> projetos.id
-  nome                text
-  uf                  text
-  ocupacao_principal  text   código normativo (alimenta dados_projeto
-                              local, o mesmo que exigir_projeto_e_estado()
-                              em lib/projeto.py espera)
-  ocupacao_label      text   rótulo pro dashboard (ex.: "Mista")
-  area_construida     numeric
-  area_terreno        numeric
-  altura_piso_a_piso  numeric
-  risco_label         text   (ex.: "Médio - 200 MJ/m²")
-  altura_label        text   (ex.: "I - Edificação Baixa")
+```sql
+create table public.projetos (
+  id          text primary key,       -- "ID do projeto" (não é uuid) — guardado
+                                       -- localmente como sync.projetoId no firedata.json
+  user_id     uuid not null references auth.users(id),  -- RLS: user_id = auth.uid()
+  nome        text not null,
+  dados       jsonb not null,
+  sync_token  uuid not null default gen_random_uuid(),  -- em desuso, ver nota abaixo
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  version     integer not null default 1
+);
 ```
 
-RLS: as políticas do Supabase decidem quais `projetos`/`estruturas` cada
-usuário logado enxerga — `projectData.js` não filtra por usuário, só
-repassa o que a política deixar. `VITE_SITE_URL` (opcional, `.env.local`)
-monta o link "abrir no site" do cabeçalho do dashboard
-(`${VITE_SITE_URL}/${projeto.codigo}`); sem essa env var, o ícone de link
+`lib/projectData.js` só busca a linha crua (`id, nome, dados, updated_at`);
+quem decodifica o formato de `dados` é `lib/projetoDados.js`. Campos de
+`dados` usados hoje (exemplo real, campos irrelevantes pro Dashboard
+omitidos):
+
+```jsonc
+{
+  "nome": "Loja Comercial Centro",
+  "uf": "MA",
+  "areaConstruidaTotal": "650",   // string — projeto inteiro (soma das estruturas)
+  "areaTerreno": "500",           // string — terreno é do projeto, não por estrutura
+  "estruturas": [
+    {
+      "id": "est-1", "nome": "Estrutura 1",
+      "areaTotal": "250",         // área construída DESSA estrutura
+      "altura": "6",              // altura total da edificação (m)
+      "alturaPisoPiso": 0,        // altura piso a piso (m)
+      "nPavimentos": 1
+    }
+  ],
+  "pavimentos": [
+    // cada pavimento pertence a uma estrutura (estruturaId) e tem um
+    // código de ocupação (divisao, ex.: "C-1", "A-1", "G-1" — tabela
+    // normativa em lib/normas/<UF>/saidas.py)
+    { "id": "est-1-P1", "estruturaId": "est-1", "divisao": "C-1", "area": "250", ... }
+  ],
+  "cargaState": {
+    // carga de incêndio (MJ/m²) por estrutura e por divisão
+    "est-1": { "C-1": { "cargaIncendio": 300, ... } }
+  }
+}
+```
+
+`lib/projetoDados.js` deriva disso: resumo pro card de "Conectar um
+projeto" (`resumoProjeto`), lista de estruturas (`estruturasDoProjeto`) e
+os dados de uma estrutura pro dashboard (`dashboardEstrutura` — Edificação,
+Classificação, `divisoes` presentes nela). Quando uma estrutura tem mais
+de um código de ocupação (`divisao`) entre seus pavimentos, a tela mostra
+"Mista" — mas o código "oficial" que alimenta `dados_projeto.ocupacao_principal`
+(usado por ex. em "Dimensionar Saídas") **não pode ser "Mista"**, tem que
+ser um código válido da tabela normativa; por isso quem escolhe qual
+divisão usar (a mais restritiva, menor distância máxima) é o Python
+(`project_link_bridge._divisao_mais_restritiva`, portado do antigo
+formulário "Dados do Projeto") — só ele tem acesso a essa tabela
+(`lib/normas`). Não há ainda uma classificação de "Risco" (faixa
+qualitativa tipo "Médio") nem de "Altura da edificação" (tipo "I -
+Edificação Baixa") — o dashboard mostra os valores brutos (carga de
+incêndio em MJ/m², altura em metros) até essa tabela de classificação
+existir.
+
+RLS: as políticas do Supabase decidem quais `projetos` cada usuário logado
+enxerga (`user_id = auth.uid()`) — `projectData.js` não filtra por
+usuário, só repassa o que a política deixar. `VITE_SITE_URL` (opcional,
+`.env.local`) monta o link "abrir no site" do cabeçalho do dashboard
+(`${VITE_SITE_URL}/${projeto.id}`); sem essa env var, o ícone de link
 externo simplesmente não aparece.
+
+**`sync_token` em desuso**: antes era o que o Python colava manualmente
+(`token`) pra autenticar as Edge Functions `site-sync`/`revit-sync`. Com o
+login já acontecendo dentro da dockpane, a ideia é o envio de cálculos
+(hidrantes/saídas/extintores) também passar a ser um relay pela própria
+dockpane (Python pede, React já-autenticado grava no Supabase) em vez de
+um POST direto com token — ver nota em `lib/bridge.js`. Esse relay ainda
+não foi implementado; por enquanto `sync.py` (`enviar`/`buscar`) continua
+existindo mas não é mais alimentado por nada do vínculo projeto/estrutura
+feito aqui.
 
 ### Mensagens da bridge (vínculo de projeto)
 
@@ -219,7 +258,7 @@ Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
 |---|---|---|
 | `GET_PROJECT_LINK` | JS → Python | — |
 | `PROJECT_LINK` | Python → JS | `{ docSalvo, projetoId, projetoNome, estruturaId, estruturaNome }` |
-| `SET_PROJECT_LINK` | JS → Python | `{ projetoId, projetoNome, estruturaId, estruturaNome, uf, ocupacaoPrincipal, areaConstruida }` |
+| `SET_PROJECT_LINK` | JS → Python | `{ projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida, divisoes }` |
 | `PROJECT_LINK_SAVED` | Python → JS | `{ ok, erro? }` |
 | `DISCONNECT_PROJECT` | JS → Python | — |
 | `GET_DIMENSIONAMENTOS_STATUS` | JS → Python | — |
@@ -235,7 +274,8 @@ src/
 ├── lib/
 │   ├── supabaseClient.js   cliente Supabase + helpers de URL pública/assinada
 │   ├── catalog.js          busca catalog.json (com fallback pro mock local)
-│   ├── projectData.js      projetos/estruturas do Dashboard (direto no Supabase)
+│   ├── projectData.js      busca a linha de `projetos` no Supabase (direto, RLS)
+│   ├── projetoDados.js     decodifica dados.{estruturas,pavimentos,cargaState}
 │   ├── format.js           helpers de formatação (área, metros, "editado há Xh")
 │   ├── bridge.js           postMessage <-> host WebView2 (JS <-> Python)
 │   └── toasts.js           hook useToasts() — fila de notificações

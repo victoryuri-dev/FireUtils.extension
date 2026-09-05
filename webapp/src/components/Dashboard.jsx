@@ -1,38 +1,58 @@
 import { useEffect, useState } from "react";
 import { postToHost, BridgeMessageTypes } from "../lib/bridge";
-import { buscarProjeto, buscarEstruturasDoProjeto, buscarDashboardEstrutura } from "../lib/projectData";
+import { buscarProjeto } from "../lib/projectData";
+import { estruturasDoProjeto, dashboardEstrutura } from "../lib/projetoDados";
 import ConectarProjeto from "./dashboard/ConectarProjeto";
 import SelecionarEstrutura from "./dashboard/SelecionarEstrutura";
 import DashboardEstrutura from "./dashboard/DashboardEstrutura";
 
-const ESTADO_INICIAL = { carregando: false, erro: null, projeto: null, estruturas: null, estruturaAtual: null };
+const ESTADO_INICIAL = { carregando: false, erro: null, linha: null, estruturaId: null };
 
 /**
  * Orquestra o fluxo: Conectar um projeto -> (Selecione uma estrutura, se
  * houver mais de uma) -> Dashboard do projeto/estrutura. `vinculo` vem do
  * firedata.json do documento Revit ativo (ver lib/bridge.js e
- * project_link_bridge.py do lado Python) — a busca de projetos/estruturas
- * em si é direto no Supabase (lib/projectData.js), com a sessão do
- * usuário logado.
+ * project_link_bridge.py do lado Python) — a busca do projeto em si é
+ * direto no Supabase (lib/projectData.js + lib/projetoDados.js), com a
+ * sessão do usuário logado. `linha` guarda a linha crua da tabela
+ * `projetos` (id/nome/dados/updated_at) já buscada — as telas derivam
+ * dela via lib/projetoDados.js, sem chamada adicional ao trocar de
+ * estrutura.
  */
 export default function Dashboard({ vinculo, dimensionamentos, adicionarToast }) {
   const [estado, setEstado] = useState(ESTADO_INICIAL);
 
+  function persistirVinculo(linha, estruturaId) {
+    const painel = dashboardEstrutura(linha, estruturaId);
+    if (!painel) return;
+    postToHost(BridgeMessageTypes.SET_PROJECT_LINK, {
+      projetoId: linha.id,
+      projetoNome: (linha.dados && linha.dados.nome) || linha.nome,
+      estruturaId: painel.id,
+      estruturaNome: painel.nome,
+      uf: painel.uf,
+      areaConstruida: painel.areaConstruida,
+      // Lista de códigos de ocupação dos pavimentos desta estrutura — o
+      // Python escolhe o mais restritivo (tabela normativa do estado)
+      // pra virar dados_projeto.ocupacao_principal; "Mista" (exibido na
+      // tela) não é um código válido pra isso.
+      divisoes: painel.divisoes,
+    });
+  }
+
   async function carregarProjeto(projetoId, estruturaIdEscolhida) {
     setEstado((s) => ({ ...s, carregando: true, erro: null }));
     try {
-      const [projeto, estruturas] = await Promise.all([
-        estado.projeto && estado.projeto.id === projetoId ? Promise.resolve(estado.projeto) : buscarProjeto(projetoId),
-        buscarEstruturasDoProjeto(projetoId),
-      ]);
+      const linha =
+        estado.linha && estado.linha.id === projetoId ? estado.linha : await buscarProjeto(projetoId);
+      const estruturas = estruturasDoProjeto(linha);
 
       if (estruturas.length === 0) {
         setEstado({
           carregando: false,
           erro: "Este projeto ainda não tem nenhuma estrutura cadastrada no site.",
-          projeto,
-          estruturas,
-          estruturaAtual: null,
+          linha,
+          estruturaId: null,
         });
         return;
       }
@@ -41,24 +61,12 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
       if (!alvoId) {
         // Mais de uma estrutura e nenhuma escolhida ainda — mostra a tela
         // de seleção em vez de já cravar um vínculo.
-        setEstado({ carregando: false, erro: null, projeto, estruturas, estruturaAtual: null });
+        setEstado({ carregando: false, erro: null, linha, estruturaId: null });
         return;
       }
 
-      const dadosEstrutura = await buscarDashboardEstrutura(alvoId);
-      const resumoEstrutura = estruturas.find((e) => e.id === alvoId);
-
-      postToHost(BridgeMessageTypes.SET_PROJECT_LINK, {
-        projetoId: projeto.id,
-        projetoNome: projeto.nome,
-        estruturaId: dadosEstrutura.id,
-        estruturaNome: resumoEstrutura ? resumoEstrutura.nome : dadosEstrutura.nome,
-        uf: dadosEstrutura.uf,
-        ocupacaoPrincipal: dadosEstrutura.ocupacao_principal,
-        areaConstruida: dadosEstrutura.area_construida,
-      });
-
-      setEstado({ carregando: false, erro: null, projeto, estruturas, estruturaAtual: dadosEstrutura });
+      persistirVinculo(linha, alvoId);
+      setEstado({ carregando: false, erro: null, linha, estruturaId: alvoId });
     } catch (ex) {
       console.error("[Dashboard] Falha ao carregar projeto/estrutura:", ex);
       adicionarToast?.({
@@ -78,13 +86,12 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
     if (!vinculo || vinculo.docSalvo === false) return;
 
     if (!vinculo.projetoId) {
-      if (estado.projeto) setEstado(ESTADO_INICIAL);
+      if (estado.linha) setEstado(ESTADO_INICIAL);
       return;
     }
 
     const jaCarregado =
-      estado.projeto?.id === vinculo.projetoId &&
-      (!vinculo.estruturaId || estado.estruturaAtual?.id === vinculo.estruturaId);
+      estado.linha?.id === vinculo.projetoId && (!vinculo.estruturaId || estado.estruturaId === vinculo.estruturaId);
     if (jaCarregado || estado.carregando) return;
 
     carregarProjeto(vinculo.projetoId, vinculo.estruturaId);
@@ -94,10 +101,10 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
   // Status dos dimensionamentos locais — só faz sentido pedir depois que
   // uma estrutura está de fato carregada na tela.
   useEffect(() => {
-    if (estado.estruturaAtual) {
+    if (estado.estruturaId) {
       postToHost(BridgeMessageTypes.GET_DIMENSIONAMENTOS_STATUS, {});
     }
-  }, [estado.estruturaAtual?.id]);
+  }, [estado.estruturaId]);
 
   if (!vinculo) {
     return <p className="vazio">Carregando...</p>;
@@ -111,7 +118,7 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
     );
   }
 
-  if (estado.carregando && !estado.projeto) {
+  if (estado.carregando && !estado.linha) {
     return <p className="vazio">Carregando projeto...</p>;
   }
 
@@ -123,26 +130,28 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
     );
   }
 
-  if (!estado.projeto) {
+  if (!estado.linha) {
     return <ConectarProjeto onSelecionar={(projeto) => carregarProjeto(projeto.id, null)} />;
   }
 
-  if (!estado.estruturaAtual) {
+  const estruturas = estruturasDoProjeto(estado.linha);
+
+  if (!estado.estruturaId) {
     return (
       <SelecionarEstrutura
-        projeto={estado.projeto}
-        estruturas={estado.estruturas}
-        onSelecionar={(estrutura) => carregarProjeto(estado.projeto.id, estrutura.id)}
+        projeto={estado.linha}
+        estruturas={estruturas}
+        onSelecionar={(estrutura) => carregarProjeto(estado.linha.id, estrutura.id)}
       />
     );
   }
 
   return (
     <DashboardEstrutura
-      projeto={estado.projeto}
-      estrutura={estado.estruturaAtual}
-      estruturas={estado.estruturas}
-      onTrocarEstrutura={(novoEstruturaId) => carregarProjeto(estado.projeto.id, novoEstruturaId)}
+      projeto={estado.linha}
+      estrutura={dashboardEstrutura(estado.linha, estado.estruturaId)}
+      estruturas={estruturas}
+      onTrocarEstrutura={(novoEstruturaId) => carregarProjeto(estado.linha.id, novoEstruturaId)}
       dimensionamentos={dimensionamentos}
     />
   );

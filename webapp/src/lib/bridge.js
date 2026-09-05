@@ -11,6 +11,17 @@
  * desenvolvimento isolado do frontend), postToHost só loga no console em
  * vez de quebrar — permite testar a UI sem o Revit aberto.
  *
+ * IMPORTANTE — evolução do sync com o site: o `sync_token` da tabela
+ * `projetos` (usado antes pro Python empurrar cálculos pra uma Edge
+ * Function via token) está sendo aposentado; com o login já acontecendo
+ * dentro da dockpane (sessão do Supabase no próprio React), a ideia é o
+ * envio de dados de cálculo (hidrantes/saídas/extintores) também passar a
+ * ser um relay por aqui — Python pede, React (já autenticado) grava no
+ * Supabase — em vez de um POST direto do lado Python com token. Esse
+ * relay ainda não existe (é o próximo passo depois do vínculo
+ * projeto/estrutura abaixo); quando existir, ganha seu próprio tipo de
+ * mensagem aqui.
+ *
  * Mensagens JS -> Python (payload sempre um objeto serializável em JSON):
  *
  *   { type: "LOAD_FAMILIES", payload: { familias: [{ name, categoryId, storageKey, sha256, signedUrl }] } }
@@ -43,11 +54,17 @@
  *     não foi salvo em disco — nesse caso os demais campos vêm null e o
  *     Dashboard deve pedir pra salvar o projeto antes de vincular.
  *
- *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturaId, estruturaNome, uf, ocupacaoPrincipal, areaConstruida } }
+ *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida, divisoes } }
  *     JS -> Python: grava o vínculo escolhido (projeto + estrutura, já
  *     resolvidos no Supabase) no firedata.json do documento ativo — mesmo
  *     formato que o antigo pushbutton "Dados do Projeto" gravava, pra não
  *     quebrar os módulos de dimensionamento (hidrantes/saidas/extintores).
+ *     `divisoes` é a lista de códigos de ocupação (ex.: ["A-1", "G-1"])
+ *     presentes nos pavimentos dessa estrutura (ver lib/projetoDados.js) —
+ *     o Python escolhe o mais restritivo (tabela normativa do estado) pra
+ *     virar dados_projeto.ocupacao_principal; o React nunca manda um
+ *     código de ocupação já resolvido, porque essa tabela só existe do
+ *     lado Python (lib/normas).
  *
  *   { type: "PROJECT_LINK_SAVED", payload: { ok, erro? } }
  *     Python -> JS: resultado de um SET_PROJECT_LINK ou DISCONNECT_PROJECT
