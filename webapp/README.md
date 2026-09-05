@@ -29,6 +29,16 @@ catálogo (quando logado) cai automaticamente no exemplo local em
 `src/mock/catalog.mock.json` — gerado a partir da `family_library/` real
 pelo `migration/generate_catalog.py`, então reflete o acervo atual.
 
+O Dashboard também dá pra testar assim: fora do WebView2,
+`estaDentroDoWebView2()` (`lib/bridge.js`) dá `false`, e o `App.jsx` simula
+"documento salvo, sem projeto vinculado" em vez de esperar pra sempre uma
+resposta de `GET_PROJECT_LINK` que nunca chega — cai direto na tela
+"Conectar um projeto" (que já busca de verdade no Supabase, se
+configurado). A partir daí o fluxo todo (selecionar projeto/estrutura, ver
+o dashboard) funciona normalmente — só a persistência do vínculo no
+`firedata.json` que não acontece de verdade (não tem Python do outro lado
+pra gravar), então recarregar a página sempre volta pra tela de conexão.
+
 ## Conectando ao Supabase de verdade
 
 Depois que o projeto e os buckets (`plugin-assets` público, `revit-families`
@@ -236,9 +246,13 @@ existir.
 RLS: as políticas do Supabase decidem quais `projetos` cada usuário logado
 enxerga (`user_id = auth.uid()`) — `projectData.js` não filtra por
 usuário, só repassa o que a política deixar. `VITE_SITE_URL` (opcional,
-`.env.local`) monta o link "abrir no site" do cabeçalho do dashboard
-(`${VITE_SITE_URL}/${projeto.id}`); sem essa env var, o ícone de link
-externo simplesmente não aparece.
+`.env.local`) monta dois links pro site (`lib/site.js`): "abrir no site"
+no cabeçalho do dashboard (`${VITE_SITE_URL}/${projeto.id}`) e "+ Criar
+novo projeto" na tela "Conectar um projeto" (`${VITE_SITE_URL}${VITE_SITE_NOVO_PROJETO_PATH
+|| "/novo"}`) — o cadastro completo (endereço, RT/ART, sistemas, etc.)
+continua acontecendo no site, o botão só abre essa página numa aba
+externa; a pessoa volta pro Revit e conecta o projeto recém-criado pela
+busca normal. Sem `VITE_SITE_URL`, os dois simplesmente não aparecem.
 
 **`sync_token` em desuso**: antes era o que o Python colava manualmente
 (`token`) pra autenticar as Edge Functions `site-sync`/`revit-sync`. Com o
@@ -276,6 +290,7 @@ src/
 │   ├── catalog.js          busca catalog.json (com fallback pro mock local)
 │   ├── projectData.js      busca a linha de `projetos` no Supabase (direto, RLS)
 │   ├── projetoDados.js     decodifica dados.{estruturas,pavimentos,cargaState}
+│   ├── site.js             URLs do site (abrir projeto / criar novo projeto)
 │   ├── format.js           helpers de formatação (área, metros, "editado há Xh")
 │   ├── bridge.js           postMessage <-> host WebView2 (JS <-> Python)
 │   └── toasts.js           hook useToasts() — fila de notificações

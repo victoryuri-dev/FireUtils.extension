@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { supabase, criarSignedUrlFamilia } from "./lib/supabaseClient";
 import { fetchCatalog } from "./lib/catalog";
-import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "./lib/bridge";
+import { postToHost, escutarMensagensDoHost, estaDentroDoWebView2, BridgeMessageTypes } from "./lib/bridge";
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
@@ -74,7 +74,19 @@ export default function App() {
   useEffect(() => {
     if (sessao) {
       fetchCatalog().then(setCatalogo);
-      postToHost(BridgeMessageTypes.GET_PROJECT_LINK, {});
+      if (estaDentroDoWebView2()) {
+        postToHost(BridgeMessageTypes.GET_PROJECT_LINK, {});
+      } else {
+        // Fora do WebView2 (ex.: `npm run dev` no navegador comum) não há
+        // Python do outro lado pra responder GET_PROJECT_LINK — sem isso o
+        // Dashboard ficaria esperando pra sempre. Simula "documento salvo,
+        // sem projeto vinculado ainda", que já cai na tela "Conectar um
+        // projeto" e permite testar o resto do fluxo sem o Revit aberto.
+        console.warn(
+          "[App] WebView2 não detectado — simulando vínculo vazio pra testar o Dashboard no navegador."
+        );
+        setVinculo({ docSalvo: true, projetoId: null, projetoNome: null, estruturaId: null, estruturaNome: null });
+      }
     }
   }, [sessao]);
 

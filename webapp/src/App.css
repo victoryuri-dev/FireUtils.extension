@@ -649,6 +649,24 @@
   color: var(--accent);
 }
 
+.busca-linha {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.busca-linha .search-bar {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.botao-criar-projeto {
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
 /* Conectar um projeto — grade de cartões --------------------------------- */
 .grade-projetos {
   display: flex;

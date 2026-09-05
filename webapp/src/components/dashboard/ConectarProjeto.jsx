@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listarProjetosDoUsuario } from "../../lib/projectData";
 import { resumoProjeto } from "../../lib/projetoDados";
 import { formatarArea, formatarEditadoHa } from "../../lib/format";
+import { urlNovoProjeto } from "../../lib/site";
 import Icon from "../Icon";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 import linkIconSvg from "../../assets/icons/link-icon-placeholder.svg?raw";
@@ -13,6 +14,7 @@ export default function ConectarProjeto({ onSelecionar }) {
   const [busca, setBusca] = useState("");
   const [projetos, setProjetos] = useState(null); // null = ainda carregando
   const [erro, setErro] = useState(null);
+  const linkNovoProjeto = urlNovoProjeto();
 
   useEffect(() => {
     let cancelado = false;
@@ -43,14 +45,21 @@ export default function ConectarProjeto({ onSelecionar }) {
         <h2>Conectar um projeto</h2>
       </div>
 
-      <div className="search-bar">
-        <Icon svg={searchIconSvg} className="icone" />
-        <input
-          type="text"
-          placeholder="Pesquise pelo nome ou ID do projeto"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-        />
+      <div className="busca-linha">
+        <div className="search-bar">
+          <Icon svg={searchIconSvg} className="icone" />
+          <input
+            type="text"
+            placeholder="Pesquise pelo nome ou ID do projeto"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+          />
+        </div>
+        {linkNovoProjeto && (
+          <a href={linkNovoProjeto} target="_blank" rel="noreferrer" className="botao accent botao-criar-projeto">
+            + Criar novo projeto
+          </a>
+        )}
       </div>
 
       {erro && <p className="vazio">Não foi possível buscar os projetos: {erro}</p>}

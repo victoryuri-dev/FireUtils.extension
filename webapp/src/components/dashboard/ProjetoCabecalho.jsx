@@ -2,8 +2,7 @@ import Icon from "../Icon";
 import linkIconSvg from "../../assets/icons/link-icon-placeholder.svg?raw";
 import externalLinkIconSvg from "../../assets/icons/external-link-icon-placeholder.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
-
-const SITE_URL = import.meta.env.VITE_SITE_URL || "";
+import { urlProjeto as montarUrlProjeto } from "../../lib/site";
 
 /** Cabeçalho reaproveitado nas telas "Selecione uma estrutura" e Dashboard:
  * id do projeto + status "Salvo" + nome com link pro site. `projeto` é a
@@ -12,7 +11,7 @@ const SITE_URL = import.meta.env.VITE_SITE_URL || "";
  * o `id` (text) já cumpre esse papel. */
 export default function ProjetoCabecalho({ projeto }) {
   if (!projeto) return null;
-  const urlProjeto = SITE_URL && projeto.id ? `${SITE_URL}/${projeto.id}` : null;
+  const link = montarUrlProjeto(projeto.id);
 
   return (
     <div className="projeto-cabecalho">
@@ -30,8 +29,8 @@ export default function ProjetoCabecalho({ projeto }) {
       </div>
       <h2 className="projeto-nome">
         {projeto.nome}
-        {urlProjeto && (
-          <a href={urlProjeto} target="_blank" rel="noreferrer" className="projeto-link-externo" title="Abrir no site">
+        {link && (
+          <a href={link} target="_blank" rel="noreferrer" className="projeto-link-externo" title="Abrir no site">
             <Icon svg={externalLinkIconSvg} />
           </a>
         )}
