@@ -218,24 +218,25 @@
 }
 
 .sidebar-item.ativa {
-  background: var(--accent);
-  color: var(--white);
+  color: var(--sidebar-icon-ativo);
 }
 
 .sidebar-item:disabled {
   cursor: default;
+  opacity: 0.45;
 }
 
-/* Avatar de perfil — sempre um círculo preto sólido, ícone branco, mesmo
+/* Avatar de perfil — sempre um círculo branco sólido, ícone escuro, mesmo
    desabilitado (é um placeholder de identidade, não uma ação). */
 .sidebar-item-avatar {
   border-radius: 50%;
-  background: var(--black);
-  color: var(--white);
+  background: var(--sidebar-avatar-bg);
+  color: var(--sidebar-avatar-icon);
+  opacity: 1;
 }
 
 .sidebar-item-avatar:not(:disabled):hover {
-  background: var(--black);
+  background: var(--sidebar-avatar-bg);
 }
 
 /* Área principal ---------------------------------------------------------- */

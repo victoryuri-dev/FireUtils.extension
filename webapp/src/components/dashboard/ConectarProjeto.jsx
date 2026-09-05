@@ -5,7 +5,7 @@ import { formatarArea, formatarEditadoHa } from "../../lib/format";
 import { urlNovoProjeto } from "../../lib/site";
 import Icon from "../Icon";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
-import linkIconSvg from "../../assets/icons/link-icon-placeholder.svg?raw";
+import linkIconSvg from "../../assets/icons/link-icon.svg?raw";
 
 // Debounce curto pra não disparar uma consulta a cada tecla digitada.
 const DEBOUNCE_BUSCA_MS = 300;

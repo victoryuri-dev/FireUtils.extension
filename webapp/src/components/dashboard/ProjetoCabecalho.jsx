@@ -1,6 +1,6 @@
 import Icon from "../Icon";
-import linkIconSvg from "../../assets/icons/link-icon-placeholder.svg?raw";
-import externalLinkIconSvg from "../../assets/icons/external-link-icon-placeholder.svg?raw";
+import linkIconSvg from "../../assets/icons/link-icon.svg?raw";
+import externalLinkIconSvg from "../../assets/icons/external-link-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 import { urlProjeto as montarUrlProjeto } from "../../lib/site";
 

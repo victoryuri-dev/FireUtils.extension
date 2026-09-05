@@ -1,8 +1,8 @@
 import ProjetoCabecalho from "./ProjetoCabecalho";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
-import hidranteIconSvg from "../../assets/icons/hidrante-icon.svg?raw";
-import saidaIconSvg from "../../assets/icons/saida-icon-placeholder.svg?raw";
+import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
+import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 
 function CartaoDimensionamento({ titulo, iconeSvg, dimensionado }) {
@@ -77,12 +77,12 @@ export default function DashboardEstrutura({ projeto, estrutura, dimensionamento
       <div className="grade-dimensionamentos">
         <CartaoDimensionamento
           titulo="Sistema de Hidrantes"
-          iconeSvg={hidranteIconSvg}
+          iconeSvg={hydrantIconSvg}
           dimensionado={dimensionamentos?.hidrantes}
         />
         <CartaoDimensionamento
           titulo="Saída de Emergência"
-          iconeSvg={saidaIconSvg}
+          iconeSvg={exitIconSvg}
           dimensionado={dimensionamentos?.saidaEmergencia}
         />
       </div>

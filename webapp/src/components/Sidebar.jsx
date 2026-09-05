@@ -2,13 +2,19 @@ import Icon from "./Icon";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
+import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
+import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import configuracoesIconSvg from "../assets/icons/config-icon.svg?raw";
-import unlinkIconSvg from "../assets/icons/unlink-icon-placeholder.svg?raw";
+import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
 
+// Hidrantes/Saídas ainda não têm aba própria na dockpane — aparecem
+// desabilitadas, preparando o espaço pra quando (se) migrarem pra cá.
 const ITENS_NAV = [
   { id: "biblioteca", label: "Biblioteca de Famílias", svg: libraryIconSvg },
   { id: "dashboard", label: "Dashboard", svg: dashboardIconSvg },
+  { id: "hidrantes", label: "Hidrantes (em breve)", svg: hydrantIconSvg, disabled: true },
+  { id: "saidas", label: "Saídas de Emergência (em breve)", svg: exitIconSvg, disabled: true },
 ];
 
 export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar }) {
@@ -24,6 +30,7 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
             key={item.id}
             type="button"
             className={`sidebar-item ${item.id === abaAtual ? "ativa" : ""}`}
+            disabled={item.disabled}
             onClick={() => onSelecionarAba?.(item.id)}
             title={item.label}
           >
