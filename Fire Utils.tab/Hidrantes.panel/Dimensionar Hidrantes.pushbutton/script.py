@@ -14,12 +14,8 @@ de seguir adiante com um resultado que não atende.
 
 Salva os resultados completos no cache (firedata.json) para o botão
 "Memorial de Cálculo" reimprimir o passo a passo sem recalcular.
-
-Os elementos de cada trecho não vêm mais de uma varredura por parâmetro:
-"Mapear Trechos" salva a rota (listas de ElementId) no cache, chave
-'rotas', e este script só resolve os elementos por Id. RTI e Bomba
-continuam sendo achados pela tag "FireUtils - Identificador" na própria
-família, como antes.
+(Nos elementos do Revit os identificadores gravados por 'Mapear Trechos'
+continuam sendo "HID-01"/"HID-02"; no memorial a nomenclatura é HD01/HD02.)
 """
 
 import clr
@@ -49,7 +45,7 @@ except ImportError:
 
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
-    calcular_rede, calc_potencia, extrair_trecho, salvar_cache, carregar_cache,
+    calcular_rede, calc_potencia, extrair_trecho, salvar_cache,
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
     COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
@@ -64,6 +60,7 @@ from hidrantes import succao as succao_calc
 from hidrantes import npshd as npshd_calc
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
+P_TRECHO           = u"FireUtils - Trecho"
 P_IDENTIFICADOR    = u"FireUtils - Identificador"
 
 # IronPython 2.7 (engine do pyRevit) tem 'unicode'; CPython 3 não.
@@ -115,6 +112,12 @@ def mostrar_no_revit(ids):
         ctypes.windll.user32.SetForegroundWindow(__revit__.MainWindowHandle)
     except Exception:
         pass
+
+def get_trecho(elem):
+    try:
+        p = elem.LookupParameter(P_TRECHO)
+        return p.AsString() if p else None
+    except: return None
 
 def get_identificador(elem):
     try:
@@ -405,46 +408,13 @@ if metodo_calculo not in METODOS_CALCULO:
     metodo_calculo = METODO_VALVULA
 
 # --- Etapa 2: captura de elementos ---
-# A rota (RTI-Bomba / Bomba-Ponto A / Ponto A-HD01 / Ponto A-HD02) vem do
-# cache salvo por "Mapear Trechos" (chave 'rotas'), como listas de
-# ElementId - não mais de uma varredura pelo parametro "FireUtils -
-# Trecho". RTI e Bomba continuam vindo da tag "FireUtils - Identificador"
-# na propria familia, sem mudanca.
-payload_rotas, erro_rotas = carregar_cache(projeto_dir, chave=u"rotas")
-if erro_rotas:
-    forms.alert(erro_rotas, title="Fire Utils", warn_icon=True)
-    script.exit()
+TRECHOS = [u"RTI - Bomba", u"Bomba - Ponto A", u"Ponto A - Hid 01", u"Ponto A - Hid 02"]
+trechos_elems = {t: [] for t in TRECHOS}
+ident_map = {}; hid_map = {}
 
-def _resolve_elems(eids):
-    # ElementId(int) e ambiguo no IronPython nas versoes do Revit que tem
-    # ElementId(BuiltInParameter)/ElementId(BuiltInCategory) tambem (2024+)
-    # - Int64(eid) forca o overload certo (mesmo fix de mostrar_no_revit).
-    return [doc.GetElement(ElementId(Int64(eid))) for eid in eids]
-
-trechos_elems = {
-    u"RTI - Bomba":      _resolve_elems(payload_rotas[u"t1"]),
-    u"Bomba - Ponto A":  _resolve_elems(payload_rotas[u"t2"]),
-    u"Ponto A - Hid 01": _resolve_elems(payload_rotas[u"t3"]),
-    u"Ponto A - Hid 02": _resolve_elems(payload_rotas[u"t4"]),
-}
-ponto_a_elem = doc.GetElement(ElementId(Int64(payload_rotas[u"ponto_a_id"])))
-
-_todos_elems_rota = [e for lst in trechos_elems.values() for e in lst] + [ponto_a_elem]
-if any(e is None for e in _todos_elems_rota):
-    forms.alert(
-        u"Um ou mais elementos do mapeamento não existem mais no projeto "
-        u"(modelo alterado desde o último mapeamento).\n\n"
-        u"Execute 'Mapear Trechos' novamente.",
-        title="Fire Utils", warn_icon=True)
-    script.exit()
-
-hid_map = {
-    u"HID-01": trechos_elems[u"Ponto A - Hid 01"][-1],
-    u"HID-02": trechos_elems[u"Ponto A - Hid 02"][-1],
-}
-
-ident_map = {u"Ponto A": ponto_a_elem}
 for elem in FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements():
+    t = get_trecho(elem)
+    if t in trechos_elems: trechos_elems[t].append(elem)
     i = get_identificador(elem)
     # So Pipe ou FamilyInstance sao alvos legitimos de "Mapear Trechos" -
     # ignora qualquer outro elemento que porventura carregue o mesmo
@@ -452,10 +422,20 @@ for elem in FilteredElementCollector(doc).WhereElementIsNotElementType().ToEleme
     # centro"), pra nao pegar o elemento errado por engano.
     if i and isinstance(elem, (Pipe, FamilyInstance)):
         ident_map[i] = elem
+    if isinstance(elem, FamilyInstance):
+        try:
+            p = elem.LookupParameter(u"FireUtils - Identificador")
+            if p and p.AsString() in (u"HID-01", u"HID-02"):
+                hid_map[p.AsString()] = elem
+        except: pass
 
 erros = []
-for i in [u"RTI", u"Bomba"]:
+for t in TRECHOS:
+    if not trechos_elems[t]: erros.append(u"Trecho '{}' vazio".format(t))
+for i in [u"RTI", u"Bomba", u"Ponto A"]:
     if i not in ident_map: erros.append(u"Identificador '{}' não encontrado".format(i))
+for h in [u"HID-01", u"HID-02"]:
+    if h not in hid_map: erros.append(u"'{}' não encontrado".format(h))
 if erros:
     forms.alert(u"Elementos não encontrados:\n{}\n\nExecute 'Mapear Trechos' primeiro.".format(
         u"\n".join(erros)), title="Fire Utils", warn_icon=True)

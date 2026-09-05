@@ -659,18 +659,8 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
 # CACHE — salvar e carregar resultados entre botões
 # ===========================================================================
 
-_MENSAGENS_ERRO_CACHE = {
-    u"hidrantes": u"Nenhum dimensionamento encontrado.\nExecute 'Dimensionar Hidrantes' primeiro.",
-    u"rotas":     u"Nenhum mapeamento de rotas encontrado.\nExecute 'Mapear Trechos' primeiro.",
-}
-
-
-def salvar_cache(payload, projeto_dir=None, chave=u"hidrantes"):
-    """Salva `payload` na chave indicada (`hidrantes` = resultado do
-    dimensionamento; `rotas` = mapeamento de trechos salvo por "Mapear
-    Trechos") do arquivo unificado firedata.json. Só a chave 'hidrantes'
-    é enviada ao site (sync) — 'rotas' é puramente interna, IDs de
-    elemento do Revit sem sentido fora do próprio projeto."""
+def salvar_cache(payload, projeto_dir=None):
+    """Salva o resultado do dimensionamento na chave 'hidrantes' do arquivo unificado."""
     payload["_timestamp"]   = datetime.datetime.now().strftime(u"%Y-%m-%d %H:%M:%S")
     payload["_projeto_dir"] = projeto_dir or u""
     path = _cache_path(projeto_dir)
@@ -679,40 +669,38 @@ def salvar_cache(payload, projeto_dir=None, chave=u"hidrantes"):
             dados = json.loads(f.read())
     except Exception:
         dados = {}
-    dados[chave] = payload
+    dados[u"hidrantes"] = payload
     with io.open(path, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
     _salvar_ponteiro_projeto(projeto_dir)
 
-    if chave == u"hidrantes":
-        enviar_sync(u"hidrantes", payload, projeto_dir)
+    enviar_sync(u"hidrantes", payload, projeto_dir)
 
     return path
 
 
-def carregar_cache(projeto_dir=None, chave=u"hidrantes"):
+def carregar_cache(projeto_dir=None):
     """Retorna (payload, erro). Se erro não for None, payload é None."""
-    mensagem_erro = _MENSAGENS_ERRO_CACHE.get(chave, _MENSAGENS_ERRO_CACHE[u"hidrantes"])
     path = _cache_path(projeto_dir)
     if not os.path.exists(path):
-        return None, mensagem_erro
+        return None, u"Nenhum dimensionamento encontrado.\nExecute 'Dimensionar Hidrantes' primeiro."
     try:
         with io.open(path, "r", encoding="utf-8") as f:
             dados = json.loads(f.read())
-        payload = dados.get(chave)
+        payload = dados.get(u"hidrantes")
         if payload is None:
-            return None, mensagem_erro
+            return None, u"Nenhum dimensionamento encontrado.\nExecute 'Dimensionar Hidrantes' primeiro."
         return payload, None
     except Exception as e:
         return None, u"Erro ao ler cache: {}".format(str(e))
 
 
-def cache_existe(projeto_dir=None, chave=u"hidrantes"):
+def cache_existe(projeto_dir=None):
     path = _cache_path(projeto_dir)
     if not os.path.exists(path):
         return False
     try:
         with io.open(path, "r", encoding="utf-8") as f:
-            return chave in json.loads(f.read())
+            return u"hidrantes" in json.loads(f.read())
     except Exception:
         return False
