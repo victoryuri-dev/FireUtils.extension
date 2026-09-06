@@ -6,6 +6,8 @@ Ponte HTTP com o site (Supabase) nos dois sentidos:
     hidrantes, saidas_emergencia) pra Edge Function `revit-sync`.
   - buscar(): pull sob demanda de dados cadastrados no site (estruturas,
     ocupação/área por pavimento) via Edge Function `site-sync`.
+  - buscar_norma(): pull da base normativa central (tabela `normas_dados`),
+    direto via PostgREST — ver docstring da função.
 
 Identificação por projetoId (não mais por token): o vínculo agora é
 escolhido direto no Dashboard da dockpane, consultando o Supabase com a
@@ -19,9 +21,10 @@ próprio firedata.json — mesmo padrão ler-arquivo-inteiro → mesclar chave
 já usam.
 
 Uso:
-    from sync import enviar, buscar, config_sync, salvar_config_sync
+    from sync import enviar, buscar, buscar_norma, config_sync, salvar_config_sync
     enviar(u"extintores", payload, projeto_dir)
     resultado, erro = buscar(u"listar_estruturas", projeto_dir)
+    dados, erro = buscar_norma(u"MA", u"saida_emergencia")
 """
 
 import io
@@ -30,6 +33,7 @@ import json
 
 _SYNC_URL   = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/revit-sync"
 _BUSCA_URL  = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/site-sync"
+_NORMAS_URL = u"https://lngvagifcukglgdjildw.supabase.co/rest/v1/normas_dados"
 _ANON_KEY   = u"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ZhZ2lmY3VrZ2xnZGppbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDUwNzksImV4cCI6MjEwMjMyMTA3OX0.hApUcA5wunyv21JdL8XAVVD1TnGU9oRvyew1uCIlZRw"
 _CACHE_NOME = u"firedata.json"
 _MEDIDAS_VALIDAS = (u"extintores", u"hidrantes", u"saidas_emergencia")
@@ -69,16 +73,7 @@ def salvar_config_sync(projeto_dir, **campos):
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
 
-def _post_json(url, corpo):
-    """POST JSON com os headers do Supabase. Retorna (resultado, erro) —
-    `erro` é None em caso de sucesso, senão uma mensagem legível (extraída
-    do corpo de erro `{"error": "..."}` quando o servidor manda um)."""
-    import clr
-    clr.AddReference(u"System.Net")
-    from System.Net import WebRequest, WebException
-    from System.Text import Encoding
-    from System.IO import StreamReader
-
+def _forcar_tls12():
     # Força TLS1.2 em .NET Framework antigo, que não negocia isso por padrão
     # (o Supabase exige TLS1.2+). Em runtimes mais novos (.NET Core/5+, usado
     # por versões recentes do Revit) ServicePointManager nem existe mais —
@@ -90,6 +85,19 @@ def _post_json(url, corpo):
         )
     except Exception:
         pass
+
+
+def _post_json(url, corpo):
+    """POST JSON com os headers do Supabase. Retorna (resultado, erro) —
+    `erro` é None em caso de sucesso, senão uma mensagem legível (extraída
+    do corpo de erro `{"error": "..."}` quando o servidor manda um)."""
+    import clr
+    clr.AddReference(u"System.Net")
+    from System.Net import WebRequest, WebException
+    from System.Text import Encoding
+    from System.IO import StreamReader
+
+    _forcar_tls12()
 
     dados_bytes = Encoding.UTF8.GetBytes(json.dumps(corpo, ensure_ascii=False))
 
@@ -106,6 +114,45 @@ def _post_json(url, corpo):
         stream.Write(dados_bytes, 0, dados_bytes.Length)
         stream.Close()
 
+        resp = req.GetResponse()
+        leitor = StreamReader(resp.GetResponseStream(), Encoding.UTF8)
+        texto = leitor.ReadToEnd()
+        resp.Close()
+    except WebException as werr:
+        if werr.Response:
+            leitor_erro = StreamReader(werr.Response.GetResponseStream(), Encoding.UTF8)
+            texto_erro = leitor_erro.ReadToEnd()
+            werr.Response.Close()
+            try:
+                return None, (json.loads(texto_erro).get(u"error") or texto_erro)
+            except Exception:
+                return None, texto_erro or u"{}".format(werr)
+        return None, u"Falha de rede: {}".format(werr)
+
+    try:
+        return json.loads(texto), None
+    except Exception:
+        return None, u"Resposta inválida do servidor."
+
+
+def _get_json(url):
+    """GET com os headers do Supabase (PostgREST). Retorna (resultado, erro)
+    — mesmo contrato de _post_json, mas sem corpo de requisição."""
+    import clr
+    clr.AddReference(u"System.Net")
+    from System.Net import WebRequest, WebException
+    from System.Text import Encoding
+    from System.IO import StreamReader
+
+    _forcar_tls12()
+
+    req = WebRequest.Create(url)
+    req.Method = u"GET"
+    req.Timeout = 5000
+    req.Headers.Add(u"Authorization", u"Bearer " + _ANON_KEY)
+    req.Headers.Add(u"apikey", _ANON_KEY)
+
+    try:
         resp = req.GetResponse()
         leitor = StreamReader(resp.GetResponseStream(), Encoding.UTF8)
         texto = leitor.ReadToEnd()
@@ -172,3 +219,34 @@ def buscar(acao, projeto_dir, **params):
         return _post_json(_BUSCA_URL, corpo)
     except Exception as ex:
         return None, u"Falha ao consultar o site: {}".format(ex)
+
+
+def buscar_norma(uf, sistema):
+    """
+    Busca a base normativa central (tabela `normas_dados`) direto via
+    PostgREST — ao contrário de `buscar()`, não passa pela Edge Function
+    site-sync nem exige projeto vinculado (`projeto_dir`), porque a base
+    normativa (NBR/NT/IT) é norma técnica publicada, não dado de usuário:
+    qualquer instalação do plugin pode ler, com ou sem projeto aberto.
+
+    É a mesma tabela que o site lê via supabase-js em
+    src/lib/normasRemote.js — aqui só troca o cliente HTTP (WebRequest do
+    .NET em vez de fetch/supabase-js), porque este módulo roda dentro do
+    IronPython do Revit, não num navegador.
+
+    Retorna (dados, erro): `dados` é o dict já pronto pra usar como
+    `normas.get_estado()` (ou uma fatia dele — ver normas/__init__.py),
+    ou None se não encontrado/erro de rede; `erro` é uma mensagem legível
+    ou None em caso de sucesso. Nunca lança — quem chama decide o
+    fallback (ver normas/remote.py).
+    """
+    url = u"{}?uf=eq.{}&sistema=eq.{}&select=dados&limit=1".format(_NORMAS_URL, uf, sistema)
+    try:
+        linhas, erro = _get_json(url)
+    except Exception as ex:
+        return None, u"Falha ao consultar a base normativa: {}".format(ex)
+    if erro:
+        return None, erro
+    if not linhas:
+        return None, u"Norma '{}' não cadastrada para o estado '{}'.".format(sistema, uf)
+    return linhas[0].get(u"dados"), None
