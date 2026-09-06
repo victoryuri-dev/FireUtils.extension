@@ -3,6 +3,15 @@
 normas/MA/saidas.py — Fire Utils
 Dados normativos de saídas de emergência do Maranhão — CBM-MA.
 
+FALLBACK OFFLINE/DEV: a fonte de verdade é a tabela `normas_dados`
+(uf='MA', sistema='saida_emergencia') no Supabase — mesma base usada pelo
+site (ver supabase/migrations/*normas_dados* em ETOS.FireUtils) — buscada
+em runtime por normas/remote.py e normas/__init__.py. Este dict só é usado
+quando a busca remota falha (sem rede) ou antes do primeiro fetch bem
+sucedido (cache em disco). Editar a norma? Edite a linha no Supabase, não
+aqui — este arquivo só precisa ser atualizado de vez em quando, pra não
+ficar defasado como fallback.
+
 Normas de referência:
   - Ocupações / taxa populacional : NT-01/2021 CBM-MA  (+ IT 11 CBMSP adaptada)
   - Saídas de emergência          : IT 11 CBMSP (adotada pelo MA)
@@ -44,6 +53,25 @@ DADOS_SAIDAS = {
     u"corpo":            u"CBM-MA",
     u"norma_ocupacoes":  u"NT-01/2021 CBM-MA",
     u"norma_saidas":     u"IT 11 CBMSP (adotada pelo MA)",
+
+    # -------------------------------------------------------------------------
+    # Pendências encontradas ao reconciliar esta cópia com a do site
+    # (src/data/normas/MA/saida_emergencia.js) na migração pra base central —
+    # ver supabase/migrations/*normas_saida_emergencia_ma* em ETOS.FireUtils.
+    # -------------------------------------------------------------------------
+    u"_pendencias": [
+        {
+            u"campo": u"tabela.M-3, tabela.M-4, tabela.M-5",
+            u"descricao": (
+                u"O site tinha A=None ('consultar norma específica'); aqui já "
+                u"havia valores numéricos (A=10, 4, 10) em uso real no cálculo "
+                u"de população. Mantidos os valores numéricos na base central. "
+                u"M-4 também diverge em AD/ER (aqui: 60/45, site tinha: 100/60). "
+                u"Revisar com o CBM-MA qual é o correto."
+            ),
+            u"revisado": False,
+        },
+    ],
 
     # -------------------------------------------------------------------------
     # Tabela 1 — Classificação das ocupações
@@ -176,9 +204,13 @@ DADOS_SAIDAS = {
 
         # Grupo M — Especial
         u"M-1": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Túnel"},
+        u"M-2": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Líquido/gás inflamável"},
         u"M-3": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Central de comunicação"},
         u"M-4": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Canteiro de obras"},
         u"M-5": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Silos"},
+        u"M-6": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Floresta"},
+        u"M-7": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Pátio de contêineres"},
+        u"M-8": {u"grupo": u"M", u"uso": u"Especial", u"descricao": u"Torres de telefonia"},
     },
 
     # -------------------------------------------------------------------------
@@ -291,10 +323,18 @@ DADOS_SAIDAS = {
         u"L-3": {u"A": 10,   u"AD": 100, u"ER": 60, u"PT": 100, u"obs": u"1 pessoa por 10m²", u"notas": []},
 
         u"M-1": {u"A": None, u"AD": 100, u"ER": 75, u"PT": 100,
-                 u"obs": u"Consultar NT específica", u"notas": [u"I"]},
+                 u"obs": u"Consultar NT específica (Túnel)", u"notas": [u"I"]},
+        u"M-2": {u"A": None, u"AD": 100, u"ER": 75, u"PT": 100,
+                 u"obs": u"Consultar NT específica (Líquido/gás inflamável)", u"notas": [u"I"]},
         u"M-3": {u"A": 10,   u"AD": 100, u"ER": 60, u"PT": 100, u"obs": u"1 pessoa por 10m²", u"notas": []},
         u"M-4": {u"A": 4,    u"AD": 60,  u"ER": 45, u"PT": 100, u"obs": u"1 pessoa por 4m²",  u"notas": []},
         u"M-5": {u"A": 10,   u"AD": 100, u"ER": 60, u"PT": 100, u"obs": u"1 pessoa por 10m²", u"notas": []},
+        u"M-6": {u"A": None, u"AD": 100, u"ER": 60, u"PT": 100,
+                 u"obs": u"Consultar NT específica (Floresta)", u"notas": [u"I"]},
+        u"M-7": {u"A": None, u"AD": 100, u"ER": 60, u"PT": 100,
+                 u"obs": u"Consultar NT específica (Pátio de contêineres)", u"notas": [u"I"]},
+        u"M-8": {u"A": None, u"AD": 100, u"ER": 60, u"PT": 100,
+                 u"obs": u"Consultar NT específica (Torres de telefonia)", u"notas": [u"I"]},
     },
 
     # -------------------------------------------------------------------------
@@ -358,7 +398,8 @@ DADOS_SAIDAS = {
             u"J-3": u"I2I3J3J4", u"J-4": u"I2I3J3J4",
             u"K-1": u"CDFG",
             u"L-1": u"CDFG", u"L-2": u"CDFG", u"L-3": u"CDFG",
-            u"M-1": u"CDFG", u"M-3": u"CDFG", u"M-4": u"CDFG", u"M-5": u"CDFG",
+            u"M-1": u"CDFG", u"M-2": u"CDFG", u"M-3": u"CDFG", u"M-4": u"CDFG",
+            u"M-5": u"CDFG", u"M-6": u"CDFG", u"M-7": u"CDFG", u"M-8": u"CDFG",
         },
 
         u"grupos": {
