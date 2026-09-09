@@ -114,14 +114,24 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
       className={`se-card se-card-leaf se-card-header ${isDragging ? "se-dragging" : ""}`}
     >
       <div className="se-card-header-esq">
-        <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar ambiente">
-          <Icon svg={gripIconSvg} />
-        </button>
-        <span className="se-ambiente-nome">{amb.nome}</span>
-        <DivBadge label={amb.divisao || "?"} />
+          <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar ambiente">
+            <Icon svg={gripIconSvg} />
+          </button>
+          <span className="se-ambiente-nome">{amb.nome}</span>
+          <DivBadge label={amb.divisao || "?"} />
+        
+        <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(amb.id);
+        }}
+        className="se-card-lixeira se-icon-botao"
+      >
+        <Icon svg={trashIconSvg} />
+      </button>
       </div>
       <div className="se-card-header-dir">
-        <span className="se-ambiente-porta-label">PORTA</span>
+        <span className="se-label">PORTA</span>
         <span className="se-sep">|</span>
         <span>C {capPT}</span>
         <span className="se-sep">|</span>
@@ -133,15 +143,6 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
           L. MÍN.: <strong className="se-vermelho">{fmtM(pt.la)}</strong>
         </span>
       </div>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove(amb.id);
-        }}
-        className="se-card-lixeira se-icon-botao"
-      >
-        <Icon svg={trashIconSvg} />
-      </button>
     </div>
   );
 }
@@ -208,10 +209,14 @@ function AcessoCard({
           <InlineEditableNome value={acesso.nome} onCommit={(novoNome) => onRenomear(acesso.id, novoNome)} className="se-acesso-nome" />
         </div>
         <div className="se-card-header-dir">
-          <div className="se-acesso-tipo-label">{label}</div>
+          <div className="se-label">{label}</div>
+          <span className="se-sep">|</span>
           <StatCol label="POP." value={pop} />
+          <span className="se-sep">|</span>
           <StatCol label="C" value={capValor} />
+          <span className="se-sep">|</span>
           <StatCol label="U.P." value={dim.n} />
+          <span className="se-sep">|</span>
           <StatCol label="LARGURA MÍN." value={fmtM(dim.la)} big />
         </div>
         <button onClick={remover} className="se-card-lixeira se-icon-botao">

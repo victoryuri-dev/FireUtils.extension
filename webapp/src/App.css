@@ -961,10 +961,7 @@
   opacity: 0.35;
 }
 
-/* Overlay — só o popup de Ambiente continua sendo um popup de verdade
-   (a lista de pavimentos e a árvore de Acessos e Descargas viraram
-   conteúdo de página própria — ver .se-pagina*/.se-detalhe-header abaixo,
-   em SaidaEmergenciaPage.jsx/AcessosDescargasView.jsx). ------------------- */
+
 .se-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1127,7 +1124,11 @@
 .se-raizes {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 15px;
+}
+
+.se-raizes > div{
+  border-color: var(--text-2);
 }
 
 .se-centralizado {
@@ -1179,7 +1180,7 @@
 }
 
 .se-card:hover {
-  border-color: var(--text-2);
+  border-color: var(--text-3);
 }
 
 .se-card.se-card-over {
@@ -1211,11 +1212,11 @@
 .se-card-header {
   position: relative;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: start;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 36px 7px 10px;
+  padding: 20px 10px 5px 10px;
   cursor: pointer;
   user-select: none;
 }
@@ -1231,13 +1232,15 @@
 .se-card-header-dir {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 14px;
   min-width: 220px;
+  width: 100%;
   flex: 1 1 auto;
   font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
+  padding: 10px 0;
 }
 
 .se-card-lixeira {
@@ -1263,18 +1266,8 @@
   color: var(--text);
 }
 
-.se-acesso-tipo-label {
-  font-size: 9px;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-align: right;
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
 .se-card-body {
-  padding: 8px 10px 10px 18px;
+  padding: 10px 10px;
   border-top: 1px solid var(--border-2);
   display: flex;
   flex-direction: column;
@@ -1290,7 +1283,7 @@
 
 /* Estatística compacta (POP./C/U.P./LARGURA MÍN.) --------------------------- */
 .se-stat-col {
-  text-align: right;
+  text-align: center;
   line-height: 1.2;
 }
 
@@ -1320,11 +1313,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.se-ambiente-porta-label {
-  font-weight: 700;
-  color: var(--text-2);
 }
 
 .se-ambiente-up {
@@ -1475,7 +1463,8 @@
   text-transform: uppercase;
   letter-spacing: 0.02em;
   border-radius: 4px;
-  border: 1px solid var(--black);
+  border: 1px solid var(--text-3);
+  transition: .3s;
   background: var(--bg-3);
   color: var(--text);
   box-shadow: none;
@@ -1511,6 +1500,8 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 4px;
+  font-weight: 700;
+  color: var(--text-2);
 }
 
 .se-form-row {
@@ -1600,11 +1591,10 @@
   height: 20px;
   padding: 0 6px;
   border-radius: 4px;
-  background: var(--bg-3);
-  border: 1px solid var(--border-2);
-  color: var(--text-2);
+  background: var(--text-2);
+  color: white;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: normal;
   flex-shrink: 0;
 }
 
