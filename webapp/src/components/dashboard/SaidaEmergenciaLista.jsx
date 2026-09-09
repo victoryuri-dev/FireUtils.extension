@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../Icon";
 import { pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
-import { getNormaCentral } from "../../lib/normasCentral";
+import { getSeNorma } from "../../lib/normasCentral";
 import { calcPopPav, contarSaidasPavimento, getDistanciaPavimento } from "../../data/se_calc";
 import { OCUPACOES } from "../../data/ocupacoesMA";
 import AcessosDescargasView from "./AcessosDescargasView";
@@ -37,7 +37,7 @@ export default function SaidaEmergenciaLista({ projeto, estruturaId, onClose, on
 
   useEffect(() => {
     let cancelado = false;
-    getNormaCentral(uf, "saida_emergencia")
+    getSeNorma(uf)
       .then((dados) => {
         if (!cancelado) setSeNorma(dados);
       })

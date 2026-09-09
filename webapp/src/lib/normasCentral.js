@@ -42,3 +42,26 @@ export async function getNormaCentral(uf, sistema) {
   _cache[chave] = data.dados;
   return data.dados;
 }
+
+// A linha de "saida_emergencia" guarda as chaves em minúsculo (tabela/
+// notas/larguras_minimas/distancias_maximas — mesma convenção que o lado
+// Python já usava, ver Fire Utils.tab/lib/normas/__init__.py.
+// _CHAVES_SAIDAS), mas o motor de cálculo e a UI portados do site
+// (data/se_calc.js, components/dashboard/seShared.jsx,
+// AcessosDescargasView.jsx) esperam os nomes em maiúsculo que o arquivo
+// estático do site usa (TAXA_POPULACIONAL, NOTAS_NORMATIVAS,
+// LARGURAS_MINIMAS, DISTANCIAS_MAXIMAS) — sem esse adaptador, a estrutura
+// batia campo a campo mas com nome de chave diferente, e a tela quebrava
+// (`Cannot read properties of undefined`) assim que a tabela central
+// tivesse dados de verdade. Mesmo adaptador existe no site (ver
+// getSE/adaptarSEDaBaseCentral em src/data/normas/index.js lá).
+export async function getSeNorma(uf) {
+  const remoto = await getNormaCentral(uf, "saida_emergencia");
+  return {
+    ...remoto,
+    TAXA_POPULACIONAL: remoto.tabela,
+    NOTAS_NORMATIVAS: remoto.notas,
+    LARGURAS_MINIMAS: remoto.larguras_minimas,
+    DISTANCIAS_MAXIMAS: remoto.distancias_maximas,
+  };
+}
