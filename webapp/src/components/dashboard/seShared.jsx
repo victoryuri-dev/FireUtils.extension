@@ -6,7 +6,7 @@ import xIconSvg from "../../assets/icons/x-icon.svg?raw";
 
 /**
  * seShared.jsx — UI compartilhada da árvore de Saída de Emergência
- * (SaidaEmergenciaLista.jsx / AcessosDescargasView.jsx), portada de
+ * (SaidaEmergenciaPage.jsx / AcessosDescargasView.jsx), portada de
  * ETOS.FireUtils/src/pages/medidas/se_shared.jsx — mesmas regras de
  * negócio, reescrita em CSS simples (App.css) em vez das classes utility
  * do Tailwind que o site usa, pra ficar consistente com o resto desta

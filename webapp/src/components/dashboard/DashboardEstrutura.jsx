@@ -1,6 +1,5 @@
-import { useState } from "react";
 import ProjetoCabecalho from "./ProjetoCabecalho";
-import SaidaEmergenciaLista from "./SaidaEmergenciaLista";
+import SaidaEmergenciaPage from "./SaidaEmergenciaPage";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
@@ -29,8 +28,29 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick }) {
   );
 }
 
-export default function DashboardEstrutura({ projeto, estrutura, dimensionamentos, adicionarToast, onAtualizarProjeto }) {
-  const [saidaAberta, setSaidaAberta] = useState(false);
+export default function DashboardEstrutura({
+  projeto,
+  estrutura,
+  dimensionamentos,
+  adicionarToast,
+  onAtualizarProjeto,
+  modo = "dashboard",
+  onAbrirSaidaEmergencia,
+}) {
+  // Saída de Emergência virou página própria (mesmo destino do atalho da
+  // sidebar e deste cartão) — ver App.jsx/Sidebar.jsx. `modo` chega até
+  // aqui (em vez de um estado local tipo `saidaAberta`) porque quem decide
+  // a aba atual é o App, não este componente.
+  if (modo === "saidas") {
+    return (
+      <SaidaEmergenciaPage
+        projeto={projeto}
+        estruturaId={estrutura.id}
+        onProjetoAtualizado={onAtualizarProjeto}
+        adicionarToast={adicionarToast}
+      />
+    );
+  }
 
   return (
     <div className="dashboard-tela">
@@ -89,19 +109,9 @@ export default function DashboardEstrutura({ projeto, estrutura, dimensionamento
           titulo="Saída de Emergência"
           iconeSvg={exitIconSvg}
           dimensionado={dimensionamentos?.saidaEmergencia}
-          onClick={() => setSaidaAberta(true)}
+          onClick={onAbrirSaidaEmergencia}
         />
       </div>
-
-      {saidaAberta && (
-        <SaidaEmergenciaLista
-          projeto={projeto}
-          estruturaId={estrutura.id}
-          onClose={() => setSaidaAberta(false)}
-          onProjetoAtualizado={onAtualizarProjeto}
-          adicionarToast={adicionarToast}
-        />
-      )}
     </div>
   );
 }

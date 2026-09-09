@@ -65,7 +65,7 @@ export function estruturasDoProjeto(linha) {
  * estruturaId, pisoDescarga, divisao, ambientes, acessos), na ordem
  * cadastrada no site (do mais baixo pro mais alto). Usado pela tela de
  * Saída de Emergência (lista de pavimentos + árvore de Acessos e
- * Descargas — components/dashboard/SaidaEmergenciaLista.jsx e
+ * Descargas — components/dashboard/SaidaEmergenciaPage.jsx e
  * AcessosDescargasView.jsx), que precisa editar os campos direto, ao
  * contrário de dashboardEstrutura (só deriva valores agregados
  * pro dashboard). */

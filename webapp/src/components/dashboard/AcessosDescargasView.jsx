@@ -88,7 +88,7 @@ function InlineEditableNome({ value, onCommit, className }) {
   );
 }
 
-function StatCol({ label, value, big }) {
+export function StatCol({ label, value, big }) {
   return (
     <div className="se-stat-col">
       <div className="se-stat-col-label">{label}</div>
@@ -297,11 +297,14 @@ function PisoDescargaSwitch({ checked, onChange }) {
   );
 }
 
-// ── Popup principal ─────────────────────────────────────────────────────
-// `pav` é o pavimento cru (dados.pavimentos[i]). `onProjetoAtualizado`
-// recebe a linha inteira já atualizada (dados + version novos) depois de
-// cada ação persistida com sucesso.
-export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes, onClose, onProjetoAtualizado, adicionarToast }) {
+// ── Seção de detalhe do pavimento ───────────────────────────────────────
+// Vive direto na página de Saída de Emergência (ver SaidaEmergenciaPage.jsx)
+// — não é mais um popup: só o formulário de Ambiente (`editAmb` abaixo)
+// continua sendo um popup de verdade. `pav` é o pavimento cru
+// (dados.pavimentos[i]). `onProjetoAtualizado` recebe a linha inteira já
+// atualizada (dados + version novos) depois de cada ação persistida com
+// sucesso. `onVoltar` volta pra lista de pavimentos.
+export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes, onVoltar, onProjetoAtualizado, adicionarToast }) {
   const { TAXA_POPULACIONAL, LARGURAS_MINIMAS } = seNorma;
   const ambientes = pav.ambientes || [];
   const acessos = pav.acessos || [];
@@ -384,79 +387,77 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
   };
 
   return (
-    <div className="se-modal-overlay" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="se-modal-caixa">
-        <div className="se-modal-header">
-          <div className="se-modal-header-esq">
-            <button onClick={onClose} className="se-icon-botao">
-              <Icon svg={arrowLeftIconSvg} />
-            </button>
-            <span className="se-modal-titulo">{pav.label}</span>
-            {salvando && <span className="se-salvando">Salvando…</span>}
-          </div>
-          <PisoDescargaSwitch
-            checked={!!pav.pisoDescarga}
-            onChange={(v) => despachar({ type: "SET_PISO_DESCARGA", pavimentoId: pav.id, estruturaId: pav.estruturaId, valor: v })}
-          />
+    <>
+      <div className="se-detalhe-header">
+        <div className="se-modal-header-esq">
+          <button onClick={onVoltar} className="se-icon-botao" title="Voltar para Pavimentos">
+            <Icon svg={arrowLeftIconSvg} />
+          </button>
+          <span className="se-modal-titulo">{pav.label}</span>
+          {salvando && <span className="se-salvando">Salvando…</span>}
         </div>
-
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="se-modal-corpo">
-            <div className="se-qtd-saidas">
-              Quantidade de saídas (automático): <strong>{nSaidas}</strong>
-            </div>
-
-            <div className="se-arvore">
-              <RootDropZone />
-
-              <div className="se-raizes">
-                {raizes.map((r) => (
-                  <AcessoCard
-                    key={r.id}
-                    acesso={r}
-                    ambientes={ambientes}
-                    acessos={acessos}
-                    taxaPopulacional={TAXA_POPULACIONAL}
-                    larguras={LARGURAS_MINIMAS}
-                    pisoDescarga={!!pav.pisoDescarga}
-                    onRenomear={renomearAcesso}
-                    onRemover={removerAcesso}
-                    onCriarAcessoFilho={criarAcessoFilho}
-                    pavimentoId={pav.id}
-                    onEditAmbiente={setEditAmb}
-                    onRemoveAmbiente={removerAmbiente}
-                    onCreateAmbiente={criarAmbiente}
-                    colapsados={colapsados}
-                    toggleColapsado={toggleColapsado}
-                  />
-                ))}
-                {raizes.length === 0 && (
-                  <div className="se-vazio-grande">Nenhuma {rotuloRaiz.toLowerCase()} criada ainda. Clique abaixo para começar a montar a árvore.</div>
-                )}
-              </div>
-
-              <div className="se-centralizado">
-                <button type="button" className="se-botao" onClick={criarRaiz}>
-                  <Icon svg={plusIconSvg} /> CRIAR {rotuloRaiz.toUpperCase()}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div className="se-secao-titulo-linha">
-                <div className="se-secao-titulo">Ambientes sem acesso atribuído</div>
-                <button type="button" className="se-botao" onClick={() => criarAmbiente()}>
-                  <Icon svg={plusIconSvg} /> Adicionar Ambiente
-                </button>
-              </div>
-              <SemAcessoDropZone ambientes={semAcesso} taxaPopulacional={TAXA_POPULACIONAL} larguras={LARGURAS_MINIMAS} onEdit={setEditAmb} onRemove={removerAmbiente} />
-            </div>
-          </div>
-        </DndContext>
+        <PisoDescargaSwitch
+          checked={!!pav.pisoDescarga}
+          onChange={(v) => despachar({ type: "SET_PISO_DESCARGA", pavimentoId: pav.id, estruturaId: pav.estruturaId, valor: v })}
+        />
       </div>
 
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <div className="se-modal-corpo">
+          <div className="se-qtd-saidas">
+            Quantidade de saídas (automático): <strong>{nSaidas}</strong>
+          </div>
+
+          <div className="se-arvore">
+            <RootDropZone />
+
+            <div className="se-raizes">
+              {raizes.map((r) => (
+                <AcessoCard
+                  key={r.id}
+                  acesso={r}
+                  ambientes={ambientes}
+                  acessos={acessos}
+                  taxaPopulacional={TAXA_POPULACIONAL}
+                  larguras={LARGURAS_MINIMAS}
+                  pisoDescarga={!!pav.pisoDescarga}
+                  onRenomear={renomearAcesso}
+                  onRemover={removerAcesso}
+                  onCriarAcessoFilho={criarAcessoFilho}
+                  pavimentoId={pav.id}
+                  onEditAmbiente={setEditAmb}
+                  onRemoveAmbiente={removerAmbiente}
+                  onCreateAmbiente={criarAmbiente}
+                  colapsados={colapsados}
+                  toggleColapsado={toggleColapsado}
+                />
+              ))}
+              {raizes.length === 0 && (
+                <div className="se-vazio-grande">Nenhuma {rotuloRaiz.toLowerCase()} criada ainda. Clique abaixo para começar a montar a árvore.</div>
+              )}
+            </div>
+
+            <div className="se-centralizado">
+              <button type="button" className="se-botao" onClick={criarRaiz}>
+                <Icon svg={plusIconSvg} /> CRIAR {rotuloRaiz.toUpperCase()}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <div className="se-secao-titulo-linha">
+              <div className="se-secao-titulo">Ambientes sem acesso atribuído</div>
+              <button type="button" className="se-botao" onClick={() => criarAmbiente()}>
+                <Icon svg={plusIconSvg} /> Adicionar Ambiente
+              </button>
+            </div>
+            <SemAcessoDropZone ambientes={semAcesso} taxaPopulacional={TAXA_POPULACIONAL} larguras={LARGURAS_MINIMAS} onEdit={setEditAmb} onRemove={removerAmbiente} />
+          </div>
+        </div>
+      </DndContext>
+
       {editAmb && (
-        <div className="se-modal-overlay se-modal-overlay-topo" onClick={() => setEditAmb(null)}>
+        <div className="se-modal-overlay" onClick={() => setEditAmb(null)}>
           <div onClick={(e) => e.stopPropagation()} className="se-ambiente-modal">
             <div className="se-ambiente-modal-header">
               <InlineEditableNome value={editAmb.nome} onCommit={renomearAmbiente} className="se-ambiente-modal-nome" />
@@ -478,6 +479,6 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
