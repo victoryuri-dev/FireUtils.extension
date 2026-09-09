@@ -31,6 +31,8 @@ import io
 import os
 import json
 
+from family_error_utils import texto_erro
+
 _SYNC_URL   = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/revit-sync"
 _BUSCA_URL  = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/site-sync"
 _NORMAS_URL = u"https://lngvagifcukglgdjildw.supabase.co/rest/v1/normas_dados"
@@ -121,13 +123,13 @@ def _post_json(url, corpo):
     except WebException as werr:
         if werr.Response:
             leitor_erro = StreamReader(werr.Response.GetResponseStream(), Encoding.UTF8)
-            texto_erro = leitor_erro.ReadToEnd()
+            corpo_erro = leitor_erro.ReadToEnd()
             werr.Response.Close()
             try:
-                return None, (json.loads(texto_erro).get(u"error") or texto_erro)
+                return None, (json.loads(corpo_erro).get(u"error") or corpo_erro)
             except Exception:
-                return None, texto_erro or u"{}".format(werr)
-        return None, u"Falha de rede: {}".format(werr)
+                return None, corpo_erro or texto_erro(werr)
+        return None, u"Falha de rede: {}".format(texto_erro(werr))
 
     try:
         return json.loads(texto), None
@@ -160,13 +162,13 @@ def _get_json(url):
     except WebException as werr:
         if werr.Response:
             leitor_erro = StreamReader(werr.Response.GetResponseStream(), Encoding.UTF8)
-            texto_erro = leitor_erro.ReadToEnd()
+            corpo_erro = leitor_erro.ReadToEnd()
             werr.Response.Close()
             try:
-                return None, (json.loads(texto_erro).get(u"error") or texto_erro)
+                return None, (json.loads(corpo_erro).get(u"error") or corpo_erro)
             except Exception:
-                return None, texto_erro or u"{}".format(werr)
-        return None, u"Falha de rede: {}".format(werr)
+                return None, corpo_erro or texto_erro(werr)
+        return None, u"Falha de rede: {}".format(texto_erro(werr))
 
     try:
         return json.loads(texto), None
@@ -218,7 +220,7 @@ def buscar(acao, projeto_dir, **params):
     try:
         return _post_json(_BUSCA_URL, corpo)
     except Exception as ex:
-        return None, u"Falha ao consultar o site: {}".format(ex)
+        return None, u"Falha ao consultar o site: {}".format(texto_erro(ex))
 
 
 def buscar_norma(uf, sistema):
@@ -244,7 +246,7 @@ def buscar_norma(uf, sistema):
     try:
         linhas, erro = _get_json(url)
     except Exception as ex:
-        return None, u"Falha ao consultar a base normativa: {}".format(ex)
+        return None, u"Falha ao consultar a base normativa: {}".format(texto_erro(ex))
     if erro:
         return None, erro
     if not linhas:

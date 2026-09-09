@@ -26,6 +26,7 @@ import os
 from sync import config_sync, salvar_config_sync
 from projeto import salvar_dados_projeto, limpar_vinculo_projeto
 from normas import get_label, get_estado
+from family_error_utils import texto_erro
 import hidrantes.calc as hidrantes_calc
 import saidas.calc as saidas_calc
 
@@ -110,7 +111,18 @@ def _estado_vinculo(projeto_dir):
 
 
 def tratar_get_project_link(uiapp, postar_mensagem):
-    postar_mensagem(u"PROJECT_LINK", _estado_vinculo(_projeto_dir(uiapp)))
+    # Sem try/except aqui, um erro (ex.: exceção de rede ao consultar a
+    # base normativa central — ver sync.buscar_norma) deixava essa
+    # mensagem sem resposta nenhuma: a exceção subia até
+    # family_loader_events.Execute, que só loga no console do pyRevit, e
+    # o Dashboard ficava preso em "Carregando..." pra sempre, sem nenhum
+    # aviso visível no React.
+    try:
+        estado = _estado_vinculo(_projeto_dir(uiapp))
+    except Exception as ex:
+        print(u"[AVISO] GET_PROJECT_LINK falhou: {}".format(texto_erro(ex)))
+        estado = _estado_vinculo(None)
+    postar_mensagem(u"PROJECT_LINK", estado)
 
 
 def tratar_set_project_link(uiapp, payload, postar_mensagem):
@@ -142,7 +154,7 @@ def tratar_set_project_link(uiapp, payload, postar_mensagem):
             estruturaNome=payload.get(u"estruturaNome"),
         )
     except Exception as ex:
-        postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": False, u"erro": u"{}".format(ex)})
+        postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": False, u"erro": texto_erro(ex)})
         return
 
     postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": True})
@@ -155,7 +167,7 @@ def tratar_disconnect_project(uiapp, postar_mensagem):
         try:
             limpar_vinculo_projeto(projeto_dir)
         except Exception as ex:
-            postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": False, u"erro": u"{}".format(ex)})
+            postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": False, u"erro": texto_erro(ex)})
             return
     postar_mensagem(u"PROJECT_LINK", _estado_vinculo(projeto_dir))
 
@@ -166,8 +178,13 @@ def tratar_get_dimensionamentos_status(uiapp, postar_mensagem):
         postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {u"hidrantes": False, u"saidaEmergencia": False})
         return
 
-    hidrantes_ok = hidrantes_calc.cache_existe(projeto_dir)
-    saida_ok = saidas_calc.carregar_cache_se_import(projeto_dir) is not None
+    try:
+        hidrantes_ok = hidrantes_calc.cache_existe(projeto_dir)
+        saida_ok = saidas_calc.carregar_cache_se_import(projeto_dir) is not None
+    except Exception as ex:
+        print(u"[AVISO] GET_DIMENSIONAMENTOS_STATUS falhou: {}".format(texto_erro(ex)))
+        hidrantes_ok = False
+        saida_ok = False
     postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {
         u"hidrantes": hidrantes_ok,
         u"saidaEmergencia": saida_ok,
