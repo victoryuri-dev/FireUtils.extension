@@ -111,16 +111,16 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
       ref={setNodeRef}
       style={style}
       onClick={() => onEdit(amb)}
-      className={`se-ambiente-chip ${isDragging ? "se-dragging" : ""}`}
+      className={`se-card se-card-leaf se-card-header ${isDragging ? "se-dragging" : ""}`}
     >
-      <div className="se-ambiente-chip-esq">
+      <div className="se-card-header-esq">
         <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar ambiente">
           <Icon svg={gripIconSvg} />
         </button>
         <span className="se-ambiente-nome">{amb.nome}</span>
         <DivBadge label={amb.divisao || "?"} />
       </div>
-      <div className="se-ambiente-chip-dir">
+      <div className="se-card-header-dir">
         <span className="se-ambiente-porta-label">PORTA</span>
         <span className="se-sep">|</span>
         <span>C {capPT}</span>
@@ -132,16 +132,16 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
         <span>
           L. MÍN.: <strong className="se-vermelho">{fmtM(pt.la)}</strong>
         </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(amb.id);
-          }}
-          className="se-icon-botao"
-        >
-          <Icon svg={trashIconSvg} />
-        </button>
       </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(amb.id);
+        }}
+        className="se-card-lixeira se-icon-botao"
+      >
+        <Icon svg={trashIconSvg} />
+      </button>
     </div>
   );
 }
@@ -197,29 +197,29 @@ function AcessoCard({
         setDropRef(node);
       }}
       style={style}
-      className={`se-acesso-card ${isOver ? "se-acesso-card-over" : ""} ${isDragging ? "se-dragging" : ""} ${isRaiz ? "" : "se-acesso-card-filho"}`}
+      className={`se-card ${isOver ? "se-card-over" : ""} ${isDragging ? "se-dragging" : ""} ${isRaiz ? "" : "se-acesso-card-filho"}`}
     >
-      <div className="se-acesso-header" onClick={() => toggleColapsado(acesso.id)}>
-        <div className="se-acesso-header-esq">
+      <div className="se-card-header" onClick={() => toggleColapsado(acesso.id)}>
+        <div className="se-card-header-esq">
           <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar (leva tudo dentro)">
             <Icon svg={gripIconSvg} />
           </button>
           <Icon svg={aberto ? chevronDownIconSvg : chevronRightIconSvg} className="se-chevron" />
           <InlineEditableNome value={acesso.nome} onCommit={(novoNome) => onRenomear(acesso.id, novoNome)} className="se-acesso-nome" />
         </div>
-        <div className="se-acesso-header-dir">
+        <div className="se-card-header-dir">
           <div className="se-acesso-tipo-label">{label}</div>
           <StatCol label="POP." value={pop} />
           <StatCol label="C" value={capValor} />
           <StatCol label="U.P." value={dim.n} />
           <StatCol label="LARGURA MÍN." value={fmtM(dim.la)} big />
-          <button onClick={remover} className="se-icon-botao">
-            <Icon svg={trashIconSvg} />
-          </button>
         </div>
+        <button onClick={remover} className="se-card-lixeira se-icon-botao">
+          <Icon svg={trashIconSvg} />
+        </button>
       </div>
       {aberto && (
-        <div className="se-acesso-corpo">
+        <div className="se-card-body">
           {filhos.map((f) => (
             <AcessoCard
               key={f.id}
