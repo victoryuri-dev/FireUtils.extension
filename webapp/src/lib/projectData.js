@@ -15,7 +15,8 @@ import { supabase } from "./supabaseClient";
  *
  * A forma de `dados` (uf, areaConstruidaTotal, areaTerreno, estruturas[],
  * pavimentos[], cargaState, ...) é decodificada em lib/projetoDados.js —
- * este arquivo só busca a linha crua.
+ * este arquivo busca a linha crua e (a partir da tela "Saída de
+ * Emergência" da dockpane) também grava de volta em `dados`.
  */
 
 function exigirSupabase() {
@@ -24,7 +25,7 @@ function exigirSupabase() {
   }
 }
 
-const CAMPOS_PROJETO = "id, nome, dados, updated_at";
+const CAMPOS_PROJETO = "id, nome, dados, updated_at, version";
 
 /** Lista os projetos do usuário logado (RLS), opcionalmente filtrados por
  * nome/id — usado pela tela "Conectar um projeto". */
@@ -50,4 +51,29 @@ export async function buscarProjeto(projetoId) {
   const { data, error } = await supabase.from("projetos").select(CAMPOS_PROJETO).eq("id", projetoId).single();
   if (error) throw error;
   return data;
+}
+
+/**
+ * Grava `novosDados` na coluna `dados` da linha do projeto — compare-and-
+ * swap pela `versaoConhecida` (mesmo espírito do autosave do site, ver
+ * ProjetoContext.jsx): se a versão no banco já mudou (outra sessão/aba —
+ * ou o próprio site — salvou por cima enquanto esta tela estava aberta),
+ * a escrita não acontece e a função lança, em vez de sobrescrever
+ * silenciosamente. Diferente do site, não tenta re-mesclar e salvar de
+ * novo sozinha — quem chama decide (normalmente: avisar o usuário e
+ * pedir pra reabrir a tela). Retorna a nova versão em caso de sucesso.
+ */
+export async function salvarDadosProjeto(projetoId, versaoConhecida, novosDados) {
+  exigirSupabase();
+  const { data, error } = await supabase
+    .from("projetos")
+    .update({ dados: novosDados, version: versaoConhecida + 1, updated_at: new Date().toISOString() })
+    .eq("id", projetoId)
+    .eq("version", versaoConhecida)
+    .select("version");
+  if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error("Este projeto foi alterado em outro lugar (outra sessão, ou o site) enquanto você editava. Feche e reabra a tela de Saída de Emergência para ver a versão mais recente antes de tentar de novo.");
+  }
+  return data[0].version;
 }

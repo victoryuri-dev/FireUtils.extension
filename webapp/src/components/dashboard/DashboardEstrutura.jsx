@@ -1,13 +1,16 @@
+import { useState } from "react";
 import ProjetoCabecalho from "./ProjetoCabecalho";
+import SaidaEmergenciaLista from "./SaidaEmergenciaLista";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 
-function CartaoDimensionamento({ titulo, iconeSvg, dimensionado }) {
+function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="cartao-dimensionamento">
+    <Tag type={onClick ? "button" : undefined} className={`cartao-dimensionamento ${onClick ? "cartao-dimensionamento-clicavel" : ""}`} onClick={onClick}>
       <span className="cartao-dimensionamento-icone">
         <Icon svg={iconeSvg} />
       </span>
@@ -22,11 +25,13 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado }) {
       ) : (
         <span className="status-dimensionamento status-pendente">Pendente</span>
       )}
-    </div>
+    </Tag>
   );
 }
 
-export default function DashboardEstrutura({ projeto, estrutura, dimensionamentos }) {
+export default function DashboardEstrutura({ projeto, estrutura, dimensionamentos, adicionarToast, onAtualizarProjeto }) {
+  const [saidaAberta, setSaidaAberta] = useState(false);
+
   return (
     <div className="dashboard-tela">
       <ProjetoCabecalho projeto={projeto} />
@@ -84,8 +89,19 @@ export default function DashboardEstrutura({ projeto, estrutura, dimensionamento
           titulo="Saída de Emergência"
           iconeSvg={exitIconSvg}
           dimensionado={dimensionamentos?.saidaEmergencia}
+          onClick={() => setSaidaAberta(true)}
         />
       </div>
+
+      {saidaAberta && (
+        <SaidaEmergenciaLista
+          projeto={projeto}
+          estruturaId={estrutura.id}
+          onClose={() => setSaidaAberta(false)}
+          onProjetoAtualizado={onAtualizarProjeto}
+          adicionarToast={adicionarToast}
+        />
+      )}
     </div>
   );
 }

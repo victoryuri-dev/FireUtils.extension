@@ -912,3 +912,878 @@
   color: var(--text-3);
   font-weight: 400;
 }
+
+/* Dimensionamento clicável (ex.: "Saída de Emergência") ------------------- */
+.cartao-dimensionamento-clicavel {
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-align: left;
+  font-family: inherit;
+  width: 100%;
+}
+
+.cartao-dimensionamento-clicavel:hover {
+  border-color: var(--sidebar-icon);
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Saída de Emergência — árvore de Acessos e Descargas
+   ══════════════════════════════════════════════════════════════════════ */
+
+.se-icon-botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.se-icon-botao:hover {
+  color: var(--accent);
+  background: var(--bg-3);
+}
+
+.se-icon-botao .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.se-vermelho {
+  color: var(--accent);
+}
+
+.se-sep {
+  opacity: 0.35;
+}
+
+/* Overlay / caixas modais -------------------------------------------------- */
+.se-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 300;
+  animation: surgir 0.15s;
+}
+
+.se-modal-overlay-topo {
+  z-index: 400;
+}
+
+.se-modal-caixa {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 900px;
+  max-width: 96vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.se-lista-caixa {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 760px;
+  max-width: 96vw;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.se-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.se-modal-header-esq {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.se-modal-titulo {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.se-salvando {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.se-modal-corpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.se-qtd-saidas {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.se-qtd-saidas strong {
+  color: var(--text);
+}
+
+/* Piso de descarga switch -------------------------------------------------- */
+.se-piso-descarga {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-2);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.se-piso-descarga strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.se-piso-descarga-botao {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.se-piso-descarga-sim {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.se-piso-descarga-nao {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* Toggle genérico (reaproveitado por seShared.Toggle e PisoDescargaSwitch) */
+.se-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.se-toggle.se-toggle-on {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.se-toggle-track {
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--border-2);
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+}
+
+.se-toggle-track.se-toggle-track-on,
+.se-toggle-on .se-toggle-track {
+  background: var(--accent);
+}
+
+.se-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--white);
+  transition: left 0.2s;
+}
+
+.se-toggle-track-on .se-toggle-thumb,
+.se-toggle-on .se-toggle-track .se-toggle-thumb {
+  left: 14px;
+}
+
+/* Árvore -------------------------------------------------------------------- */
+.se-arvore {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.se-raizes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.se-centralizado {
+  display: flex;
+  justify-content: center;
+}
+
+.se-root-drop {
+  border: 1px dashed var(--border-2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 11px;
+  text-align: center;
+  color: var(--text-3);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.se-root-drop-over {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(234, 19, 48, 0.05);
+}
+
+.se-vazio-grande {
+  padding: 34px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+  border: 1px dashed var(--border-2);
+  border-radius: 8px;
+}
+
+.se-vazio-italico {
+  font-size: 11px;
+  color: var(--text-3);
+  font-style: italic;
+  padding: 4px 0;
+}
+
+/* Card de Acesso/Saída/Escada-Rampa ------------------------------------------ */
+.se-acesso-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.se-acesso-card:hover {
+  border-color: var(--sidebar-icon);
+}
+
+.se-acesso-card.se-acesso-card-over {
+  border-color: var(--accent);
+  background: rgba(234, 19, 48, 0.04);
+}
+
+.se-acesso-card.se-dragging {
+  opacity: 0.4;
+}
+
+.se-acesso-card-filho {
+  margin-left: 4px;
+}
+
+.se-acesso-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.se-acesso-header-esq {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.se-chevron {
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.se-chevron .icon,
+.se-chevron.icon {
+  width: 14px;
+  height: 14px;
+}
+
+.se-acesso-nome {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.se-acesso-header-dir {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.se-acesso-tipo-label {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: right;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.se-acesso-corpo {
+  padding: 12px 13px 13px 26px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.se-acesso-acoes {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+/* Estatística compacta (POP./C/U.P./LARGURA MÍN.) --------------------------- */
+.se-stat-col {
+  text-align: right;
+  line-height: 1.2;
+}
+
+.se-stat-col-label {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.se-stat-col-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.se-stat-col-value-big {
+  color: var(--accent);
+}
+
+/* Card de ambiente ------------------------------------------------------------ */
+.se-ambiente-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-3);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.se-ambiente-chip:hover {
+  border-color: var(--sidebar-icon);
+}
+
+.se-ambiente-chip.se-dragging {
+  opacity: 0.4;
+  position: relative;
+  z-index: 50;
+}
+
+.se-ambiente-chip-esq {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.se-ambiente-nome {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.se-ambiente-chip-dir {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.se-ambiente-porta-label {
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.se-ambiente-up {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.se-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  padding: 2px;
+  cursor: grab;
+  flex-shrink: 0;
+  touch-action: none;
+}
+
+.se-grip:active {
+  cursor: grabbing;
+}
+
+.se-grip .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.se-sem-acesso {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1px dashed var(--border-2);
+  min-height: 56px;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.se-sem-acesso.se-sem-acesso-over {
+  border-color: var(--accent);
+  background: rgba(234, 19, 48, 0.04);
+}
+
+.se-secao-titulo-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.se-secao-titulo {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Nome editável inline -------------------------------------------------------- */
+.se-nome-editavel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.se-nome-texto {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.se-nome-icone {
+  color: var(--text-3);
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+
+.se-nome-icone.icon,
+.se-nome-icone .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.se-nome-editavel:hover .se-nome-icone {
+  opacity: 1;
+}
+
+.se-nome-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  padding: 0;
+  outline: none;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+}
+
+/* Modal de edição de ambiente -------------------------------------------------- */
+.se-ambiente-modal {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  width: 560px;
+  max-width: 95vw;
+  padding: 20px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.se-ambiente-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.se-ambiente-modal-nome {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Formulário de ambiente (seShared.jsx) --------------------------------------- */
+.se-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.se-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.se-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.se-input,
+.se-select {
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 7px 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.se-select-fixo {
+  background: var(--bg-3);
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+}
+
+.se-notas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.se-nota {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.se-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  margin-top: 2px;
+  border-top: 1px solid var(--border);
+}
+
+.se-form-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.se-stat-label {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+
+.se-stat-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.se-stat-value-red {
+  color: var(--accent);
+}
+
+.se-stat-value-faint {
+  color: var(--text-3);
+}
+
+.se-form-botoes {
+  display: flex;
+  gap: 6px;
+}
+
+/* Tag de ocupação (divisão) — cinza neutro, sem peso dimensional ------------- */
+.se-div-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Lista de pavimentos (SaidaEmergenciaLista.jsx) ------------------------------ */
+.se-lista-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.se-lista-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.se-lista-titulo {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.se-lista-header-dir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.se-lista-corpo {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.se-sistema-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.se-sistema-badge.se-sistema-badge-ativo {
+  border-color: var(--green-border);
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.se-sistema-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-2);
+  flex-shrink: 0;
+}
+
+.se-sistema-badge-ativo .se-sistema-badge-dot {
+  background: var(--green);
+}
+
+.se-lista-tabela-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.se-lista-tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.se-lista-tabela th {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  font-weight: 600;
+  text-align: left;
+  padding: 9px 14px;
+  background: var(--bg-3);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.se-th-center {
+  text-align: center;
+}
+
+.se-th-right {
+  text-align: right;
+}
+
+.se-lista-tabela td {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.se-lista-linha {
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.se-lista-linha:hover {
+  background: var(--bg-3);
+}
+
+.se-lista-linha:last-child td {
+  border-bottom: none;
+}
+
+.se-td-bold {
+  font-weight: 700;
+}
+
+.se-td-center {
+  text-align: center;
+}
+
+.se-td-right {
+  text-align: right;
+}
+
+.se-td-muted {
+  color: var(--text-3);
+}
+
+.se-td-muted-sm {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.se-td-red {
+  color: var(--accent);
+}
+
+.se-tag-descarga {
+  display: inline-block;
+  margin-left: 6px;
+  vertical-align: middle;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-border);
+  color: var(--amber);
+}
+
+.se-aviso-pequeno {
+  font-size: 9px;
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+.se-chip-verde {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 13px;
+  font-family: ui-monospace, monospace;
+  background: var(--green-dim);
+  border: 1px solid var(--green-border);
+  color: var(--green);
+}
+
+.se-chevron-linha {
+  color: var(--text-3);
+}
+
+.se-chevron-linha.icon {
+  width: 13px;
+  height: 13px;
+}

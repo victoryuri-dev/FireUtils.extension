@@ -19,6 +19,12 @@
   --sidebar-icon-neutro: #737373;
   --sidebar-avatar-bg: #ffffff;
   --sidebar-avatar-icon: #141414;
+  --green: #1f9d55;
+  --green-dim: #eafaf0;
+  --green-border: #bfe8cf;
+  --amber: #b45309;
+  --amber-dim: #fef3e0;
+  --amber-border: #f3d9a8;
 }
 
 * {

@@ -61,6 +61,35 @@ export function estruturasDoProjeto(linha) {
   return ((linha.dados && linha.dados.estruturas) || []).map((e) => ({ id: e.id, nome: e.nome }));
 }
 
+/** Pavimentos "crus" de uma estrutura — objetos completos (id, label,
+ * estruturaId, pisoDescarga, divisao, ambientes, acessos), na ordem
+ * cadastrada no site (do mais baixo pro mais alto). Usado pela tela de
+ * Saída de Emergência (lista de pavimentos + árvore de Acessos e
+ * Descargas — components/dashboard/SaidaEmergenciaLista.jsx e
+ * AcessosDescargasView.jsx), que precisa editar os campos direto, ao
+ * contrário de dashboardEstrutura (só deriva valores agregados
+ * pro dashboard). */
+export function pavimentosCompletos(linha, estruturaId) {
+  const dados = linha.dados || {};
+  return (dados.pavimentos || []).filter((p) => p.estruturaId === estruturaId);
+}
+
+/** Chuveiros automáticos / detecção de incêndio da estrutura — badges
+ * somente-leitura na tela de Saída de Emergência (a edição de verdade é
+ * na Etapa "Medidas de Segurança" do site). Simplificação: lê só o
+ * override manual salvo em `sistemasPorEstrutura` — não recalcula se o
+ * sistema é normativamente obrigatório pra essa ocupação/altura/área
+ * (esse motor de normas só existe no site, ver useMedidasObrigatorias.js
+ * lá); na prática cobre a maioria dos casos, já que nenhum dos dois é
+ * obrigatório por padrão na maior parte das ocupações. */
+export function sistemasAtivos(linha, estruturaId) {
+  const manual = (linha.dados && linha.dados.sistemasPorEstrutura && linha.dados.sistemasPorEstrutura[estruturaId]) || {};
+  return {
+    sprinklers: !!manual.sprinklers,
+    deteccao: !!manual.deteccao,
+  };
+}
+
 /** Dados completos de uma estrutura específica pro dashboard. */
 export function dashboardEstrutura(linha, estruturaId) {
   const dados = linha.dados || {};

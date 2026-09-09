@@ -153,6 +153,12 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
       projeto={estado.linha}
       estrutura={dashboardEstrutura(estado.linha, estado.estruturaId)}
       dimensionamentos={dimensionamentos}
+      adicionarToast={adicionarToast}
+      // A tela de Saída de Emergência edita e persiste direto no Supabase
+      // (ver AcessosDescargasView.jsx) — isso atualiza `estado.linha` aqui
+      // pra manter uma única fonte de verdade (a mesma linha que o resto
+      // do Dashboard já lê), sem precisar buscar o projeto de novo.
+      onAtualizarProjeto={(novaLinha) => setEstado((s) => ({ ...s, linha: novaLinha }))}
     />
   );
 }

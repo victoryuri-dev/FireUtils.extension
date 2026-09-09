@@ -281,6 +281,36 @@ Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
 Do lado Python, tratadas em `Fire Utils.tab/lib/project_link_bridge.py`
 (despachado a partir de `family_webview_bridge.py`).
 
+## Saída de Emergência — árvore de Acessos e Descargas
+
+Clicar no card "Saída de Emergência" do Dashboard abre a mesma árvore
+(Ambiente -> Acesso -> Acesso/Saída ou Escada-Rampa) que existe no site
+(`ETOS.FireUtils/src/pages/medidas/AcessosDescargasView.jsx`), com
+drag-and-drop (`@dnd-kit/core`). Ao contrário do resto do Dashboard (só
+leitura), esta tela **escreve** direto na coluna `dados` do Supabase —
+sem passar pela bridge Python: não há nada aqui que dependa da API do
+Revit (os níveis do Revit não entram nessa tela; a expectativa é que o
+usuário já os tenha renomeado pra bater com os pavimentos do site).
+
+- `lib/seReducer.js` — mesmas ações do reducer do site (CRIAR_SAIDA,
+  MOVER_ACESSO, SET_PISO_DESCARGA, ...), mas puras: recebem `dados` (a
+  coluna jsonb inteira) e devolvem uma cópia nova, sem `useReducer` nem
+  broadcast entre abas.
+- `lib/projectData.salvarDadosProjeto` — grava com compare-and-swap pela
+  coluna `version` (mesmo espírito do autosave do site); se a versão
+  mudou (outra sessão ou o site salvaram por cima), a escrita falha em
+  vez de sobrescrever.
+- `lib/normasCentral.js` — busca `TAXA_POPULACIONAL`/`LARGURAS_MINIMAS`/
+  `DISTANCIAS_MAXIMAS` direto da tabela `normas_dados` via supabase-js
+  (mesma tabela de `sync.buscar_norma` no lado Python) — sem fallback
+  estático: sem rede, a tela mostra erro em vez de dado desatualizado.
+- `data/se_calc.js` e `data/ocupacoesMA.js` — cópias literais dos
+  arquivos equivalentes do site (lógica pura, sem imports do projeto).
+- `components/dashboard/SaidaEmergenciaLista.jsx` — lista de pavimentos
+  da estrutura (pop./saídas/distância máxima já calculados).
+- `components/dashboard/AcessosDescargasView.jsx` + `seShared.jsx` — a
+  árvore em si e o formulário de ambiente.
+
 ## Estrutura
 
 ```
