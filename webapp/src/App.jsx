@@ -47,6 +47,13 @@ export default function App() {
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const { toasts, adicionarToast, removerToast } = useToasts();
   const timeoutCarregamentoRef = useRef(null);
+  // Espelha `catalogo` num ref só pra o listener da bridge (abaixo) poder
+  // ler o valor mais atual sem precisar de `catalogo` na dependência do
+  // useEffect — ver comentário lá.
+  const catalogoRef = useRef(null);
+  useEffect(() => {
+    catalogoRef.current = catalogo;
+  }, [catalogo]);
 
   function pararCarregamento() {
     setCarregando(false);
@@ -90,6 +97,19 @@ export default function App() {
     }
   }, [sessao]);
 
+  // IMPORTANTE: este listener assina o canal de mensagens do WebView2 (uma
+  // vez só, no mount) e NUNCA deve depender de estado que muda logo depois
+  // do boot (como `catalogo`, que só carrega depois do login). Um
+  // useEffect com `catalogo` na dependência recriaria este listener bem
+  // na hora em que GET_PROJECT_LINK normalmente já recebeu resposta —
+  // removeEventListener/addEventListener não são atômicos, então uma
+  // mensagem (ex.: o PROJECT_LINK que o Python reenvia depois de um
+  // SET_PROJECT_LINK) podia chegar bem nesse instantinho e ser
+  // simplesmente descartada, sem erro nenhum (nem no console do
+  // navegador, nem no do pyRevit) — o Dashboard ficava preso em
+  // "Carregando..." pra sempre, sem nenhuma pista do porquê. `catalogoRef`
+  // (acima) resolve isso: o handler lê o valor mais atual sem precisar
+  // que o efeito seja recriado.
   useEffect(() => {
     return escutarMensagensDoHost((mensagem) => {
       if (!mensagem) return;
@@ -153,10 +173,10 @@ export default function App() {
       // já existiam) saem da seleção — só ficam marcadas as que falharam,
       // prontas pra tentar de novo.
       const nomesProcessados = new Set([...nomesCarregados, ...jaExistentes]);
-      if (nomesProcessados.size > 0 && catalogo) {
+      if (nomesProcessados.size > 0 && catalogoRef.current) {
         setSelecionadas((atual) => {
           const nova = new Set(atual);
-          catalogo.families.forEach((familia) => {
+          catalogoRef.current.families.forEach((familia) => {
             if (nomesProcessados.has(familia.name)) nova.delete(familia.id);
           });
           return nova;
@@ -165,7 +185,8 @@ export default function App() {
 
       pararCarregamento();
     });
-  }, [adicionarToast, catalogo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adicionarToast]);
 
   const secoesVisiveis = useMemo(() => {
     if (!catalogo) return [];

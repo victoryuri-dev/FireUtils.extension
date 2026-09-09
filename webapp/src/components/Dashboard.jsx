@@ -8,6 +8,22 @@ import DashboardEstrutura from "./dashboard/DashboardEstrutura";
 
 const ESTADO_INICIAL = { carregando: false, erro: null, linha: null, estruturaId: null };
 
+// Timeout defensivo pra qualquer chamada ao Supabase feita aqui — sem
+// isso, uma sessão de auth restaurada de forma inconsistente após um
+// reload/reabertura do Revit (o supabase-js às vezes fica esperando uma
+// renovação de token que nunca resolve, sem lançar erro nenhum: nem no
+// console do navegador, nem no do pyRevit) deixava o Dashboard preso em
+// "Carregando..." pra sempre, sem nenhum jeito de perceber o que
+// aconteceu. Isso converte esse tipo de trava silenciosa num erro visível.
+const TIMEOUT_SUPABASE_MS = 12000;
+
+function comTimeout(promessa, ms, mensagem) {
+  return Promise.race([
+    promessa,
+    new Promise((_, rejeitar) => setTimeout(() => rejeitar(new Error(mensagem)), ms)),
+  ]);
+}
+
 /**
  * Orquestra o fluxo: Conectar um projeto -> (Selecione uma estrutura, se
  * houver mais de uma) -> Dashboard do projeto/estrutura. `vinculo` vem do
@@ -44,7 +60,13 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
     setEstado((s) => ({ ...s, carregando: true, erro: null }));
     try {
       const linha =
-        estado.linha && estado.linha.id === projetoId ? estado.linha : await buscarProjeto(projetoId);
+        estado.linha && estado.linha.id === projetoId
+          ? estado.linha
+          : await comTimeout(
+              buscarProjeto(projetoId),
+              TIMEOUT_SUPABASE_MS,
+              "O Supabase demorou demais pra responder. Feche e reabra a dockpane (ou o Revit) e tente de novo."
+            );
       const estruturas = estruturasDoProjeto(linha);
 
       if (estruturas.length === 0) {
@@ -57,10 +79,19 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast })
         return;
       }
 
-      const alvoId = estruturaIdEscolhida || (estruturas.length === 1 ? estruturas[0].id : null);
+      // `estruturaIdEscolhida` pode vir do firedata.json (vínculo salvo de
+      // uma sessão anterior) — se a estrutura foi removida/recriada no
+      // site nesse meio tempo, o id salvo não bate mais com nenhuma das
+      // atuais. Sem essa checagem, `alvoId` virava esse id inválido e o
+      // Dashboard tentava renderizar com `estrutura: null`, travando a
+      // tela sem nenhum erro visível.
+      const escolhidaValida =
+        estruturaIdEscolhida && estruturas.some((e) => e.id === estruturaIdEscolhida) ? estruturaIdEscolhida : null;
+      const alvoId = escolhidaValida || (estruturas.length === 1 ? estruturas[0].id : null);
       if (!alvoId) {
-        // Mais de uma estrutura e nenhuma escolhida ainda — mostra a tela
-        // de seleção em vez de já cravar um vínculo.
+        // Mais de uma estrutura e nenhuma escolhida (ou a vinculada não
+        // existe mais) — mostra a tela de seleção em vez de já cravar um
+        // vínculo inválido.
         setEstado({ carregando: false, erro: null, linha, estruturaId: null });
         return;
       }
