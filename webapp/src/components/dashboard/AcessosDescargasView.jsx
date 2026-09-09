@@ -246,11 +246,11 @@ function AcessoCard({
           {filhos.length === 0 && filhosAmbientes.length === 0 && <div className="se-vazio-italico">Arraste ambientes para cá.</div>}
           <div className="se-acesso-acoes">
             {isRaiz && (
-              <button type="button" className="botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
+              <button type="button" className="se-botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
                 <Icon svg={plusIconSvg} /> CRIAR ACESSO
               </button>
             )}
-            <button type="button" className="botao" onClick={() => onCreateAmbiente(acesso.id)}>
+            <button type="button" className="se-botao" onClick={() => onCreateAmbiente(acesso.id)}>
               <Icon svg={plusIconSvg} /> ADICIONAR AMBIENTE
             </button>
           </div>
@@ -436,7 +436,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
               </div>
 
               <div className="se-centralizado">
-                <button type="button" className="botao" onClick={criarRaiz}>
+                <button type="button" className="se-botao" onClick={criarRaiz}>
                   <Icon svg={plusIconSvg} /> CRIAR {rotuloRaiz.toUpperCase()}
                 </button>
               </div>
@@ -445,7 +445,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
             <div>
               <div className="se-secao-titulo-linha">
                 <div className="se-secao-titulo">Ambientes sem acesso atribuído</div>
-                <button type="button" className="botao" onClick={() => criarAmbiente()}>
+                <button type="button" className="se-botao" onClick={() => criarAmbiente()}>
                   <Icon svg={plusIconSvg} /> Adicionar Ambiente
                 </button>
               </div>

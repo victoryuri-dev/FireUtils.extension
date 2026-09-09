@@ -197,10 +197,10 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           )}
         </div>
         <div className="se-form-botoes">
-          <button type="button" className="botao" onClick={onCancel}>
+          <button type="button" className="se-botao" onClick={onCancel}>
             <Icon svg={xIconSvg} /> Cancelar
           </button>
-          <button type="button" className="botao accent" onClick={handleSave} disabled={!canSave()}>
+          <button type="button" className="se-botao se-botao-accent" onClick={handleSave} disabled={!canSave()}>
             <Icon svg={checkIconSvg} /> Salvar
           </button>
         </div>
