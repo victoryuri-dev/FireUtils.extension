@@ -1281,6 +1281,29 @@
   padding-top: 2px;
 }
 
+/* Grade de estatísticas de um Acesso/Saída/Escada-Rampa — duas linhas
+   (Acesso/Descarga ou Escada/Rampa em cima, Portas embaixo), colunas
+   alinhadas entre as duas via grid (mesmas 5 colunas pras duas linhas,
+   preenchidas em ordem de leitura — a própria grid quebra em 2 linhas
+   sozinha). Não é o mesmo elemento que .se-card-header-dir (compartilhado
+   com AmbienteChip, que continua de uma linha só). --------------------- */
+.se-acesso-stats-grid {
+  display: grid;
+  grid-template-columns: 78px 42px 38px 38px 68px;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.se-acesso-stats-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: right;
+  line-height: 1.15;
+}
+
 /* Estatística compacta (POP./C/U.P./LARGURA MÍN.) --------------------------- */
 .se-stat-col {
   text-align: center;

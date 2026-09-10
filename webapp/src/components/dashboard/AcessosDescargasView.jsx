@@ -213,20 +213,22 @@ function AcessoCard({
           <Icon svg={aberto ? chevronDownIconSvg : chevronRightIconSvg} className="se-chevron" />
           <InlineEditableNome value={acesso.nome} onCommit={(novoNome) => onRenomear(acesso.id, novoNome)} className="se-acesso-nome" />
         </div>
+        {/* Duas linhas alinhadas em grid — Acesso/Descarga (ou Escada/Rampa)
+            em cima, Portas embaixo — em vez de espremer as duas dimensões
+            (fluxo + porta) numa linha só com rótulos "C (PORTA)"/"PORTA". */}
         <div className="se-card-header-dir">
-          <div className="se-label">{label}</div>
-          <span className="se-sep">|</span>
-          <StatCol label="POP." value={pop} />
-          <span className="se-sep">|</span>
-          <StatCol label="C" value={capValor} />
-          <span className="se-sep">|</span>
-          <StatCol label="U.P." value={dim.n} />
-          <span className="se-sep">|</span>
-          <StatCol label="LARGURA MÍN." value={fmtM(dim.la)} big />
-          <span className="se-sep">|</span>
-          <StatCol label="C (PORTA)" value={cap.PT} />
-          <span className="se-sep">|</span>
-          <StatCol label="PORTA" value={fmtM(porta.la)} big />
+          <div className="se-acesso-stats-grid">
+            <div className="se-acesso-stats-label">{label}</div>
+            <StatCol label="POP." value={pop} />
+            <StatCol label="C" value={capValor} />
+            <StatCol label="U.P." value={dim.n} />
+            <StatCol label="LARGURA MÍN." value={fmtM(dim.la)} big />
+            <div className="se-acesso-stats-label">Portas</div>
+            <StatCol label="POP." value={pop} />
+            <StatCol label="C" value={cap.PT} />
+            <StatCol label="U.P." value={dim.n} />
+            <StatCol label="LARGURA MÍN." value={fmtM(porta.la)} big />
+          </div>
         </div>
         <button onClick={remover} className="se-card-lixeira se-icon-botao">
           <Icon svg={trashIconSvg} />
