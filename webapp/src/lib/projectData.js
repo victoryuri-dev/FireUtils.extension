@@ -53,15 +53,19 @@ export async function buscarProjeto(projetoId) {
   return data;
 }
 
+/** Erro específico de conflito de versão (compare-and-swap falhou) — deixa
+ * `salvarComRetry` distinguir "outra sessão salvou por cima" de qualquer
+ * outro erro (rede, RLS, etc.), que não deve disparar retry. */
+export class ConflitoVersaoError extends Error {}
+
 /**
  * Grava `novosDados` na coluna `dados` da linha do projeto — compare-and-
  * swap pela `versaoConhecida` (mesmo espírito do autosave do site, ver
  * ProjetoContext.jsx): se a versão no banco já mudou (outra sessão/aba —
  * ou o próprio site — salvou por cima enquanto esta tela estava aberta),
- * a escrita não acontece e a função lança, em vez de sobrescrever
- * silenciosamente. Diferente do site, não tenta re-mesclar e salvar de
- * novo sozinha — quem chama decide (normalmente: avisar o usuário e
- * pedir pra reabrir a tela). Retorna a nova versão em caso de sucesso.
+ * a escrita não acontece e a função lança `ConflitoVersaoError`. Prefira
+ * `salvarComRetry` na maioria dos casos — ela já trata esse conflito.
+ * Retorna a nova versão em caso de sucesso.
  */
 export async function salvarDadosProjeto(projetoId, versaoConhecida, novosDados) {
   exigirSupabase();
@@ -73,7 +77,34 @@ export async function salvarDadosProjeto(projetoId, versaoConhecida, novosDados)
     .select("version");
   if (error) throw error;
   if (!data || data.length === 0) {
-    throw new Error("Este projeto foi alterado em outro lugar (outra sessão, ou o site) enquanto você editava. Feche e reabra a tela de Saída de Emergência para ver a versão mais recente antes de tentar de novo.");
+    throw new ConflitoVersaoError("Este projeto foi alterado em outro lugar (outra sessão, ou o site) enquanto você editava.");
   }
   return data[0].version;
+}
+
+/**
+ * Aplica `computarNovosDados(dadosAtuais)` sobre `projetoAtual` e salva.
+ * A dockpane não tem a camada de broadcast em tempo real que o site tem
+ * (ProjetoContext.jsx) — aqui cada ação salva na hora, sem uma sessão
+ * viva recebendo as edições de outras abas ao vivo. Isso torna comum o
+ * "falso conflito de versão" descrito lá: a versão que esta tela conhece
+ * fica desatualizada assim que o site (aberto em outro lugar) salva
+ * qualquer coisa, mesmo sem conflito real de conteúdo. Por isso, ao
+ * esbarrar em `ConflitoVersaoError`, rebusca o projeto fresco do
+ * Supabase, recalcula `computarNovosDados` em cima dele e tenta salvar
+ * mais uma vez antes de desistir de vez — só falha pra valer se essa
+ * segunda tentativa também esbarrar em conflito.
+ */
+export async function salvarComRetry(projetoId, projetoAtual, computarNovosDados) {
+  try {
+    const novosDados = computarNovosDados(projetoAtual.dados);
+    const novaVersao = await salvarDadosProjeto(projetoId, projetoAtual.version, novosDados);
+    return { dados: novosDados, version: novaVersao };
+  } catch (erro) {
+    if (!(erro instanceof ConflitoVersaoError)) throw erro;
+    const fresco = await buscarProjeto(projetoId);
+    const novosDados = computarNovosDados(fresco.dados);
+    const novaVersao = await salvarDadosProjeto(projetoId, fresco.version, novosDados);
+    return { dados: novosDados, version: novaVersao };
+  }
 }

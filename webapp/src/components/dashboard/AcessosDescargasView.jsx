@@ -4,7 +4,7 @@ import Icon from "../Icon";
 import { AmbienteForm, DivBadge, fmtM } from "./seShared";
 import { calcPopAmb, calcNoAcesso, calcNoAmbientePT, calcPortaNoAcesso, contarSaidasPavimento, tipoDoNo } from "../../data/se_calc";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE } from "../../lib/seReducer";
-import { salvarDadosProjeto } from "../../lib/projectData";
+import { salvarComRetry } from "../../lib/projectData";
 import gripIconSvg from "../../assets/icons/grip-icon.svg?raw";
 import chevronDownIconSvg from "../../assets/icons/chevron-down-icon.svg?raw";
 import chevronRightIconSvg from "../../assets/icons/chevron-right-icon.svg?raw";
@@ -23,11 +23,13 @@ import xIconSvg from "../../assets/icons/x-icon.svg?raw";
  * (useReducer + broadcast em tempo real entre abas). Aqui não há reducer
  * nem sessão compartilhada — cada ação (arrastar, renomear, criar/remover)
  * aplica lib/seReducer.aplicarAcaoSaida sobre uma cópia local de `dados`
- * e persiste na hora via lib/projectData.salvarDadosProjeto (compare-and-
- * swap pela versão da linha). `onProjetoAtualizado` propaga o novo
- * `{...projeto, dados, version}` pro Dashboard, que é quem guarda a fonte
- * de verdade (estado.linha) — assim reabrir a árvore ou fechar e reabrir
- * o popup de ambiente sempre parte do dado mais recente.
+ * e persiste na hora via lib/projectData.salvarComRetry (compare-and-swap
+ * pela versão da linha, com uma segunda tentativa em cima da versão
+ * atual se a primeira esbarrar num conflito — ver docstring de
+ * salvarComRetry). `onProjetoAtualizado` propaga o novo `{...projeto,
+ * dados, version}` pro Dashboard, que é quem guarda a fonte de verdade
+ * (estado.linha) — assim reabrir a árvore ou fechar e reabrir o popup de
+ * ambiente sempre parte do dado mais recente.
  */
 
 function acessosFilhos(acessos, parentId) {
@@ -352,14 +354,18 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Aplica a ação localmente e persiste na hora — se a escrita falhar
-  // (versão desatualizada, sem rede), avisa e NÃO aplica a mudança local,
-  // pra tela nunca ficar mostrando algo que não foi salvo de verdade.
+  // Aplica a ação e persiste na hora — se a escrita falhar (versão
+  // desatualizada, sem rede), avisa e NÃO aplica a mudança local, pra
+  // tela nunca ficar mostrando algo que não foi salvo de verdade.
+  // salvarComRetry já absorve o "falso conflito de versão" (outra aba/o
+  // site salvou algo nesse meio-tempo, sem conflito real de conteúdo) —
+  // só chega a dar erro aqui se a segunda tentativa também falhar.
   async function despachar(action) {
-    const novosDados = aplicarAcaoSaida(projeto.dados, action);
     setSalvando(true);
     try {
-      const novaVersao = await salvarDadosProjeto(projeto.id, projeto.version, novosDados);
+      const { dados: novosDados, version: novaVersao } = await salvarComRetry(projeto.id, projeto, (dados) =>
+        aplicarAcaoSaida(dados, action)
+      );
       onProjetoAtualizado({ ...projeto, dados: novosDados, version: novaVersao });
     } catch (erro) {
       adicionarToast?.({ tipo: "erro", titulo: "Não foi possível salvar", mensagem: erro.message, duracaoMs: 9000 });

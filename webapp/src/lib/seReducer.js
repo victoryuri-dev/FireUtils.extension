@@ -4,9 +4,10 @@
  * ProjetoContext.jsx) pro contexto da dockpane: aqui não existe um reducer
  * vivo com useReducer — cada ação recebe o `dados` (coluna jsonb da linha
  * `projetos`) inteiro e devolve uma cópia nova com `pavimentos` já
- * atualizado; quem chama (components/dashboard/AcessosDescargasView.jsx)
- * é responsável por persistir o resultado via lib/projectData.js
- * (salvarDadosProjeto, compare-and-swap por versão).
+ * atualizado; quem chama (components/dashboard/AcessosDescargasView.jsx,
+ * SaidaEmergenciaPage.jsx) é responsável por persistir o resultado via
+ * lib/projectData.js (salvarComRetry, compare-and-swap por versão com
+ * retry em falso conflito).
  *
  * Mesma árvore do site: Ambiente -> Acesso -> Acesso/Saída ou Escada-Rampa
  * (ver data/se_calc.js pro motor de cálculo). Um "Acesso" com

@@ -6,7 +6,7 @@ import { calcPopPav, contarSaidasPavimento, getDistanciaPavimento } from "../../
 import { OCUPACOES } from "../../data/ocupacoesMA";
 import { supabase } from "../../lib/supabaseClient";
 import { aplicarAcaoSaida, idAmbienteSE } from "../../lib/seReducer";
-import { salvarDadosProjeto } from "../../lib/projectData";
+import { salvarComRetry } from "../../lib/projectData";
 import AcessosDescargasView, { StatCol } from "./AcessosDescargasView";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 
@@ -152,8 +152,9 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
 
       const { atualizacoes, erros } = resolverImportacaoSaidas(data.payload, pavimentos);
       if (atualizacoes.length > 0) {
-        const novosDados = aplicarAcaoSaida(projeto.dados, { type: "IMPORT_AMBIENTES_SE", atualizacoes });
-        const novaVersao = await salvarDadosProjeto(projeto.id, projeto.version, novosDados);
+        const { dados: novosDados, version: novaVersao } = await salvarComRetry(projeto.id, projeto, (dados) =>
+          aplicarAcaoSaida(dados, { type: "IMPORT_AMBIENTES_SE", atualizacoes })
+        );
         onProjetoAtualizado({ ...projeto, dados: novosDados, version: novaVersao });
       }
 
