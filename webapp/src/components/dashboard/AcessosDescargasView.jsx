@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import Icon from "../Icon";
 import { AmbienteForm, DivBadge, fmtM } from "./seShared";
-import { calcPopAmb, calcNoAcesso, calcNoAmbientePT, contarSaidasPavimento, tipoDoNo } from "../../data/se_calc";
+import { calcPopAmb, calcNoAcesso, calcNoAmbientePT, calcPortaNoAcesso, contarSaidasPavimento, tipoDoNo } from "../../data/se_calc";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE } from "../../lib/seReducer";
 import { salvarDadosProjeto } from "../../lib/projectData";
 import gripIconSvg from "../../assets/icons/grip-icon.svg?raw";
@@ -168,7 +168,12 @@ function AcessoCard({
   toggleColapsado,
 }) {
   const { tipo, label } = tipoDoNo(acesso, pisoDescarga);
-  const { pop, capValor, dim } = calcNoAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, tipo);
+  const { pop, cap, capValor, dim } = calcNoAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, tipo);
+  // Porta do box: reaproveita o mesmo N de UP do AD/ER (não recalcula
+  // população) — só a capacidade de unidade de passagem (C) usada pra
+  // achar a largura mínima é a normativa de PORTA (cap.PT), não a de
+  // AD/ER já mostrada acima.
+  const porta = calcPortaNoAcesso(dim.n, larguras);
   const filhos = acessosFilhos(acessos, acesso.id);
   const filhosAmbientes = ambientesDe(ambientes, acesso.id);
   const isRaiz = acesso.alimentaEm === null;
@@ -218,6 +223,10 @@ function AcessoCard({
           <StatCol label="U.P." value={dim.n} />
           <span className="se-sep">|</span>
           <StatCol label="LARGURA MÍN." value={fmtM(dim.la)} big />
+          <span className="se-sep">|</span>
+          <StatCol label="C (PORTA)" value={cap.PT} />
+          <span className="se-sep">|</span>
+          <StatCol label="PORTA" value={fmtM(porta.la)} big />
         </div>
         <button onClick={remover} className="se-card-lixeira se-icon-botao">
           <Icon svg={trashIconSvg} />

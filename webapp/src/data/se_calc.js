@@ -173,6 +173,18 @@ export function calcNoAmbientePT(amb, taxaPopulacional, larguras) {
   return { pop, capPT, pt }
 }
 
+/** Largura mínima da porta de um nó de Acesso/Saída/Escada-Rampa —
+ * reaproveita o mesmo N de UP já calculado pro AD/ER daquele box (ver
+ * calcNoAcesso) em vez de recalcular população/capacidade: a mesma vazão
+ * que passa pelo corredor/escada precisa caber na porta daquele ponto.
+ * Só busca a largura mínima de porta pra esse N na tabela PT — mesma
+ * lógica de calcPT, sem o passo de `Math.ceil(pop / capacidade)`. */
+export function calcPortaNoAcesso(n, larguras) {
+  const lc     = +(n * larguras.LARG_UP).toFixed(2)
+  const ptInfo = getLargMinPT(n, larguras.PT)
+  return { n, lc, la: Math.max(lc, ptInfo.largura), lMin: ptInfo.largura, tipo: ptInfo.tipo }
+}
+
 /** Retorna o grupo de distância (terreo/demais) para uma divisão, a
  * partir do formato { mapa_ocupacao, grupos } (divisão -> id do grupo -> dados). */
 export function getGrupoDistancia(divisao, distanciasMaximas) {
