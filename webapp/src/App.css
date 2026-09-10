@@ -313,7 +313,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 22px 26px 20px;
+  padding: 20px 20px;
   position: relative;
   background: var(--bg);
 }
@@ -378,13 +378,14 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 18px;
+  justify-content: center;
 }
 
 .pill {
   display: flex;
   align-items: center;
   height: 40px;
-  padding: 0 18px;
+  padding: 0 15px;
   border-radius: 4px;
   border: none;
   background: #f1f1f1;
@@ -477,6 +478,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  margin: auto;
+  justify-content: center;
 }
 
 .cartao {
@@ -734,22 +737,24 @@
 
 /* Conectar um projeto — grade de cartões --------------------------------- */
 .grade-projetos {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   flex-wrap: wrap;
   gap: 12px;
 }
 
 .cartao-projeto {
-  width: 260px;
+  flex-grow: 0;
   text-align: left;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 14px 16px;
+  transition: .2s;
 }
 
 .cartao-projeto:hover {
-  border-color: var(--sidebar-icon);
+  border-color: var(--border-3);
 }
 
 .cartao-projeto-nome {
@@ -1212,13 +1217,14 @@
 .se-card-header {
   position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: start;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 20px 10px 5px 10px;
+  padding: 15px;
   cursor: pointer;
   user-select: none;
+  background-color: var(--bg-3);
 }
 
 .se-card-header-esq {
@@ -1240,7 +1246,7 @@
   font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
-  padding: 10px 0;
+  padding: 0px 0;
 }
 
 .se-card-lixeira {
@@ -1324,9 +1330,9 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  padding: 4px 9px;
+  padding: 2px 7px;
   border-radius: 4px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-2);
   background: var(--bg-3);
   color: var(--text-3);
   transition: 0.15s;
@@ -1348,12 +1354,14 @@
   gap: 16px;
   flex-wrap: wrap;
   padding: 0 10px 12px;
+  background-color: var(--bg-3);
 }
 
 .se-dim-entrada {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 5px 0;
 }
 
 .se-dim-entrada-valor {
@@ -1545,8 +1553,8 @@
   text-transform: uppercase;
   letter-spacing: 0.02em;
   border-radius: 4px;
-  border: 1px solid var(--text-3);
-  transition: .3s;
+  border: 1px solid var(--border-2);
+  transition: .2s;
   background: var(--bg-3);
   color: var(--text);
   box-shadow: none;
@@ -1675,7 +1683,7 @@
   border-radius: 4px;
   background: var(--text-2);
   color: white;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: normal;
   flex-shrink: 0;
 }
@@ -1699,20 +1707,17 @@
 }
 
 .se-pagina-icone {
-  width: 34px;
-  height: 34px;
   flex-shrink: 0;
   border-radius: 8px;
-  background: var(--black);
-  color: var(--white);
+  color: black;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .se-pagina-icone .icon {
-  width: 18px;
-  height: 18px;
+  width: 30px;
+  height: 30px;
 }
 
 .se-pagina-header h1 {
