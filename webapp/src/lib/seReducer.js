@@ -1,3 +1,5 @@
+import { dimsPadrao } from "../data/se_calc";
+
 /**
  * seReducer.js — Ações da árvore de Acessos e Descargas (Saída de
  * Emergência), portadas de ProjetoContext.jsx (ETOS.FireUtils/src/context/
@@ -62,13 +64,32 @@ export function aplicarAcaoSaida(dados, action) {
     case "CRIAR_SAIDA":
       return atualizarPavimento(dados, action.pavimentoId, (p) => ({
         ...p,
-        acessos: [...(p.acessos || []), { id: action.id, nome: action.nome, alimentaEm: null }],
+        acessos: [
+          ...(p.acessos || []),
+          { id: action.id, nome: action.nome, alimentaEm: null, dims: dimsPadrao({ alimentaEm: null }, !!p.pisoDescarga) },
+        ],
       }));
 
     case "CRIAR_ACESSO":
       return atualizarPavimento(dados, action.pavimentoId, (p) => ({
         ...p,
-        acessos: [...(p.acessos || []), { id: action.id, nome: action.nome, alimentaEm: action.alimentaEm }],
+        acessos: [
+          ...(p.acessos || []),
+          { id: action.id, nome: action.nome, alimentaEm: action.alimentaEm, dims: dimsPadrao({ alimentaEm: action.alimentaEm }, !!p.pisoDescarga) },
+        ],
+      }));
+
+    // Liga/desliga um dimensionamento (AD/ER/PT) de um nó específico da
+    // árvore — um nó pode precisar de mais de um ao mesmo tempo (ex.: o
+    // ponto de descarga que é ao mesmo tempo corredor de saída e chegada
+    // da escada que desce até ali). Ver dimsPadrao/calcDimsAcesso em
+    // data/se_calc.js.
+    case "SET_ACESSO_DIM":
+      return atualizarPavimento(dados, action.pavimentoId, (p) => ({
+        ...p,
+        acessos: (p.acessos || []).map((ac) =>
+          ac.id === action.acessoId ? { ...ac, dims: { ...(ac.dims || {}), [action.dim]: action.valor } } : ac
+        ),
       }));
 
     case "RENOMEAR_ACESSO":

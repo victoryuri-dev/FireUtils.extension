@@ -173,6 +173,46 @@ export function calcNoAmbientePT(amb, taxaPopulacional, larguras) {
   return { pop, capPT, pt }
 }
 
+/** Dimensionamentos padrão de um nó recém-criado — raiz num piso de
+ * descarga nasce só com AD; raiz em outro pavimento nasce só com ER;
+ * qualquer nó que não é raiz nasce só com AD (nunca é a escada em si) —
+ * mesmo critério que tipoDoNo. PT sempre nasce ligado. O usuário pode
+ * depois ligar/desligar cada um independente (ver SET_ACESSO_DIM) —
+ * ex.: o ponto de descarga que recebe tanto o corredor (AD) quanto a
+ * escada que desce até ali (ER) precisa dos dois ao mesmo tempo. */
+export function dimsPadrao(acesso, pisoDescarga) {
+  const isRaiz = acesso.alimentaEm === null
+  if (isRaiz) return pisoDescarga ? { AD: true, ER: false, PT: true } : { AD: false, ER: true, PT: true }
+  return { AD: true, ER: false, PT: true }
+}
+
+/** `acesso.dims` com fallback pro padrão de tipoDoNo — projetos criados
+ * antes deste campo existir não têm `dims` gravado; sem isso, um nó
+ * antigo apareceria sem nenhum dimensionamento marcado. */
+export function dimsDoAcesso(acesso, pisoDescarga) {
+  if (acesso.dims) return acesso.dims
+  const { tipo } = tipoDoNo(acesso, pisoDescarga)
+  return { AD: tipo === 'AD', ER: tipo === 'ER', PT: true }
+}
+
+/** Dimensionamento de um nó de Acesso pra cada AD/ER/PT independentemente
+ * habilitado em `dims` — ao contrário do modelo antigo (um nó só podia ser
+ * AD OU ER), agora os dois podem coexistir no mesmo nó (ex.: o piso de
+ * descarga que é ao mesmo tempo corredor de saída e chegada da escada).
+ * Portas reaproveita o maior N de UP entre AD/ER habilitados (a porta
+ * precisa comportar o maior fluxo que passa por ali) — mesmo N mínimo de 1
+ * mesmo que nenhum dos dois esteja ligado, pra nunca calcular porta com
+ * 0 UP. Retorna null em cada campo cujo dimensionamento está desligado. */
+export function calcDimsAcesso(acessoId, ambientes, acessos, taxaPopulacional, larguras, dims) {
+  const pop = calcPopAcesso(acessoId, ambientes, acessos, taxaPopulacional)
+  const cap = capAmbientes(ambientesDoAcesso(acessoId, ambientes, acessos), taxaPopulacional)
+  const ad  = dims.AD ? calcAD(pop, cap.AD, larguras) : null
+  const er  = dims.ER ? calcER(pop, cap.ER, larguras) : null
+  const nPorta = Math.max(ad?.n || 0, er?.n || 0, 1)
+  const pt  = dims.PT ? calcPortaNoAcesso(nPorta, larguras) : null
+  return { pop, cap, ad, er, pt, nPorta }
+}
+
 /** Largura mínima da porta de um nó de Acesso/Saída/Escada-Rampa —
  * reaproveita o mesmo N de UP já calculado pro AD/ER daquele box (ver
  * calcNoAcesso) em vez de recalcular população/capacidade: a mesma vazão

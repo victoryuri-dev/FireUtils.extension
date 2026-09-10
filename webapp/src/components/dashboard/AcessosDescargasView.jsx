@@ -2,7 +2,7 @@ import { useState } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import Icon from "../Icon";
 import { AmbienteForm, DivBadge, fmtM } from "./seShared";
-import { calcPopAmb, calcNoAcesso, calcNoAmbientePT, calcPortaNoAcesso, contarSaidasPavimento, tipoDoNo } from "../../data/se_calc";
+import { calcPopAmb, calcNoAmbientePT, calcDimsAcesso, dimsDoAcesso, contarSaidasPavimento } from "../../data/se_calc";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE } from "../../lib/seReducer";
 import { salvarComRetry } from "../../lib/projectData";
 import gripIconSvg from "../../assets/icons/grip-icon.svg?raw";
@@ -114,13 +114,16 @@ export function StatCol({ label, value, big }) {
 }
 
 // ── Ambiente (folha da árvore) — arrastável, card inteiro clicável ─────
+// Só mostra UP (no lugar da ocupação, no cabeçalho) + população + largura
+// mínima da porta — capacidade (C) e o código de divisão saíram do card
+// (continuam editáveis no formulário, só não aparecem mais aqui).
 function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `amb:${amb.id}`,
     data: { kind: "amb", id: amb.id },
   });
   const pop = calcPopAmb(amb, taxaPopulacional);
-  const { capPT, pt } = calcNoAmbientePT(amb, taxaPopulacional, larguras);
+  const { pt } = calcNoAmbientePT(amb, taxaPopulacional, larguras);
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
   return (
     <div
@@ -130,13 +133,20 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
       className={`se-card se-card-leaf se-card-header ${isDragging ? "se-dragging" : ""}`}
     >
       <div className="se-card-header-esq">
-          <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar ambiente">
-            <Icon svg={gripIconSvg} />
-          </button>
-          <span className="se-ambiente-nome">{amb.nome}</span>
-          <DivBadge label={amb.divisao || "?"} />
-        
-        <button
+        <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar ambiente">
+          <Icon svg={gripIconSvg} />
+        </button>
+        <span className="se-ambiente-nome">{amb.nome}</span>
+        <DivBadge label={`${pt.n} UP`} />
+      </div>
+      <div className="se-card-header-dir">
+        <span>{pop} pessoas</span>
+        <span className="se-sep">|</span>
+        <span>
+          PORTAS: <strong className="se-vermelho">{fmtM(pt.la)}</strong>
+        </span>
+      </div>
+      <button
         onClick={(e) => {
           e.stopPropagation();
           onRemove(amb.id);
@@ -145,27 +155,53 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
       >
         <Icon svg={trashIconSvg} />
       </button>
+    </div>
+  );
+}
+
+// ── Botão de dimensionamento (AD/ER/PT) no cabeçalho de Acesso/Saída —
+// liga/desliga qual dimensionamento se aplica àquele nó especificamente
+// (um nó pode precisar de mais de um ao mesmo tempo, ex.: o piso de
+// descarga que é corredor de saída E chegada da escada). Vermelho
+// preenchido = ligado; cinza neutro = desligado.
+function DimButton({ label, ativo, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`se-dim-botao ${ativo ? "se-dim-botao-ativo" : ""}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+// ── Um par rótulo+valor da linha de larguras mínimas (ex.: "ACESSO/
+// DESCARGA  1,20 m") — só aparece quando o dimensionamento correspondente
+// está ligado (ver DimButton).
+function DimEntry({ label, value }) {
+  return (
+    <div className="se-dim-entrada">
+      <div className="se-stat-col-label">
+        <LabelQuebrado texto={label} />
       </div>
-      <div className="se-card-header-dir">
-        <span className="se-label">PORTA</span>
-        <span className="se-sep">|</span>
-        <span>C {capPT}</span>
-        <span className="se-sep">|</span>
-        <span>{pop} pessoas</span>
-        <span className="se-sep">|</span>
-        <span className="se-ambiente-up">{pt.n} UP</span>
-        <span className="se-sep">|</span>
-        <span>
-          L. MÍN.: <strong className="se-vermelho">{fmtM(pt.la)}</strong>
-        </span>
-      </div>
+      <div className="se-dim-entrada-valor">{value}</div>
     </div>
   );
 }
 
 // ── Acesso/Saída/Escada-Rampa (nó da árvore) — arrastável, soltável,
-// cabeçalho inteiro retrai/expande. Só a raiz pode abrir novos Acessos
-// filhos; qualquer nó pode receber ambientes direto.
+// cabeçalho inteiro retrai/expande. Cada nó decide independentemente
+// quais dimensionamentos (AD/ER/PT) se aplicam a ele via `acesso.dims`
+// (ver DimButton) — um nó pode precisar de mais de um ao mesmo tempo
+// (ex.: o piso de descarga que é ao mesmo tempo corredor de saída e
+// chegada da escada que desce até ali). `dimsDoAcesso` resolve o padrão
+// (mesmo critério da antiga tipoDoNo) quando o nó ainda não tem `dims`
+// gravado (projetos antigos). Só a raiz pode abrir novos Acessos filhos;
+// qualquer nó pode receber ambientes direto.
 function AcessoCard({
   acesso,
   ambientes,
@@ -176,6 +212,7 @@ function AcessoCard({
   onRenomear,
   onRemover,
   onCriarAcessoFilho,
+  onSetDim,
   pavimentoId,
   onEditAmbiente,
   onRemoveAmbiente,
@@ -183,13 +220,13 @@ function AcessoCard({
   colapsados,
   toggleColapsado,
 }) {
-  const { tipo, label } = tipoDoNo(acesso, pisoDescarga);
-  const { pop, cap, capValor, dim } = calcNoAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, tipo);
-  // Porta do box: reaproveita o mesmo N de UP do AD/ER (não recalcula
-  // população) — só a capacidade de unidade de passagem (C) usada pra
-  // achar a largura mínima é a normativa de PORTA (cap.PT), não a de
-  // AD/ER já mostrada acima.
-  const porta = calcPortaNoAcesso(dim.n, larguras);
+  const dims = dimsDoAcesso(acesso, pisoDescarga);
+  const { ad, er, pt, nPorta } = calcDimsAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, dims);
+  const entradas = [
+    ad && { label: "ACESSO/DESCARGA", value: fmtM(ad.la) },
+    pt && { label: "PORTAS", value: fmtM(pt.la) },
+    er && { label: "ESCADA/RAMPA", value: fmtM(er.la) },
+  ].filter(Boolean);
   const filhos = acessosFilhos(acessos, acesso.id);
   const filhosAmbientes = ambientesDe(ambientes, acesso.id);
   const isRaiz = acesso.alimentaEm === null;
@@ -211,6 +248,7 @@ function AcessoCard({
       onRemover(acesso.id);
     }
   };
+  const toggleDim = (d) => onSetDim(acesso.id, d, !dims[d]);
 
   return (
     <div
@@ -228,30 +266,31 @@ function AcessoCard({
           </button>
           <Icon svg={aberto ? chevronDownIconSvg : chevronRightIconSvg} className="se-chevron" />
           <InlineEditableNome value={acesso.nome} onCommit={(novoNome) => onRenomear(acesso.id, novoNome)} className="se-acesso-nome" />
+          <DivBadge label={`${nPorta} UP`} />
         </div>
-        {/* Duas linhas alinhadas em grid — Acesso/Descarga (ou Escada/Rampa)
-            em cima, Portas embaixo — em vez de espremer as duas dimensões
-            (fluxo + porta) numa linha só com rótulos "C (PORTA)"/"PORTA". */}
-        <div className="se-card-header-dir">
-          <div className="se-acesso-stats-grid">
-            <div className="se-acesso-stats-label">
-              <LabelQuebrado texto={label} />
-            </div>
-            <StatCol label="POP." value={pop} />
-            <StatCol label="C" value={capValor} />
-            <StatCol label="U.P." value={dim.n} />
-            <StatCol label="LARGURA MÍN." value={fmtM(dim.la)} big />
-            <div className="se-acesso-stats-label">Portas</div>
-            <StatCol label="POP." value={pop} />
-            <StatCol label="C" value={cap.PT} />
-            <StatCol label="U.P." value={dim.n} />
-            <StatCol label="LARGURA MÍN." value={fmtM(porta.la)} big />
-          </div>
+        <div className="se-card-header-dims">
+          <DimButton label="AD" ativo={dims.AD} onClick={() => toggleDim("AD")} />
+          <DimButton label="ER" ativo={dims.ER} onClick={() => toggleDim("ER")} />
+          <DimButton label="PT" ativo={dims.PT} onClick={() => toggleDim("PT")} />
         </div>
         <button onClick={remover} className="se-card-lixeira se-icon-botao">
           <Icon svg={trashIconSvg} />
         </button>
       </div>
+      {entradas.length > 0 && (
+        <div className="se-dim-entradas">
+          {entradas
+            .flatMap((e, i) => [
+              i > 0 && (
+                <span key={`sep-${i}`} className="se-sep">
+                  |
+                </span>
+              ),
+              <DimEntry key={e.label} label={e.label} value={e.value} />,
+            ])
+            .filter(Boolean)}
+        </div>
+      )}
       {aberto && (
         <div className="se-card-body">
           {filhos.map((f) => (
@@ -266,6 +305,7 @@ function AcessoCard({
               onRenomear={onRenomear}
               onRemover={onRemover}
               onCriarAcessoFilho={onCriarAcessoFilho}
+              onSetDim={onSetDim}
               pavimentoId={pavimentoId}
               onEditAmbiente={onEditAmbiente}
               onRemoveAmbiente={onRemoveAmbiente}
@@ -389,6 +429,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
 
   const renomearAcesso = (acessoId, nome) => despachar({ type: "RENOMEAR_ACESSO", pavimentoId: pav.id, acessoId, nome });
   const removerAcesso = (acessoId) => despachar({ type: "REMOVER_ACESSO", pavimentoId: pav.id, acessoId });
+  const setAcessoDim = (acessoId, dim, valor) => despachar({ type: "SET_ACESSO_DIM", pavimentoId: pav.id, acessoId, dim, valor });
 
   // `acessoId` opcional: quando vem de dentro de um card de Acesso ("+
   // Adicionar Ambiente" ali dentro), o ambiente já nasce atribuído a ele.
@@ -467,6 +508,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
                   onRenomear={renomearAcesso}
                   onRemover={removerAcesso}
                   onCriarAcessoFilho={criarAcessoFilho}
+                  onSetDim={setAcessoDim}
                   pavimentoId={pav.id}
                   onEditAmbiente={setEditAmb}
                   onRemoveAmbiente={removerAmbiente}

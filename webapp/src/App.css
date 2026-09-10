@@ -1304,6 +1304,65 @@
   line-height: 1.15;
 }
 
+/* Botões de dimensionamento (AD/ER/PT) no cabeçalho de Acesso/Saída — liga/
+   desliga qual dimensionamento se aplica àquele nó especificamente (ver
+   calcDimsAcesso em data/se_calc.js) — um nó pode precisar de mais de um ao
+   mesmo tempo (ex.: o piso de descarga que é ao mesmo tempo corredor de
+   saída e chegada da escada). Vermelho preenchido = ligado; cinza neutro =
+   desligado. padding-right reserva o espaço da lixeira (position:absolute,
+   ver .se-card-lixeira). */
+.se-card-header-dims {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-right: 30px;
+}
+
+.se-dim-botao {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 9px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text-3);
+  transition: 0.15s;
+}
+
+.se-dim-botao.se-dim-botao-ativo {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--white);
+}
+
+/* Linha de larguras mínimas de um Acesso/Saída (ex.: "ACESSO/DESCARGA
+   1,20 m") — só os dimensionamentos ligados aparecem, sempre na ordem
+   AD, Portas, Escada/Rampa. */
+.se-dim-entradas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 0 10px 12px;
+}
+
+.se-dim-entrada {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.se-dim-entrada-valor {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 /* Estatística compacta (POP./C/U.P./LARGURA MÍN.) --------------------------- */
 .se-stat-col {
   text-align: center;
