@@ -231,17 +231,11 @@ projeto" (`resumoProjeto`), lista de estruturas (`estruturasDoProjeto`) e
 os dados de uma estrutura pro dashboard (`dashboardEstrutura` — Edificação,
 Classificação, `divisoes` presentes nela). Quando uma estrutura tem mais
 de um código de ocupação (`divisao`) entre seus pavimentos, a tela mostra
-"Mista" — mas o código "oficial" que alimenta `dados_projeto.ocupacao_principal`
-(usado por ex. em "Dimensionar Saídas") **não pode ser "Mista"**, tem que
-ser um código válido da tabela normativa; por isso quem escolhe qual
-divisão usar (a mais restritiva, menor distância máxima) é o Python
-(`project_link_bridge._divisao_mais_restritiva`, portado do antigo
-formulário "Dados do Projeto") — só ele tem acesso a essa tabela
-(`lib/normas`). Não há ainda uma classificação de "Risco" (faixa
-qualitativa tipo "Médio") nem de "Altura da edificação" (tipo "I -
-Edificação Baixa") — o dashboard mostra os valores brutos (carga de
-incêndio em MJ/m², altura em metros) até essa tabela de classificação
-existir.
+"Mista" — só pra exibição local, nada disso é mandado pro Python. Não há
+ainda uma classificação de "Risco" (faixa qualitativa tipo "Médio") nem de
+"Altura da edificação" (tipo "I - Edificação Baixa") — o dashboard mostra
+os valores brutos (carga de incêndio em MJ/m², altura em metros) até essa
+tabela de classificação existir.
 
 RLS: as políticas do Supabase decidem quais `projetos` cada usuário logado
 enxerga (`user_id = auth.uid()`) — `projectData.js` não filtra por
@@ -272,7 +266,7 @@ Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
 |---|---|---|
 | `GET_PROJECT_LINK` | JS → Python | — |
 | `PROJECT_LINK` | Python → JS | `{ docSalvo, projetoId, projetoNome, estruturaId, estruturaNome }` |
-| `SET_PROJECT_LINK` | JS → Python | `{ projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida, divisoes }` |
+| `SET_PROJECT_LINK` | JS → Python | `{ projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida }` |
 | `PROJECT_LINK_SAVED` | Python → JS | `{ ok, erro? }` |
 | `DISCONNECT_PROJECT` | JS → Python | — |
 | `GET_DIMENSIONAMENTOS_STATUS` | JS → Python | — |

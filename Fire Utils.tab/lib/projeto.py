@@ -51,20 +51,19 @@ def carregar_dados_projeto(projeto_dir):
     return carregar_cache(projeto_dir).get(u"dados_projeto")
 
 
-def salvar_dados_projeto(projeto_dir, identificador, estado_nome, uf, ocupacao_principal, area_construida):
+def salvar_dados_projeto(projeto_dir, identificador, estado_nome, uf, area_construida):
     """Grava a chave 'dados_projeto' do firedata.json — mesmo formato que
-    exigir_projeto_e_estado() (abaixo) e os módulos de dimensionamento
-    (hidrantes/saidas/extintores) já esperam. Usada pelo vínculo de
-    projeto/estrutura escolhido no Dashboard da dockpane (ver
-    project_link_bridge.py) — substitui o antigo formulário "Dados do
-    Projeto", que gravava isso a partir de campos digitados manualmente."""
+    exigir_projeto_e_estado() (abaixo) e os módulos de hidrantes/saidas/
+    extintores já esperam. Usada pelo vínculo de projeto/estrutura escolhido
+    no Dashboard da dockpane (ver project_link_bridge.py) — substitui o
+    antigo formulário "Dados do Projeto", que gravava isso a partir de
+    campos digitados manualmente."""
     dados = {
-        u"identificador":      identificador,
-        u"estado":             estado_nome,
-        u"uf":                 uf,
-        u"ocupacao_principal": ocupacao_principal,
-        u"area_construida":    area_construida,
-        u"_timestamp":         datetime.datetime.now().strftime(u"%Y-%m-%d %H:%M:%S"),
+        u"identificador":   identificador,
+        u"estado":          estado_nome,
+        u"uf":              uf,
+        u"area_construida": area_construida,
+        u"_timestamp":      datetime.datetime.now().strftime(u"%Y-%m-%d %H:%M:%S"),
     }
     path = cache_path(projeto_dir)
     arquivo = carregar_cache(projeto_dir)

@@ -6,14 +6,9 @@
  * ocupação daquele pavimento). Tudo derivado aqui é client-side, a partir
  * de uma linha já buscada (lib/projectData.js) — sem chamada adicional.
  *
- * Importante: o código de ocupação "oficial" usado pelos módulos de
- * dimensionamento (dados_projeto.ocupacao_principal, ex.: "Dimensionar
- * Saídas") não é decidido aqui — quando uma estrutura tem mais de uma
- * divisão, o Python escolhe a mais restritiva (menor distância máxima,
- * tabela normativa do estado) ao receber SET_PROJECT_LINK, porque só ele
- * tem acesso a essa tabela (lib/normas). Este arquivo manda a lista de
- * divisões (`divisoes`) e mostra "Mista" na tela quando há mais de uma —
- * são coisas propositalmente diferentes.
+ * `divisoes` (lista de códigos de ocupação dos pavimentos da estrutura)
+ * só alimenta a exibição local: mostra "Mista" na tela quando a estrutura
+ * tem mais de uma.
  */
 
 function paraNumero(valor) {

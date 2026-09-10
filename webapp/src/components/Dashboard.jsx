@@ -48,11 +48,6 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
       estruturaNome: painel.nome,
       uf: painel.uf,
       areaConstruida: painel.areaConstruida,
-      // Lista de códigos de ocupação dos pavimentos desta estrutura — o
-      // Python escolhe o mais restritivo (tabela normativa do estado)
-      // pra virar dados_projeto.ocupacao_principal; "Mista" (exibido na
-      // tela) não é um código válido pra isso.
-      divisoes: painel.divisoes,
     });
   }
 

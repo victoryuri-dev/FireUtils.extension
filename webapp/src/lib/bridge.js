@@ -54,17 +54,11 @@
  *     não foi salvo em disco — nesse caso os demais campos vêm null e o
  *     Dashboard deve pedir pra salvar o projeto antes de vincular.
  *
- *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida, divisoes } }
+ *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida } }
  *     JS -> Python: grava o vínculo escolhido (projeto + estrutura, já
  *     resolvidos no Supabase) no firedata.json do documento ativo — mesmo
  *     formato que o antigo pushbutton "Dados do Projeto" gravava, pra não
- *     quebrar os módulos de dimensionamento (hidrantes/saidas/extintores).
- *     `divisoes` é a lista de códigos de ocupação (ex.: ["A-1", "G-1"])
- *     presentes nos pavimentos dessa estrutura (ver lib/projetoDados.js) —
- *     o Python escolhe o mais restritivo (tabela normativa do estado) pra
- *     virar dados_projeto.ocupacao_principal; o React nunca manda um
- *     código de ocupação já resolvido, porque essa tabela só existe do
- *     lado Python (lib/normas).
+ *     quebrar os módulos de hidrantes/saidas/extintores.
  *
  *   { type: "PROJECT_LINK_SAVED", payload: { ok, erro? } }
  *     Python -> JS: resultado de um SET_PROJECT_LINK ou DISCONNECT_PROJECT

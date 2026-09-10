@@ -2,6 +2,8 @@
 # saidas/rooms.py — Fire Utils
 # Funções de coleta de ambientes (Room) do modelo Revit.
 
+import math
+
 from pyrevit import revit, DB, forms, script
 from Autodesk.Revit.DB import Architecture, FilteredElementCollector
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
@@ -55,6 +57,45 @@ def get_rooms_sem_grupo(doc):
                 valor = param.AsString()
                 if not valor:   # None ou string vazia
                     resultado.append(r)
+    return resultado
+
+
+def get_rooms_classificados(doc):
+    """Retorna todos os ambientes com área > 0 e o parâmetro 'Grupo'
+    preenchido, já no formato pronto pra sincronizar com o site (ver
+    saidas.calc.montar_payload_ambientes): dicts {nivel, nome, grupo,
+    area (m²), pop}."""
+    colecao = FilteredElementCollector(doc)\
+        .OfCategory(DB.BuiltInCategory.OST_Rooms)\
+        .WhereElementIsNotElementType()\
+        .ToElements()
+
+    resultado = []
+    for room in colecao:
+        try:
+            if room.Area == 0:
+                continue
+
+            p_grupo = room.LookupParameter(u"Grupo")
+            grupo   = p_grupo.AsString() if (p_grupo and p_grupo.HasValue) else None
+            if not grupo:
+                continue
+
+            p_pop  = room.LookupParameter(u"População")
+            p_nome = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
+            p_area = room.get_Parameter(DB.BuiltInParameter.ROOM_AREA)
+            nivel  = room.Level.Name if room.Level else u"(sem nível)"
+
+            resultado.append({
+                u"nivel": nivel,
+                u"nome":  p_nome.AsString() if (p_nome and p_nome.HasValue) else u"(sem nome)",
+                u"grupo": grupo,
+                u"area":  float(math.ceil(p_area.AsDouble() * 0.092903)) if p_area else 0.0,
+                u"pop":   int(p_pop.AsInteger()) if (p_pop and p_pop.HasValue) else 0,
+            })
+        except Exception:
+            continue
+
     return resultado
 
 
