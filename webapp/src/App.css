@@ -1665,16 +1665,8 @@
   letter-spacing: 0.01em;
 }
 
-.se-pavimentos-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 4px 0 14px;
-}
-
-.se-pavimentos-header .dashboard-subtitulo {
-  margin: 0;
+.se-pagina-header-botao {
+  margin-left: auto;
 }
 
 .se-pavimentos-lista {

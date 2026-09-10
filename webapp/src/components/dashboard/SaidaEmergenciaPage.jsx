@@ -191,6 +191,9 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
           <Icon svg={exitIconSvg} />
         </span>
         <h1>Saídas de Emergência</h1>
+        <button type="button" className="se-botao se-pagina-header-botao" onClick={handleBuscarRevit} disabled={buscando}>
+          {buscando ? "Recarregando…" : "Recarregar"}
+        </button>
       </div>
 
       {viewPav && seNorma ? (
@@ -207,12 +210,7 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         />
       ) : (
         <>
-          <div className="se-pavimentos-header">
-            <p className="dashboard-subtitulo">Pavimentos</p>
-            <button type="button" className="se-botao" onClick={handleBuscarRevit} disabled={buscando}>
-              {buscando ? "Buscando…" : "Buscar do Revit"}
-            </button>
-          </div>
+          <p className="dashboard-subtitulo">Pavimentos</p>
 
           {erro ? (
             <p className="vazio">{erro}</p>
