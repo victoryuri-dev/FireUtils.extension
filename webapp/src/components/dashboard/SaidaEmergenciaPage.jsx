@@ -4,8 +4,71 @@ import { pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
 import { getSeNorma } from "../../lib/normasCentral";
 import { calcPopPav, contarSaidasPavimento, getDistanciaPavimento } from "../../data/se_calc";
 import { OCUPACOES } from "../../data/ocupacoesMA";
+import { supabase } from "../../lib/supabaseClient";
+import { aplicarAcaoSaida, idAmbienteSE } from "../../lib/seReducer";
+import { salvarDadosProjeto } from "../../lib/projectData";
 import AcessosDescargasView, { StatCol } from "./AcessosDescargasView";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
+
+// ── Importação "Buscar do Revit" ────────────────────────────────────────
+// Casa o pavimento pelo NOME que o plugin manda (ver Fire Utils.tab/lib/
+// saidas/calc.py -> montar_payload_ambientes) contra os pavimentos já
+// cadastrados nesta estrutura — mesma lógica de ETOS.FireUtils/src/pages/
+// medidas/SaidaEmergenciaPage.jsx (resolverPavimentoSite), só que aqui já
+// chega restrito a uma única estrutura (pavimentosCompletos).
+function norm(s) {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function resolverPavimentoSite(nomeImportado, pavimentos) {
+  const porLabel = pavimentos.find((p) => norm(p.label) === norm(nomeImportado));
+  if (porLabel) return porLabel;
+  const m = norm(nomeImportado).match(/^(?:n[ií]vel|piso|level)\s*(\d+)$/);
+  if (m) {
+    const porNivel = pavimentos.find((p) => p.id.endsWith(`-P${parseInt(m[1], 10)}`));
+    if (porNivel) return porNivel;
+  }
+  return pavimentos.find((p) => p.pisoDescarga) || null;
+}
+
+// Resolve cada pavimento do payload contra o cadastro real e devolve só as
+// atualizações (pavimentoId -> ambientes já com id) — quem chama decide
+// como aplicar (mesclar via IMPORT_AMBIENTES_SE, não substituir a lista
+// inteira de pavimentos).
+function resolverImportacaoSaidas(payloadSE, pavimentos) {
+  if (!payloadSE?.pavimentos) throw new Error('Chave "pavimentos" não encontrada nos dados.');
+
+  const erros = [];
+  const atualizacoes = [];
+
+  payloadSE.pavimentos.forEach((p, pi) => {
+    const nomeImportado = p.nome || `Pavimento ${pi + 1}`;
+    const pavSite = resolverPavimentoSite(nomeImportado, pavimentos);
+    if (!pavSite) {
+      erros.push(`"${nomeImportado}": nenhum pavimento correspondente encontrado no projeto.`);
+      return;
+    }
+    atualizacoes.push({
+      pavimentoId: pavSite.id,
+      ambientes: (p.ambientes || []).map((a, ai) => ({
+        id: idAmbienteSE(),
+        nome: a.nome || `Ambiente ${ai + 1}`,
+        divisao: a.divisao || "",
+        area: a.area ?? 0,
+        popTipo: a.popTipo || "area",
+        assentos: a.assentos ?? 0,
+        popManual: a.popManual ?? 0,
+      })),
+    });
+  });
+
+  return { atualizacoes, erros, timestamp: payloadSE._timestamp || null };
+}
 
 /**
  * SaidaEmergenciaPage.jsx — página própria de Saída de Emergência dentro da
@@ -25,6 +88,7 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
   const [seNorma, setSeNorma] = useState(null);
   const [erro, setErro] = useState(null);
   const [viewPavId, setViewPavId] = useState(null);
+  const [buscando, setBuscando] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -59,6 +123,52 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
 
   const viewPav = viewPavId ? pavimentos.find((p) => p.id === viewPavId) : null;
 
+  // Lê a última sincronização do plugin (revit_syncs_latest, gravada pela
+  // Edge Function revit-sync — ver Fire Utils.tab/lib/sync.py) e mescla os
+  // ambientes nos pavimentos já cadastrados desta estrutura, casando pelo
+  // NOME do pavimento. Mesmo fluxo do botão "Buscar do Revit" do site
+  // (ETOS.FireUtils/src/pages/medidas/SaidaEmergenciaPage.jsx).
+  async function handleBuscarRevit() {
+    setBuscando(true);
+    try {
+      const { data, error } = await supabase
+        .from("revit_syncs_latest")
+        .select("payload")
+        .eq("projeto_id", projeto.id)
+        .eq("estrutura_id", estruturaId)
+        .eq("medida", "saidas_emergencia")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) {
+        adicionarToast?.({
+          tipo: "erro",
+          titulo: "Nada sincronizado ainda",
+          mensagem: "Nenhum dado de saídas de emergência sincronizado do Revit para esta estrutura.",
+          duracaoMs: 7000,
+        });
+        return;
+      }
+
+      const { atualizacoes, erros } = resolverImportacaoSaidas(data.payload, pavimentos);
+      if (atualizacoes.length > 0) {
+        const novosDados = aplicarAcaoSaida(projeto.dados, { type: "IMPORT_AMBIENTES_SE", atualizacoes });
+        const novaVersao = await salvarDadosProjeto(projeto.id, projeto.version, novosDados);
+        onProjetoAtualizado({ ...projeto, dados: novosDados, version: novaVersao });
+      }
+
+      if (erros.length > 0) {
+        adicionarToast?.({ tipo: "erro", titulo: "Alguns pavimentos não foram importados", mensagem: erros.join(" "), duracaoMs: 9000 });
+      } else {
+        adicionarToast?.({ tipo: "sucesso", titulo: "Ambientes importados do Revit", duracaoMs: 4000 });
+      }
+    } catch (ex) {
+      adicionarToast?.({ tipo: "erro", titulo: "Não foi possível buscar do Revit", mensagem: ex.message, duracaoMs: 9000 });
+    } finally {
+      setBuscando(false);
+    }
+  }
+
   return (
     <div className="se-pagina">
       <div className="se-pagina-header">
@@ -81,7 +191,12 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         />
       ) : (
         <>
-          <p className="dashboard-subtitulo">Pavimentos</p>
+          <div className="se-pavimentos-header">
+            <p className="dashboard-subtitulo">Pavimentos</p>
+            <button type="button" className="se-botao" onClick={handleBuscarRevit} disabled={buscando}>
+              {buscando ? "Buscando…" : "Buscar do Revit"}
+            </button>
+          </div>
 
           {erro ? (
             <p className="vazio">{erro}</p>

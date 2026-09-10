@@ -44,6 +44,20 @@ function atualizarPavimento(dados, pavimentoId, atualizar) {
  */
 export function aplicarAcaoSaida(dados, action) {
   switch (action.type) {
+    // Substitui os ambientes de um ou mais pavimentos de uma vez —
+    // usado pela importação "Buscar do Revit" (ver SaidaEmergenciaPage.jsx),
+    // que já resolve cada pavimento do payload contra o cadastro real
+    // (por nome) antes de despachar esta ação.
+    case "IMPORT_AMBIENTES_SE": {
+      const porPavimento = new Map(action.atualizacoes.map((a) => [a.pavimentoId, a.ambientes]));
+      return {
+        ...dados,
+        pavimentos: (dados.pavimentos || []).map((p) =>
+          porPavimento.has(p.id) ? { ...p, ambientes: porPavimento.get(p.id) } : p
+        ),
+      };
+    }
+
     case "CRIAR_SAIDA":
       return atualizarPavimento(dados, action.pavimentoId, (p) => ({
         ...p,
