@@ -7,6 +7,7 @@ import { OCUPACOES } from "../../data/ocupacoesMA";
 import { supabase } from "../../lib/supabaseClient";
 import { aplicarAcaoSaida, idAmbienteSE } from "../../lib/seReducer";
 import { salvarComRetry } from "../../lib/projectData";
+import { useProjetoChannel } from "../../lib/useProjetoChannel";
 import AcessosDescargasView, { StatCol } from "./AcessosDescargasView";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 
@@ -123,6 +124,17 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
 
   const viewPav = viewPavId ? pavimentos.find((p) => p.id === viewPavId) : null;
 
+  // Canal Realtime do projeto — recebe ao vivo as ações de Saída de
+  // Emergência de outras sessões (o site, ou outra instância da dockpane)
+  // e as aplica localmente (nunca salva de novo: quem mandou já
+  // persistiu). `enviarAcao` é repassado pro despachar() de
+  // AcessosDescargasView.jsx e usado aqui mesmo no handleBuscarRevit, pra
+  // avisar as outras sessões depois de CADA ação salva com sucesso.
+  const enviarAcao = useProjetoChannel(projeto.id, (action) => {
+    const novosDados = aplicarAcaoSaida(projeto.dados, action);
+    onProjetoAtualizado({ ...projeto, dados: novosDados });
+  });
+
   // Lê a última sincronização do plugin (revit_syncs_latest, gravada pela
   // Edge Function revit-sync — ver Fire Utils.tab/lib/sync.py) e mescla os
   // ambientes nos pavimentos já cadastrados desta estrutura, casando pelo
@@ -152,10 +164,12 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
 
       const { atualizacoes, erros } = resolverImportacaoSaidas(data.payload, pavimentos);
       if (atualizacoes.length > 0) {
+        const acao = { type: "IMPORT_AMBIENTES_SE", atualizacoes };
         const { dados: novosDados, version: novaVersao } = await salvarComRetry(projeto.id, projeto, (dados) =>
-          aplicarAcaoSaida(dados, { type: "IMPORT_AMBIENTES_SE", atualizacoes })
+          aplicarAcaoSaida(dados, acao)
         );
         onProjetoAtualizado({ ...projeto, dados: novosDados, version: novaVersao });
+        enviarAcao(acao);
       }
 
       if (erros.length > 0) {
@@ -182,6 +196,7 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
       {viewPav && seNorma ? (
         <AcessosDescargasView
           projeto={projeto}
+          enviarAcao={enviarAcao}
           pav={viewPav}
           seNorma={seNorma}
           // OCUPACOES (grupo/divisão) é só do estado MA por enquanto — ver data/ocupacoesMA.js.

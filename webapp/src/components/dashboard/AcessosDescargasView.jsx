@@ -338,7 +338,7 @@ function PisoDescargaSwitch({ checked, onChange }) {
 // (dados.pavimentos[i]). `onProjetoAtualizado` recebe a linha inteira já
 // atualizada (dados + version novos) depois de cada ação persistida com
 // sucesso. `onVoltar` volta pra lista de pavimentos.
-export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes, onVoltar, onProjetoAtualizado, adicionarToast }) {
+export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes, onVoltar, onProjetoAtualizado, adicionarToast, enviarAcao }) {
   const { TAXA_POPULACIONAL, LARGURAS_MINIMAS } = seNorma;
   const ambientes = pav.ambientes || [];
   const acessos = pav.acessos || [];
@@ -359,7 +359,11 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
   // tela nunca ficar mostrando algo que não foi salvo de verdade.
   // salvarComRetry já absorve o "falso conflito de versão" (outra aba/o
   // site salvou algo nesse meio-tempo, sem conflito real de conteúdo) —
-  // só chega a dar erro aqui se a segunda tentativa também falhar.
+  // só chega a dar erro aqui se a segunda tentativa também falhar. Depois
+  // de salvar com sucesso, `enviarAcao` avisa o site (ou outra sessão da
+  // dockpane) em tempo real, via o canal Realtime aberto em
+  // SaidaEmergenciaPage.jsx — mesmo protocolo do site (ver
+  // ProjetoContext.jsx), pra edição ao vivo em várias sessões.
   async function despachar(action) {
     setSalvando(true);
     try {
@@ -367,6 +371,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
         aplicarAcaoSaida(dados, action)
       );
       onProjetoAtualizado({ ...projeto, dados: novosDados, version: novaVersao });
+      enviarAcao?.(action);
     } catch (erro) {
       adicionarToast?.({ tipo: "erro", titulo: "Não foi possível salvar", mensagem: erro.message, duracaoMs: 9000 });
     } finally {
