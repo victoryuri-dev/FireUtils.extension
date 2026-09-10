@@ -88,6 +88,20 @@ function InlineEditableNome({ value, onCommit, className }) {
   );
 }
 
+// Quebra "ACESSO/DESCARGA" -> "ACESSO/" + quebra de linha + "DESCARGA"
+// (idem "ESCADA/RAMPA") — os únicos rótulos com "/" que chegam aqui (ver
+// tipoDoNo em data/se_calc.js). Sem "/", mostra o texto como veio (ex.: "Portas").
+function LabelQuebrado({ texto }) {
+  const partes = texto.split("/");
+  if (partes.length !== 2) return texto;
+  return (
+    <>
+      {partes[0]}/<br />
+      {partes[1]}
+    </>
+  );
+}
+
 export function StatCol({ label, value, big }) {
   return (
     <div className="se-stat-col">
@@ -218,7 +232,9 @@ function AcessoCard({
             (fluxo + porta) numa linha só com rótulos "C (PORTA)"/"PORTA". */}
         <div className="se-card-header-dir">
           <div className="se-acesso-stats-grid">
-            <div className="se-acesso-stats-label">{label}</div>
+            <div className="se-acesso-stats-label">
+              <LabelQuebrado texto={label} />
+            </div>
             <StatCol label="POP." value={pop} />
             <StatCol label="C" value={capValor} />
             <StatCol label="U.P." value={dim.n} />

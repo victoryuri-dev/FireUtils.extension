@@ -1300,7 +1300,7 @@
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  text-align: right;
+  text-align: center;
   line-height: 1.15;
 }
 
