@@ -3,6 +3,7 @@
 # Utilitários de população: parâmetros compartilhados Revit + gravação de ocupação.
 
 import os
+import re
 import math
 from pyrevit import revit, DB, forms, script
 
@@ -13,6 +14,46 @@ app   = doc.Application
 
 def population_calc(area, rate):
     return area / rate
+
+
+# ============================================================
+# NUMERAÇÃO DO NOME — desambigua ambientes com o mesmo uso
+# ============================================================
+# set_occupancy grava o USO da ocupação (ex.: "Loja") como nome do Room —
+# como normalmente vários ambientes caem na mesma ocupação, isso duplicava
+# nomes ("Loja", "Loja", "Loja"...), o que quebra tanto a leitura no Revit
+# quanto o casamento por NOME que o site/dockpane faz ao importar (ver
+# resolverImportacaoSaidas em SaidaEmergenciaPage.jsx). Por isso o nome sai
+# gravado já com um prefixo numérico ("00 - Loja", "01 - Loja", ...),
+# reiniciando a contagem por nível (mesmo Level do Revit) + uso.
+_NUMERO_NOME_RE = re.compile(u"^(\\d+) - ")
+
+
+def _proximo_numero(doc, nivel_id, ocupacao):
+    """Maior número já usado no prefixo "NN - <ocupacao>" entre os ambientes
+    do mesmo nível, mais 1 (ou 0 se nenhum) — pra continuar a sequência em
+    vez de reiniciar a cada nova leva de ambientes classificados."""
+    maior = -1
+    sufixo = u" - {}".format(ocupacao)
+    colecao = DB.FilteredElementCollector(doc)\
+        .OfCategory(DB.BuiltInCategory.OST_Rooms)\
+        .WhereElementIsNotElementType()\
+        .ToElements()
+    for r in colecao:
+        try:
+            r_nivel_id = r.Level.Id if r.Level else None
+            if r_nivel_id != nivel_id:
+                continue
+            p_nome = r.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
+            nome = p_nome.AsString() if (p_nome and p_nome.HasValue) else u""
+            if not nome.endswith(sufixo):
+                continue
+            m = _NUMERO_NOME_RE.match(nome)
+            if m and int(m.group(1)) > maior:
+                maior = int(m.group(1))
+        except Exception:
+            continue
+    return maior + 1
 
 
 # ============================================================
@@ -112,6 +153,7 @@ def set_occupancy(rooms, occupancy_value, estado):
     # ------------------------------------------------------------------
     # Gravar parâmetros nos ambientes
     # ------------------------------------------------------------------
+    contadores = {}  # nivel_id -> próximo número disponível pra `ocupacao`
     with revit.Transaction(u"Definir Ocupação"):
         for room in rooms:
             area = math.ceil(
@@ -119,11 +161,17 @@ def set_occupancy(rooms, occupancy_value, estado):
             )
             nome_room = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME).AsString() or u""
 
-            # Nome do ambiente → uso da ocupação
+            # Nome do ambiente → uso da ocupação, numerado ("00 - Loja") pra
+            # não duplicar nome entre ambientes do mesmo uso no mesmo nível.
             if ocupacao:
                 param_nome = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
                 if param_nome:
-                    param_nome.Set(ocupacao)
+                    nivel_id = room.Level.Id if room.Level else None
+                    if nivel_id not in contadores:
+                        contadores[nivel_id] = _proximo_numero(doc, nivel_id, ocupacao)
+                    numero = contadores[nivel_id]
+                    contadores[nivel_id] = numero + 1
+                    param_nome.Set(u"{:02d} - {}".format(numero, ocupacao))
 
             # Código de ocupação
             param_ocup = room.LookupParameter(u"Grupo")
