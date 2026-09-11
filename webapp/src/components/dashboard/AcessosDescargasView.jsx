@@ -13,6 +13,8 @@ import trashIconSvg from "../../assets/icons/trash-icon.svg?raw";
 import plusIconSvg from "../../assets/icons/plus-icon.svg?raw";
 import arrowLeftIconSvg from "../../assets/icons/arrow-left-icon.svg?raw";
 import xIconSvg from "../../assets/icons/x-icon.svg?raw";
+import unlinkIconSvg from "../../assets/icons/unlinked-icon.svg?raw";
+import perfilIconSvg from "../../assets/icons/perfil-icon.svg?raw";
 
 /**
  * AcessosDescargasView.jsx — árvore de Acessos e Descargas de um pavimento
@@ -116,8 +118,12 @@ export function StatCol({ label, value, big }) {
 // ── Ambiente (folha da árvore) — arrastável, card inteiro clicável ─────
 // Só mostra UP (no lugar da ocupação, no cabeçalho) + população + largura
 // mínima da porta — capacidade (C) e o código de divisão saíram do card
-// (continuam editáveis no formulário, só não aparecem mais aqui).
-function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
+// (continuam editáveis no formulário, só não aparecem mais aqui). Dentro
+// de um Acesso/Saída, o botão de canto é "desvincular" (volta pra "sem
+// acesso atribuído" — ver onDesvincular); só quando já está órfão
+// (`orfao`) é que vira exclusão de verdade, pra evitar apagar por engano
+// um ambiente que só precisava trocar de lugar na árvore.
+function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDesvincular, orfao }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `amb:${amb.id}`,
     data: { kind: "amb", id: amb.id },
@@ -138,6 +144,11 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
         </button>
         <span className="se-ambiente-nome">{amb.nome}</span>
         <DivBadge label={`${pt.n} UP`} />
+        {amb.origem === "manual" && (
+          <span className="se-badge-manual" title="Ambiente criado manualmente (não veio do Revit)">
+            <Icon svg={perfilIconSvg} />
+          </span>
+        )}
       </div>
       <div className="se-card-header-dir">
         <span>{pop} pessoas</span>
@@ -146,15 +157,29 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove }) {
           PORTAS: <strong className="se-vermelho">{fmtM(pt.la)}</strong>
         </span>
       </div>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove(amb.id);
-        }}
-        className="se-card-lixeira se-icon-botao"
-      >
-        <Icon svg={trashIconSvg} />
-      </button>
+      {orfao ? (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(amb.id);
+          }}
+          className="se-card-lixeira se-icon-botao"
+          title="Excluir ambiente"
+        >
+          <Icon svg={trashIconSvg} />
+        </button>
+      ) : (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDesvincular(amb.id);
+          }}
+          className="se-card-lixeira se-icon-botao"
+          title="Desvincular do Acesso/Saída (volta pra lista sem acesso)"
+        >
+          <Icon svg={unlinkIconSvg} />
+        </button>
+      )}
     </div>
   );
 }
@@ -216,6 +241,7 @@ function AcessoCard({
   pavimentoId,
   onEditAmbiente,
   onRemoveAmbiente,
+  onDesvincularAmbiente,
   onCreateAmbiente,
   colapsados,
   toggleColapsado,
@@ -309,13 +335,15 @@ function AcessoCard({
               pavimentoId={pavimentoId}
               onEditAmbiente={onEditAmbiente}
               onRemoveAmbiente={onRemoveAmbiente}
+              onDesvincularAmbiente={onDesvincularAmbiente}
               onCreateAmbiente={onCreateAmbiente}
               colapsados={colapsados}
               toggleColapsado={toggleColapsado}
             />
           ))}
           {filhosAmbientes.map((a) => (
-            <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEditAmbiente} onRemove={onRemoveAmbiente} />
+            <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEditAmbiente} onRemove={onRemoveAmbiente}
+              onDesvincular={onDesvincularAmbiente} orfao={false} />
           ))}
           {filhos.length === 0 && filhosAmbientes.length === 0 && <div className="se-vazio-italico">Arraste ambientes para cá.</div>}
           <div className="se-acesso-acoes">
@@ -349,7 +377,7 @@ function SemAcessoDropZone({ ambientes, taxaPopulacional, larguras, onEdit, onRe
     <div ref={setNodeRef} className={`se-sem-acesso ${isOver ? "se-sem-acesso-over" : ""}`}>
       {ambientes.length === 0 && <div className="se-vazio-italico">Todos os ambientes já estão posicionados na árvore.</div>}
       {ambientes.map((a) => (
-        <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEdit} onRemove={onRemove} />
+        <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEdit} onRemove={onRemove} orfao />
       ))}
     </div>
   );
@@ -436,7 +464,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
   const criarAmbiente = (acessoId = null) => {
     const id = idAmbienteSE();
     const nome = `Ambiente ${ambientes.length + 1}`;
-    const ambiente = { nome, divisao: "", popTipo: "area", area: 0, assentos: 0, popManual: 0, acessoId };
+    const ambiente = { nome, divisao: "", popTipo: "area", area: 0, assentos: 0, popManual: 0, acessoId, origem: "manual" };
     despachar({ type: "ADD_AMBIENTE_SE", pavimentoId: pav.id, id, ambiente });
     setEditAmb({ id, ...ambiente });
   };
@@ -444,6 +472,10 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
     despachar({ type: "REMOVE_AMBIENTE_SE", pavimentoId: pav.id, ambienteId: id });
     if (editAmb?.id === id) setEditAmb(null);
   };
+  // Desvincula um ambiente do Acesso/Saída sem apagar — volta pra "sem
+  // acesso atribuído" (ver AmbienteChip: só ambiente já órfão ganha botão
+  // de exclusão de verdade).
+  const desvincularAmbiente = (id) => despachar({ type: "MOVER_AMBIENTE_ACESSO", pavimentoId: pav.id, ambienteId: id, novoAcessoId: null });
   const renomearAmbiente = (novoNome) => {
     despachar({ type: "UPDATE_AMBIENTE_SE", pavimentoId: pav.id, ambienteId: editAmb.id, changes: { nome: novoNome } });
     setEditAmb((prev) => ({ ...prev, nome: novoNome }));
@@ -517,6 +549,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
                   pavimentoId={pav.id}
                   onEditAmbiente={setEditAmb}
                   onRemoveAmbiente={removerAmbiente}
+                  onDesvincularAmbiente={desvincularAmbiente}
                   onCreateAmbiente={criarAmbiente}
                   colapsados={colapsados}
                   toggleColapsado={toggleColapsado}

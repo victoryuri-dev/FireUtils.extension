@@ -1688,6 +1688,25 @@
   flex-shrink: 0;
 }
 
+/* Indicador de ambiente criado manualmente (não veio do Revit) —
+   ver AmbienteChip em AcessosDescargasView.jsx. */
+.se-badge-manual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.se-badge-manual .icon {
+  width: 11px;
+  height: 11px;
+}
+
 /* Página de Saída de Emergência (SaidaEmergenciaPage.jsx) ------------------- */
 .se-pagina {
   flex: 1;

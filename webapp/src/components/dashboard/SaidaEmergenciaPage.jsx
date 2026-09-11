@@ -48,7 +48,9 @@ function resolverPavimentoSite(nomeImportado, pavimentos) {
 // que soltava (órfão) qualquer ambiente que já estivesse dentro de um
 // Acesso/Saída a cada nova importação. `assentos` não vem do Revit (ver
 // montar_payload_ambientes em Fire Utils.tab/lib/saidas/calc.py):
-// preserva o valor já cadastrado em vez de zerar.
+// preserva o valor já cadastrado em vez de zerar. `origem: "revit"` marca
+// todo ambiente que passa por aqui — distingue do `origem: "manual"` de
+// quem nasce pelo botão "Adicionar Ambiente" (ver AcessosDescargasView.jsx).
 function resolverImportacaoSaidas(payloadSE, pavimentos) {
   if (!payloadSE?.pavimentos) throw new Error('Chave "pavimentos" não encontrada nos dados.');
 
@@ -77,6 +79,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
           popTipo: a.popTipo || "area",
           assentos: a.assentos ?? existente?.assentos ?? 0,
           popManual: a.popManual ?? 0,
+          origem: "revit",
         };
       }),
     });
