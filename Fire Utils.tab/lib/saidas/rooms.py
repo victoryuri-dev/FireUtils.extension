@@ -2,8 +2,6 @@
 # saidas/rooms.py — Fire Utils
 # Funções de coleta de ambientes (Room) do modelo Revit.
 
-import math
-
 from pyrevit import revit, DB, forms, script
 from Autodesk.Revit.DB import Architecture, FilteredElementCollector
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
@@ -90,7 +88,7 @@ def get_rooms_classificados(doc):
                 u"nivel": nivel,
                 u"nome":  p_nome.AsString() if (p_nome and p_nome.HasValue) else u"(sem nome)",
                 u"grupo": grupo,
-                u"area":  float(math.ceil(p_area.AsDouble() * 0.092903)) if p_area else 0.0,
+                u"area":  round(p_area.AsDouble() * 0.092903, 3) if p_area else 0.0,
                 u"pop":   int(p_pop.AsInteger()) if (p_pop and p_pop.HasValue) else 0,
             })
         except Exception:

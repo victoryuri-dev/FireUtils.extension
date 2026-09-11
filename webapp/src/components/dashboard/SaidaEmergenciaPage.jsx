@@ -41,6 +41,14 @@ function resolverPavimentoSite(nomeImportado, pavimentos) {
 // atualizações (pavimentoId -> ambientes já com id) — quem chama decide
 // como aplicar (mesclar via IMPORT_AMBIENTES_SE, não substituir a lista
 // inteira de pavimentos).
+//
+// Ambiente já existente no pavimento (casado pelo NOME, normalizado) é
+// ATUALIZADO no lugar — mantém `id` e `acessoId`, só troca os dados que
+// vêm do Revit (divisão/área/população) — em vez de recriado do zero, o
+// que soltava (órfão) qualquer ambiente que já estivesse dentro de um
+// Acesso/Saída a cada nova importação. `assentos` não vem do Revit (ver
+// montar_payload_ambientes em Fire Utils.tab/lib/saidas/calc.py):
+// preserva o valor já cadastrado em vez de zerar.
 function resolverImportacaoSaidas(payloadSE, pavimentos) {
   if (!payloadSE?.pavimentos) throw new Error('Chave "pavimentos" não encontrada nos dados.');
 
@@ -54,17 +62,23 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
       erros.push(`"${nomeImportado}": nenhum pavimento correspondente encontrado no projeto.`);
       return;
     }
+    const existentesPorNome = new Map((pavSite.ambientes || []).map((a) => [norm(a.nome), a]));
     atualizacoes.push({
       pavimentoId: pavSite.id,
-      ambientes: (p.ambientes || []).map((a, ai) => ({
-        id: idAmbienteSE(),
-        nome: a.nome || `Ambiente ${ai + 1}`,
-        divisao: a.divisao || "",
-        area: a.area ?? 0,
-        popTipo: a.popTipo || "area",
-        assentos: a.assentos ?? 0,
-        popManual: a.popManual ?? 0,
-      })),
+      ambientes: (p.ambientes || []).map((a, ai) => {
+        const nome = a.nome || `Ambiente ${ai + 1}`;
+        const existente = existentesPorNome.get(norm(nome));
+        return {
+          id: existente?.id ?? idAmbienteSE(),
+          acessoId: existente?.acessoId ?? null,
+          nome,
+          divisao: a.divisao || "",
+          area: a.area ?? 0,
+          popTipo: a.popTipo || "area",
+          assentos: a.assentos ?? existente?.assentos ?? 0,
+          popManual: a.popManual ?? 0,
+        };
+      }),
     });
   });
 
