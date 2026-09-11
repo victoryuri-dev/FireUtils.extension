@@ -56,14 +56,20 @@ def montar_payload_ambientes(rooms_data, estado):
     pavimentos = []
     for nivel in ordem:
         ambientes = []
-        for r in by_nivel[nivel]:
+        for i, r in enumerate(by_nivel[nivel]):
+            # Prefixo numérico ("00 - Sala") pra desambiguar ambientes com o
+            # mesmo nome no Revit (comum — vários "Sala", "WC" etc. no mesmo
+            # nível) — sem isso, resolverImportacaoSaidas no site/dockpane
+            # (que casa ambiente importado com o já cadastrado PELO NOME) não
+            # consegue distinguir dois ambientes homônimos.
+            nome = u"{:02d} - {}".format(i, r[u"nome"])
             divisao = r[u"grupo"]
             taxa_a  = tabela.get(divisao, {}).get(u"A")
             if taxa_a is not None and float(taxa_a) > 0:
-                ambientes.append({u"nome": r[u"nome"], u"divisao": divisao,
+                ambientes.append({u"nome": nome, u"divisao": divisao,
                                    u"area": r[u"area"], u"popTipo": u"area"})
             else:
-                ambientes.append({u"nome": r[u"nome"], u"divisao": divisao,
+                ambientes.append({u"nome": nome, u"divisao": divisao,
                                    u"area": r[u"area"], u"popTipo": u"manual",
                                    u"popManual": r[u"pop"]})
         pavimentos.append({u"nome": nivel, u"ambientes": ambientes})
