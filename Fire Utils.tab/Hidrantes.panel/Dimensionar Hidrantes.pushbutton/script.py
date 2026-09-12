@@ -49,7 +49,7 @@ except ImportError:
 
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
-    calcular_rede, calc_potencia, extrair_trecho, salvar_cache, carregar_cache,
+    calcular_rede, extrair_trecho, salvar_cache, carregar_cache,
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
     COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
@@ -631,58 +631,22 @@ _para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)"
 _para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)",
                      comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
 
-# --- Etapa 6: eficiência e potência da bomba ---
-eta_str = forms.ask_for_string(
-    default="60",
-    prompt=u"Eficiência global da bomba (%)\nEx: 60",
-    title=u"Fire Utils — Eficiência"
-)
-if not eta_str:
-    output.print_md(u"Cancelado."); script.exit()
-try:
-    eta = float(eta_str.replace(",", "."))
-    if not (0 < eta <= 100): raise ValueError
-except ValueError:
-    forms.alert(u"Valor inválido.", title="Fire Utils", warn_icon=True)
-    script.exit()
-
-eta_dec = eta / 100.0
-pot_cv  = calc_potencia(res["Qt"] / 60000.0, res["P_RTI"], eta_dec)
-pot_kw  = pot_cv / 1.36
-
-# Potência adotada para a bomba do projeto — digitada pelo usuário (não é
-# calculada): a mínima acima é só a referência mostrada no prompt. Cancelar
-# ou deixar em branco segue o dimensionamento só com a potência mínima.
-pot_escolhida_str = forms.ask_for_string(
-    default=u"{:.2f}".format(pot_cv),
-    prompt=u"Potência adotada (cv)\nPotência mínima calculada: {:.2f} cv".format(pot_cv),
-    title=u"Fire Utils — Potência Adotada"
-)
-pot_escolhida_cv = None
-pot_escolhida_kw = None
-if pot_escolhida_str:
-    try:
-        pot_escolhida_cv = float(pot_escolhida_str.replace(",", "."))
-        if pot_escolhida_cv <= 0: raise ValueError
-        pot_escolhida_kw = pot_escolhida_cv / 1.36
-    except ValueError:
-        forms.alert(u"Potência adotada inválida — seguindo só com a potência "
-                    u"mínima calculada.", title="Fire Utils", warn_icon=True)
-        pot_escolhida_cv = None
-
 # ===========================================================================
-# Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
+# Etapa 6 — Verificações e resultados finais (resumo; o passo a passo
 # completo agora é o botão separado "Memorial de Cálculo")
 # ===========================================================================
+# Eficiência e potência da bomba não são mais calculadas aqui — o site
+# (ETOS.FireUtils) passou a fazer esse dimensionamento a partir de Qt/Ht
+# (ver HidrantesPage.jsx), já que não depende de nenhum dado exclusivo do
+# modelo Revit.
 mostrar_resultado_ok(
     res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
-    Pmin, Qs_lmin, eta, pot_cv, pot_kw,
-    pot_escolhida_cv=pot_escolhida_cv, pot_escolhida_kw=pot_escolhida_kw,
+    Pmin, Qs_lmin,
     comprimento_min_velocidade=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
 
-# --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
+# --- Etapa 7: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
 import datetime
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 payload_hid = {
@@ -699,11 +663,6 @@ payload_hid = {
     "j_succao_npsh": j_succao_npsh,
     "C_HW":          C_HW,
     "uf":            perfil.get(u"_uf_efetiva"),
-    "eta":              eta,
-    "pot_cv":           pot_cv,
-    "pot_kw":           pot_kw,
-    "pot_escolhida_cv": pot_escolhida_cv,
-    "pot_escolhida_kw": pot_escolhida_kw,
     "timestamp":     timestamp,
     "_nome_projeto": doc.Title,
 }

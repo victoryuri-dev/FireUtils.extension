@@ -276,18 +276,17 @@ class _JanelaResultado(forms.WPFWindow):
 def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                           v_max_tubo, v_max_succao, p_ref_desc,
                           p_hd01_ref, p_hd02_ref, Pmin, Qs_lmin,
-                          eta, pot_cv, pot_kw,
-                          pot_escolhida_cv=None, pot_escolhida_kw=None,
                           comprimento_min_velocidade=None):
     """
     Resumo final mostrado ao término de "Dimensionar Hidrantes": só
     verificações e resultados finais (velocidade nos quatro trechos —
     sucção, recalque e os dois ramais até os hidrantes —,
     pressão/vazão nos hidrantes mais desfavoráveis e no Ponto A, diferença
-    de pressão entre os ramais após o equilíbrio, demanda do sistema e
-    requisitos da bomba) — não o passo a passo completo, que é o botão
-    "Memorial de Cálculo". Só é chamada depois que todas as verificações
-    normativas passaram.
+    de pressão entre os ramais após o equilíbrio e demanda do sistema) —
+    não o passo a passo completo, que é o botão "Memorial de Cálculo". Só
+    é chamada depois que todas as verificações normativas passaram.
+    Eficiência e potência da bomba não entram mais aqui — o site
+    (ETOS.FireUtils) faz esse dimensionamento a partir de Qt/Ht.
 
     comprimento_min_velocidade (m), quando informado: sub-trechos de
     sucção/recalque mais curtos que isso (ex.: redução na entrada/saída
@@ -352,23 +351,8 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                     u"**{}**".format(_mca(res["P_RTI"]))]],
                   alinhas=[u"left", u"left"])
 
-    janela.secao(u"5. Requisitos da Bomba de Recalque")
-    linhas_bomba = [
-        [u"Vazão de projeto (Qt)", u"{:.2f} L/min = {:.2f} m³/h".format(
-            res["Qt"], res["Qt"] * 60.0 / 1000.0), u"—"],
-        [u"Altura manométrica (Ht)", _mca(res["P_RTI"]), u"—"],
-        [u"Eficiência global (η)", u"{:.0f}%".format(eta), u"—"],
-        [u"Potência mínima calculada", u"**{:.2f} cv = {:.2f} kW**".format(pot_cv, pot_kw), u"—"],
-    ]
-    if pot_escolhida_cv is not None:
-        atende = pot_escolhida_cv >= pot_cv - 1e-6
-        linhas_bomba.append(
-            [u"Potência adotada",
-             u"**{:.2f} cv = {:.2f} kW**".format(pot_escolhida_cv, pot_escolhida_kw),
-             _pill(atende)])
-    janela.tabela([u"Parâmetro", u"Valor", u"Verificação"], linhas_bomba,
-                  alinhas=[u"left", u"left", u"left"])
-
+    janela.paragrafo(u"Eficiência e potência da bomba são dimensionadas no site, a "
+                     u"partir de Qt/Ht acima.")
     janela.paragrafo(u"Para o memorial de cálculo completo (passo a passo), "
                      u"execute \"Memorial de Cálculo\".")
 

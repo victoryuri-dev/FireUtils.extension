@@ -46,7 +46,6 @@ caminho = gerar_memorial_calculo(
     payload.get(u"verif_npshd"), payload.get(u"erro_npshd"),
     payload.get(u"j_succao_npsh"),
     Qs_lmin, Pmin, payload[u"C_HW"],
-    payload[u"eta"], payload[u"pot_cv"], payload[u"pot_kw"],
     payload.get(u"timestamp") or u"", perfil,
     projeto_dir=projeto_dir,
     nome_projeto=payload.get(u"_nome_projeto") or doc.Title,

@@ -183,11 +183,6 @@ def calc_velocidade(q_lmin, d_mm):
     return 21.22 * float(q_lmin) / (float(d_mm) ** 2)
 
 
-def calc_potencia(qt_m3s, ht_mca, eta_decimal):
-    """Potência mínima da bomba em cv: P_cv = (1000·Q·Ht)/(75·η)."""
-    return (1000.0 * qt_m3s * ht_mca) / (75.0 * eta_decimal)
-
-
 # ===========================================================================
 # ESGUICHO → MANGUEIRA → VÁLVULA (método "Ponta do Esguicho Regulável")
 # ===========================================================================

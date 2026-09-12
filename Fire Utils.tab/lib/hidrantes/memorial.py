@@ -494,7 +494,7 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
                      cotas, succao, verif_succao,
                      verif_npshd, erro_npshd, j_succao_npsh,
                      Qs_lmin, Pmin, C_HW,
-                     eta, pot_cv, pot_kw, timestamp, perfil):
+                     timestamp, perfil):
     norma           = req(perfil, u"norma")
     hidr_simult     = req(perfil, u"hidrantes_simultaneos")
     v_max_tubo      = req(perfil, u"v_max_tubulacao")
@@ -1059,28 +1059,8 @@ def _montar_memorial(res, dados_sistema, valor_sistema,
     output.print_md(u"")
     output.print_md(u"Altura manométrica total (HMT): **{:.4f} mca**".format(res["P_RTI"]))
     output.print_md(u"")
-
-    # ── Bomba ─────────────────────────────────────────────────────────────
-    sec(u"Dimensionamento da Bomba de Recalque")
-    Qt_m3s  = res["Qt"] / 60000.0
-    eta_dec = eta / 100.0
-    _formula_frac(u"P_cv", u"1000 × Qt × Ht", u"75 × η",
-                 definicoes=[(u"Qt", u"Vazão total de projeto, em m³/s"),
-                            (u"Ht", u"Altura manométrica total, em mca (Ht = HMT = P_RTI)"),
-                            (u"η", u"Eficiência global da bomba")])
-    _tabela([u"Parâmetro", u"Símbolo", u"Valor"],
-            [[u"Vazão total de projeto", u"Qt",
-              u"**{:.2f} L/min = {:.6f} m³/s = {:.4f} m³/h**".format(
-                  res["Qt"], Qt_m3s, res["Qt"] * 60.0 / 1000.0)],
-             [u"Altura manométrica (demanda)", u"Ht = HMT",
-              u"**{:.4f} mca**".format(res["P_RTI"])],
-             [u"Eficiência global", u"η",
-              u"**{:.0f}% = {:.2f}**".format(eta, eta_dec)]],
-            alinhas=[u"left", u"left", u"left"])
-    output.print_md(u"P_cv = (1000 × {:.6f} × {:.4f}) / (75 × {:.2f}) = {:.4f} / {:.4f}".format(
-        Qt_m3s, res["P_RTI"], eta_dec,
-        1000.0 * Qt_m3s * res["P_RTI"], 75.0 * eta_dec))
-    output.print_md(u"**P_cv = {:.2f} cv  →  {:.2f} kW**".format(pot_cv, pot_kw))
+    output.print_md(u"_Eficiência e potência da bomba são dimensionadas no site "
+                    u"(ETOS.FireUtils), a partir de Qt/Ht acima._")
     output.print_md(u"")
 
 
@@ -1125,7 +1105,7 @@ def gerar_memorial_calculo(res, dados_sistema, valor_sistema,
                            cotas, succao, verif_succao,
                            verif_npshd, erro_npshd, j_succao_npsh,
                            Qs_lmin, Pmin, C_HW,
-                           eta, pot_cv, pot_kw, timestamp, perfil,
+                           timestamp, perfil,
                            projeto_dir, nome_projeto=None):
     """
     Monta o memorial e grava como arquivo .html na pasta do projeto,
@@ -1141,7 +1121,7 @@ def gerar_memorial_calculo(res, dados_sistema, valor_sistema,
                          cotas, succao, verif_succao,
                          verif_npshd, erro_npshd, j_succao_npsh,
                          Qs_lmin, Pmin, C_HW,
-                         eta, pot_cv, pot_kw, timestamp, perfil)
+                         timestamp, perfil)
     finally:
         output = None
 
