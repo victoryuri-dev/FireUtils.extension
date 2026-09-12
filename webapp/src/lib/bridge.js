@@ -78,7 +78,7 @@
  *     Python -> JS: resposta de GET_DIMENSIONAMENTOS_STATUS.
  *
  *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number,
- *     metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
+ *     rti?: number, metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
  *     JS -> Python: manda o Tipo de sistema de hidrantes/mangotinhos que o
  *     ETOS.FireUtils classificou (Tabela 3 da norma, a partir de área +
  *     ocupação + carga de incêndio do projeto — ver
@@ -88,12 +88,43 @@
  *     parâmetros da Tabela 2 (esguicho, mangueira, vazão/pressão mínima)
  *     continuam vindo do perfil normativo do próprio plugin, nunca do
  *     site. O extinto pushbutton "Classificar Sistema de Hidrante" foi
- *     removido do plugin — método de cálculo e os dados de sucção
- *     (altitude/temperatura, usados no NPSH disponível) que ele coletava
- *     agora vêm daqui também, do state.hidrantes do site.
+ *     removido do plugin — RTI (Tabela 3), método de cálculo e os dados
+ *     de sucção (altitude/temperatura, usados no NPSH disponível) que ele
+ *     coletava agora vêm daqui também, do state.hidrantes do site.
  *
  *   { type: "HIDRANTES_CLASSIFICACAO_SAVED", payload: { ok, erro?, valorSistema?, metodoCalculo? } }
  *     Python -> JS: resultado de um SET_HIDRANTES_CLASSIFICACAO.
+ *
+ *   { type: "GET_HIDRANTES_DIMENSIONAMENTO" }
+ *     JS -> Python: pede, pra página "Sistema de Hidrantes" (ver
+ *     components/dashboard/SistemaHidrantesPage.jsx), o sistema classificado
+ *     que está de fato aplicado no Revit (Project Information, resolvido
+ *     pelo perfil normativo — pode divergir do que está pendente no site
+ *     se "Aplicar classificação no Revit" ainda não foi clicado depois de
+ *     uma mudança), o ponto de operação do último "Dimensionar Hidrantes"
+ *     (cache local) e a eficiência da bomba já salva, se houver.
+ *
+ *   { type: "HIDRANTES_DIMENSIONAMENTO", payload: { ok, erro?,
+ *     classificacao?: { tipo, variante_idx, descricao, esguicho_dn, mang_dn,
+ *       mang_comp, expedicoes, q_min, p_min, rti, valorSistema },
+ *     pontoOperacao?: { qt, ht, pHd01, pHd02, qHd01, qHd02, hidGoverna, timestamp } | null,
+ *     erroDimensionamento?: string | null,
+ *     bombaEficiencia?: number | null } }
+ *     Python -> JS: resposta de GET_HIDRANTES_DIMENSIONAMENTO. `ht` é a
+ *     altura manométrica total que a bomba precisa desenvolver (P_RTI do
+ *     motor de cálculo — pressão que precisaria existir na RTI, referência
+ *     atmosférica, pra alimentar o sistema por gravidade; já inclui sucção
+ *     e recalque). `pontoOperacao` vem null quando "Dimensionar Hidrantes"
+ *     ainda não rodou nesta sessão do projeto (ver erroDimensionamento).
+ *
+ *   { type: "SET_HIDRANTES_EFICIENCIA_BOMBA", payload: { eficiencia: number } }
+ *     JS -> Python: salva a eficiência global (%) da bomba de incêndio
+ *     informada na página "Sistema de Hidrantes", persistida em Project
+ *     Information pra sobreviver fechar/reabrir o Revit. A potência em si
+ *     é calculada aqui no React (lib/hidrantesCalc.js), nunca no Python.
+ *
+ *   { type: "HIDRANTES_EFICIENCIA_SAVED", payload: { ok, erro?, eficiencia? } }
+ *     Python -> JS: resultado de um SET_HIDRANTES_EFICIENCIA_BOMBA.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -107,6 +138,10 @@ export const BridgeMessageTypes = {
   DIMENSIONAMENTOS_STATUS: "DIMENSIONAMENTOS_STATUS",
   SET_HIDRANTES_CLASSIFICACAO: "SET_HIDRANTES_CLASSIFICACAO",
   HIDRANTES_CLASSIFICACAO_SAVED: "HIDRANTES_CLASSIFICACAO_SAVED",
+  GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
+  HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
+  SET_HIDRANTES_EFICIENCIA_BOMBA: "SET_HIDRANTES_EFICIENCIA_BOMBA",
+  HIDRANTES_EFICIENCIA_SAVED: "HIDRANTES_EFICIENCIA_SAVED",
 };
 
 function obterWebView() {

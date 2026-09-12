@@ -10,14 +10,13 @@ import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import configuracoesIconSvg from "../assets/icons/config-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
 
-// Hidrantes ainda não tem aba própria na dockpane — aparece desabilitado,
-// preparando o espaço pra quando (se) migrar pra cá. Saídas de Emergência
-// já é uma página própria (ver App.jsx/SaidaEmergenciaPage.jsx) — mesmo
-// atalho que o cartão de dimensionamento dentro do Dashboard.
+// Sistema de Hidrantes e Saídas de Emergência são páginas próprias (ver
+// App.jsx/SistemaHidrantesPage.jsx/SaidaEmergenciaPage.jsx) — mesmo atalho
+// que o respectivo cartão de dimensionamento dentro do Dashboard.
 const ITENS_NAV = [
   { id: "biblioteca", label: "Biblioteca de Famílias", svg: libraryIconSvg },
   { id: "dashboard", label: "Dashboard", svg: dashboardIconSvg },
-  { id: "hidrantes", label: "Hidrantes (em breve)", svg: hydrantIconSvg, disabled: true },
+  { id: "hidrantes", label: "Sistema de Hidrantes", svg: hydrantIconSvg },
   { id: "saidas", label: "Saídas de Emergência", svg: exitIconSvg },
 ];
 

@@ -1933,3 +1933,42 @@
   color: var(--amber);
   margin-top: 2px;
 }
+
+/* Página "Sistema de Hidrantes" (SistemaHidrantesPage.jsx) --------------- */
+.hid-secao {
+  margin-bottom: 20px;
+}
+
+.hid-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.hid-eficiencia-linha {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.hid-eficiencia-input {
+  max-width: 140px;
+}
+
+.hid-salvando {
+  font-size: 11px;
+  color: var(--text-3);
+  padding-bottom: 8px;
+}
+
+.hid-aviso {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 10px;
+}

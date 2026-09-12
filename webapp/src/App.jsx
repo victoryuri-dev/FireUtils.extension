@@ -307,22 +307,24 @@ export default function App() {
       />
 
       <div className="app">
-        {abaAtual === "dashboard" || abaAtual === "saidas" ? (
+        {abaAtual === "dashboard" || abaAtual === "saidas" || abaAtual === "hidrantes" ? (
           // Sem <header> genérico aqui de propósito: cada tela do Dashboard
           // (ConectarProjeto/SelecionarEstrutura/DashboardEstrutura) já
           // mostra o próprio título ("Conectar um projeto", nome do
           // projeto...) — um "Dashboard" fixo por cima ficaria redundante
           // e nunca bateria com o passo atual do fluxo. `modo` decide, uma
           // vez que a estrutura já está carregada, se DashboardEstrutura
-          // mostra o dashboard normal ou a página de Saída de Emergência
-          // (mesmo destino do atalho da sidebar e do cartão de
-          // dimensionamento) — ver DashboardEstrutura.jsx.
+          // mostra o dashboard normal ou uma das páginas próprias (Saída
+          // de Emergência / Sistema de Hidrantes — mesmo destino do
+          // atalho da sidebar e do respectivo cartão de dimensionamento)
+          // — ver DashboardEstrutura.jsx.
           <Dashboard
             vinculo={vinculo}
             dimensionamentos={dimensionamentos}
             adicionarToast={adicionarToast}
             modo={abaAtual}
             onAbrirSaidaEmergencia={() => setAbaAtual("saidas")}
+            onAbrirHidrantes={() => setAbaAtual("hidrantes")}
           />
         ) : (
           <>
