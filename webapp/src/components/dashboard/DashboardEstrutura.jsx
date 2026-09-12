@@ -1,10 +1,57 @@
+import { useState } from "react";
 import ProjetoCabecalho from "./ProjetoCabecalho";
 import SaidaEmergenciaPage from "./SaidaEmergenciaPage";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
+import { dadosHidrantes } from "../../lib/projetoDados";
+import { postToHost, BridgeMessageTypes } from "../../lib/bridge";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
+
+function CartaoClassificacaoHidrantes({ hidrantes }) {
+  const [enviando, setEnviando] = useState(false);
+
+  if (hidrantes.tipo == null) {
+    return (
+      <div className="cartao-info">
+        <h3>Sistema de Hidrantes</h3>
+        <p className="vazio">Classificação ainda não definida no site.</p>
+      </div>
+    );
+  }
+
+  function aplicar() {
+    setEnviando(true);
+    postToHost(BridgeMessageTypes.SET_HIDRANTES_CLASSIFICACAO, {
+      tipo: hidrantes.tipo,
+      tipoVariante: hidrantes.tipoVariante,
+    });
+    // Sem callback de conclusão aqui — o toast de sucesso/erro (App.jsx,
+    // HIDRANTES_CLASSIFICACAO_SAVED) já avisa o usuário; solta o botão logo
+    // em seguida pra permitir reenvio caso a primeira tentativa falhe.
+    setTimeout(() => setEnviando(false), 1500);
+  }
+
+  return (
+    <div className="cartao-info">
+      <h3>Sistema de Hidrantes</h3>
+      <dl>
+        <div>
+          <dt>Tipo:</dt>
+          <dd>{hidrantes.tipo}</dd>
+        </div>
+        <div>
+          <dt>RTI:</dt>
+          <dd>{hidrantes.rti != null ? `${hidrantes.rti} m³` : "—"}</dd>
+        </div>
+      </dl>
+      <button type="button" className="botao" onClick={aplicar} disabled={enviando}>
+        {enviando ? "Aplicando..." : "Aplicar classificação no Revit"}
+      </button>
+    </div>
+  );
+}
 
 function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick }) {
   const Tag = onClick ? "button" : "div";
@@ -96,6 +143,8 @@ export default function DashboardEstrutura({
             </div>
           </dl>
         </div>
+
+        <CartaoClassificacaoHidrantes hidrantes={dadosHidrantes(projeto)}/>
       </div>
 
       <p className="dashboard-subtitulo">Dimensionamentos</p>

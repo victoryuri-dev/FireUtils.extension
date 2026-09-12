@@ -85,6 +85,20 @@ export function sistemasAtivos(linha, estruturaId) {
   };
 }
 
+/** Classificação do Sistema de Hidrantes/Mangotinhos (Tabela 3 da norma) —
+ * decidida no site a partir da área + ocupação + carga de incêndio do
+ * projeto inteiro (não por estrutura — ver comentário de state.hidrantes
+ * em ETOS.FireUtils/src/context/ProjetoContext.jsx). `tipo` null quando o
+ * RT ainda não classificou nada no site. */
+export function dadosHidrantes(linha) {
+  const h = (linha.dados && linha.dados.hidrantes) || {};
+  return {
+    tipo: typeof h.tipo === "number" ? h.tipo : null,
+    tipoVariante: typeof h.tipoVariante === "number" ? h.tipoVariante : 0,
+    rti: paraNumero(h.rti),
+  };
+}
+
 /** Dados completos de uma estrutura específica pro dashboard. */
 export function dashboardEstrutura(linha, estruturaId) {
   const dados = linha.dados || {};

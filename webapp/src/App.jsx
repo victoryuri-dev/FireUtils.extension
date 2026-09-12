@@ -137,6 +137,16 @@ export default function App() {
         return;
       }
 
+      if (mensagem.type === BridgeMessageTypes.HIDRANTES_CLASSIFICACAO_SAVED) {
+        const { ok, erro, valorSistema } = mensagem.payload || {};
+        adicionarToast(
+          ok
+            ? { tipo: "sucesso", titulo: "Classificação aplicada", mensagem: valorSistema, duracaoMs: 6000 }
+            : { tipo: "erro", titulo: "Não foi possível aplicar a classificação", mensagem: erro, duracaoMs: 9000 }
+        );
+        return;
+      }
+
       if (mensagem.type !== BridgeMessageTypes.LOAD_RESULT) return;
 
       const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};
