@@ -3,23 +3,25 @@ __title__ = "Sincronizar\nAmbientes"
 __doc__ = (
     u"Sincroniza os ambientes deste projeto com o site nos dois sentidos, "
     u"num único clique:\n\n"
-    u"1. Puxa do site o nome atual de cada ambiente (casado por "
-    u"Room.UniqueId) e reaplica no parâmetro Nome do Room aqui, se tiver "
-    u"sido alterado por lá.\n"
-    u"2. Reaplica a taxa normativa ATUAL na População/Taxa Populacional "
-    u"de todos os ambientes já classificados (Grupo já preenchido).\n"
-    u"3. Envia o resultado (nomes/área/população atualizados) de volta "
-    u"pro site.\n\n"
-    u"Use depois de renomear um ambiente no site, mudar a UF/norma do "
-    u"projeto, editar a área de algum Room, ou sempre que quiser garantir "
-    u"que Revit e site estão com os mesmos dados."
+    u"1. Envia pro site o Nome/Grupo/Área atuais de cada ambiente já "
+    u"classificado (casado por Room.UniqueId) — Revit é quem manda nesses "
+    u"campos.\n"
+    u"2. Puxa de volta do site a População e a Taxa Populacional já "
+    u"calculadas por lá (área x taxa normativa vigente, ou o valor "
+    u"manual/assento fixo cadastrado na tela de Acessos e Descargas) e "
+    u"grava nos parâmetros do Room correspondente — o site é quem manda "
+    u"nesses campos.\n\n"
+    u"Use depois de editar um ambiente aqui (nome, classificação, área) "
+    u"ou lá no site (população manual, assentos fixos, taxa normativa), "
+    u"ou sempre que quiser garantir que Revit e site estão com os mesmos "
+    u"dados."
 )
 
 from pyrevit import revit, script, forms
 from projeto import exigir_projeto_e_estado
 from saidas.calc       import sincronizar_ambientes
-from saidas.populacao  import garantir_parametros, recalcular_populacao, puxar_nomes_do_site
-from saidas.rooms      import get_rooms_com_grupo, get_rooms_classificados
+from saidas.populacao  import garantir_parametros, puxar_populacao_do_site
+from saidas.rooms      import get_rooms_classificados
 
 doc = revit.doc
 
@@ -29,35 +31,21 @@ if not garantir_parametros():
 
 projeto_dir, sigla_estado, estado = exigir_projeto_e_estado(doc, forms, script)
 
-# 1) Site -> Revit: nomes editados no site entram primeiro, pra já saírem
-#    corretos no payload que o passo 3 envia de volta.
-renomeados, nao_encontrados, erro_nomes = puxar_nomes_do_site(doc, projeto_dir)
-
-# 2) Reaplica a taxa normativa atual nos ambientes já classificados.
-rooms = get_rooms_com_grupo(doc)
-if rooms:
-    atualizados, sem_taxa = recalcular_populacao(rooms, estado)
-else:
-    atualizados, sem_taxa = 0, 0
-
-# 3) Revit -> Site: envia nomes/área/população já atualizados.
+# 1) Revit -> Site: envia nome/grupo/área atuais.
 sincronizar_ambientes(get_rooms_classificados(doc), estado, projeto_dir)
 
-mensagem = u"{} ambiente(s) com população recalculada.".format(atualizados)
-if renomeados:
-    mensagem += u"\n{} nome(s) atualizado(s) a partir do site.".format(renomeados)
-if sem_taxa:
-    mensagem += (
-        u"\n{} ambiente(s) com Grupo que não existe mais na norma atual "
-        u"— não foram alterados.".format(sem_taxa)
-    )
-if nao_encontrados:
-    mensagem += (
-        u"\n{} ambiente(s) do site não encontrados neste modelo "
-        u"(Room pode ter sido apagado ou está em outro arquivo)."
-        .format(nao_encontrados)
-    )
-if erro_nomes:
-    mensagem += u"\n[Nomes do site não sincronizados: {}]".format(erro_nomes)
+# 2) Site -> Revit: puxa população/taxa populacional já calculadas lá.
+atualizados, nao_encontrados, erro_pop = puxar_populacao_do_site(doc, projeto_dir)
+
+if erro_pop:
+    mensagem = u"Ambientes enviados pro site.\n[População não sincronizada: {}]".format(erro_pop)
+else:
+    mensagem = u"{} ambiente(s) com população atualizada a partir do site.".format(atualizados)
+    if nao_encontrados:
+        mensagem += (
+            u"\n{} ambiente(s) do site não encontrados neste modelo "
+            u"(Room pode ter sido apagado ou está em outro arquivo)."
+            .format(nao_encontrados)
+        )
 
 forms.alert(mensagem, title=u"Sincronizar Ambientes")

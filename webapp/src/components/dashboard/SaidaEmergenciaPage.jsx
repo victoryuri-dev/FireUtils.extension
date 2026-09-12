@@ -43,18 +43,23 @@ function resolverPavimentoSite(nomeImportado, pavimentos) {
 // inteira de pavimentos).
 //
 // Ambiente já existente no pavimento é ATUALIZADO no lugar — mantém `id` e
-// `acessoId`, só troca os dados que vêm do Revit (nome/divisão/área/
-// população) — em vez de recriado do zero, o que soltava (órfão) qualquer
+// `acessoId`, só troca os dados que são autoridade do Revit (nome/divisão/
+// área) — em vez de recriado do zero, o que soltava (órfão) qualquer
 // ambiente que já estivesse dentro de um Acesso/Saída a cada nova
 // importação. Casamento é primeiro por `revitId` (Room.UniqueId, ver
 // rooms.get_rooms_classificados no plugin) — estável mesmo se o ambiente
 // for renomeado numa reclassificação ou tiver só a área editada — com
 // fallback pro NOME normalizado só pra ambiente sincronizado antes dessa
-// mudança (ainda sem revitId salvo). `assentos` não vem do Revit (ver
-// montar_payload_ambientes em Fire Utils.tab/lib/saidas/calc.py): preserva
-// o valor já cadastrado em vez de zerar. `origem: "revit"` marca todo
-// ambiente que passa por aqui — distingue do `origem: "manual"` de quem
-// nasce pelo botão "Adicionar Ambiente" (ver AcessosDescargasView.jsx).
+// mudança (ainda sem revitId salvo). `popTipo`/`assentos`/`popManual` NÃO
+// vêm mais do Revit (ver montar_payload_ambientes em
+// Fire Utils.tab/lib/saidas/calc.py) — população é autoridade do site (é
+// lá que se escolhe "assento fixo"/manual e mora a taxa normativa vigente;
+// ver site-sync ação populacao_ambientes, que devolve o cálculo pro
+// plugin aplicar de volta no Room) — por isso esses três campos sempre
+// preservam o valor já cadastrado, nunca são sobrescritos por uma
+// importação do Revit. `origem: "revit"` marca todo ambiente que passa
+// por aqui — distingue do `origem: "manual"` de quem nasce pelo botão
+// "Adicionar Ambiente" (ver AcessosDescargasView.jsx).
 function resolverImportacaoSaidas(payloadSE, pavimentos) {
   if (!payloadSE?.pavimentos) throw new Error('Chave "pavimentos" não encontrada nos dados.');
 
@@ -81,9 +86,9 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
           nome,
           divisao: a.divisao || "",
           area: a.area ?? 0,
-          popTipo: a.popTipo || "area",
-          assentos: a.assentos ?? existente?.assentos ?? 0,
-          popManual: a.popManual ?? 0,
+          popTipo: existente?.popTipo || "area",
+          assentos: existente?.assentos ?? 0,
+          popManual: existente?.popManual ?? 0,
           revitId: a.revitId ?? existente?.revitId ?? null,
           origem: "revit",
         };

@@ -202,104 +202,41 @@ def set_occupancy(rooms, occupancy_value, estado):
 
 
 # ============================================================
-# RECÁLCULO — reaplica a taxa normativa ATUAL sem reclassificar
+# PUXAR POPULAÇÃO DO SITE — caminho Site → Revit
 # ============================================================
-# set_occupancy grava a população usando a taxa vigente NO MOMENTO da
-# classificação — se a norma/UF do projeto mudar depois (ou a tabela da
-# norma for atualizada), os ambientes já classificados ficam com o valor
-# antigo até alguém rodar esse recálculo. Ao contrário de set_occupancy,
-# não mexe no Nome (cada ambiente já tem seu Grupo próprio, não um único
-# `occupancy_value` compartilhado) — só atualiza Taxa Populacional e
-# População com a taxa atual da tabela do `estado` pro Grupo já gravado
-# em cada Room.
-def recalcular_populacao(rooms, estado):
-    """Reaplica a taxa normativa atual (estado['tabela']) na População e
-    Taxa Populacional dos ambientes já classificados (Grupo já gravado),
-    sem alterar Nome/Grupo. Retorna (atualizados, sem_taxa) — contagens.
-
-    Ocupação sem taxa por área (entry['A'] é None — vagas, leitos, assento
-    fixo etc.) não tem o que recalcular: a População desses ambientes é
-    sempre digitada manualmente, então o parâmetro é deixado como está —
-    zerar ele aqui apagaria qualquer valor que o usuário já tenha
-    informado à mão."""
-    if not estado or u"tabela" not in estado:
-        print(u"recalcular_populacao: estado com 'tabela' é obrigatório.")
-        return 0, 0
-
-    tabela = estado[u"tabela"]
-    atualizados = 0
-    sem_taxa = 0
-
-    with revit.Transaction(u"Recalcular População"):
-        for room in rooms:
-            param_ocup = room.LookupParameter(u"Grupo")
-            grupo = param_ocup.AsString() if (param_ocup and param_ocup.HasValue) else None
-            if not grupo:
-                continue
-
-            entry = tabela.get(grupo)
-            if not entry:
-                # Código não existe mais na tabela atual (norma mudou de
-                # esquema) — não dá pra recalcular, avisa e segue.
-                sem_taxa += 1
-                nome_room = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME).AsString() or u""
-                print(u"  [SEM TAXA] '{}': grupo '{}' não encontrado na norma atual.".format(nome_room, grupo))
-                continue
-
-            taxa_a   = entry.get(u"A")
-            taxa_obs = entry.get(u"obs", u"")
-
-            param_taxa = room.LookupParameter(u"Taxa Populacional")
-            if param_taxa:
-                param_taxa.Set(taxa_obs)
-
-            if taxa_a and taxa_a > 0:
-                area = math.ceil(
-                    room.get_Parameter(DB.BuiltInParameter.ROOM_AREA).AsDouble() * 0.092903
-                )
-                param_pop = room.LookupParameter(u"População")
-                if param_pop:
-                    param_pop.Set(int(population_calc(area, float(taxa_a))))
-            # taxa_a None: população é manual — não mexe no parâmetro.
-
-            atualizados += 1
-
-    return atualizados, sem_taxa
-
-
-# ============================================================
-# PUXAR NOMES DO SITE — caminho Site → Revit
-# ============================================================
-# recalcular_populacao (e a sincronização ao final de qualquer classificação
-# — ver saidas.calc.sincronizar_ambientes) cobrem o caminho Revit → Site:
-# renomeou o Room no Revit, o próximo sync já leva o nome novo pro site,
-# casando por revitId. Esta função cobre o caminho inverso: renomeou o
-# ambiente no site, reaplica esse nome no parâmetro Nome do Room aqui,
-# casando pelo mesmo revitId (Room.UniqueId).
-def puxar_nomes_do_site(doc, projeto_dir):
-    """Busca em site-sync (ação 'nomes_ambientes') o nome atual de cada
-    ambiente da estrutura vinculada e reaplica no parâmetro Nome do Room
-    correspondente (casado por revitId/UniqueId — doc.GetElement aceita o
-    UniqueId direto). Retorna (atualizados, nao_encontrados, erro): `erro`
-    é uma mensagem pronta pra mostrar ao usuário (None em caso de
-    sucesso); os contadores só fazem sentido quando `erro` é None."""
+# Nome/Grupo/Área são autoridade do Revit — vão pro site a cada
+# classificação/sincronização (ver saidas.calc.sincronizar_ambientes,
+# caminho Revit → Site). População/Taxa Populacional viraram autoridade do
+# SITE: é lá que fica o popTipo de cada ambiente (por área, manual ou
+# assento fixo — esse último só existe como número digitado na tela de
+# Acessos e Descargas, o Revit não tem como derivar sozinho) e a taxa
+# normativa vigente. Esta função busca o resultado já calculado (ação
+# 'populacao_ambientes' do site-sync) e só grava nos parâmetros do Room,
+# casando por revitId/UniqueId.
+def puxar_populacao_do_site(doc, projeto_dir):
+    """Busca em site-sync (ação 'populacao_ambientes') a População e a
+    Taxa Populacional já calculadas no site pra cada ambiente da estrutura
+    vinculada, e grava nos parâmetros correspondentes do Room (casado por
+    revitId/UniqueId — doc.GetElement aceita o UniqueId direto). Retorna
+    (atualizados, nao_encontrados, erro): `erro` é uma mensagem pronta pra
+    mostrar ao usuário (None em caso de sucesso); os contadores só fazem
+    sentido quando `erro` é None."""
     estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
     if not estrutura_id:
         return 0, 0, u"Nenhuma estrutura vinculada a este arquivo Revit."
 
-    resultado, erro = buscar(u"nomes_ambientes", projeto_dir, estruturaId=estrutura_id)
+    resultado, erro = buscar(u"populacao_ambientes", projeto_dir, estruturaId=estrutura_id)
     if erro:
         return 0, 0, erro
 
     atualizados = 0
     nao_encontrados = 0
 
-    with revit.Transaction(u"Atualizar Nomes de Ambientes (Site)"):
+    with revit.Transaction(u"Atualizar População (Site)"):
         for pav in (resultado or {}).get(u"pavimentos", []):
             for amb in pav.get(u"ambientes", []):
-                revit_id  = amb.get(u"revitId")
-                novo_nome = amb.get(u"nome")
-                if not revit_id or not novo_nome:
+                revit_id = amb.get(u"revitId")
+                if not revit_id:
                     continue
 
                 room = doc.GetElement(revit_id)
@@ -307,12 +244,22 @@ def puxar_nomes_do_site(doc, projeto_dir):
                     nao_encontrados += 1
                     continue
 
-                param_nome = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
-                if not param_nome:
-                    continue
+                mudou = False
 
-                if (param_nome.AsString() or u"") != novo_nome:
-                    param_nome.Set(novo_nome)
+                nova_pop = amb.get(u"pop")
+                if nova_pop is not None:
+                    param_pop = room.LookupParameter(u"População")
+                    if param_pop and param_pop.AsInteger() != int(nova_pop):
+                        param_pop.Set(int(nova_pop))
+                        mudou = True
+
+                nova_taxa = amb.get(u"taxaObs") or u""
+                param_taxa = room.LookupParameter(u"Taxa Populacional")
+                if param_taxa and (param_taxa.AsString() or u"") != nova_taxa:
+                    param_taxa.Set(nova_taxa)
+                    mudou = True
+
+                if mudou:
                     atualizados += 1
 
     return atualizados, nao_encontrados, None

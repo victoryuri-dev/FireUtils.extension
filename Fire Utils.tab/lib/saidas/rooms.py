@@ -58,24 +58,6 @@ def get_rooms_sem_grupo(doc):
     return resultado
 
 
-def get_rooms_com_grupo(doc):
-    """Retorna ambientes com área > 0 e o parâmetro 'Grupo' já preenchido —
-    usado por populacao.recalcular_populacao pra reaplicar a taxa
-    normativa ATUAL (útil quando a norma/UF do projeto muda depois que os
-    ambientes já foram classificados: a população gravada nos parâmetros
-    fica com o valor antigo até alguém rodar esse recálculo)."""
-    colecao = FilteredElementCollector(doc)\
-        .OfCategory(DB.BuiltInCategory.OST_Rooms)\
-        .ToElements()
-    resultado = []
-    for r in colecao:
-        if r.Area > 0:
-            param = r.LookupParameter(u"Grupo")
-            if param and param.AsString():
-                resultado.append(r)
-    return resultado
-
-
 def get_rooms_classificados(doc):
     """Retorna todos os ambientes com área > 0 e o parâmetro 'Grupo'
     preenchido, já no formato pronto pra sincronizar com o site (ver
