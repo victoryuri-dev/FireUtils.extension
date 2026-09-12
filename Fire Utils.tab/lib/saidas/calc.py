@@ -32,7 +32,7 @@ def _cache_path(projeto_dir):
 
 def montar_payload_ambientes(rooms_data, estado):
     """
-    rooms_data : list de dicts {nivel, nome, grupo, area, pop} — ver
+    rooms_data : list de dicts {nivel, nome, grupo, area, pop, uid} — ver
                  saidas.rooms.get_rooms_classificados().
     estado     : dict de normas.get_estado(); usa estado["tabela"] pra
                  decidir se a população do ambiente é derivada da área
@@ -40,7 +40,9 @@ def montar_payload_ambientes(rooms_data, estado):
 
     Retorna {"pavimentos": [{"nome": <nível>, "ambientes": [...]}, ...]} —
     mesmo formato que o site espera (SaidaEmergenciaPage.jsx →
-    resolverImportacaoSaidas), casando cada pavimento pelo NOME do nível.
+    resolverImportacaoSaidas), casando cada pavimento pelo NOME do nível e
+    cada ambiente pelo `revitId` (Room.UniqueId, estável mesmo se o nome
+    mudar numa reclassificação ou a área for editada depois).
     """
     tabela = (estado or {}).get(u"tabela", {})
 
@@ -64,11 +66,12 @@ def montar_payload_ambientes(rooms_data, estado):
             taxa_a  = tabela.get(divisao, {}).get(u"A")
             if taxa_a is not None and float(taxa_a) > 0:
                 ambientes.append({u"nome": r[u"nome"], u"divisao": divisao,
-                                   u"area": r[u"area"], u"popTipo": u"area"})
+                                   u"area": r[u"area"], u"popTipo": u"area",
+                                   u"revitId": r.get(u"uid")})
             else:
                 ambientes.append({u"nome": r[u"nome"], u"divisao": divisao,
                                    u"area": r[u"area"], u"popTipo": u"manual",
-                                   u"popManual": r[u"pop"]})
+                                   u"popManual": r[u"pop"], u"revitId": r.get(u"uid")})
         pavimentos.append({u"nome": nivel, u"ambientes": ambientes})
 
     return {u"pavimentos": pavimentos}

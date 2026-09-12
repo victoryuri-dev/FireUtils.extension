@@ -42,15 +42,19 @@ function resolverPavimentoSite(nomeImportado, pavimentos) {
 // como aplicar (mesclar via IMPORT_AMBIENTES_SE, não substituir a lista
 // inteira de pavimentos).
 //
-// Ambiente já existente no pavimento (casado pelo NOME, normalizado) é
-// ATUALIZADO no lugar — mantém `id` e `acessoId`, só troca os dados que
-// vêm do Revit (divisão/área/população) — em vez de recriado do zero, o
-// que soltava (órfão) qualquer ambiente que já estivesse dentro de um
-// Acesso/Saída a cada nova importação. `assentos` não vem do Revit (ver
-// montar_payload_ambientes em Fire Utils.tab/lib/saidas/calc.py):
-// preserva o valor já cadastrado em vez de zerar. `origem: "revit"` marca
-// todo ambiente que passa por aqui — distingue do `origem: "manual"` de
-// quem nasce pelo botão "Adicionar Ambiente" (ver AcessosDescargasView.jsx).
+// Ambiente já existente no pavimento é ATUALIZADO no lugar — mantém `id` e
+// `acessoId`, só troca os dados que vêm do Revit (nome/divisão/área/
+// população) — em vez de recriado do zero, o que soltava (órfão) qualquer
+// ambiente que já estivesse dentro de um Acesso/Saída a cada nova
+// importação. Casamento é primeiro por `revitId` (Room.UniqueId, ver
+// rooms.get_rooms_classificados no plugin) — estável mesmo se o ambiente
+// for renomeado numa reclassificação ou tiver só a área editada — com
+// fallback pro NOME normalizado só pra ambiente sincronizado antes dessa
+// mudança (ainda sem revitId salvo). `assentos` não vem do Revit (ver
+// montar_payload_ambientes em Fire Utils.tab/lib/saidas/calc.py): preserva
+// o valor já cadastrado em vez de zerar. `origem: "revit"` marca todo
+// ambiente que passa por aqui — distingue do `origem: "manual"` de quem
+// nasce pelo botão "Adicionar Ambiente" (ver AcessosDescargasView.jsx).
 function resolverImportacaoSaidas(payloadSE, pavimentos) {
   if (!payloadSE?.pavimentos) throw new Error('Chave "pavimentos" não encontrada nos dados.');
 
@@ -64,12 +68,13 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
       erros.push(`"${nomeImportado}": nenhum pavimento correspondente encontrado no projeto.`);
       return;
     }
+    const existentesPorRevitId = new Map((pavSite.ambientes || []).filter((a) => a.revitId).map((a) => [a.revitId, a]));
     const existentesPorNome = new Map((pavSite.ambientes || []).map((a) => [norm(a.nome), a]));
     atualizacoes.push({
       pavimentoId: pavSite.id,
       ambientes: (p.ambientes || []).map((a, ai) => {
         const nome = a.nome || `Ambiente ${ai + 1}`;
-        const existente = existentesPorNome.get(norm(nome));
+        const existente = (a.revitId && existentesPorRevitId.get(a.revitId)) || existentesPorNome.get(norm(nome));
         return {
           id: existente?.id ?? idAmbienteSE(),
           acessoId: existente?.acessoId ?? null,
@@ -79,6 +84,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
           popTipo: a.popTipo || "area",
           assentos: a.assentos ?? existente?.assentos ?? 0,
           popManual: a.popManual ?? 0,
+          revitId: a.revitId ?? existente?.revitId ?? null,
           origem: "revit",
         };
       }),

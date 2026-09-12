@@ -200,6 +200,67 @@ def set_occupancy(rooms, occupancy_value, estado):
 
 
 # ============================================================
+# RECÁLCULO — reaplica a taxa normativa ATUAL sem reclassificar
+# ============================================================
+# set_occupancy grava a população usando a taxa vigente NO MOMENTO da
+# classificação — se a norma/UF do projeto mudar depois (ou a tabela da
+# norma for atualizada), os ambientes já classificados ficam com o valor
+# antigo até alguém rodar esse recálculo. Ao contrário de set_occupancy,
+# não mexe no Nome (cada ambiente já tem seu Grupo próprio, não um único
+# `occupancy_value` compartilhado) — só atualiza Taxa Populacional e
+# População com a taxa atual da tabela do `estado` pro Grupo já gravado
+# em cada Room.
+def recalcular_populacao(rooms, estado):
+    """Reaplica a taxa normativa atual (estado['tabela']) na População e
+    Taxa Populacional dos ambientes já classificados (Grupo já gravado),
+    sem alterar Nome/Grupo. Retorna (atualizados, sem_taxa) — contagens."""
+    if not estado or u"tabela" not in estado:
+        print(u"recalcular_populacao: estado com 'tabela' é obrigatório.")
+        return 0, 0
+
+    tabela = estado[u"tabela"]
+    atualizados = 0
+    sem_taxa = 0
+
+    with revit.Transaction(u"Recalcular População"):
+        for room in rooms:
+            param_ocup = room.LookupParameter(u"Grupo")
+            grupo = param_ocup.AsString() if (param_ocup and param_ocup.HasValue) else None
+            if not grupo:
+                continue
+
+            entry = tabela.get(grupo)
+            if not entry:
+                # Código não existe mais na tabela atual (norma mudou de
+                # esquema) — não dá pra recalcular, avisa e segue.
+                sem_taxa += 1
+                nome_room = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME).AsString() or u""
+                print(u"  [SEM TAXA] '{}': grupo '{}' não encontrado na norma atual.".format(nome_room, grupo))
+                continue
+
+            taxa_a   = entry.get(u"A")
+            taxa_obs = entry.get(u"obs", u"")
+            area = math.ceil(
+                room.get_Parameter(DB.BuiltInParameter.ROOM_AREA).AsDouble() * 0.092903
+            )
+
+            param_taxa = room.LookupParameter(u"Taxa Populacional")
+            if param_taxa:
+                param_taxa.Set(taxa_obs)
+
+            param_pop = room.LookupParameter(u"População")
+            if param_pop:
+                if taxa_a and taxa_a > 0:
+                    param_pop.Set(int(population_calc(area, float(taxa_a))))
+                else:
+                    param_pop.Set(0)
+
+            atualizados += 1
+
+    return atualizados, sem_taxa
+
+
+# ============================================================
 # FUNÇÕES AUXILIARES — parâmetros compartilhados
 # ============================================================
 

@@ -58,11 +58,36 @@ def get_rooms_sem_grupo(doc):
     return resultado
 
 
+def get_rooms_com_grupo(doc):
+    """Retorna ambientes com área > 0 e o parâmetro 'Grupo' já preenchido —
+    usado por populacao.recalcular_populacao pra reaplicar a taxa
+    normativa ATUAL (útil quando a norma/UF do projeto muda depois que os
+    ambientes já foram classificados: a população gravada nos parâmetros
+    fica com o valor antigo até alguém rodar esse recálculo)."""
+    colecao = FilteredElementCollector(doc)\
+        .OfCategory(DB.BuiltInCategory.OST_Rooms)\
+        .ToElements()
+    resultado = []
+    for r in colecao:
+        if r.Area > 0:
+            param = r.LookupParameter(u"Grupo")
+            if param and param.AsString():
+                resultado.append(r)
+    return resultado
+
+
 def get_rooms_classificados(doc):
     """Retorna todos os ambientes com área > 0 e o parâmetro 'Grupo'
     preenchido, já no formato pronto pra sincronizar com o site (ver
     saidas.calc.montar_payload_ambientes): dicts {nivel, nome, grupo,
-    area (m²), pop}."""
+    area (m²), pop, uid}.
+
+    `uid` é o Room.UniqueId do Revit — persiste mesmo se o ambiente for
+    renomeado/renumerado (reclassificação) ou tiver a área alterada depois.
+    O site/dockpane casa ambientes primeiro por esse id (ver
+    resolverImportacaoSaidas), então uma reclassificação ou uma edição de
+    área no Revit sempre ATUALIZA o mesmo ambiente lá — nunca cria um
+    duplicado nem perde a posição dele na árvore de Acessos/Saídas."""
     colecao = FilteredElementCollector(doc)\
         .OfCategory(DB.BuiltInCategory.OST_Rooms)\
         .WhereElementIsNotElementType()\
@@ -90,6 +115,7 @@ def get_rooms_classificados(doc):
                 u"grupo": grupo,
                 u"area":  round(p_area.AsDouble() * 0.092903, 3) if p_area else 0.0,
                 u"pop":   int(p_pop.AsInteger()) if (p_pop and p_pop.HasValue) else 0,
+                u"uid":   room.UniqueId,
             })
         except Exception:
             continue
