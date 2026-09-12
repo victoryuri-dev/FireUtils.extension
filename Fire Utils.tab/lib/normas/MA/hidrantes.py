@@ -24,10 +24,10 @@ from hidrantes.db import SISTEMAS_HIDRANTE
 def _tipos_de_db():
     """
     Deriva a secao 'tipos' (Tabela 2) a partir de hidrantes/db.py, que continua
-    sendo a fonte unica desses dados (usada tambem por Classificar Sistema e
-    hidrantes/forms.py). Isso evita duplicar/hardcodar os mesmos valores em
-    dois lugares - aqui apenas renomeamos as chaves para o vocabulario da
-    Tabela 2 (q_min/p_min/mang_dn/mang_comp) usado pelas verificacoes.
+    sendo a fonte unica desses dados. Isso evita duplicar/hardcodar os mesmos
+    valores em dois lugares - aqui apenas renomeamos as chaves para o
+    vocabulario da Tabela 2 (q_min/p_min/mang_dn/mang_comp) usado pelas
+    verificacoes.
     """
     tipos = {}
     for tipo_num, dados in SISTEMAS_HIDRANTE.items():

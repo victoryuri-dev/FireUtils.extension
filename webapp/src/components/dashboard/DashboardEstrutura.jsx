@@ -26,6 +26,9 @@ function CartaoClassificacaoHidrantes({ hidrantes }) {
     postToHost(BridgeMessageTypes.SET_HIDRANTES_CLASSIFICACAO, {
       tipo: hidrantes.tipo,
       tipoVariante: hidrantes.tipoVariante,
+      metodoCalculo: hidrantes.metodoCalculo,
+      succaoAltitude: hidrantes.succaoAltitude,
+      succaoTemperatura: hidrantes.succaoTemperatura,
     });
     // Sem callback de conclusão aqui — o toast de sucesso/erro (App.jsx,
     // HIDRANTES_CLASSIFICACAO_SAVED) já avisa o usuário; solta o botão logo

@@ -77,17 +77,20 @@
  *   { type: "DIMENSIONAMENTOS_STATUS", payload: { hidrantes: boolean, saidaEmergencia: boolean } }
  *     Python -> JS: resposta de GET_DIMENSIONAMENTOS_STATUS.
  *
- *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number } }
+ *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number,
+ *     metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
  *     JS -> Python: manda o Tipo de sistema de hidrantes/mangotinhos que o
  *     ETOS.FireUtils classificou (Tabela 3 da norma, a partir de área +
  *     ocupação + carga de incêndio do projeto — ver
  *     src/components/hidrantes/FormularioSistema.jsx no site) pra ser
- *     gravado no Project Information do documento Revit ativo, no mesmo
- *     formato que o pushbutton "Classificar Sistema de Hidrante" grava —
- *     ver hidrantes_classificacao_bridge.py do lado Python. Só Tipo +
- *     variante viajam por aqui: os demais parâmetros da Tabela 2 (esguicho,
- *     mangueira, vazão/pressão mínima) e o método de cálculo continuam
- *     vindo do perfil normativo do próprio plugin, nunca do site.
+ *     gravado no Project Information do documento Revit ativo — ver
+ *     hidrantes_classificacao_bridge.py do lado Python. Os demais
+ *     parâmetros da Tabela 2 (esguicho, mangueira, vazão/pressão mínima)
+ *     continuam vindo do perfil normativo do próprio plugin, nunca do
+ *     site. O extinto pushbutton "Classificar Sistema de Hidrante" foi
+ *     removido do plugin — método de cálculo e os dados de sucção
+ *     (altitude/temperatura, usados no NPSH disponível) que ele coletava
+ *     agora vêm daqui também, do state.hidrantes do site.
  *
  *   { type: "HIDRANTES_CLASSIFICACAO_SAVED", payload: { ok, erro?, valorSistema?, metodoCalculo? } }
  *     Python -> JS: resultado de um SET_HIDRANTES_CLASSIFICACAO.

@@ -89,13 +89,21 @@ export function sistemasAtivos(linha, estruturaId) {
  * decidida no site a partir da área + ocupação + carga de incêndio do
  * projeto inteiro (não por estrutura — ver comentário de state.hidrantes
  * em ETOS.FireUtils/src/context/ProjetoContext.jsx). `tipo` null quando o
- * RT ainda não classificou nada no site. */
+ * RT ainda não classificou nada no site.
+ *
+ * `metodoCalculo`/`succaoAltitude`/`succaoTemperatura` migraram pro site
+ * junto com a remoção do pushbutton "Classificar Sistema de Hidrante" do
+ * plugin — são enviados ao Revit no mesmo SET_HIDRANTES_CLASSIFICACAO
+ * (ver aplicar() em components/dashboard/DashboardEstrutura.jsx). */
 export function dadosHidrantes(linha) {
   const h = (linha.dados && linha.dados.hidrantes) || {};
   return {
     tipo: typeof h.tipo === "number" ? h.tipo : null,
     tipoVariante: typeof h.tipoVariante === "number" ? h.tipoVariante : 0,
     rti: paraNumero(h.rti),
+    metodoCalculo: h.metodoCalculo || null,
+    succaoAltitude: paraNumero(h.succaoAltitude),
+    succaoTemperatura: paraNumero(h.succaoTemperatura),
   };
 }
 
