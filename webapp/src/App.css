@@ -1232,6 +1232,7 @@
   align-items: center;
   gap: 8px;
   min-width: 140px;
+  max-width: 50%;
   flex: 1 1 auto;
 }
 
@@ -1270,7 +1271,7 @@
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
-  max-width: 45%;
+  min-width: 0;
 }
 
 /* População somada de todos os ambientes do nó (ver calcDimsAcesso em
@@ -1414,7 +1415,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 45%;
+  min-width: 0;
 }
 
 /* Borda vermelha do card quando o ambiente está marcado na seleção em
@@ -1450,13 +1451,13 @@
   height: 15px;
   flex-shrink: 0;
   border-radius: 3px;
-  border: 1px solid var(--text-3);
+  border: 1px solid var(--text-2);
   background: transparent;
   transition: border-color 0.15s;
 }
 
 .se-checkbox:hover {
-  border-color: var(--text-2);
+  border-color: var(--text);
 }
 
 .se-checkbox.se-checkbox-marcado {

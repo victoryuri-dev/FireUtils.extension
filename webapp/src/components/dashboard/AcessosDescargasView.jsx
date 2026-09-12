@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, pointerWithin } from "@dnd-kit/core";
 import Icon from "../Icon";
-import { AmbienteForm, DivBadge, fmtM } from "./seShared";
+import { AmbienteForm, fmtM } from "./seShared";
 import { calcPopAmb, calcNoAmbientePT, calcDimsAcesso, dimsDoAcesso, contarSaidasPavimento } from "../../data/se_calc";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE } from "../../lib/seReducer";
 import { salvarComRetry } from "../../lib/projectData";
@@ -198,7 +198,6 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDes
         <span className="se-sep">|</span>
         <span className="se-ambiente-portas">
           <span>Porta</span>
-          <DivBadge label={`${pt.n} UP`} />
           <strong className="se-ambiente-portas-valor">{fmtM(pt.la)}</strong>
         </span>
       </div>
@@ -249,17 +248,15 @@ function DimButton({ label, ativo, onClick }) {
   );
 }
 
-// ── Trinca rótulo+UP+valor da linha de larguras mínimas (ex.: "ACESSO/
-// DESCARGA  1UP  1,20 m") — só aparece quando o dimensionamento
-// correspondente está ligado (ver DimButton). UP agora é por elemento,
-// não mais um único badge compartilhado no cabeçalho do nó.
-function DimEntry({ label, up, value }) {
+// ── Um par rótulo+valor da linha de larguras mínimas (ex.: "ACESSO/
+// DESCARGA  1,20 m") — só aparece quando o dimensionamento correspondente
+// está ligado (ver DimButton).
+function DimEntry({ label, value }) {
   return (
     <div className="se-dim-entrada">
       <div className="se-stat-col-label">
         <LabelQuebrado texto={label} />
       </div>
-      <DivBadge label={`${up} UP`} />
       <div className="se-dim-entrada-valor">{value}</div>
     </div>
   );
@@ -298,9 +295,9 @@ function AcessoCard({
   const dims = dimsDoAcesso(acesso, pisoDescarga);
   const { pop, ad, er, pt } = calcDimsAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, dims);
   const entradas = [
-    ad && { label: "ACESSO/DESCARGA", up: ad.n, value: fmtM(ad.la) },
-    pt && { label: "PORTAS", up: pt.n, value: fmtM(pt.la) },
-    er && { label: "ESCADA/RAMPA", up: er.n, value: fmtM(er.la) },
+    ad && { label: "ACESSO/DESCARGA", value: fmtM(ad.la) },
+    pt && { label: "PORTAS", value: fmtM(pt.la) },
+    er && { label: "ESCADA/RAMPA", value: fmtM(er.la) },
   ].filter(Boolean);
   const filhos = acessosFilhos(acessos, acesso.id);
   const filhosAmbientes = ambientesDe(ambientes, acesso.id);
@@ -341,13 +338,12 @@ function AcessoCard({
           </button>
           <Icon svg={aberto ? chevronDownIconSvg : chevronRightIconSvg} className="se-chevron" />
           <InlineEditableNome value={acesso.nome} onCommit={(novoNome) => onRenomear(acesso.id, novoNome)} className="se-acesso-nome" />
-          <span className="se-sep">|</span>
-          <span className="se-acesso-populacao">{pop} Pessoas</span>
         </div>
         <div className="se-card-header-dims">
+          <span className="se-acesso-populacao">{pop} Pessoas</span>
           <DimButton label="AD" ativo={dims.AD} onClick={() => toggleDim("AD")} />
-          <DimButton label="ER" ativo={dims.ER} onClick={() => toggleDim("ER")} />
           <DimButton label="PT" ativo={dims.PT} onClick={() => toggleDim("PT")} />
+          <DimButton label="ER" ativo={dims.ER} onClick={() => toggleDim("ER")} />
         </div>
         <button onClick={remover} className="se-card-lixeira se-icon-botao">
           <Icon svg={trashIconSvg} />
@@ -362,7 +358,7 @@ function AcessoCard({
                   |
                 </span>
               ),
-              <DimEntry key={e.label} label={e.label} up={e.up} value={e.value} />,
+              <DimEntry key={e.label} label={e.label} value={e.value} />,
             ])
             .filter(Boolean)}
         </div>
