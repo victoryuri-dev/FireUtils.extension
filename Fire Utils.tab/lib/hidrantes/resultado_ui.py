@@ -8,9 +8,10 @@ vez de imprimir no console do pyRevit.
 
 Módulo puro: recebe os resultados já calculados (por calcular_rede() e
 companhia, em calc.py) — não importa nada do Revit. O passo a passo
-completo (memorial de cálculo) continua no botão separado "Memorial de
-Cálculo" (hidrantes/memorial.py, console + arquivo .html) — aqui é só o
-resumo/bloqueio de "Dimensionar Hidrantes".
+completo (memorial de cálculo) migrou pro site (ETOS.FireUtils, ver
+src/data/memorial/hidrantesCalculo.js — sempre a última folha do memorial),
+a partir do mesmo cache sincronizado por "Dimensionar Hidrantes"; aqui é
+só o resumo/bloqueio de "Dimensionar Hidrantes".
 """
 
 import os
@@ -353,8 +354,9 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
 
     janela.paragrafo(u"Eficiência e potência da bomba são dimensionadas no site, a "
                      u"partir de Qt/Ht acima.")
-    janela.paragrafo(u"Para o memorial de cálculo completo (passo a passo), "
-                     u"execute \"Memorial de Cálculo\".")
+    janela.paragrafo(u"O memorial de cálculo completo (passo a passo) é gerado no "
+                     u"site — ETOS.FireUtils, última folha do memorial descritivo "
+                     u"— a partir deste mesmo dimensionamento.")
 
     janela.ShowDialog()
 

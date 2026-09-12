@@ -7,13 +7,16 @@ mais favorável pelo Fator K.
 
 Ao final, mostra só as verificações e os resultados finais (velocidade nos
 trechos, pressão/vazão nos hidrantes mais desfavoráveis, demanda do sistema
-e requisitos da bomba) — não o memorial de cálculo completo, que agora é o
-botão separado "Memorial de Cálculo". Se alguma verificação não atender a
-norma, o dimensionamento para naquele ponto e mostra onde corrigir, em vez
-de seguir adiante com um resultado que não atende.
+e requisitos da bomba) — não o memorial de cálculo completo, que migrou
+pro site (ETOS.FireUtils, ver src/data/memorial/hidrantesCalculo.js). Se
+alguma verificação não atender a norma, o dimensionamento para naquele
+ponto e mostra onde corrigir, em vez de seguir adiante com um resultado
+que não atende.
 
-Salva os resultados completos no cache (firedata.json) para o botão
-"Memorial de Cálculo" reimprimir o passo a passo sem recalcular.
+Salva os resultados completos no cache (firedata.json), sincronizado com
+o site — é de lá (state.hidrantes.dimensionamento) que o memorial de
+cálculo e a página "Sistema de Hidrantes" da dockpane leem o passo a
+passo, sem recalcular nada.
 
 Os elementos de cada trecho não vêm mais de uma varredura por parâmetro:
 "Mapear Trechos" salva a rota (listas de ElementId) no cache, chave
@@ -621,7 +624,7 @@ _para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)",
 
 # ===========================================================================
 # Etapa 6 — Verificações e resultados finais (resumo; o passo a passo
-# completo agora é o botão separado "Memorial de Cálculo")
+# completo agora é gerado no site — ver src/data/memorial/hidrantesCalculo.js)
 # ===========================================================================
 # Eficiência e potência da bomba não são mais calculadas aqui — o site
 # (ETOS.FireUtils) passou a fazer esse dimensionamento a partir de Qt/Ht
@@ -634,7 +637,8 @@ mostrar_resultado_ok(
     comprimento_min_velocidade=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
 
-# --- Etapa 7: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
+# --- Etapa 7: salvar cache (sincroniza com o site — memorial de cálculo e a
+# página "Sistema de Hidrantes" da dockpane leem daqui, sem recalcular) ---
 import datetime
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 payload_hid = {
