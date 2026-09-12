@@ -7,6 +7,8 @@ import re
 import math
 from pyrevit import revit, DB, forms, script
 
+from sync import buscar, config_sync
+
 doc   = revit.doc
 uidoc = revit.uidoc
 app   = doc.Application
@@ -263,6 +265,57 @@ def recalcular_populacao(rooms, estado):
             atualizados += 1
 
     return atualizados, sem_taxa
+
+
+# ============================================================
+# PUXAR NOMES DO SITE — caminho Site → Revit
+# ============================================================
+# recalcular_populacao (e a sincronização ao final de qualquer classificação
+# — ver saidas.calc.sincronizar_ambientes) cobrem o caminho Revit → Site:
+# renomeou o Room no Revit, o próximo sync já leva o nome novo pro site,
+# casando por revitId. Esta função cobre o caminho inverso: renomeou o
+# ambiente no site, reaplica esse nome no parâmetro Nome do Room aqui,
+# casando pelo mesmo revitId (Room.UniqueId).
+def puxar_nomes_do_site(doc, projeto_dir):
+    """Busca em site-sync (ação 'nomes_ambientes') o nome atual de cada
+    ambiente da estrutura vinculada e reaplica no parâmetro Nome do Room
+    correspondente (casado por revitId/UniqueId — doc.GetElement aceita o
+    UniqueId direto). Retorna (atualizados, nao_encontrados, erro): `erro`
+    é uma mensagem pronta pra mostrar ao usuário (None em caso de
+    sucesso); os contadores só fazem sentido quando `erro` é None."""
+    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
+    if not estrutura_id:
+        return 0, 0, u"Nenhuma estrutura vinculada a este arquivo Revit."
+
+    resultado, erro = buscar(u"nomes_ambientes", projeto_dir, estruturaId=estrutura_id)
+    if erro:
+        return 0, 0, erro
+
+    atualizados = 0
+    nao_encontrados = 0
+
+    with revit.Transaction(u"Atualizar Nomes de Ambientes (Site)"):
+        for pav in (resultado or {}).get(u"pavimentos", []):
+            for amb in pav.get(u"ambientes", []):
+                revit_id  = amb.get(u"revitId")
+                novo_nome = amb.get(u"nome")
+                if not revit_id or not novo_nome:
+                    continue
+
+                room = doc.GetElement(revit_id)
+                if not room:
+                    nao_encontrados += 1
+                    continue
+
+                param_nome = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
+                if not param_nome:
+                    continue
+
+                if (param_nome.AsString() or u"") != novo_nome:
+                    param_nome.Set(novo_nome)
+                    atualizados += 1
+
+    return atualizados, nao_encontrados, None
 
 
 # ============================================================
