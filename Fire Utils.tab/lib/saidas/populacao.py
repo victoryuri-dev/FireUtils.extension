@@ -213,7 +213,13 @@ def set_occupancy(rooms, occupancy_value, estado):
 def recalcular_populacao(rooms, estado):
     """Reaplica a taxa normativa atual (estado['tabela']) na População e
     Taxa Populacional dos ambientes já classificados (Grupo já gravado),
-    sem alterar Nome/Grupo. Retorna (atualizados, sem_taxa) — contagens."""
+    sem alterar Nome/Grupo. Retorna (atualizados, sem_taxa) — contagens.
+
+    Ocupação sem taxa por área (entry['A'] é None — vagas, leitos, assento
+    fixo etc.) não tem o que recalcular: a População desses ambientes é
+    sempre digitada manualmente, então o parâmetro é deixado como está —
+    zerar ele aqui apagaria qualquer valor que o usuário já tenha
+    informado à mão."""
     if not estado or u"tabela" not in estado:
         print(u"recalcular_populacao: estado com 'tabela' é obrigatório.")
         return 0, 0
@@ -240,20 +246,19 @@ def recalcular_populacao(rooms, estado):
 
             taxa_a   = entry.get(u"A")
             taxa_obs = entry.get(u"obs", u"")
-            area = math.ceil(
-                room.get_Parameter(DB.BuiltInParameter.ROOM_AREA).AsDouble() * 0.092903
-            )
 
             param_taxa = room.LookupParameter(u"Taxa Populacional")
             if param_taxa:
                 param_taxa.Set(taxa_obs)
 
-            param_pop = room.LookupParameter(u"População")
-            if param_pop:
-                if taxa_a and taxa_a > 0:
+            if taxa_a and taxa_a > 0:
+                area = math.ceil(
+                    room.get_Parameter(DB.BuiltInParameter.ROOM_AREA).AsDouble() * 0.092903
+                )
+                param_pop = room.LookupParameter(u"População")
+                if param_pop:
                     param_pop.Set(int(population_calc(area, float(taxa_a))))
-                else:
-                    param_pop.Set(0)
+            # taxa_a None: população é manual — não mexe no parâmetro.
 
             atualizados += 1
 
