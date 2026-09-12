@@ -1001,7 +1001,7 @@
 }
 
 .se-modal-titulo {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text);
   white-space: nowrap;
@@ -1267,7 +1267,7 @@
 }
 
 .se-acesso-nome {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text);
 }
@@ -1365,7 +1365,7 @@
 }
 
 .se-dim-entrada-valor {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--accent);
   white-space: nowrap;
@@ -1403,6 +1403,58 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Borda vermelha do card quando o ambiente está marcado na seleção em
+   massa (ver Checkbox/toggleSelecaoAmbiente) — sobrepõe .se-card-leaf. */
+.se-card-leaf.se-card-selecionado {
+  border-color: var(--accent);
+}
+
+.se-ambiente-portas {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.se-ambiente-portas-valor {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* Checkbox próprio (em vez de <input type="checkbox"> nativo, que herda a
+   cor de fundo do tema do SO) — ver Checkbox em AcessosDescargasView.jsx. */
+.se-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  border: 1px solid var(--text-3);
+  background: transparent;
+  transition: border-color 0.15s;
+}
+
+.se-checkbox:hover {
+  border-color: var(--text-2);
+}
+
+.se-checkbox.se-checkbox-marcado {
+  border-color: var(--text);
+}
+
+.se-checkbox .icon {
+  width: 10px;
+  height: 10px;
+  color: var(--text);
 }
 
 .se-ambiente-up {
@@ -1458,6 +1510,79 @@
 .se-secao-titulo {
   font-size: 13px;
   font-weight: 600;
+  color: var(--text);
+}
+
+/* Barra de seleção em massa — sticky no rodapé do scroll de .se-pagina
+   (a ancestral rolável mais próxima), fica sempre visível enquanto houver
+   ambientes selecionados (ver AcessosDescargasView.jsx). */
+.se-selecao-barra {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 10px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg-3);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.se-selecao-contagem {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.se-selecao-select {
+  width: auto;
+  flex: 1 1 auto;
+  max-width: 320px;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.se-selecao-botao-apagar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.se-selecao-botao-apagar:hover {
+  background: var(--accent);
+  color: var(--white);
+}
+
+.se-selecao-botao-apagar .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.se-selecao-cancelar {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.se-selecao-cancelar:hover {
   color: var(--text);
 }
 
@@ -1527,7 +1652,7 @@
 }
 
 .se-ambiente-modal-nome {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text);
 }

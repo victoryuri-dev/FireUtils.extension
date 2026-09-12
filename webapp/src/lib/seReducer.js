@@ -130,6 +130,35 @@ export function aplicarAcaoSaida(dados, action) {
         ),
       }));
 
+    // Mesma ação que MOVER_AMBIENTE_ACESSO, só que pra vários ambientes de
+    // uma vez — barra de seleção em massa (ver AcessosDescargasView.jsx).
+    case "MOVER_AMBIENTES_ACESSO": {
+      const idsMovidos = new Set(action.ambienteIds);
+      return atualizarPavimento(dados, action.pavimentoId, (p) => ({
+        ...p,
+        ambientes: (p.ambientes || []).map((a) =>
+          idsMovidos.has(a.id) ? { ...a, acessoId: action.novoAcessoId } : a
+        ),
+      }));
+    }
+
+    // "Apagar selecionados" na barra de seleção em massa: comportamento
+    // igual ao botão individual de cada card — ambiente já órfão é
+    // excluído de verdade; ambiente dentro de um Acesso/Saída só é
+    // desvinculado (fica órfão), nunca apagado por engano numa seleção
+    // que misturou os dois tipos.
+    case "APAGAR_AMBIENTES_SE": {
+      const idsAlvo = new Set(action.ambienteIds);
+      return atualizarPavimento(dados, action.pavimentoId, (p) => ({
+        ...p,
+        ambientes: (p.ambientes || []).reduce((acc, a) => {
+          if (!idsAlvo.has(a.id)) { acc.push(a); return acc; }
+          if (a.acessoId) acc.push({ ...a, acessoId: null });
+          return acc;
+        }, []),
+      }));
+    }
+
     case "ADD_AMBIENTE_SE":
       return atualizarPavimento(dados, action.pavimentoId, (p) => ({
         ...p,

@@ -13,8 +13,9 @@ import trashIconSvg from "../../assets/icons/trash-icon.svg?raw";
 import plusIconSvg from "../../assets/icons/plus-icon.svg?raw";
 import arrowLeftIconSvg from "../../assets/icons/arrow-left-icon.svg?raw";
 import xIconSvg from "../../assets/icons/x-icon.svg?raw";
-import unlinkIconSvg from "../../assets/icons/unlinked-icon.svg?raw";
+import exitBoxIconSvg from "../../assets/icons/exit-box-icon.svg?raw";
 import perfilIconSvg from "../../assets/icons/perfil-icon.svg?raw";
+import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 
 /**
  * AcessosDescargasView.jsx — árvore de Acessos e Descargas de um pavimento
@@ -47,6 +48,18 @@ function descendentesDe(acessoId, acessos) {
   acessosFilhos(acessos, acessoId).forEach((f) => descendentesDe(f.id, acessos).forEach((id) => set.add(id)));
   return set;
 }
+
+// Achata a árvore de Acessos/Saídas em opções de <select> (indentadas por
+// profundidade) — usado pela barra de mover-em-massa, pra listar todo
+// Acesso/Saída/Escada-Rampa do pavimento como destino possível.
+function listarAcessosParaSelect(acessos, parentId = null, profundidade = 0) {
+  return acessosFilhos(acessos, parentId).flatMap((a) => [
+    { id: a.id, label: `${"— ".repeat(profundidade)}${a.nome}` },
+    ...listarAcessosParaSelect(acessos, a.id, profundidade + 1),
+  ]);
+}
+
+const ALVO_SEM_ACESSO = "__sem_acesso__";
 
 // ── Nome editável inline — clique vira input; Enter/blur salva, Escape
 // cancela — em vez de window.prompt (diálogo nativo do navegador).
@@ -106,6 +119,26 @@ function LabelQuebrado({ texto }) {
   );
 }
 
+// Checkbox próprio (botão + ícone) em vez de <input type="checkbox"> nativo
+// — o nativo herda a cor de fundo do tema do sistema operacional (fica
+// branco em vez de escuro), sem jeito confiável de sobrescrever entre
+// navegadores só com CSS.
+function Checkbox({ checked, onChange, title }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onChange();
+      }}
+      title={title}
+      className={`se-checkbox ${checked ? "se-checkbox-marcado" : ""}`}
+    >
+      {checked && <Icon svg={checkIconSvg} />}
+    </button>
+  );
+}
+
 export function StatCol({ label, value, big }) {
   return (
     <div className="se-stat-col">
@@ -118,12 +151,18 @@ export function StatCol({ label, value, big }) {
 // ── Ambiente (folha da árvore) — arrastável, card inteiro clicável ─────
 // Só mostra UP (no lugar da ocupação, no cabeçalho) + população + largura
 // mínima da porta — capacidade (C) e o código de divisão saíram do card
-// (continuam editáveis no formulário, só não aparecem mais aqui). Dentro
+// (continuam editáveis no formulário, só não aparecem mais aqui). O
+// checkbox de seleção fica fora do drag handle e do clique de editar —
+// marcar vários ambientes (inclusive em Acessos diferentes) habilita a
+// barra de "mover selecionados" no rodapé (ver moverSelecionados). Dentro
 // de um Acesso/Saída, o botão de canto é "desvincular" (volta pra "sem
 // acesso atribuído" — ver onDesvincular); só quando já está órfão
 // (`orfao`) é que vira exclusão de verdade, pra evitar apagar por engano
-// um ambiente que só precisava trocar de lugar na árvore.
-function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDesvincular, orfao }) {
+// um ambiente que só precisava trocar de lugar na árvore. Com pelo menos
+// um ambiente já selecionado (`modoSelecao`), clicar em qualquer lugar do
+// card seleciona/desmarca em vez de abrir o formulário — só assim dá pra
+// marcar vários rápido, sem mirar no checkbox de cada um.
+function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDesvincular, orfao, selecionado, onToggleSelecao, modoSelecao }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `amb:${amb.id}`,
     data: { kind: "amb", id: amb.id },
@@ -135,13 +174,14 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDes
     <div
       ref={setNodeRef}
       style={style}
-      onClick={() => onEdit(amb)}
-      className={`se-card se-card-leaf se-card-header ${isDragging ? "se-dragging" : ""}`}
+      onClick={() => (modoSelecao ? onToggleSelecao(amb.id) : onEdit(amb))}
+      className={`se-card se-card-leaf se-card-header ${selecionado ? "se-card-selecionado" : ""} ${isDragging ? "se-dragging" : ""}`}
     >
       <div className="se-card-header-esq">
         <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="se-grip" title="Arrastar ambiente">
           <Icon svg={gripIconSvg} />
         </button>
+        <Checkbox checked={selecionado} onChange={() => onToggleSelecao(amb.id)} title="Selecionar pra mover em massa" />
         <span className="se-ambiente-nome">{amb.nome}</span>
         <DivBadge label={`${pt.n} UP`} />
         {amb.origem === "manual" && (
@@ -153,8 +193,8 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDes
       <div className="se-card-header-dir">
         <span>{pop} pessoas</span>
         <span className="se-sep">|</span>
-        <span>
-          PORTAS: <strong className="se-vermelho">{fmtM(pt.la)}</strong>
+        <span className="se-ambiente-portas">
+          PORTAS: <strong className="se-ambiente-portas-valor">{fmtM(pt.la)}</strong>
         </span>
       </div>
       {orfao ? (
@@ -177,7 +217,7 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDes
           className="se-card-lixeira se-icon-botao"
           title="Desvincular do Acesso/Saída (volta pra lista sem acesso)"
         >
-          <Icon svg={unlinkIconSvg} />
+          <Icon svg={exitBoxIconSvg} />
         </button>
       )}
     </div>
@@ -245,6 +285,8 @@ function AcessoCard({
   onCreateAmbiente,
   colapsados,
   toggleColapsado,
+  selecionados,
+  onToggleSelecaoAmbiente,
 }) {
   const dims = dimsDoAcesso(acesso, pisoDescarga);
   const { ad, er, pt, nPorta } = calcDimsAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, dims);
@@ -319,6 +361,14 @@ function AcessoCard({
       )}
       {aberto && (
         <div className="se-card-body">
+          {/* Ambientes direto deste Acesso vêm antes dos Acessos filhos —
+              o que pertence a ele fica visualmente "em cima" do próximo
+              nível da árvore, em vez de misturado depois. */}
+          {filhosAmbientes.map((a) => (
+            <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEditAmbiente} onRemove={onRemoveAmbiente}
+              onDesvincular={onDesvincularAmbiente} orfao={false}
+              selecionado={selecionados.has(a.id)} onToggleSelecao={onToggleSelecaoAmbiente} modoSelecao={selecionados.size > 0} />
+          ))}
           {filhos.map((f) => (
             <AcessoCard
               key={f.id}
@@ -339,11 +389,9 @@ function AcessoCard({
               onCreateAmbiente={onCreateAmbiente}
               colapsados={colapsados}
               toggleColapsado={toggleColapsado}
+              selecionados={selecionados}
+              onToggleSelecaoAmbiente={onToggleSelecaoAmbiente}
             />
-          ))}
-          {filhosAmbientes.map((a) => (
-            <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEditAmbiente} onRemove={onRemoveAmbiente}
-              onDesvincular={onDesvincularAmbiente} orfao={false} />
           ))}
           {filhos.length === 0 && filhosAmbientes.length === 0 && <div className="se-vazio-italico">Arraste ambientes para cá.</div>}
           <div className="se-acesso-acoes">
@@ -371,13 +419,14 @@ function RootDropZone() {
   );
 }
 
-function SemAcessoDropZone({ ambientes, taxaPopulacional, larguras, onEdit, onRemove }) {
+function SemAcessoDropZone({ ambientes, taxaPopulacional, larguras, onEdit, onRemove, selecionados, onToggleSelecaoAmbiente }) {
   const { setNodeRef, isOver } = useDroppable({ id: "drop-null", data: { kind: "null" } });
   return (
     <div ref={setNodeRef} className={`se-sem-acesso ${isOver ? "se-sem-acesso-over" : ""}`}>
       {ambientes.length === 0 && <div className="se-vazio-italico">Todos os ambientes já estão posicionados na árvore.</div>}
       {ambientes.map((a) => (
-        <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEdit} onRemove={onRemove} orfao />
+        <AmbienteChip key={a.id} amb={a} taxaPopulacional={taxaPopulacional} larguras={larguras} onEdit={onEdit} onRemove={onRemove} orfao
+          selecionado={selecionados.has(a.id)} onToggleSelecao={onToggleSelecaoAmbiente} modoSelecao={selecionados.size > 0} />
       ))}
     </div>
   );
@@ -415,10 +464,40 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
   const [salvando, setSalvando] = useState(false);
   const toggleColapsado = (id) => setColapsados((prev) => ({ ...prev, [id]: !prev[id] }));
 
+  // Seleção em massa: marcar vários ambientes (em Acessos diferentes ou
+  // ainda sem acesso) e movê-los todos de uma vez pra um Acesso/Saída
+  // escolhido (ver MOVER_AMBIENTES_ACESSO no seReducer).
+  const [selecionados, setSelecionados] = useState(new Set());
+  const [alvoSelecao, setAlvoSelecao] = useState("");
+  const toggleSelecaoAmbiente = (id) =>
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const limparSelecao = () => setSelecionados(new Set());
+  const moverSelecionados = () => {
+    if (!selecionados.size || !alvoSelecao) return;
+    const novoAcessoId = alvoSelecao === ALVO_SEM_ACESSO ? null : alvoSelecao;
+    despachar({ type: "MOVER_AMBIENTES_ACESSO", pavimentoId: pav.id, ambienteIds: [...selecionados], novoAcessoId });
+    limparSelecao();
+    setAlvoSelecao("");
+  };
+  // Órfão selecionado é excluído de verdade; dentro de um Acesso/Saída só
+  // desvincula (fica órfão) — mesmo critério do botão individual de cada
+  // card (ver AmbienteChip), só que pra toda a seleção de uma vez.
+  const apagarSelecionados = () => {
+    if (!selecionados.size) return;
+    if (!window.confirm(`Apagar/desvincular ${selecionados.size} ambiente(s) selecionado(s)? Órfãos são excluídos; os que estiverem dentro de um Acesso/Saída só ficam sem posição.`)) return;
+    despachar({ type: "APAGAR_AMBIENTES_SE", pavimentoId: pav.id, ambienteIds: [...selecionados] });
+    limparSelecao();
+  };
+
   const raizes = acessosFilhos(acessos, null);
   const semAcesso = ambientes.filter((a) => !a.acessoId);
   const nSaidas = Math.max(1, contarSaidasPavimento(acessos));
   const rotuloRaiz = pav.pisoDescarga ? "Saída" : "Escada/Rampa";
+  const alvosSelecao = listarAcessosParaSelect(acessos);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
@@ -489,7 +568,14 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
 
     if (activeData.kind === "amb") {
       const novoAcessoId = overData.kind === "acesso" ? overData.id : null;
-      despachar({ type: "MOVER_AMBIENTE_ACESSO", pavimentoId: pav.id, ambienteId: activeData.id, novoAcessoId });
+      // Arrastar um ambiente que faz parte da seleção em massa leva o
+      // conjunto inteiro junto, não só o card que a mão pegou.
+      if (selecionados.size > 1 && selecionados.has(activeData.id)) {
+        despachar({ type: "MOVER_AMBIENTES_ACESSO", pavimentoId: pav.id, ambienteIds: [...selecionados], novoAcessoId });
+        limparSelecao();
+      } else {
+        despachar({ type: "MOVER_AMBIENTE_ACESSO", pavimentoId: pav.id, ambienteId: activeData.id, novoAcessoId });
+      }
       return;
     }
     if (activeData.kind === "acs") {
@@ -553,6 +639,8 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
                   onCreateAmbiente={criarAmbiente}
                   colapsados={colapsados}
                   toggleColapsado={toggleColapsado}
+                  selecionados={selecionados}
+                  onToggleSelecaoAmbiente={toggleSelecaoAmbiente}
                 />
               ))}
               {raizes.length === 0 && (
@@ -574,10 +662,36 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
                 <Icon svg={plusIconSvg} /> Adicionar Ambiente
               </button>
             </div>
-            <SemAcessoDropZone ambientes={semAcesso} taxaPopulacional={TAXA_POPULACIONAL} larguras={LARGURAS_MINIMAS} onEdit={setEditAmb} onRemove={removerAmbiente} />
+            <SemAcessoDropZone ambientes={semAcesso} taxaPopulacional={TAXA_POPULACIONAL} larguras={LARGURAS_MINIMAS} onEdit={setEditAmb} onRemove={removerAmbiente}
+              selecionados={selecionados} onToggleSelecaoAmbiente={toggleSelecaoAmbiente} />
           </div>
         </div>
       </DndContext>
+
+      {/* Barra de seleção em massa — sticky no rodapé do scroll (.se-pagina
+          é a ancestral rolável), fica sempre visível enquanto houver
+          ambientes selecionados. */}
+      {selecionados.size > 0 && (
+        <div className="se-selecao-barra">
+          <span className="se-selecao-contagem">{selecionados.size} ambiente{selecionados.size > 1 ? "s" : ""} selecionado{selecionados.size > 1 ? "s" : ""}</span>
+          <select value={alvoSelecao} onChange={(e) => setAlvoSelecao(e.target.value)} className="se-selecao-select">
+            <option value="">Mover para...</option>
+            <option value={ALVO_SEM_ACESSO}>— Sem acesso atribuído —</option>
+            {alvosSelecao.map((a) => (
+              <option key={a.id} value={a.id}>{a.label}</option>
+            ))}
+          </select>
+          <button type="button" className="se-botao" disabled={!alvoSelecao} onClick={moverSelecionados}>
+            <Icon svg={checkIconSvg} /> Mover
+          </button>
+          <button type="button" className="se-selecao-botao-apagar" onClick={apagarSelecionados}>
+            <Icon svg={trashIconSvg} /> Apagar selecionados
+          </button>
+          <button type="button" className="se-selecao-cancelar" onClick={limparSelecao}>
+            Cancelar seleção
+          </button>
+        </div>
+      )}
 
       {editAmb && (
         <div className="se-modal-overlay" onClick={() => setEditAmb(null)}>
