@@ -85,6 +85,10 @@ function InlineEditableNome({ value, onCommit, className }) {
           if (e.key === "Escape") setEditing(false);
         }}
         onClick={(e) => e.stopPropagation()}
+        // Acompanha a largura do texto digitado (em vez do tamanho padrão
+        // do <input>) — o max-width de `className` (limite de largura do
+        // nome no card) continua valendo por cima, via CSS.
+        style={{ width: `${Math.max(draft.length, 1) + 1}ch` }}
         className={`se-nome-input ${className || ""}`}
       />
     );
@@ -183,7 +187,6 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDes
         </button>
         <Checkbox checked={selecionado} onChange={() => onToggleSelecao(amb.id)} title="Selecionar pra mover em massa" />
         <span className="se-ambiente-nome">{amb.nome}</span>
-        <DivBadge label={`${pt.n} UP`} />
         {amb.origem === "manual" && (
           <span className="se-badge-manual" title="Ambiente criado manualmente (não veio do Revit)">
             <Icon svg={perfilIconSvg} />
@@ -194,7 +197,9 @@ function AmbienteChip({ amb, taxaPopulacional, larguras, onEdit, onRemove, onDes
         <span>{pop} pessoas</span>
         <span className="se-sep">|</span>
         <span className="se-ambiente-portas">
-          PORTAS: <strong className="se-ambiente-portas-valor">{fmtM(pt.la)}</strong>
+          <span>Porta</span>
+          <DivBadge label={`${pt.n} UP`} />
+          <strong className="se-ambiente-portas-valor">{fmtM(pt.la)}</strong>
         </span>
       </div>
       {orfao ? (
@@ -244,15 +249,17 @@ function DimButton({ label, ativo, onClick }) {
   );
 }
 
-// ── Um par rótulo+valor da linha de larguras mínimas (ex.: "ACESSO/
-// DESCARGA  1,20 m") — só aparece quando o dimensionamento correspondente
-// está ligado (ver DimButton).
-function DimEntry({ label, value }) {
+// ── Trinca rótulo+UP+valor da linha de larguras mínimas (ex.: "ACESSO/
+// DESCARGA  1UP  1,20 m") — só aparece quando o dimensionamento
+// correspondente está ligado (ver DimButton). UP agora é por elemento,
+// não mais um único badge compartilhado no cabeçalho do nó.
+function DimEntry({ label, up, value }) {
   return (
     <div className="se-dim-entrada">
       <div className="se-stat-col-label">
         <LabelQuebrado texto={label} />
       </div>
+      <DivBadge label={`${up} UP`} />
       <div className="se-dim-entrada-valor">{value}</div>
     </div>
   );
@@ -289,11 +296,11 @@ function AcessoCard({
   onToggleSelecaoAmbiente,
 }) {
   const dims = dimsDoAcesso(acesso, pisoDescarga);
-  const { ad, er, pt, nPorta } = calcDimsAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, dims);
+  const { pop, ad, er, pt } = calcDimsAcesso(acesso.id, ambientes, acessos, taxaPopulacional, larguras, dims);
   const entradas = [
-    ad && { label: "ACESSO/DESCARGA", value: fmtM(ad.la) },
-    pt && { label: "PORTAS", value: fmtM(pt.la) },
-    er && { label: "ESCADA/RAMPA", value: fmtM(er.la) },
+    ad && { label: "ACESSO/DESCARGA", up: ad.n, value: fmtM(ad.la) },
+    pt && { label: "PORTAS", up: pt.n, value: fmtM(pt.la) },
+    er && { label: "ESCADA/RAMPA", up: er.n, value: fmtM(er.la) },
   ].filter(Boolean);
   const filhos = acessosFilhos(acessos, acesso.id);
   const filhosAmbientes = ambientesDe(ambientes, acesso.id);
@@ -334,7 +341,8 @@ function AcessoCard({
           </button>
           <Icon svg={aberto ? chevronDownIconSvg : chevronRightIconSvg} className="se-chevron" />
           <InlineEditableNome value={acesso.nome} onCommit={(novoNome) => onRenomear(acesso.id, novoNome)} className="se-acesso-nome" />
-          <DivBadge label={`${nPorta} UP`} />
+          <span className="se-sep">|</span>
+          <span className="se-acesso-populacao">{pop} Pessoas</span>
         </div>
         <div className="se-card-header-dims">
           <DimButton label="AD" ativo={dims.AD} onClick={() => toggleDim("AD")} />
@@ -354,7 +362,7 @@ function AcessoCard({
                   |
                 </span>
               ),
-              <DimEntry key={e.label} label={e.label} value={e.value} />,
+              <DimEntry key={e.label} label={e.label} up={e.up} value={e.value} />,
             ])
             .filter(Boolean)}
         </div>

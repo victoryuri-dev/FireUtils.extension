@@ -1270,6 +1270,17 @@
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
+  max-width: 45%;
+}
+
+/* População somada de todos os ambientes do nó (ver calcDimsAcesso em
+   data/se_calc.js), ao lado do nome — mesmo padrão da população da
+   AmbienteChip. */
+.se-acesso-populacao {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .se-card-body {
@@ -1403,6 +1414,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 45%;
 }
 
 /* Borda vermelha do card quando o ambiente está marcado na seleção em
