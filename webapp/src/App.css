@@ -1939,28 +1939,19 @@
   margin-bottom: 20px;
 }
 
-.hid-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* Um card por linha, ocupando toda a largura — "Ponto de Operação do
+   Sistema" (HD01/HD02/Bomba). */
+.hid-lista-vertical {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   margin-bottom: 20px;
-}
-
-.hid-eficiencia-linha {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.hid-eficiencia-input {
-  max-width: 140px;
 }
 
 .hid-salvando {
   font-size: 11px;
   color: var(--text-3);
-  padding-bottom: 8px;
+  margin-top: 8px;
 }
 
 .hid-aviso {
@@ -2065,4 +2056,37 @@
 
 .hid-stat-valor-destaque {
   color: var(--accent);
+}
+
+/* Eficiência é o único valor editável no meio dos resultados — mesmo
+   card de Stat, com um input no lugar do texto, pra alterar tudo num
+   lugar só em vez de duplicar o valor num campo separado. */
+.hid-stat-input-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+}
+
+.hid-stat-input {
+  width: 46px;
+  border: none;
+  border-bottom: 1.5px solid var(--border-2);
+  background: transparent;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  padding: 0 2px 2px;
+}
+
+.hid-stat-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.hid-stat-input-sufixo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
 }

@@ -56,13 +56,38 @@ function Pill({ active, onClick, disabled, children }) {
   );
 }
 
-// Estatística em destaque (Pressão/Vazão/Eficiência/Potência) — números
-// grandes, como um resultado de verdade, não uma linha de formulário.
+// Estatística em destaque (Pressão/Vazão/Potência) — números grandes, como
+// um resultado de verdade, não uma linha de formulário.
 function Stat({ label, valor, destaque }) {
   return (
     <div className="hid-stat">
       <div className="hid-stat-label">{label}</div>
       <div className={`hid-stat-valor ${destaque ? "hid-stat-valor-destaque" : ""}`}>{valor}</div>
+    </div>
+  );
+}
+
+// Mesmo visual de Stat, mas editável — unifica o campo de eficiência com o
+// resultado, em vez de um input separado acima repetindo o mesmo valor.
+function StatInput({ label, value, onChange, onCommit }) {
+  return (
+    <div className="hid-stat">
+      <div className="hid-stat-label">{label}</div>
+      <div className="hid-stat-input-linha">
+        <input
+          className="hid-stat-input"
+          type="number"
+          min="1"
+          max="100"
+          step="1"
+          placeholder="—"
+          value={value}
+          onChange={onChange}
+          onBlur={onCommit}
+          onKeyDown={(e) => e.key === "Enter" && onCommit()}
+        />
+        <span className="hid-stat-input-sufixo">%</span>
+      </div>
     </div>
   );
 }
@@ -206,9 +231,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
     postToHost(BridgeMessageTypes.SET_HIDRANTES_EFICIENCIA_BOMBA, { eficiencia: valor });
   }
 
-  const { potCv, potKw } = ponto
-    ? calcPotenciaBomba(ponto.qt, ponto.ht, eficiencia)
-    : { potCv: null, potKw: null };
+  // Só cv é mostrado (pedido explícito) — calcPotenciaBomba ainda devolve
+  // kW junto, mas fica sem uso aqui.
+  const { potCv } = ponto ? calcPotenciaBomba(ponto.qt, ponto.ht, eficiencia) : { potCv: null };
 
   return (
     <div className="se-pagina">
@@ -292,7 +317,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
               {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Execute "Dimensionar Hidrantes" primeiro.'}
             </p>
           ) : (
-            <div className="hid-grid-3">
+            <div className="hid-lista-vertical">
               <Cartao titulo="HD01 — 1º Hidrante Mais Desfavorável">
                 <LinhaInline
                   itens={[
@@ -309,7 +334,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
                   ]}
                 />
               </Cartao>
-              <Cartao titulo="Ponto de Operação (Bomba)">
+              <Cartao titulo="Ponto de Operação — Bomba">
                 <LinhaInline
                   itens={[
                     { label: "Altura manométrica (Ht)", valor: `${fmt(ponto.ht)} mca` },
@@ -324,34 +349,18 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
             <div className="hid-secao">
               <p className="dashboard-subtitulo">Dimensionamento da Bomba de Incêndio</p>
               <Cartao titulo="Requisitos da Bomba">
-                <div className="hid-eficiencia-linha">
-                  <div className="hid-eficiencia-input">
-                    <div className="se-label">Eficiência global (η)</div>
-                    <input
-                      className="se-input"
-                      type="number"
-                      min="1"
-                      max="100"
-                      step="1"
-                      placeholder="ex.: 65"
-                      value={eficiencia}
-                      onChange={(e) => setEficiencia(e.target.value)}
-                      onBlur={salvarEficiencia}
-                      onKeyDown={(e) => e.key === "Enter" && salvarEficiencia()}
-                    />
-                  </div>
-                  {salvandoEficiencia && <span className="hid-salvando">Salvando...</span>}
-                </div>
                 <div className="hid-stat-grid">
                   <Stat label="Pressão" valor={`${fmt(ponto.ht)} mca`} />
                   <Stat label="Vazão" valor={`${fmt(ponto.qt)} L/min`} />
-                  <Stat label="Eficiência" valor={eficiencia ? `${eficiencia}%` : "—"} />
-                  <Stat
-                    label="Potência mínima"
-                    valor={potCv != null ? `${fmt(potCv)} cv (${fmt(potKw)} kW)` : "—"}
-                    destaque
+                  <StatInput
+                    label="Eficiência global (η)"
+                    value={eficiencia}
+                    onChange={(e) => setEficiencia(e.target.value)}
+                    onCommit={salvarEficiencia}
                   />
+                  <Stat label="Potência mínima" valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
                 </div>
+                {salvandoEficiencia && <div className="hid-salvando">Salvando...</div>}
                 {potCv == null && (
                   <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
                 )}
