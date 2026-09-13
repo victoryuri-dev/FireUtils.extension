@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Icon from "../Icon";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
-import { dadosHidrantes } from "../../lib/projetoDados";
+import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../../lib/projetoDados";
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
+import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
+import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
 function fmt(n, casas = 2) {
@@ -27,27 +29,68 @@ function Linha({ label, valor }) {
   );
 }
 
+// Pressão + Vazão (ou qualquer par relacionado) na mesma linha, em vez de
+// duas linhas dt/dd empilhadas — layout do card de ponto de operação.
+function LinhaInline({ itens }) {
+  return (
+    <div className="hid-linha-inline">
+      {itens.map((it, i) => (
+        <span key={i}>
+          <span className="hid-linha-inline-label">{it.label}:</span> <strong>{it.valor}</strong>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Pill({ active, onClick, disabled, children }) {
+  return (
+    <button
+      type="button"
+      className={`hid-pill ${active ? "hid-pill-ativa" : ""}`}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Estatística em destaque (Pressão/Vazão/Eficiência/Potência) — números
+// grandes, como um resultado de verdade, não uma linha de formulário.
+function Stat({ label, valor, destaque }) {
+  return (
+    <div className="hid-stat">
+      <div className="hid-stat-label">{label}</div>
+      <div className={`hid-stat-valor ${destaque ? "hid-stat-valor-destaque" : ""}`}>{valor}</div>
+    </div>
+  );
+}
+
 /**
- * Página "Sistema de Hidrantes" da dockpane — mostra o que está de fato
- * aplicado/calculado no Revit (Project Information + cache local do último
- * "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO), não o que
- * está pendente no site: são fontes diferentes (ver
- * hidrantes_dimensionamento_bridge.py). A classificação pendente do site
- * aparece à parte, com o botão "Aplicar classificação no Revit" — depois
- * de aplicada, a seção "Sistema Classificado" abaixo reflete o que acabou
- * de ser gravado.
+ * Página "Sistema de Hidrantes" da dockpane — permite classificar o
+ * sistema (Tabela 3, NT 22 CBMMA) direto aqui, com o MESMO método do site
+ * (ver lib/hidrantesClassificacao.js — cópia fiel de
+ * ETOS.FireUtils/src/data/hidrantes_calc.js), e mostra o que está de fato
+ * aplicado/calculado no Revit (Project Information + cache local do
+ * último "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO).
+ * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado.
  *
  * A potência da bomba é sempre calculada aqui (JS, lib/hidrantesCalc.js) a
  * partir de Qt/Ht do ponto de operação + a eficiência informada — nunca no
  * Python. A eficiência é persistida em Project Information
  * (SET_HIDRANTES_EFICIENCIA_BOMBA) pra sobreviver fechar/reabrir o Revit.
  */
-export default function SistemaHidrantesPage({ projeto, adicionarToast }) {
+export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToast }) {
   const [carregando, setCarregando] = useState(true);
   const [resposta, setResposta] = useState(null);
   const [eficiencia, setEficiencia] = useState("");
   const [salvandoEficiencia, setSalvandoEficiencia] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
+  // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
+  // como ativa) é o que já está aplicado no Revit (classificacao.tipo).
+  const [tipoSelecionado, setTipoSelecionado] = useState(null);
 
   function recarregar() {
     setCarregando(true);
@@ -83,30 +126,77 @@ export default function SistemaHidrantesPage({ projeto, adicionarToast }) {
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_CLASSIFICACAO_SAVED) {
         setAplicando(false);
-        const { ok } = mensagem.payload || {};
+        const { ok, erro } = mensagem.payload || {};
+        if (!ok) {
+          adicionarToast?.({
+            tipo: "erro",
+            titulo: "Não foi possível aplicar a classificação",
+            mensagem: erro,
+            duracaoMs: 9000,
+          });
+          return;
+        }
         // Sucesso muda o que está gravado no Project Information — recarrega
         // pra "Sistema Classificado" refletir a classificação recém-aplicada.
-        if (ok) recarregar();
+        recarregar();
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const hidrantesSite = dadosHidrantes(projeto);
+  // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site
+  // usa (área da estrutura vinculada + ocupação/carga de incêndio dos
+  // pavimentos + sprinklers) — sem depender do site pra essa decisão.
+  const divisoesComCarga = useMemo(
+    () => divisoesComCargaDaEstrutura(projeto, estrutura?.id),
+    [projeto, estrutura?.id]
+  );
+  const temSprinklers = sistemasAtivos(projeto, estrutura?.id).sprinklers;
+  const sugestao = useMemo(
+    () => sugerirClassificacao(estrutura?.areaConstruida, divisoesComCarga, temSprinklers, normaHidrantesMA),
+    [estrutura?.areaConstruida, divisoesComCarga, temSprinklers]
+  );
 
-  function aplicarClassificacaoDoSite() {
+  // Método de cálculo e dados de sucção (NPSH) não são escolha desta
+  // página — método é fixo pela norma (REFERENCIA_PRESSAO_VAZAO) e a
+  // sucção continua vindo do que o site já tem salvo (ou o padrão, se o
+  // site ainda não preencheu).
+  const { succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
+
+  const classificacao = resposta?.classificacao;
+  const ponto = resposta?.pontoOperacao;
+
+  function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
     postToHost(BridgeMessageTypes.SET_HIDRANTES_CLASSIFICACAO, {
-      tipo: hidrantesSite.tipo,
-      tipoVariante: hidrantesSite.tipoVariante,
-      rti: hidrantesSite.rti,
-      metodoCalculo: hidrantesSite.metodoCalculo,
-      succaoAltitude: hidrantesSite.succaoAltitude,
-      succaoTemperatura: hidrantesSite.succaoTemperatura,
+      tipo,
+      tipoVariante,
+      rti,
+      metodoCalculo: normaHidrantesMA.REFERENCIA_PRESSAO_VAZAO,
+      succaoAltitude,
+      succaoTemperatura,
     });
-    // Sem callback de conclusão aqui — o toast (App.jsx, HIDRANTES_CLASSIFICACAO_SAVED)
-    // já avisa, e o próprio listener acima recarrega em caso de sucesso.
     setTimeout(() => setAplicando(false), 1500);
+  }
+
+  // Tipo efetivo pra decidir o que mostrar: a seleção local, se houver, ou
+  // o que já está aplicado no Revit — mesmo sem nenhum clique ainda, um
+  // Tipo com mais de uma variante (Tipo 4) já mostra as pills de variante.
+  const tipoEfetivo = tipoSelecionado ?? classificacao?.tipo ?? null;
+  const variantesDoTipoEfetivo = tipoEfetivo ? normaHidrantesMA.TIPOS_SISTEMA[tipoEfetivo]?.variantes || [] : [];
+
+  function rtiParaTipo(tipo) {
+    return sugestao.opcoes.find((o) => o.tipo === tipo)?.rti ?? (classificacao?.tipo === tipo ? classificacao.rti : null);
+  }
+
+  function escolherTipo(opcao) {
+    setTipoSelecionado(opcao.tipo);
+    const variantes = normaHidrantesMA.TIPOS_SISTEMA[opcao.tipo]?.variantes || [];
+    if (variantes.length <= 1) aplicar(opcao.tipo, opcao.rti, 0);
+  }
+
+  function escolherVariante(i) {
+    aplicar(tipoEfetivo, rtiParaTipo(tipoEfetivo), i);
   }
 
   function salvarEficiencia() {
@@ -116,8 +206,6 @@ export default function SistemaHidrantesPage({ projeto, adicionarToast }) {
     postToHost(BridgeMessageTypes.SET_HIDRANTES_EFICIENCIA_BOMBA, { eficiencia: valor });
   }
 
-  const classificacao = resposta?.classificacao;
-  const ponto = resposta?.pontoOperacao;
   const { potCv, potKw } = ponto
     ? calcPotenciaBomba(ponto.qt, ponto.ht, eficiencia)
     : { potCv: null, potKw: null };
@@ -134,25 +222,43 @@ export default function SistemaHidrantesPage({ projeto, adicionarToast }) {
         </button>
       </div>
 
-      {hidrantesSite.tipo != null && (
-        <div className="hid-secao">
-          <Cartao titulo="Classificação Pendente (Site)">
-            <dl>
-              <Linha label="Tipo" valor={`Tipo ${hidrantesSite.tipo}`} />
-              <Linha label="RTI" valor={hidrantesSite.rti != null ? `${hidrantesSite.rti} m³` : "—"} />
-            </dl>
-            <button
-              type="button"
-              className="botao"
-              style={{ marginTop: 10 }}
-              onClick={aplicarClassificacaoDoSite}
-              disabled={aplicando}
-            >
-              {aplicando ? "Aplicando..." : "Aplicar classificação no Revit"}
-            </button>
-          </Cartao>
-        </div>
-      )}
+      <div className="hid-secao">
+        <Cartao titulo="Escolha do Sistema">
+          {sugestao.opcoes.length === 0 ? (
+            <p className="vazio">
+              Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
+              site.
+            </p>
+          ) : (
+            <>
+              <div className="hid-pills-linha">
+                {sugestao.opcoes.map((op) => (
+                  <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
+                    Tipo {op.tipo} — RTI {op.rti} m³
+                  </Pill>
+                ))}
+              </div>
+              {variantesDoTipoEfetivo.length > 1 && (
+                <div className="hid-pills-linha" style={{ marginTop: 8 }}>
+                  {variantesDoTipoEfetivo.map((v, i) => (
+                    <Pill
+                      key={i}
+                      active={classificacao?.tipo === tipoEfetivo && classificacao?.variante_idx === i}
+                      onClick={() => escolherVariante(i)}
+                      disabled={aplicando}
+                    >
+                      Esguicho DN{v.esguicho} — mangueira DN{v.mangueiraDn} — {v.pressaoMin} mca
+                    </Pill>
+                  ))}
+                </div>
+              )}
+              <p className="hid-nota-aviso">
+                Sempre que trocar o sistema, execute "Dimensionar Hidrantes" novamente no Revit.
+              </p>
+            </>
+          )}
+        </Cartao>
+      </div>
 
       {carregando && !resposta && <p className="vazio">Carregando...</p>}
 
@@ -187,23 +293,29 @@ export default function SistemaHidrantesPage({ projeto, adicionarToast }) {
             </p>
           ) : (
             <div className="hid-grid-3">
-              <Cartao titulo={`HD01${ponto.hidGoverna === "HD01" ? " — governante" : ""}`}>
-                <dl>
-                  <Linha label="Pressão" valor={`${fmt(ponto.pHd01)} mca`} />
-                  <Linha label="Vazão" valor={`${fmt(ponto.qHd01)} L/min`} />
-                </dl>
+              <Cartao titulo="HD01 — 1º Hidrante Mais Desfavorável">
+                <LinhaInline
+                  itens={[
+                    { label: "Pressão", valor: `${fmt(ponto.pHd01)} mca` },
+                    { label: "Vazão", valor: `${fmt(ponto.qHd01)} L/min` },
+                  ]}
+                />
               </Cartao>
-              <Cartao titulo={`HD02${ponto.hidGoverna === "HD02" ? " — governante" : ""}`}>
-                <dl>
-                  <Linha label="Pressão" valor={`${fmt(ponto.pHd02)} mca`} />
-                  <Linha label="Vazão" valor={`${fmt(ponto.qHd02)} L/min`} />
-                </dl>
+              <Cartao titulo="HD02 — 2º Hidrante Mais Desfavorável">
+                <LinhaInline
+                  itens={[
+                    { label: "Pressão", valor: `${fmt(ponto.pHd02)} mca` },
+                    { label: "Vazão", valor: `${fmt(ponto.qHd02)} L/min` },
+                  ]}
+                />
               </Cartao>
               <Cartao titulo="Ponto de Operação (Bomba)">
-                <dl>
-                  <Linha label="Altura manométrica (Ht)" valor={`${fmt(ponto.ht)} mca`} />
-                  <Linha label="Vazão total (Qt)" valor={`${fmt(ponto.qt)} L/min`} />
-                </dl>
+                <LinhaInline
+                  itens={[
+                    { label: "Altura manométrica (Ht)", valor: `${fmt(ponto.ht)} mca` },
+                    { label: "Vazão total (Qt)", valor: `${fmt(ponto.qt)} L/min` },
+                  ]}
+                />
               </Cartao>
             </div>
           )}
@@ -230,15 +342,16 @@ export default function SistemaHidrantesPage({ projeto, adicionarToast }) {
                   </div>
                   {salvandoEficiencia && <span className="hid-salvando">Salvando...</span>}
                 </div>
-                <dl>
-                  <Linha label="Pressão" valor={`${fmt(ponto.ht)} mca`} />
-                  <Linha label="Vazão" valor={`${fmt(ponto.qt)} L/min`} />
-                  <Linha label="Eficiência" valor={eficiencia ? `${eficiencia}%` : "—"} />
-                  <Linha
+                <div className="hid-stat-grid">
+                  <Stat label="Pressão" valor={`${fmt(ponto.ht)} mca`} />
+                  <Stat label="Vazão" valor={`${fmt(ponto.qt)} L/min`} />
+                  <Stat label="Eficiência" valor={eficiencia ? `${eficiencia}%` : "—"} />
+                  <Stat
                     label="Potência mínima"
                     valor={potCv != null ? `${fmt(potCv)} cv (${fmt(potKw)} kW)` : "—"}
+                    destaque
                   />
-                </dl>
+                </div>
                 {potCv == null && (
                   <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
                 )}

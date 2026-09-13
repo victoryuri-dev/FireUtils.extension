@@ -79,11 +79,16 @@
  *
  *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number,
  *     rti?: number, metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
- *     JS -> Python: manda o Tipo de sistema de hidrantes/mangotinhos que o
- *     ETOS.FireUtils classificou (Tabela 3 da norma, a partir de área +
- *     ocupação + carga de incêndio do projeto — ver
- *     src/components/hidrantes/FormularioSistema.jsx no site) pra ser
- *     gravado no Project Information do documento Revit ativo — ver
+ *     JS -> Python: manda a classificação (Tipo + variante + RTI, Tabela 3
+ *     da norma, a partir de área + ocupação + carga de incêndio do
+ *     projeto) pra ser gravada no Project Information do documento Revit
+ *     ativo. Pode vir de duas origens equivalentes — mesmo método de
+ *     classificação (ver lib/hidrantesClassificacao.js aqui e
+ *     src/data/hidrantes_calc.js no site): a página "Sistema de
+ *     Hidrantes" da própria dockpane (components/dashboard/
+ *     SistemaHidrantesPage.jsx — clicar num Tipo já aplica, sem botão
+ *     separado) ou o card do Dashboard que reflete a classificação do site
+ *     (components/dashboard/DashboardEstrutura.jsx). Gravado — ver
  *     hidrantes_classificacao_bridge.py do lado Python. Os demais
  *     parâmetros da Tabela 2 (esguicho, mangueira, vazão/pressão mínima)
  *     continuam vindo do perfil normativo do próprio plugin, nunca do

@@ -85,6 +85,42 @@ export function sistemasAtivos(linha, estruturaId) {
   };
 }
 
+/** Carga de incêndio (MJ/m²) de uma divisão a partir de dados.cargaState —
+ * mesmo critério do site (extintores_calc.js:cargaDaDivisao): usa o valor
+ * de levantamento quando esse foi o método escolhido, senão o valor de
+ * tabela já resolvido e sincronizado (nunca recalcula por CNAE aqui). */
+function cargaDaDivisao(divisao, cargaState) {
+  const st = cargaState?.[divisao];
+  if (!st) return null;
+  if (st.metodo === "levantamento") return paraNumero(st.valorManual);
+  return typeof st.cargaIncendio === "number" ? st.cargaIncendio : null;
+}
+
+/** [{ divisao, cargaMJm2 }] de uma estrutura — cada divisão (principal ou
+ * subsidiária de acesso) presente nos pavimentos da estrutura, com a maior
+ * carga de incêndio já classificada pra ela. Insumo da classificação do
+ * Sistema de Hidrantes (Tabela 3) direto na dockpane — ver
+ * lib/hidrantesClassificacao.js:sugerirClassificacao — mesma agregação que
+ * FormularioSistema.jsx faz no site (state.pavimentos + state.cargaState),
+ * só que lendo direto da linha do Supabase já sincronizada. */
+export function divisoesComCargaDaEstrutura(linha, estruturaId) {
+  const dados = linha.dados || {};
+  const cargaState = (dados.cargaState && dados.cargaState[estruturaId]) || {};
+  const porDivisao = new Map();
+  (dados.pavimentos || [])
+    .filter((p) => p.estruturaId === estruturaId)
+    .forEach((p) => {
+      const divs = [p.divisao, ...(p.acess || []).map((a) => a.divisao)].filter(Boolean);
+      divs.forEach((divisao) => {
+        const carga = cargaDaDivisao(divisao, cargaState);
+        if (carga == null) return;
+        const atual = porDivisao.get(divisao);
+        if (atual == null || carga > atual) porDivisao.set(divisao, carga);
+      });
+    });
+  return [...porDivisao.entries()].map(([divisao, cargaMJm2]) => ({ divisao, cargaMJm2 }));
+}
+
 /** Classificação do Sistema de Hidrantes/Mangotinhos (Tabela 3 da norma) —
  * decidida no site a partir da área + ocupação + carga de incêndio do
  * projeto inteiro (não por estrutura — ver comentário de state.hidrantes

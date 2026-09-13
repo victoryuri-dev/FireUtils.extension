@@ -86,7 +86,7 @@ export default function DashboardEstrutura({
   }
 
   if (modo === "hidrantes") {
-    return <SistemaHidrantesPage projeto={projeto} adicionarToast={adicionarToast} />;
+    return <SistemaHidrantesPage projeto={projeto} estrutura={estrutura} adicionarToast={adicionarToast} />;
   }
 
   return (

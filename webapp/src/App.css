@@ -1972,3 +1972,97 @@
   padding: 8px 10px;
   margin-top: 10px;
 }
+
+/* Escolha do sistema (Tabela 3) — pills clicáveis, cada clique já aplica
+   no Revit (sem botão "Aplicar" separado). */
+.hid-pills-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hid-pill {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.hid-pill:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.hid-pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hid-pill-ativa,
+.hid-pill-ativa:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hid-nota-aviso {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 10px;
+}
+
+/* Pressão + Vazão (ou par equivalente) numa linha só, em vez de duas
+   linhas dt/dd empilhadas — cards de "Ponto de Operação do Sistema". */
+.hid-linha-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.hid-linha-inline-label {
+  color: var(--text-2);
+}
+
+/* Requisitos da bomba — números grandes, como um resultado de verdade
+   (não uma linha de formulário secundária). */
+.hid-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.hid-stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.hid-stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.hid-stat-valor {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hid-stat-valor-destaque {
+  color: var(--accent);
+}
