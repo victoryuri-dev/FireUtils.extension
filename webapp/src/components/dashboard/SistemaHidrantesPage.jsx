@@ -56,38 +56,30 @@ function Pill({ active, onClick, disabled, children }) {
   );
 }
 
-// Estatística em destaque (Pressão/Vazão/Potência) — números grandes, como
-// um resultado de verdade, não uma linha de formulário.
-function Stat({ label, valor, destaque }) {
-  return (
-    <div className="hid-stat">
-      <div className="hid-stat-label">{label}</div>
-      <div className={`hid-stat-valor ${destaque ? "hid-stat-valor-destaque" : ""}`}>{valor}</div>
-    </div>
-  );
+// Um valor só, em destaque — cada card de "Ponto de Operação"/"Dimensionamento
+// da Bomba" mostra uma única grandeza, com o título do card (Cartao) como
+// rótulo, em vez de repetir o rótulo dentro do corpo.
+function ValorGrande({ valor, destaque }) {
+  return <div className={`hid-valor-grande ${destaque ? "hid-valor-grande-destaque" : ""}`}>{valor}</div>;
 }
 
-// Mesmo visual de Stat, mas editável — unifica o campo de eficiência com o
-// resultado, em vez de um input separado acima repetindo o mesmo valor.
-function StatInput({ label, value, onChange, onCommit }) {
+// Mesmo lugar visual de ValorGrande, mas editável — eficiência e potência
+// adotada são digitadas aqui, no próprio card do resultado.
+function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
   return (
-    <div className="hid-stat">
-      <div className="hid-stat-label">{label}</div>
-      <div className="hid-stat-input-linha">
-        <input
-          className="hid-stat-input"
-          type="number"
-          min="1"
-          max="100"
-          step="1"
-          placeholder="—"
-          value={value}
-          onChange={onChange}
-          onBlur={onCommit}
-          onKeyDown={(e) => e.key === "Enter" && onCommit()}
-        />
-        <span className="hid-stat-input-sufixo">%</span>
-      </div>
+    <div className="hid-stat-input-linha">
+      <input
+        className="hid-stat-input"
+        type="number"
+        min="0"
+        step="1"
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        onBlur={onCommit}
+        onKeyDown={(e) => e.key === "Enter" && onCommit?.()}
+      />
+      {sufixo && <span className="hid-stat-input-sufixo">{sufixo}</span>}
     </div>
   );
 }
@@ -111,6 +103,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
   const [resposta, setResposta] = useState(null);
   const [eficiencia, setEficiencia] = useState("");
   const [salvandoEficiencia, setSalvandoEficiencia] = useState(false);
+  // Potência realmente escolhida pro conjunto motobomba (catálogo do
+  // fabricante só vem em potências padronizadas — quase nunca bate exato
+  // com a potência mínima calculada) — só um campo local por enquanto,
+  // sem persistir no Revit.
+  const [potenciaAdotada, setPotenciaAdotada] = useState("");
   const [aplicando, setAplicando] = useState(false);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
@@ -236,7 +233,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
   const { potCv } = ponto ? calcPotenciaBomba(ponto.qt, ponto.ht, eficiencia) : { potCv: null };
 
   return (
-    <div className="se-pagina">
+    <div className="se-pagina hid-pagina">
       <div className="se-pagina-header">
         <span className="se-pagina-icone">
           <Icon svg={hydrantIconSvg} />
@@ -334,37 +331,54 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
                   ]}
                 />
               </Cartao>
-              <Cartao titulo="Ponto de Operação — Bomba">
-                <LinhaInline
-                  itens={[
-                    { label: "Altura manométrica (Ht)", valor: `${fmt(ponto.ht)} mca` },
-                    { label: "Vazão total (Qt)", valor: `${fmt(ponto.qt)} L/min` },
-                  ]}
-                />
-              </Cartao>
+              <div className="hid-grid-2">
+                <Cartao titulo="Altura Manométrica Total">
+                  <ValorGrande valor={`${fmt(ponto.ht)} mca`} />
+                </Cartao>
+                <Cartao titulo="Vazão Total">
+                  <ValorGrande valor={`${fmt(ponto.qt)} L/min`} />
+                </Cartao>
+              </div>
             </div>
           )}
 
           {ponto && (
             <div className="hid-secao">
               <p className="dashboard-subtitulo">Dimensionamento da Bomba de Incêndio</p>
-              <Cartao titulo="Requisitos da Bomba">
-                <div className="hid-stat-grid">
-                  <Stat label="Pressão" valor={`${fmt(ponto.ht)} mca`} />
-                  <Stat label="Vazão" valor={`${fmt(ponto.qt)} L/min`} />
-                  <StatInput
-                    label="Eficiência global (η)"
+              <div className="hid-grid-2" style={{ marginBottom: 12 }}>
+                <Cartao titulo="Pressão">
+                  <ValorGrande valor={`${fmt(ponto.ht)} mca`} />
+                </Cartao>
+                <Cartao titulo="Vazão">
+                  <ValorGrande valor={`${fmt(ponto.qt)} L/min`} />
+                </Cartao>
+              </div>
+              <div className="hid-grid-3">
+                <Cartao titulo="Eficiência Global (η)">
+                  <CampoNumero
                     value={eficiencia}
                     onChange={(e) => setEficiencia(e.target.value)}
                     onCommit={salvarEficiencia}
+                    sufixo="%"
+                    placeholder="ex.: 65"
                   />
-                  <Stat label="Potência mínima" valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
-                </div>
-                {salvandoEficiencia && <div className="hid-salvando">Salvando...</div>}
-                {potCv == null && (
-                  <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
-                )}
-              </Cartao>
+                </Cartao>
+                <Cartao titulo="Potência Mínima">
+                  <ValorGrande valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
+                </Cartao>
+                <Cartao titulo="Potência Adotada">
+                  <CampoNumero
+                    value={potenciaAdotada}
+                    onChange={(e) => setPotenciaAdotada(e.target.value)}
+                    sufixo="cv"
+                    placeholder="ex.: 5"
+                  />
+                </Cartao>
+              </div>
+              {salvandoEficiencia && <div className="hid-salvando">Salvando...</div>}
+              {potCv == null && (
+                <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
+              )}
             </div>
           )}
         </>
