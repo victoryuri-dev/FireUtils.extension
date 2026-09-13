@@ -68,14 +68,28 @@ export function calcER(pop, capER, larguras) {
   return calcLarguraFluxo(pop, capER, larguras.ER, larguras)
 }
 
+/** Largura de porta pra N UP: dentro da faixa tabelada (n_up com entrada
+ * exata em larguras.PT), o valor cadastrado na tabela manda — mesmo que
+ * N×LARG_UP desse um número maior, é a norma (a tabela) que define a
+ * largura pra essa faixa, não a multiplicação. Só extrapola
+ * multiplicando por LARG_UP quando N passa do maior n_up tabelado (fora
+ * da faixa coberta — ver getLargMinPT). Sem isso, editar a tabela
+ * (ex.: via Supabase) não tinha efeito nenhum nas faixas onde
+ * N×LARG_UP já era maior que o valor cadastrado. */
+function larguraPT(n, larguras) {
+  const ptInfo = getLargMinPT(n, larguras.PT)
+  const lc     = +(n * larguras.LARG_UP).toFixed(2)
+  const dentroTabela = larguras.PT.some(e => e.n_up === n)
+  return { lc, ptInfo, la: dentroTabela ? ptInfo.largura : Math.max(lc, ptInfo.largura) }
+}
+
 /** Cálculo de PT — recebe a população e a capacidade já resolvidas por
  * quem chama (um ambiente sozinho, na rede de saída; ou um pavimento
  * inteiro, no modelo antigo) */
 export function calcPT(pop, capPT, larguras) {
-  const n      = Math.ceil(pop / capPT)
-  const lc     = +(n * larguras.LARG_UP).toFixed(2)
-  const ptInfo = getLargMinPT(n, larguras.PT)
-  return { n, lc, la: Math.max(lc, ptInfo.largura), lMin: ptInfo.largura, tipo: ptInfo.tipo }
+  const n = Math.ceil(pop / capPT)
+  const { lc, ptInfo, la } = larguraPT(n, larguras)
+  return { n, lc, la, lMin: ptInfo.largura, tipo: ptInfo.tipo }
 }
 
 // ── Rede de saída (Ambiente -> Acesso -> Acesso/Descarga ou Escada/Rampa) ────
@@ -220,9 +234,8 @@ export function calcDimsAcesso(acessoId, ambientes, acessos, taxaPopulacional, l
  * Só busca a largura mínima de porta pra esse N na tabela PT — mesma
  * lógica de calcPT, sem o passo de `Math.ceil(pop / capacidade)`. */
 export function calcPortaNoAcesso(n, larguras) {
-  const lc     = +(n * larguras.LARG_UP).toFixed(2)
-  const ptInfo = getLargMinPT(n, larguras.PT)
-  return { n, lc, la: Math.max(lc, ptInfo.largura), lMin: ptInfo.largura, tipo: ptInfo.tipo }
+  const { lc, ptInfo, la } = larguraPT(n, larguras)
+  return { n, lc, la, lMin: ptInfo.largura, tipo: ptInfo.tipo }
 }
 
 /** Retorna o grupo de distância (terreo/demais) para uma divisão, a
