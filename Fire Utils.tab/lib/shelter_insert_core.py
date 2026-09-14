@@ -37,9 +37,14 @@ except ImportError:
 
 from shelter_family import garantir_abrigo, NOME_FAMILIA_ABRIGO
 from hydrant_family import NOME_FAMILIA as NOME_FAMILIA_VALVULA
+from level_offset_utils import nivel_mais_proximo_abaixo
 
 TOL = 1e-4
-TOL_DUPLICATA_M = 0.50  # raio 3D (metros) para considerar abrigo já existente
+# Raio 3D (metros) para considerar abrigo já existente. Pequeno de propósito:
+# só precisa cobrir a mesma válvula recalculada de novo (posição idêntica ou
+# quase); um raio maior (30/50cm) tratava dois hidrantes reais em faces
+# opostas de uma parede fina (ex.: 7cm) como duplicata um do outro.
+TOL_DUPLICATA_M = 0.05
 OFFSET_FRENTE_M = 0.10  # deslocamento extra à frente (dir_abrigo) no posicionamento automático
 
 
@@ -245,7 +250,7 @@ def posicionar_todos_abrigos(doc, uidoc, output):
             continue
 
         dir_s  = _dir_valvula(doc, valvula)
-        nivel  = doc.GetElement(valvula.LevelId)
+        nivel  = nivel_mais_proximo_abaixo(doc, pt_valvula.Z)
         if nivel is None:
             output.print_md(u"| {} | **nível não encontrado** |".format(vid))
             erros += 1

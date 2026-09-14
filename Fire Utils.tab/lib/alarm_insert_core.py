@@ -22,7 +22,6 @@ from Autodesk.Revit.DB import (
     Transaction, XYZ, Line,
     FilteredElementCollector, FamilyInstance,
     ElementTransformUtils, UnitUtils,
-    BuiltInParameter,
 )
 from Autodesk.Revit.DB.Structure import StructuralType
 from pyrevit import forms, script as pyscript
@@ -37,40 +36,25 @@ except ImportError:
 from alarm_family import (garantir_acionador, garantir_alarme_sonoro,
                            NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME)
 from shelter_family import NOME_FAMILIA_ABRIGO
+from level_offset_utils import (
+    forcar_nivel_referencia, definir_elevacao_nivel, nivel_mais_proximo_abaixo,
+)
 
 TOL              = 1e-4
 DIST_ALARME_M    = 0.57   # eixo a eixo: abrigo → conjunto de alarme
 DESLOC_FRENTE_M  = 0.38   # valor do parâmetro "Desloc. Frente" do acionador
-ALTURA_ACION_M   = 1.35   # elevação do acionador em relação ao nível
-ALTURA_ALARME_M  = 2.20   # elevação do avisador sonoro/visual em relação ao nível
-TOL_DUPLICATA_M  = 0.30   # raio (m) para considerar componente já existente
+ALTURA_ACION_M   = 1.35   # elevação do acionador em relação ao NÍVEL DO ABRIGO
+ALTURA_ALARME_M  = 2.20   # elevação do avisador sonoro/visual em relação ao NÍVEL DO ABRIGO
+# Raio (m) para considerar componente já existente. Pequeno de propósito:
+# só precisa cobrir o mesmo abrigo recalculado de novo; um raio maior (30cm)
+# tratava dois conjuntos reais em abrigos de faces opostas de uma parede
+# fina (ex.: 7cm) como duplicata um do outro.
+TOL_DUPLICATA_M  = 0.05
 
 
 # ===========================================================================
 # HELPERS INTERNOS
 # ===========================================================================
-
-def _zerar_offset_nivel(inst):
-    """Zera o parâmetro de elevação de nível da instância."""
-    for bip in [BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM,
-                BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM,
-                BuiltInParameter.SCHEDULE_BASE_LEVEL_OFFSET_PARAM]:
-        try:
-            p = inst.get_Parameter(bip)
-            if p and not p.IsReadOnly:
-                p.Set(0.0)
-                return
-        except Exception:
-            pass
-    for nome in [u"Elevação do nível", u"Offset from Level", u"Level Offset"]:
-        try:
-            p = inst.LookupParameter(nome)
-            if p and not p.IsReadOnly:
-                p.Set(0.0)
-                return
-        except Exception:
-            pass
-
 
 def _set_param_metros(inst, nome_param, valor_m):
     """Seta um parâmetro de comprimento (em metros) por nome."""
@@ -84,15 +68,29 @@ def _set_param_metros(inst, nome_param, valor_m):
 
 def _inserir_componente(doc, simbolo, pt_xy, dir_face, nivel, altura_m):
     """
-    Insere um FamilyInstance na posição (pt_xy.X, pt_xy.Y, nivel.Elevation + altura_m)
-    e o rotaciona para alinhar sua FacingOrientation com dir_face.
-    A altura é preservada como offset do nível — não é zerada.
+    Insere um FamilyInstance no nível `nivel` (o do ABRIGO) e o rotaciona
+    para alinhar sua FacingOrientation com dir_face.
+
+    Cria a instância em (pt_xy.X, pt_xy.Y, nivel.Elevation) — offset 0 —
+    e só DEPOIS define os dois parâmetros nativos do Revit direto:
+    "Nível de referência" = nivel e "Elevação do nível" = altura_m (ver
+    level_offset_utils.py). NÃO soma altura_m ao Z absoluto na criação:
+    pra famílias não hospedadas (caso do Acionador/Avisador), a
+    "Elevação do nível" que o Revit deriva de um Z absoluto pode ser
+    calculada em relação a outro nível (o nível base do projeto) em vez
+    do "Nível de referência" — fazendo o valor exibido somar a cota do
+    pavimento à altura combinada (ex.: pavimento a 3m + 2,20m vira
+    "Elevação do nível" = 5,20m em vez de 2,20m). Definindo os dois
+    parâmetros explicitamente, cada um fica com o valor esperado.
+
     Retorna a instância criada.
     """
-    pt = XYZ(pt_xy.X, pt_xy.Y, nivel.Elevation + _to_ft(altura_m))
+    pt = XYZ(pt_xy.X, pt_xy.Y, nivel.Elevation)
     inst = doc.Create.NewFamilyInstance(
         pt, simbolo, nivel, StructuralType.NonStructural
     )
+    forcar_nivel_referencia(inst, nivel)
+    definir_elevacao_nivel(inst, altura_m)
 
     # Lê a orientação atual do componente recém-inserido e ajusta para dir_face
     doc.Regenerate()
@@ -179,7 +177,7 @@ def inserir_alarmes(doc, uidoc, output):
             erros += 1
             continue
 
-        nivel = doc.GetElement(abrigo.LevelId)
+        nivel = nivel_mais_proximo_abaixo(doc, pt_abrigo.Z)
         if nivel is None:
             output.print_md(u"| {} | **nível não encontrado** |".format(aid))
             erros += 1
@@ -199,10 +197,11 @@ def inserir_alarmes(doc, uidoc, output):
         except Exception:
             dir_face = XYZ(0.0, 1.0, 0.0)
 
-        # Ponto XY do conjunto de alarme (57 cm no lado OPOSTO ao HandOrientation)
+        # Ponto XY do conjunto de alarme (57 cm no lado do HandOrientation
+        # do abrigo — direita)
         pt_conj = XYZ(
-            pt_abrigo.X - dir_hand.X * dist_ft,
-            pt_abrigo.Y - dir_hand.Y * dist_ft,
+            pt_abrigo.X + dir_hand.X * dist_ft,
+            pt_abrigo.Y + dir_hand.Y * dist_ft,
             pt_abrigo.Z
         )
 
