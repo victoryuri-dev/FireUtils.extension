@@ -96,10 +96,29 @@ def _forcar_tls12():
         pass
 
 
+def _mensagem_erro_http(corpo_erro, werr):
+    """Extrai uma mensagem legível do corpo de erro JSON do Supabase.
+    Edge Functions/PostgREST mandam só `{"error": "..."}`; a API de
+    Storage manda `{"error": "<codigo curto>", "message": "<descricao>"}`
+    (ex.: error='not_found', message='Object not found' OU 'Bucket not
+    found', dependendo se é o arquivo ou o bucket que não existe/RLS
+    negou) — combina os dois quando disponíveis, em vez de mostrar só o
+    código curto, que sozinho não diferencia essas causas."""
+    try:
+        corpo_json = json.loads(corpo_erro)
+    except Exception:
+        return corpo_erro or texto_erro(werr)
+    codigo = corpo_json.get(u"error")
+    descricao = corpo_json.get(u"message")
+    if codigo and descricao and codigo != descricao:
+        return u"{} — {}".format(codigo, descricao)
+    return codigo or descricao or corpo_erro
+
+
 def _post_json(url, corpo):
     """POST JSON com os headers do Supabase. Retorna (resultado, erro) —
-    `erro` é None em caso de sucesso, senão uma mensagem legível (extraída
-    do corpo de erro `{"error": "..."}` quando o servidor manda um)."""
+    `erro` é None em caso de sucesso, senão uma mensagem legível (ver
+    _mensagem_erro_http)."""
     import clr
     clr.AddReference(u"System.Net")
     from System.Net import WebRequest, WebException
@@ -132,10 +151,7 @@ def _post_json(url, corpo):
             leitor_erro = StreamReader(werr.Response.GetResponseStream(), Encoding.UTF8)
             corpo_erro = leitor_erro.ReadToEnd()
             werr.Response.Close()
-            try:
-                return None, (json.loads(corpo_erro).get(u"error") or corpo_erro)
-            except Exception:
-                return None, corpo_erro or texto_erro(werr)
+            return None, _mensagem_erro_http(corpo_erro, werr)
         return None, u"Falha de rede: {}".format(texto_erro(werr))
 
     try:
@@ -171,10 +187,7 @@ def _get_json(url):
             leitor_erro = StreamReader(werr.Response.GetResponseStream(), Encoding.UTF8)
             corpo_erro = leitor_erro.ReadToEnd()
             werr.Response.Close()
-            try:
-                return None, (json.loads(corpo_erro).get(u"error") or corpo_erro)
-            except Exception:
-                return None, corpo_erro or texto_erro(werr)
+            return None, _mensagem_erro_http(corpo_erro, werr)
         return None, u"Falha de rede: {}".format(texto_erro(werr))
 
     try:
