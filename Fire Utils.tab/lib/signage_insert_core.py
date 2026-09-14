@@ -7,9 +7,11 @@ signage_family.py) e, pra cada tipo marcado, confirma que a família da
 placa JÁ ESTÁ carregada no projeto (não baixa nada — se faltar, orienta
 o usuário a carregá-la pela dockpane) e insere uma instância na mesma
 posição (X, Y) e orientação de cada equipamento já presente no projeto
-que ainda não tiver uma placa daquele tipo por perto — usando SEMPRE o
-nível do próprio equipamento como referência, na elevação definida por
-tipo (TipoSinalizacao.elevacao_m), nunca a elevação real do equipamento.
+que ainda não tiver uma placa daquele tipo por perto — usando o nível
+de referência de cada tipo (TipoSinalizacao.nivel_referencia — o do
+próprio equipamento, ou o do abrigo mais próximo pra Sirene/Botoeira,
+ver signage_family.py), com elevação 0 (todas as famílias de placa já
+têm a altura real embutida), nunca a elevação real do equipamento.
 
 Função pública
 --------------
@@ -124,11 +126,12 @@ def _pontos_placas_existentes(doc, nome_familia_placa):
 
 
 def _ponto_insercao(equipamento, nivel, elevacao_m):
-    """X/Y do equipamento, Z = elevação do NÍVEL do equipamento + a
-    elevação própria do tipo de placa (0 pra Hidrante/Extintor — a
-    família já embute a altura certa; ALTURA_ALARME_M/ALTURA_ACION_M
-    pra Sirene/Botoeira, que não têm altura própria embutida) — nunca a
-    elevação real (Z) do equipamento em si."""
+    """X/Y do equipamento, Z = elevação do NÍVEL de referência do tipo
+    (TipoSinalizacao.nivel_referencia) + a elevação própria do tipo de
+    placa (sempre 0 — todas as famílias de placa já embutem a altura
+    real, 1,80m do piso) — nunca a elevação real (Z) do equipamento em
+    si nem o nível do próprio dispositivo quando este não é a
+    referência (ver signage_family._nivel_por_abrigo_mais_proximo)."""
     pt_equip = equipamento.Location.Point
     return XYZ(pt_equip.X, pt_equip.Y, nivel.Elevation + _to_ft(elevacao_m))
 
@@ -185,7 +188,7 @@ def _sinalizar_tipo(doc, tipo, output):
         t.Start()
         try:
             for equipamento in equipamentos:
-                nivel = doc.GetElement(equipamento.LevelId)
+                nivel = tipo.nivel_referencia(doc, equipamento)
                 if nivel is None:
                     erros += 1
                     continue

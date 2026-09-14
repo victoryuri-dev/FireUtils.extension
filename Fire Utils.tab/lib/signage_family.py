@@ -28,9 +28,8 @@ import clr
 clr.AddReference("RevitAPI")
 from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance
 
-from hydrant_family import NOME_FAMILIA as NOME_FAMILIA_VALVULA
 from alarm_family import NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME
-from alarm_insert_core import ALTURA_ACION_M, ALTURA_ALARME_M
+from shelter_family import NOME_FAMILIA_ABRIGO
 from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
 
 
@@ -109,36 +108,75 @@ def _instancias_extintor(doc):
     return resultado
 
 
+def _nivel_por_equipamento(doc, equipamento):
+    """Padrão: usa o LevelId do próprio equipamento sinalizado."""
+    return doc.GetElement(equipamento.LevelId)
+
+
+def _nivel_por_abrigo_mais_proximo(doc, equipamento):
+    """Usa o nível do ABRIGO DE MANGUEIRA mais próximo, em vez do LevelId
+    do próprio equipamento — Sirene e Botoeira são sempre inseridos a uma
+    distância fixa de um abrigo (ver alarm_insert_core.py), e é o nível
+    do abrigo (não o do próprio dispositivo) que deve servir de
+    referência pra placa, pro mesmo pavimento valer pros dois."""
+    try:
+        pt = equipamento.Location.Point
+    except Exception:
+        return _nivel_por_equipamento(doc, equipamento)
+
+    abrigos = _instancias_por_familia(doc, NOME_FAMILIA_ABRIGO)
+    mais_proximo = None
+    menor_distancia = None
+    for abrigo in abrigos:
+        try:
+            distancia = pt.DistanceTo(abrigo.Location.Point)
+        except Exception:
+            continue
+        if menor_distancia is None or distancia < menor_distancia:
+            menor_distancia = distancia
+            mais_proximo = abrigo
+
+    if mais_proximo is None:
+        return _nivel_por_equipamento(doc, equipamento)
+    return doc.GetElement(mais_proximo.LevelId)
+
+
 class TipoSinalizacao(object):
-    def __init__(self, chave, rotulo, arquivo_slug, localizar, elevacao_m=0.0):
+    def __init__(self, chave, rotulo, arquivo_slug, localizar, elevacao_m=0.0,
+                 nivel_referencia=None):
         self.chave = chave
         self.rotulo = rotulo
         self.arquivo_slug = arquivo_slug
         self.localizar = localizar
         self.elevacao_m = elevacao_m
+        self.nivel_referencia = nivel_referencia or _nivel_por_equipamento
 
 
-# Elevação (m) de cada placa em relação ao nível do equipamento de
-# referência. Hidrante e Extintor ficam em 0 — as próprias famílias das
-# placas já têm a altura certa embutida. Sirene e Botoeira usam a MESMA
-# altura da botoeira/avisador de referência (ALTURA_ACION_M/ALTURA_ALARME_M
-# de alarm_insert_core.py), porque essas placas não têm altura própria
-# embutida — precisam ficar na altura real do equipamento que sinalizam.
+# Elevação (m) de cada placa em relação ao seu nível de referência
+# (TipoSinalizacao.nivel_referencia) — SEMPRE 0 nos quatro tipos: todas
+# as famílias de placa já têm a altura real (1,80m do piso) embutida
+# internamente, então "elevação 0" já posiciona a placa na altura
+# correta. O que importa acertar é o NÍVEL de referência: pra Hidrante
+# é o do próprio abrigo (o equipamento localizado já É o abrigo); pra
+# Sirene/Botoeira é o do abrigo mais próximo (não o do próprio
+# dispositivo, que pode estar em outro nível de referência — ver
+# alarm_insert_core._forcar_nivel_referencia); pra Extintor é o do
+# próprio extintor.
 TIPOS_SINALIZACAO = [
+    # A sinalização do hidrante é do ABRIGO DE MANGUEIRA, não da válvula
+    # — fica no ponto e no nível do próprio abrigo.
     TipoSinalizacao(
         u"hidrante", u"Hidrantes — E8", u"placa-de-sinalizacao-e8-8m",
-        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_VALVULA),
-        elevacao_m=0.0),
+        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ABRIGO)),
     TipoSinalizacao(
         u"sirene", u"Sirene — E1", u"placa-de-sinalizacao-e1-8m",
         lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ALARME),
-        elevacao_m=ALTURA_ALARME_M),
+        nivel_referencia=_nivel_por_abrigo_mais_proximo),
     TipoSinalizacao(
         u"botoeira", u"Botoeira — E2", u"placa-de-sinalizacao-e2-10m",
         lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ACIONADOR),
-        elevacao_m=ALTURA_ACION_M),
+        nivel_referencia=_nivel_por_abrigo_mais_proximo),
     TipoSinalizacao(
         u"extintor", u"Extintores — E5", u"placa-de-sinalizacao-e5-8m",
-        _instancias_extintor,
-        elevacao_m=0.0),
+        _instancias_extintor),
 ]
