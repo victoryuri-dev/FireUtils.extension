@@ -55,10 +55,20 @@ def _catalogo():
     return _catalogo_cache
 
 
-def _entrada_catalogo(nome_familia):
+def _entrada_catalogo(nome_familia=None, slug=None):
+    """Localiza uma entrada do catalog.json por nome de exibição exato
+    (`nome_familia`) ou pelo slug do arquivo .rfa — o nome do storage_key
+    sem a pasta de categoria nem a extensão (`slug`), útil quando quem
+    chama conhece a convenção de nome do arquivo mas não o nome de
+    exibição exato cadastrado no catálogo (ex.: as placas de sinalização,
+    ver signage_family.py)."""
     for familia in (_catalogo() or {}).get(u"families") or []:
-        if familia.get(u"name") == nome_familia:
+        if nome_familia is not None and familia.get(u"name") == nome_familia:
             return familia
+        if slug is not None:
+            storage_key = familia.get(u"storage_key") or u""
+            if os.path.splitext(os.path.basename(storage_key))[0] == slug:
+                return familia
     return None
 
 
@@ -104,40 +114,15 @@ def _baixar_e_carregar(doc, nome_familia, entrada_catalogo):
     return familias_por_nome.get(nome_familia), None
 
 
-def garantir_familia_supabase(doc, nome_familia):
-    """
-    Garante que a família `nome_familia` (nome de exibição, ex.: 'Abrigo
-    de Mangueira para Hidrante') está carregada e ativada em `doc`.
-
-    Se a família já estiver no projeto, não faz nenhuma chamada de rede.
-    Senão, busca o catalog.json do Supabase, localiza a entrada por nome,
-    baixa o .rfa do bucket privado (Signed URL) pra um arquivo temporário
-    e carrega no documento via family_loader.carregar_familias — a MESMA
-    função que a dockpane usa (ver family_webview_bridge.py) — apagando o
-    temporário em seguida.
-
-    Retorno: (FamilySymbol, erro_msg) — erro_msg é None em caso de sucesso.
-    """
-    familia = next(
+def _familia_no_documento(doc, nome_familia):
+    return next(
         (f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
          if f.Name == nome_familia),
         None
     )
 
-    if familia is None:
-        try:
-            entrada = _entrada_catalogo(nome_familia)
-        except Exception as ex:
-            return None, (u"Falha ao consultar o catálogo de famílias no "
-                          u"Supabase: {}".format(texto_erro(ex)))
-        if entrada is None:
-            return None, (u"Família '{}' não encontrada no catálogo do "
-                          u"Supabase.".format(nome_familia))
 
-        familia, erro = _baixar_e_carregar(doc, nome_familia, entrada)
-        if erro:
-            return None, erro
-
+def _ativar_simbolo(doc, familia, nome_familia):
     if familia is None:
         return None, (u"Não foi possível localizar '{}' no projeto após o "
                       u"carregamento.".format(nome_familia))
@@ -156,3 +141,69 @@ def garantir_familia_supabase(doc, nome_familia):
             t.Commit()
 
     return simbolo, None
+
+
+def garantir_familia_supabase(doc, nome_familia):
+    """
+    Garante que a família `nome_familia` (nome de exibição, ex.: 'Abrigo
+    de Mangueira para Hidrante') está carregada e ativada em `doc`.
+
+    Se a família já estiver no projeto, não faz nenhuma chamada de rede.
+    Senão, busca o catalog.json do Supabase, localiza a entrada por nome,
+    baixa o .rfa do bucket privado (Signed URL) pra um arquivo temporário
+    e carrega no documento via family_loader.carregar_familias — a MESMA
+    função que a dockpane usa (ver family_webview_bridge.py) — apagando o
+    temporário em seguida.
+
+    Retorno: (FamilySymbol, erro_msg) — erro_msg é None em caso de sucesso.
+    """
+    familia = _familia_no_documento(doc, nome_familia)
+
+    if familia is None:
+        try:
+            entrada = _entrada_catalogo(nome_familia=nome_familia)
+        except Exception as ex:
+            return None, (u"Falha ao consultar o catálogo de famílias no "
+                          u"Supabase: {}".format(texto_erro(ex)))
+        if entrada is None:
+            return None, (u"Família '{}' não encontrada no catálogo do "
+                          u"Supabase.".format(nome_familia))
+
+        familia, erro = _baixar_e_carregar(doc, nome_familia, entrada)
+        if erro:
+            return None, erro
+
+    return _ativar_simbolo(doc, familia, nome_familia)
+
+
+def garantir_familia_supabase_por_slug(doc, slug):
+    """
+    Como garantir_familia_supabase, mas localizando a entrada do catálogo
+    pelo slug do arquivo .rfa (ex.: 'placa-de-sinalizacao-e8-8m') em vez
+    do nome de exibição — útil quando quem chama conhece a convenção de
+    nome do arquivo (ver signage_family.py) mas não o nome de exibição
+    exato cadastrado no catálogo. O nome de exibição real (`entrada.name`)
+    é usado tanto pra checar se a família já está no projeto quanto,
+    depois de carregada, pra renomeá-la (ver family_loader.carregar_familias).
+
+    Retorno: (FamilySymbol, nome_exibicao, erro_msg).
+    """
+    try:
+        entrada = _entrada_catalogo(slug=slug)
+    except Exception as ex:
+        return None, None, (u"Falha ao consultar o catálogo de famílias no "
+                            u"Supabase: {}".format(texto_erro(ex)))
+    if entrada is None:
+        return None, None, (u"Família '{}' não encontrada no catálogo do "
+                            u"Supabase.".format(slug))
+
+    nome_familia = entrada.get(u"name") or slug
+    familia = _familia_no_documento(doc, nome_familia)
+
+    if familia is None:
+        familia, erro = _baixar_e_carregar(doc, nome_familia, entrada)
+        if erro:
+            return None, nome_familia, erro
+
+    simbolo, erro = _ativar_simbolo(doc, familia, nome_familia)
+    return simbolo, nome_familia, erro
