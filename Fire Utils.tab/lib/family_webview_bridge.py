@@ -35,6 +35,8 @@ from family_loader import FamilyEntry, carregar_familias
 from family_cache import baixar_temporario, remover_temporario
 from family_error_utils import texto_erro, print_seguro
 import project_link_bridge
+import hidrantes_classificacao_bridge
+import hidrantes_dimensionamento_bridge
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -198,6 +200,21 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     elif tipo == u"GET_DIMENSIONAMENTOS_STATUS":
         fila_acoes.enfileirar(
             lambda uiapp: project_link_bridge.tratar_get_dimensionamentos_status(uiapp, postar_mensagem)
+        )
+    elif tipo == u"SET_HIDRANTES_CLASSIFICACAO":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_classificacao_bridge.tratar_set_hidrantes_classificacao(
+                uiapp, payload, postar_mensagem)
+        )
+    elif tipo == u"GET_HIDRANTES_DIMENSIONAMENTO":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_dimensionamento_bridge.tratar_get_hidrantes_dimensionamento(
+                uiapp, postar_mensagem)
+        )
+    elif tipo == u"SET_HIDRANTES_EFICIENCIA_BOMBA":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_dimensionamento_bridge.tratar_set_hidrantes_eficiencia_bomba(
+                uiapp, payload, postar_mensagem)
         )
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

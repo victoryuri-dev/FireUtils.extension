@@ -1,10 +1,42 @@
 import ProjetoCabecalho from "./ProjetoCabecalho";
 import SaidaEmergenciaPage from "./SaidaEmergenciaPage";
+import SistemaHidrantesPage from "./SistemaHidrantesPage";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
+import { dadosHidrantes } from "../../lib/projetoDados";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
+
+// A ação de aplicar a classificação no Revit mora na página "Sistema de
+// Hidrantes" (SistemaHidrantesPage.jsx, mesmo destino deste cartão) — aqui
+// fica só o resumo do que está pendente no site, sem botão.
+function CartaoClassificacaoHidrantes({ hidrantes }) {
+  if (hidrantes.tipo == null) {
+    return (
+      <div className="cartao-info">
+        <h3>Sistema de Hidrantes</h3>
+        <p className="vazio">Classificação ainda não definida no site.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cartao-info">
+      <h3>Sistema de Hidrantes</h3>
+      <dl>
+        <div>
+          <dt>Tipo:</dt>
+          <dd>{hidrantes.tipo}</dd>
+        </div>
+        <div>
+          <dt>RTI:</dt>
+          <dd>{hidrantes.rti != null ? `${hidrantes.rti} m³` : "—"}</dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
 
 function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick }) {
   const Tag = onClick ? "button" : "div";
@@ -36,11 +68,12 @@ export default function DashboardEstrutura({
   onAtualizarProjeto,
   modo = "dashboard",
   onAbrirSaidaEmergencia,
+  onAbrirHidrantes,
 }) {
-  // Saída de Emergência virou página própria (mesmo destino do atalho da
-  // sidebar e deste cartão) — ver App.jsx/Sidebar.jsx. `modo` chega até
-  // aqui (em vez de um estado local tipo `saidaAberta`) porque quem decide
-  // a aba atual é o App, não este componente.
+  // Saída de Emergência e Sistema de Hidrantes viraram páginas próprias
+  // (mesmo destino do atalho da sidebar e do respectivo cartão) — ver
+  // App.jsx/Sidebar.jsx. `modo` chega até aqui (em vez de um estado local)
+  // porque quem decide a aba atual é o App, não este componente.
   if (modo === "saidas") {
     return (
       <SaidaEmergenciaPage
@@ -50,6 +83,10 @@ export default function DashboardEstrutura({
         adicionarToast={adicionarToast}
       />
     );
+  }
+
+  if (modo === "hidrantes") {
+    return <SistemaHidrantesPage projeto={projeto} estrutura={estrutura} adicionarToast={adicionarToast} />;
   }
 
   return (
@@ -96,6 +133,8 @@ export default function DashboardEstrutura({
             </div>
           </dl>
         </div>
+
+        <CartaoClassificacaoHidrantes hidrantes={dadosHidrantes(projeto)}/>
       </div>
 
       <p className="dashboard-subtitulo">Dimensionamentos</p>
@@ -104,6 +143,7 @@ export default function DashboardEstrutura({
           titulo="Sistema de Hidrantes"
           iconeSvg={hydrantIconSvg}
           dimensionado={dimensionamentos?.hidrantes}
+          onClick={onAbrirHidrantes}
         />
         <CartaoDimensionamento
           titulo="Saída de Emergência"

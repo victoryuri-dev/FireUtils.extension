@@ -4,8 +4,9 @@ hydrant_params.py
 Cria e vincula os parâmetros necessários para o dimensionamento de hidrantes:
 
 Project Information:
-  - FireUtils - Tipo de Sistema de Hidrante  (texto)
-  - FireUtils - Sistema Personalizado        (texto/JSON com valores custom)
+  - FireUtils - Tipo de Sistema de Hidrante  (texto) — classificação vinda do site
+  - FireUtils - Metodo de Calculo de Hidrante (texto) — idem
+  - FireUtils - Dados de Succao              (texto/JSON: altitude/temperatura) — idem
 
 Shared Parameters (categorias alvo definidas abaixo):
   Tubulações:
@@ -119,27 +120,37 @@ PARAMS_CONFIG = [
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
 
-# Guarda, em JSON, os valores personalizados do sistema (quando o usuário opta
-# por valores fora da Tabela 2). Fica no próprio projeto para permitir
-# reclassificar quantas vezes for preciso sem redigitar.
-PROJECT_INFO_CUSTOM_PARAM = u"FireUtils - Sistema Personalizado"
-
 # Guarda a escolha de método de cálculo (Válvula do Hidrante / Ponta do
-# Esguicho Regulável), feita em "Classificar Sistema". Por enquanto é só
-# um registro — o motor de cálculo (hidrantes/calc.py) ainda não usa esse
-# valor; ele sempre aplica o método da marcha com Fator K.
+# Esguicho Regulável) — vem do site (state.hidrantes, a partir da norma do
+# estado do projeto) desde que a classificação deixou de ser feita no
+# Revit (ver hidrantes_classificacao_bridge.py). O motor de cálculo
+# (Dimensionar Hidrantes) usa esse valor pra decidir onde Q/Pmin se
+# aplicam.
 PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
 
 # Guarda, em JSON, os dados do reservatório que a verificação da condição de
 # sucção pelo nível X e o NPSH disponível precisam e que não existem na
-# geometria: cota do fundo, volume total, área em planta, dispositivo
-# antivórtice, poço de sucção e — opcionalmente — o tipo de tomada, quando o
-# usuário quer sobrepor o que foi lido do modelo.
+# geometria: altitude do local e temperatura da água — também vêm do site
+# (ver hidrantes_classificacao_bridge.py).
 PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
 
+# RTI (Reserva Técnica de Incêndio, m³) — Tabela 3 da norma, decidida pelo
+# site a partir de área/ocupação/carga de incêndio do projeto (o plugin não
+# tem como derivar isso sozinho). Vem junto no mesmo SET_HIDRANTES_CLASSIFICACAO
+# que grava PROJECT_INFO_PARAM. Guardado como texto (ex.: "48") — sem
+# format spec no Set/leitura, pra não esbarrar no ValueError do IronPython
+# 2.7 ao formatar int.
+PROJECT_INFO_RTI_PARAM = u"FireUtils - RTI Hidrante"
+
+# Eficiência global (%) da bomba de incêndio, informada pelo usuário na
+# página "Sistema de Hidrantes" da dockpane — persistida aqui pra
+# sobreviver fechar/reabrir o Revit (ver hidrantes_dimensionamento_bridge.py).
+PROJECT_INFO_EFICIENCIA_PARAM = u"FireUtils - Eficiencia Bomba Hidrante"
+
 PROJECT_INFO_PARAMS = [
-    PROJECT_INFO_PARAM, PROJECT_INFO_CUSTOM_PARAM, PROJECT_INFO_METODO_PARAM,
-    PROJECT_INFO_SUCCAO_PARAM,
+    PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
+    PROJECT_INFO_SUCCAO_PARAM, PROJECT_INFO_RTI_PARAM,
+    PROJECT_INFO_EFICIENCIA_PARAM,
 ]
 
 
