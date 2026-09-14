@@ -33,7 +33,7 @@ import threading
 
 from family_loader import FamilyEntry, carregar_familias
 from family_cache import baixar_temporario, remover_temporario
-from family_error_utils import texto_erro
+from family_error_utils import texto_erro, print_seguro
 import project_link_bridge
 
 
@@ -71,20 +71,59 @@ def _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mens
         return
     doc = uidoc.Document
 
-    carregadas, ja_existentes, erros, _familias_por_nome = carregar_familias(doc, entradas)
+    # carregar_familias já protege cada família individualmente (erro numa
+    # não derruba as outras) — mas se mesmo assim algo escapar sem ser
+    # capturado (ex.: alguma variação da classe de erro de codificação do
+    # IronPython com nome/caminho acentuado, ver family_error_utils.py),
+    # não pode deixar o frontend esperando pra sempre pelo LOAD_RESULT: o
+    # ExternalEvent (family_loader_events.py) só imprime esse tipo de
+    # exceção no console, não manda nada de volta — sem esse try/except
+    # aqui, a dockpane ficava travada no timeout de 30s (App.jsx) mesmo
+    # com a família já carregada com sucesso no Revit.
+    try:
+        carregadas, ja_existentes, erros, _familias_por_nome = carregar_familias(doc, entradas)
+    except Exception as e:
+        print_seguro(u"[AVISO] carregar_familias falhou inesperadamente: {}".format(texto_erro(e)))
+        for caminho in caminhos_temporarios:
+            remover_temporario(caminho)
+        postar_mensagem(u"LOAD_RESULT", {
+            u"carregadas": [],
+            u"jaExistentes": [],
+            u"erros": _formatar_erros([
+                (entrada.name, u"Falha inesperada ao processar — confira o projeto, a família pode ter sido carregada mesmo assim.")
+                for entrada in entradas
+            ] + erros_download),
+        })
+        return
+
     for nome, msg in erros:
-        print(u"[AVISO] Falha ao carregar '{}': {}".format(nome, msg))
+        print_seguro(u"[AVISO] Falha ao carregar '{}': {}".format(nome, msg))
 
     # A partir daqui a família já está embutida no documento (.rvt) — o
     # .rfa baixado não é mais necessário.
     for caminho in caminhos_temporarios:
         remover_temporario(caminho)
 
-    postar_mensagem(u"LOAD_RESULT", {
-        u"carregadas": carregadas,
-        u"jaExistentes": ja_existentes,
-        u"erros": _formatar_erros(erros + erros_download),
-    })
+    try:
+        postar_mensagem(u"LOAD_RESULT", {
+            u"carregadas": carregadas,
+            u"jaExistentes": ja_existentes,
+            u"erros": _formatar_erros(erros + erros_download),
+        })
+    except Exception as e:
+        # Mesma rede de segurança do lado do envio: se o post em si falhar
+        # (ex.: algo no payload que o WebView2 não digere), tenta de novo
+        # com uma versão mínima — melhor um aviso genérico do que nenhuma
+        # resposta nenhuma.
+        print_seguro(u"[AVISO] Falha ao enviar LOAD_RESULT: {}".format(texto_erro(e)))
+        try:
+            postar_mensagem(u"LOAD_RESULT", {
+                u"carregadas": [],
+                u"jaExistentes": [],
+                u"erros": [{u"name": u"?", u"mensagem": u"Falha ao reportar o resultado — confira o projeto."}],
+            })
+        except Exception:
+            pass
 
 
 def _baixar_em_background(familias, fila_acoes, postar_mensagem):
@@ -98,7 +137,7 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
             )
         except Exception as ex:
             mensagem_ex = texto_erro(ex)
-            print(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), mensagem_ex))
+            print_seguro(u"[AVISO] Falha ao baixar '{}' do Supabase: {}".format(item.get(u"name"), mensagem_ex))
             erros_download.append((item.get(u"name") or u"?", mensagem_ex))
             continue
         caminhos_temporarios.append(caminho_local)

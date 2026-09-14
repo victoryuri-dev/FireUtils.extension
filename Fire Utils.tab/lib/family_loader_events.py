@@ -15,7 +15,7 @@ import clr
 clr.AddReference(u"RevitAPIUI")
 from Autodesk.Revit.UI import IExternalEventHandler, ExternalEvent
 
-from family_error_utils import texto_erro
+from family_error_utils import texto_erro, print_seguro
 
 
 class _FilaAcoesHandler(IExternalEventHandler):
@@ -48,7 +48,7 @@ class _FilaAcoesHandler(IExternalEventHandler):
         try:
             funcao(uiapp)
         except Exception as ex:
-            print(u"[AVISO] Ação do Carregador de Famílias falhou: {}".format(texto_erro(ex)))
+            print_seguro(u"[AVISO] Ação do Carregador de Famílias falhou: {}".format(texto_erro(ex)))
         finally:
             if self._fila:
                 self.evento.Raise()
