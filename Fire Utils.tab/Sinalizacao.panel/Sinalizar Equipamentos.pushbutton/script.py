@@ -5,8 +5,9 @@ __doc__ = (
     "(Hidrantes - E8, Sirene - E1, Botoeira - E2, Extintores - E5) e "
     "insere a placa correspondente na mesma posição de cada equipamento "
     "já presente no projeto que ainda não estiver sinalizado. As "
-    "famílias das placas vêm do catálogo do Supabase, carregadas apenas "
-    "quando ainda não estiverem no projeto."
+    "famílias das placas precisam já estar carregadas no projeto — "
+    "carregue-as pela Biblioteca de Famílias (dockpane) antes de usar "
+    "este botão."
 )
 
 from pyrevit import script

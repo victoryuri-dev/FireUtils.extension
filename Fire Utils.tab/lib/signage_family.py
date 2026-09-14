@@ -9,15 +9,19 @@ Cada TipoSinalizacao carrega:
   chave        : identificador curto, usado pra ligar o tipo ao CheckBox
                  correspondente em signage_opcoes.xaml (Chk_<chave>)
   rotulo       : texto exibido no painel de seleção
-  arquivo_slug : nome do arquivo .rfa (sem extensão) da placa no catálogo
-                 do Supabase — ver
-                 family_supabase.garantir_familia_supabase_por_slug
+  arquivo_slug : nome do arquivo .rfa (sem extensão) da placa, no mesmo
+                 formato do slugify() abaixo — usado pra achar a família
+                 já carregada no projeto pelo nome (ver
+                 signage_insert_core._familia_placa_carregada), já que a
+                 família não é baixada automaticamente por este plugin
+                 (precisa ser carregada antes pela dockpane)
   elevacao_m   : elevação (m) da placa em relação ao nível do equipamento
                  de referência — ver signage_insert_core._inserir_placa
   localizar    : function(doc) -> list[FamilyInstance] dos equipamentos já
                  inseridos no projeto que esse tipo de placa sinaliza
 """
 
+import re
 import unicodedata
 
 import clr
@@ -51,6 +55,21 @@ def _normalizado(texto):
     sem_acento = unicodedata.normalize(u"NFKD", texto)
     sem_acento = u"".join(c for c in sem_acento if not unicodedata.combining(c))
     return sem_acento.strip().lower()
+
+
+def slugify(texto):
+    """'Placa de Sinalização E8 - 8m' -> 'placa-de-sinalizacao-e8-8m' —
+    MESMO algoritmo de migration/generate_catalog.py (usado lá pra gerar
+    o storage_key/nome de arquivo de cada família no catálogo). Usado
+    aqui ao contrário: dado o Family.Name de uma família já carregada no
+    projeto, confirma se ela corresponde ao TipoSinalizacao.arquivo_slug
+    esperado (ver signage_insert_core._familia_placa_carregada)."""
+    if not texto:
+        return u"item"
+    sem_acento = unicodedata.normalize(u"NFKD", texto)
+    sem_acento = sem_acento.encode(u"ascii", u"ignore").decode(u"ascii")
+    slug = re.sub(r"[^a-zA-Z0-9]+", u"-", sem_acento).strip(u"-").lower()
+    return slug or u"item"
 
 
 def _todas_instancias(doc):

@@ -3,13 +3,13 @@
 signage_insert_core.py — Fire Utils · lib/
 Lógica central do botão "Sinalizar Equipamentos": mostra um painel de
 checkbox (signage_opcoes.xaml) com os tipos de placa disponíveis (ver
-signage_family.py) e, pra cada tipo marcado, garante a família
-correspondente (Supabase — ver family_supabase.py) e insere uma
-instância na mesma posição (X, Y) e orientação de cada equipamento já
-presente no projeto que ainda não tiver uma placa daquele tipo por
-perto — usando SEMPRE o nível do próprio equipamento como referência,
-na elevação definida por tipo (TipoSinalizacao.elevacao_m), nunca a
-elevação real do equipamento.
+signage_family.py) e, pra cada tipo marcado, confirma que a família da
+placa JÁ ESTÁ carregada no projeto (não baixa nada — se faltar, orienta
+o usuário a carregá-la pela dockpane) e insere uma instância na mesma
+posição (X, Y) e orientação de cada equipamento já presente no projeto
+que ainda não tiver uma placa daquele tipo por perto — usando SEMPRE o
+nível do próprio equipamento como referência, na elevação definida por
+tipo (TipoSinalizacao.elevacao_m), nunca a elevação real do equipamento.
 
 Função pública
 --------------
@@ -24,15 +24,14 @@ clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import (
-    Transaction, XYZ, Line,
+    Transaction, XYZ, Line, Family,
     FilteredElementCollector, FamilyInstance,
     ElementTransformUtils, UnitUtils,
 )
 from Autodesk.Revit.DB.Structure import StructuralType
 from pyrevit import forms
 
-from family_supabase import garantir_familia_supabase_por_slug
-from signage_family import TIPOS_SINALIZACAO
+from signage_family import TIPOS_SINALIZACAO, slugify
 from family_error_utils import texto_erro
 
 try:
@@ -80,6 +79,35 @@ class _JanelaSinalizacao(forms.WPFWindow):
 # HELPERS INTERNOS
 # ===========================================================================
 
+def _familia_placa_carregada(doc, arquivo_slug):
+    """Procura, entre as famílias já carregadas em `doc`, uma cujo Name —
+    passado pelo mesmo slugify() usado pra gerar o nome de arquivo da
+    placa no catálogo (ver signage_family.py) — bata com `arquivo_slug`
+    (ex.: uma família 'Placa de Sinalização E8 - 8m' vira
+    'placa-de-sinalizacao-e8-8m'). Não baixa nada: retorna None se a
+    família ainda não estiver no projeto."""
+    return next(
+        (f for f in FilteredElementCollector(doc).OfClass(Family).ToElements()
+         if slugify(f.Name) == arquivo_slug),
+        None
+    )
+
+
+def _ativar_simbolo_placa(doc, familia):
+    simbolo = next(
+        (doc.GetElement(sid) for sid in familia.GetFamilySymbolIds()),
+        None
+    )
+    if simbolo is None:
+        return None
+    if not simbolo.IsActive:
+        with Transaction(doc, u"FireUtils - Ativar Símbolo {}".format(familia.Name)) as t:
+            t.Start()
+            simbolo.Activate()
+            t.Commit()
+    return simbolo
+
+
 def _pontos_placas_existentes(doc, nome_familia_placa):
     pontos = []
     for e in FilteredElementCollector(doc).OfClass(FamilyInstance) \
@@ -126,10 +154,20 @@ def _inserir_placa(doc, simbolo, equipamento, nivel, pt):
 
 
 def _sinalizar_tipo(doc, tipo, output):
-    simbolo, nome_placa, erro = garantir_familia_supabase_por_slug(doc, tipo.arquivo_slug)
-    if erro:
-        output.print_md(u"**{}** — falha ao carregar a família: `{}`".format(tipo.rotulo, erro))
+    familia = _familia_placa_carregada(doc, tipo.arquivo_slug)
+    if familia is None:
+        output.print_md(
+            u"**{}** — a família da placa ainda não está no projeto. Abra "
+            u"a Biblioteca de Famílias (dockpane) e carregue-a antes de "
+            u"sinalizar este tipo.".format(tipo.rotulo))
         return
+
+    simbolo = _ativar_simbolo_placa(doc, familia)
+    if simbolo is None:
+        output.print_md(u"**{}** — família carregada, mas nenhum tipo encontrado.".format(tipo.rotulo))
+        return
+
+    nome_placa = familia.Name
 
     equipamentos = tipo.localizar(doc)
     if not equipamentos:

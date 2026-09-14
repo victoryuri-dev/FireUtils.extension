@@ -33,17 +33,10 @@ import json
 
 from family_error_utils import texto_erro
 
-# Expostos (sem "_") porque family_supabase.py também precisa deles pra
-# assinar/baixar .rfa do bucket privado revit-families — mesmo projeto
-# Supabase, mesma anon key, só endpoints diferentes (Storage em vez de
-# Edge Functions/PostgREST).
-SUPABASE_URL = u"https://lngvagifcukglgdjildw.supabase.co"
-ANON_KEY     = u"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ZhZ2lmY3VrZ2xnZGppbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDUwNzksImV4cCI6MjEwMjMyMTA3OX0.hApUcA5wunyv21JdL8XAVVD1TnGU9oRvyew1uCIlZRw"
-
-_SYNC_URL   = SUPABASE_URL + u"/functions/v1/revit-sync"
-_BUSCA_URL  = SUPABASE_URL + u"/functions/v1/site-sync"
-_NORMAS_URL = SUPABASE_URL + u"/rest/v1/normas_dados"
-_ANON_KEY   = ANON_KEY
+_SYNC_URL   = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/revit-sync"
+_BUSCA_URL  = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/site-sync"
+_NORMAS_URL = u"https://lngvagifcukglgdjildw.supabase.co/rest/v1/normas_dados"
+_ANON_KEY   = u"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ZhZ2lmY3VrZ2xnZGppbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDUwNzksImV4cCI6MjEwMjMyMTA3OX0.hApUcA5wunyv21JdL8XAVVD1TnGU9oRvyew1uCIlZRw"
 _CACHE_NOME = u"firedata.json"
 _MEDIDAS_VALIDAS = (u"extintores", u"hidrantes", u"saidas_emergencia")
 

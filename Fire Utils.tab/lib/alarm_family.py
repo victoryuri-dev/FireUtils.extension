@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 alarm_family.py — Fire Utils · lib/
-Garante que as famílias de alarme de incêndio (Acionador Manual =
-"botoeira", Avisador Sonoro e Visual = "sirene") estão carregadas e
-ativadas no documento ativo — baixando do catálogo do Supabase (o mesmo
-acervo do Carregador de Famílias da dockpane) quando ainda não estiverem
-no projeto. Ver family_supabase.py pro fluxo de download/carga.
+Confirma que as famílias de alarme de incêndio (Acionador Manual =
+"botoeira", Avisador Sonoro e Visual = "sirene") já estão carregadas e
+ativadas no documento ativo. Não baixa nem carrega nada — se faltar
+alguma, orienta o usuário a carregá-la pela dockpane (Biblioteca de
+Famílias). Ver family_check.py.
 
 Uso:
     from alarm_family import (garantir_acionador, garantir_alarme_sonoro,
@@ -17,15 +17,15 @@ Uso:
         script.exit()
 """
 
-from family_supabase import garantir_familia_supabase
+from family_check import garantir_familia_no_projeto
 
 NOME_FAMILIA_ACIONADOR = u"Acionador Manual do Sistema de Detecção e Alarme"
 NOME_FAMILIA_ALARME    = u"Avisador Sonoro e Visual"
 
 
 def garantir_acionador(doc):
-    return garantir_familia_supabase(doc, NOME_FAMILIA_ACIONADOR)
+    return garantir_familia_no_projeto(doc, NOME_FAMILIA_ACIONADOR)
 
 
 def garantir_alarme_sonoro(doc):
-    return garantir_familia_supabase(doc, NOME_FAMILIA_ALARME)
+    return garantir_familia_no_projeto(doc, NOME_FAMILIA_ALARME)
