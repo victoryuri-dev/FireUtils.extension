@@ -30,7 +30,7 @@ from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance
 
 from alarm_family import NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME
 from shelter_family import NOME_FAMILIA_ABRIGO
-from extintores.params import CATEGORIAS_EXTINTOR
+from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
 from level_offset_utils import nivel_mais_proximo_abaixo
 
 
@@ -87,14 +87,19 @@ def _instancias_por_familia(doc, nome_familia):
 
 
 def _instancias_extintor(doc):
-    """Categoria Proteção contra Incêndio (OST_FireProtection) — mesma
-    categoria usada por extintores/calc.py, mas SEM exigir o parâmetro
-    'Capacidade Extintora' preenchido: aquele parâmetro só importa pra
-    quem grava dados de dimensionamento (Gravar Dados de Extintores);
-    pra saber se um item precisa de placa de sinalização, a categoria já
-    basta — exigir o parâmetro a mais fazia extintores já posicionados
-    no projeto não serem encontrados quando esse parâmetro de Tipo não
-    estava preenchido na família usada. Cobre as 5 famílias de extintor
+    """Um elemento conta como extintor quando a categoria é Proteção
+    contra Incêndio (OST_FireProtection, convenção deste escritório) OU
+    a família TEM o parâmetro compartilhado 'Capacidade Extintora'
+    definido no Tipo — sem exigir valor preenchido, só a presença do
+    parâmetro. Categoria sozinha não bastou na prática: a família de
+    extintor usada em alguns projetos pode não estar de fato na
+    categoria Proteção contra Incêndio, então o parâmetro compartilhado
+    (que só existe nas famílias de extintor, por ser vinculado só a
+    elas) funciona como sinal independente da categoria real do
+    elemento. É sempre um parâmetro de TIPO (Capacidade Extintora é
+    definido no Tipo, não na instância), então a checagem é sempre em
+    e.Symbol, nunca em e diretamente — LookupParameter na instância não
+    enxerga parâmetros de Tipo. Cobre as 5 famílias de extintor
     (A/ABC/BC/CO2/K) sem depender de um nome de família específico."""
     cat_ids = set(
         _get_id_value(doc.Settings.Categories.get_Item(bic).Id)
@@ -104,9 +109,17 @@ def _instancias_extintor(doc):
     resultado = []
     for e in _todas_instancias(doc):
         categoria = e.Category
-        if not categoria or _get_id_value(categoria.Id) not in cat_ids:
-            continue
-        resultado.append(e)
+        na_categoria = bool(categoria) and _get_id_value(categoria.Id) in cat_ids
+
+        tem_param_tipo = False
+        if e.Symbol is not None:
+            try:
+                tem_param_tipo = e.Symbol.LookupParameter(PARAM_CAPACIDADE) is not None
+            except Exception:
+                tem_param_tipo = False
+
+        if na_categoria or tem_param_tipo:
+            resultado.append(e)
     return resultado
 
 
