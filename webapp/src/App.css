@@ -1933,3 +1933,161 @@
   color: var(--amber);
   margin-top: 2px;
 }
+
+/* Página "Sistema de Hidrantes" (SistemaHidrantesPage.jsx) --------------- */
+.hid-secao {
+  margin-bottom: 20px;
+}
+
+/* Títulos de seção e de card nesta página em preto (var(--text)) — as
+   classes compartilhadas (.dashboard-subtitulo, .cartao-info h3) usam um
+   cinza mais claro (var(--text-2)) nas outras páginas do Dashboard;
+   escopado a .hid-pagina pra não mudar o resto do app. */
+.hid-pagina .dashboard-subtitulo,
+.hid-pagina .cartao-info h3 {
+  color: var(--text);
+}
+
+/* Um card por linha, ocupando toda a largura — "Ponto de Operação do
+   Sistema" (HD01/HD02/Bomba). */
+.hid-lista-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.hid-salvando {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 8px;
+}
+
+.hid-aviso {
+  font-size: 11px;
+  color: var(--amber);
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 10px;
+}
+
+/* Escolha do sistema (Tabela 3) — pills clicáveis, cada clique já aplica
+   no Revit (sem botão "Aplicar" separado). */
+.hid-pills-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hid-pill {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.hid-pill:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.hid-pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.hid-pill-ativa,
+.hid-pill-ativa:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.hid-nota-aviso {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 10px;
+}
+
+/* Pressão + Vazão (ou par equivalente) numa linha só, em vez de duas
+   linhas dt/dd empilhadas — cards de "Ponto de Operação do Sistema". */
+.hid-linha-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.hid-linha-inline-label {
+  color: var(--text-2);
+}
+
+/* Cards de valor único — "Ponto de Operação do Sistema" (Altura
+   Manométrica/Vazão Total) e "Dimensionamento da Bomba de Incêndio"
+   (Pressão/Vazão/Eficiência/Potência): cada card mostra UMA grandeza,
+   grande, como um resultado de verdade — o título do próprio card
+   (Cartao h3) já serve de rótulo. */
+.hid-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.hid-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.hid-valor-grande {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hid-valor-grande-destaque {
+  color: var(--accent);
+}
+
+/* Eficiência e potência adotada são os únicos valores editáveis no meio
+   dos resultados — mesmo lugar visual de ValorGrande, com um input no
+   lugar do texto, pra alterar tudo no próprio card do resultado em vez
+   de duplicar o valor num campo separado. */
+.hid-stat-input-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+}
+
+.hid-stat-input {
+  width: 60px;
+  border: none;
+  border-bottom: 1.5px solid var(--border-2);
+  background: transparent;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  padding: 0 2px 2px;
+}
+
+.hid-stat-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.hid-stat-input-sufixo {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}

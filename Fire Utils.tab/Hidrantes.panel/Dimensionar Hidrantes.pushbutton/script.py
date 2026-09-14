@@ -7,13 +7,16 @@ mais favorável pelo Fator K.
 
 Ao final, mostra só as verificações e os resultados finais (velocidade nos
 trechos, pressão/vazão nos hidrantes mais desfavoráveis, demanda do sistema
-e requisitos da bomba) — não o memorial de cálculo completo, que agora é o
-botão separado "Memorial de Cálculo". Se alguma verificação não atender a
-norma, o dimensionamento para naquele ponto e mostra onde corrigir, em vez
-de seguir adiante com um resultado que não atende.
+e requisitos da bomba) — não o memorial de cálculo completo, que migrou
+pro site (ETOS.FireUtils, ver src/data/memorial/hidrantesCalculo.js). Se
+alguma verificação não atender a norma, o dimensionamento para naquele
+ponto e mostra onde corrigir, em vez de seguir adiante com um resultado
+que não atende.
 
-Salva os resultados completos no cache (firedata.json) para o botão
-"Memorial de Cálculo" reimprimir o passo a passo sem recalcular.
+Salva os resultados completos no cache (firedata.json), sincronizado com
+o site — é de lá (state.hidrantes.dimensionamento) que o memorial de
+cálculo e a página "Sistema de Hidrantes" da dockpane leem o passo a
+passo, sem recalcular nada.
 
 Os elementos de cada trecho não vêm mais de uma varredura por parâmetro:
 "Mapear Trechos" salva a rota (listas de ElementId) no cache, chave
@@ -49,7 +52,7 @@ except ImportError:
 
 from projeto import exigir_projeto_e_estado
 from hidrantes.calc import (
-    calcular_rede, calc_potencia, extrair_trecho, salvar_cache, carregar_cache,
+    calcular_rede, extrair_trecho, salvar_cache, carregar_cache,
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
     COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
@@ -59,7 +62,6 @@ from hidrantes.resultado_ui import (
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req, opt
-from hidrantes import custom as custom_store
 from hidrantes import succao as succao_calc
 from hidrantes import npshd as npshd_calc
 
@@ -334,54 +336,43 @@ projeto_dir, sigla_estado, _ = exigir_projeto_e_estado(doc, forms, script)
 # --- Perfil normativo ativo (UF do projeto, default "MA") ---
 perfil = get_profile(sigla_estado)
 
-# --- Etapa 1: tipo de sistema ---
+# --- Etapa 1: tipo de sistema (classificação vinda do site — ver
+# hidrantes_classificacao_bridge.py) ---
 param_sistema = doc.ProjectInformation.LookupParameter(PROJECT_INFO_PARAM)
 if not param_sistema or not param_sistema.AsString():
-    forms.alert(u"Execute 'Classificar Sistema de Hidrante' primeiro.",
-                title="Fire Utils", warn_icon=True)
+    forms.alert(
+        u"Sistema de hidrantes ainda não classificado. Aplique a "
+        u"classificação do site (botão \"Aplicar classificação no Revit\" "
+        u"na dockpane) primeiro.",
+        title="Fire Utils", warn_icon=True)
     script.exit()
 
 valor_sistema = param_sistema.AsString()
 
-if custom_store.is_custom(valor_sistema):
-    # Sistema classificado com valores personalizados (fora da Tabela 2).
-    # Os valores vêm do JSON salvo no próprio projeto, não do perfil normativo.
-    _custom = custom_store.load_custom(doc)
-    if not _custom:
-        forms.alert(
-            u"O projeto está classificado como sistema personalizado, mas os "
-            u"valores não foram encontrados.\n\nExecute "
-            u"'Classificar Sistema de Hidrante' novamente.",
-            title="Fire Utils", warn_icon=True)
-        script.exit()
-    dados_sistema = custom_store.para_dados_sistema(_custom)
-else:
-    try:    tipo_num = int(valor_sistema.split()[1])
-    except:
-        forms.alert(u"Não foi possível interpretar o tipo.", title="Fire Utils", warn_icon=True)
-        script.exit()
+try:    tipo_num = int(valor_sistema.split()[1])
+except:
+    forms.alert(u"Não foi possível interpretar o tipo.", title="Fire Utils", warn_icon=True)
+    script.exit()
 
-    variante_idx = 0
-    if u"Var." in valor_sistema:
-        try:    variante_idx = ord(valor_sistema.split(u"Var.")[1].strip()[0]) - 65
-        except: variante_idx = 0
+variante_idx = 0
+if u"Var." in valor_sistema:
+    try:    variante_idx = ord(valor_sistema.split(u"Var.")[1].strip()[0]) - 65
+    except: variante_idx = 0
 
-    _tipo_perfil = req(perfil, u"tipos").get(tipo_num)
-    if _tipo_perfil is None:
-        forms.alert(
-            u"O perfil normativo '{}' não define o Tipo {} de sistema de hidrante.".format(
-                perfil.get(u"norma"), tipo_num),
-            title="Fire Utils", warn_icon=True)
-        script.exit()
+_tipo_perfil = req(perfil, u"tipos").get(tipo_num)
+if _tipo_perfil is None:
+    forms.alert(
+        u"O perfil normativo '{}' não define o Tipo {} de sistema de hidrante.".format(
+            perfil.get(u"norma"), tipo_num),
+        title="Fire Utils", warn_icon=True)
+    script.exit()
 
-    dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
-    dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
+dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
+dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
 
 # A Tabela 2 (hidrantes/db.py) guarda esses valores como int. O IronPython
 # 2.7 do Revit (diferente do CPython) lança ValueError em "{:.1f}".format(x)
-# quando x é int — então normalizamos tudo para float aqui, no único ponto
-# de entrada dos dois caminhos (Tabela 2 e personalizado; este último já
-# vem normalizado de custom_store, mas o float() abaixo é inofensivo).
+# quando x é int — então normalizamos tudo para float aqui.
 for _chave in (u"q_min", u"p_min", u"mang_dn", u"mang_comp", u"esguicho_dn"):
     dados_sistema[_chave] = float(dados_sistema[_chave])
 
@@ -631,58 +622,23 @@ _para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)"
 _para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)",
                      comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
 
-# --- Etapa 6: eficiência e potência da bomba ---
-eta_str = forms.ask_for_string(
-    default="60",
-    prompt=u"Eficiência global da bomba (%)\nEx: 60",
-    title=u"Fire Utils — Eficiência"
-)
-if not eta_str:
-    output.print_md(u"Cancelado."); script.exit()
-try:
-    eta = float(eta_str.replace(",", "."))
-    if not (0 < eta <= 100): raise ValueError
-except ValueError:
-    forms.alert(u"Valor inválido.", title="Fire Utils", warn_icon=True)
-    script.exit()
-
-eta_dec = eta / 100.0
-pot_cv  = calc_potencia(res["Qt"] / 60000.0, res["P_RTI"], eta_dec)
-pot_kw  = pot_cv / 1.36
-
-# Potência adotada para a bomba do projeto — digitada pelo usuário (não é
-# calculada): a mínima acima é só a referência mostrada no prompt. Cancelar
-# ou deixar em branco segue o dimensionamento só com a potência mínima.
-pot_escolhida_str = forms.ask_for_string(
-    default=u"{:.2f}".format(pot_cv),
-    prompt=u"Potência adotada (cv)\nPotência mínima calculada: {:.2f} cv".format(pot_cv),
-    title=u"Fire Utils — Potência Adotada"
-)
-pot_escolhida_cv = None
-pot_escolhida_kw = None
-if pot_escolhida_str:
-    try:
-        pot_escolhida_cv = float(pot_escolhida_str.replace(",", "."))
-        if pot_escolhida_cv <= 0: raise ValueError
-        pot_escolhida_kw = pot_escolhida_cv / 1.36
-    except ValueError:
-        forms.alert(u"Potência adotada inválida — seguindo só com a potência "
-                    u"mínima calculada.", title="Fire Utils", warn_icon=True)
-        pot_escolhida_cv = None
-
 # ===========================================================================
-# Etapa 7 — Verificações e resultados finais (resumo; o passo a passo
-# completo agora é o botão separado "Memorial de Cálculo")
+# Etapa 6 — Verificações e resultados finais (resumo; o passo a passo
+# completo agora é gerado no site — ver src/data/memorial/hidrantesCalculo.js)
 # ===========================================================================
+# Eficiência e potência da bomba não são mais calculadas aqui — o site
+# (ETOS.FireUtils) passou a fazer esse dimensionamento a partir de Qt/Ht
+# (ver HidrantesPage.jsx), já que não depende de nenhum dado exclusivo do
+# modelo Revit.
 mostrar_resultado_ok(
     res, valor_sistema, metodo_calculo, req(perfil, u"norma"),
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
-    Pmin, Qs_lmin, eta, pot_cv, pot_kw,
-    pot_escolhida_cv=pot_escolhida_cv, pot_escolhida_kw=pot_escolhida_kw,
+    Pmin, Qs_lmin,
     comprimento_min_velocidade=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
 
-# --- Etapa 8: salvar cache (para "Memorial de Cálculo" reimprimir sem recalcular) ---
+# --- Etapa 7: salvar cache (sincroniza com o site — memorial de cálculo e a
+# página "Sistema de Hidrantes" da dockpane leem daqui, sem recalcular) ---
 import datetime
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 payload_hid = {
@@ -699,11 +655,6 @@ payload_hid = {
     "j_succao_npsh": j_succao_npsh,
     "C_HW":          C_HW,
     "uf":            perfil.get(u"_uf_efetiva"),
-    "eta":              eta,
-    "pot_cv":           pot_cv,
-    "pot_kw":           pot_kw,
-    "pot_escolhida_cv": pot_escolhida_cv,
-    "pot_escolhida_kw": pot_escolhida_kw,
     "timestamp":     timestamp,
     "_nome_projeto": doc.Title,
 }
