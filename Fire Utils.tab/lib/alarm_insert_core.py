@@ -22,7 +22,6 @@ from Autodesk.Revit.DB import (
     Transaction, XYZ, Line,
     FilteredElementCollector, FamilyInstance,
     ElementTransformUtils, UnitUtils,
-    BuiltInParameter,
 )
 from Autodesk.Revit.DB.Structure import StructuralType
 from pyrevit import forms, script as pyscript
@@ -37,6 +36,7 @@ except ImportError:
 from alarm_family import (garantir_acionador, garantir_alarme_sonoro,
                            NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME)
 from shelter_family import NOME_FAMILIA_ABRIGO
+from level_offset_utils import forcar_nivel_referencia, definir_elevacao_nivel
 
 TOL              = 1e-4
 DIST_ALARME_M    = 0.57   # eixo a eixo: abrigo → conjunto de alarme
@@ -45,80 +45,10 @@ ALTURA_ACION_M   = 1.35   # elevação do acionador em relação ao NÍVEL DO AB
 ALTURA_ALARME_M  = 2.20   # elevação do avisador sonoro/visual em relação ao NÍVEL DO ABRIGO
 TOL_DUPLICATA_M  = 0.30   # raio (m) para considerar componente já existente
 
-# Candidatos de parâmetro de instância pra forçar o "Nível de
-# referência" (ver _forcar_nivel_referencia) — via getattr porque nem
-# todo BuiltInParameter existe em toda versão da API do Revit.
-_BIPS_NIVEL_REFERENCIA = [
-    b for b in (getattr(BuiltInParameter, nome, None)
-                for nome in (u"FAMILY_LEVEL_PARAM", u"SCHEDULE_LEVEL_PARAM"))
-    if b is not None
-]
-_NOMES_NIVEL_REFERENCIA = (u"Nível de referência", u"Reference Level", u"Nível", u"Level")
-
 
 # ===========================================================================
 # HELPERS INTERNOS
 # ===========================================================================
-
-def _forcar_nivel_referencia(inst, nivel):
-    """
-    Garante que a instância recém-criada fica de fato associada ao nível
-    `nivel` (o do ABRIGO) — passar `nivel` pro construtor de
-    NewFamilyInstance nem sempre é suficiente: pra famílias não
-    hospedadas (Work Plane-Based/genéricas, caso comum de Acionador/
-    Avisador), o parâmetro de instância "Nível de referência" pode ficar
-    associado a outro nível (tipicamente o nível base do projeto) em vez
-    do nível passado no construtor.
-
-    Sem essa correção, a "Elevação do nível" (offset) passa a ser
-    calculada em relação ao nível errado — somando a cota do PAVIMENTO à
-    elevação combinada em vez de ficar só com a elevação: um pavimento a
-    3m do nível 0 + 2,20m de elevação vira 5,20m (relativos ao nível 0)
-    em vez de 2,20m (relativos ao nível do abrigo, o valor combinado).
-    Best-effort — se nenhum parâmetro candidato existir/for editável
-    pra essa família, a instância continua na posição absoluta correta
-    (calculada por quem chama), só o "Nível de referência" que pode
-    ficar desatualizado.
-    """
-    for bip in _BIPS_NIVEL_REFERENCIA:
-        try:
-            p = inst.get_Parameter(bip)
-            if p and not p.IsReadOnly:
-                p.Set(nivel.Id)
-                return
-        except Exception:
-            pass
-    for nome in _NOMES_NIVEL_REFERENCIA:
-        try:
-            p = inst.LookupParameter(nome)
-            if p and not p.IsReadOnly:
-                p.Set(nivel.Id)
-                return
-        except Exception:
-            pass
-
-
-def _zerar_offset_nivel(inst):
-    """Zera o parâmetro de elevação de nível da instância."""
-    for bip in [BuiltInParameter.INSTANCE_FREE_HOST_OFFSET_PARAM,
-                BuiltInParameter.FAMILY_BASE_LEVEL_OFFSET_PARAM,
-                BuiltInParameter.SCHEDULE_BASE_LEVEL_OFFSET_PARAM]:
-        try:
-            p = inst.get_Parameter(bip)
-            if p and not p.IsReadOnly:
-                p.Set(0.0)
-                return
-        except Exception:
-            pass
-    for nome in [u"Elevação do nível", u"Offset from Level", u"Level Offset"]:
-        try:
-            p = inst.LookupParameter(nome)
-            if p and not p.IsReadOnly:
-                p.Set(0.0)
-                return
-        except Exception:
-            pass
-
 
 def _set_param_metros(inst, nome_param, valor_m):
     """Seta um parâmetro de comprimento (em metros) por nome."""
@@ -132,18 +62,29 @@ def _set_param_metros(inst, nome_param, valor_m):
 
 def _inserir_componente(doc, simbolo, pt_xy, dir_face, nivel, altura_m):
     """
-    Insere um FamilyInstance na posição (pt_xy.X, pt_xy.Y, nivel.Elevation + altura_m)
-    e o rotaciona para alinhar sua FacingOrientation com dir_face.
-    A altura é preservada como offset do nível — não é zerada.
-    `nivel` (o do ABRIGO) é reforçado como Nível de referência da
-    instância após a criação — ver _forcar_nivel_referencia.
+    Insere um FamilyInstance no nível `nivel` (o do ABRIGO) e o rotaciona
+    para alinhar sua FacingOrientation com dir_face.
+
+    Cria a instância em (pt_xy.X, pt_xy.Y, nivel.Elevation) — offset 0 —
+    e só DEPOIS define os dois parâmetros nativos do Revit direto:
+    "Nível de referência" = nivel e "Elevação do nível" = altura_m (ver
+    level_offset_utils.py). NÃO soma altura_m ao Z absoluto na criação:
+    pra famílias não hospedadas (caso do Acionador/Avisador), a
+    "Elevação do nível" que o Revit deriva de um Z absoluto pode ser
+    calculada em relação a outro nível (o nível base do projeto) em vez
+    do "Nível de referência" — fazendo o valor exibido somar a cota do
+    pavimento à altura combinada (ex.: pavimento a 3m + 2,20m vira
+    "Elevação do nível" = 5,20m em vez de 2,20m). Definindo os dois
+    parâmetros explicitamente, cada um fica com o valor esperado.
+
     Retorna a instância criada.
     """
-    pt = XYZ(pt_xy.X, pt_xy.Y, nivel.Elevation + _to_ft(altura_m))
+    pt = XYZ(pt_xy.X, pt_xy.Y, nivel.Elevation)
     inst = doc.Create.NewFamilyInstance(
         pt, simbolo, nivel, StructuralType.NonStructural
     )
-    _forcar_nivel_referencia(inst, nivel)
+    forcar_nivel_referencia(inst, nivel)
+    definir_elevacao_nivel(inst, altura_m)
 
     # Lê a orientação atual do componente recém-inserido e ajusta para dir_face
     doc.Regenerate()

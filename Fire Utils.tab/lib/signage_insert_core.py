@@ -35,6 +35,7 @@ from pyrevit import forms
 
 from signage_family import TIPOS_SINALIZACAO, slugify
 from family_error_utils import texto_erro
+from level_offset_utils import forcar_nivel_referencia, definir_elevacao_nivel
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -125,21 +126,28 @@ def _pontos_placas_existentes(doc, nome_familia_placa):
     return pontos
 
 
-def _ponto_insercao(equipamento, nivel, elevacao_m):
+def _ponto_insercao(equipamento, nivel):
     """X/Y do equipamento, Z = elevação do NÍVEL de referência do tipo
-    (TipoSinalizacao.nivel_referencia) + a elevação própria do tipo de
-    placa (sempre 0 — todas as famílias de placa já embutem a altura
-    real, 1,80m do piso) — nunca a elevação real (Z) do equipamento em
-    si nem o nível do próprio dispositivo quando este não é a
+    (TipoSinalizacao.nivel_referencia) — offset 0. A elevação própria do
+    tipo de placa é definida DEPOIS, via parâmetro nativo (ver
+    _inserir_placa/level_offset_utils.definir_elevacao_nivel), nunca
+    somada aqui ao Z absoluto — nunca a elevação real (Z) do equipamento
+    em si nem o nível do próprio dispositivo quando este não é a
     referência (ver signage_family._nivel_por_abrigo_mais_proximo)."""
     pt_equip = equipamento.Location.Point
-    return XYZ(pt_equip.X, pt_equip.Y, nivel.Elevation + _to_ft(elevacao_m))
+    return XYZ(pt_equip.X, pt_equip.Y, nivel.Elevation)
 
 
-def _inserir_placa(doc, simbolo, equipamento, nivel, pt):
+def _inserir_placa(doc, simbolo, equipamento, nivel, pt, elevacao_m):
     """Insere a placa em `pt` (ver _ponto_insercao), virada pra mesma
-    orientação (FacingOrientation) do equipamento."""
+    orientação (FacingOrientation) do equipamento, e define os dois
+    parâmetros nativos do Revit direto — "Nível de referência" = nivel
+    e "Elevação do nível" = elevacao_m — em vez de confiar que o Z
+    absoluto de `pt` já produz a "Elevação do nível" esperada (ver
+    level_offset_utils.py)."""
     inst = doc.Create.NewFamilyInstance(pt, simbolo, nivel, StructuralType.NonStructural)
+    forcar_nivel_referencia(inst, nivel)
+    definir_elevacao_nivel(inst, elevacao_m)
 
     doc.Regenerate()
     try:
@@ -194,7 +202,7 @@ def _sinalizar_tipo(doc, tipo, output):
                     continue
 
                 try:
-                    pt = _ponto_insercao(equipamento, nivel, tipo.elevacao_m)
+                    pt = _ponto_insercao(equipamento, nivel)
                 except Exception:
                     erros += 1
                     continue
@@ -204,7 +212,7 @@ def _sinalizar_tipo(doc, tipo, output):
                     continue
 
                 try:
-                    _inserir_placa(doc, simbolo, equipamento, nivel, pt)
+                    _inserir_placa(doc, simbolo, equipamento, nivel, pt, tipo.elevacao_m)
                     pontos_existentes.append(pt)
                     inseridas += 1
                 except Exception:
