@@ -7,9 +7,11 @@ signage_family.py) e, pra cada tipo marcado, confirma que a família da
 placa JÁ ESTÁ carregada no projeto (não baixa nada — se faltar, orienta
 o usuário a carregá-la pela dockpane) e insere uma instância na mesma
 posição (X, Y) e orientação de cada equipamento já presente no projeto
-que ainda não tiver uma placa daquele tipo por perto — usando SEMPRE o
-nível do próprio equipamento como referência, na elevação definida por
-tipo (TipoSinalizacao.elevacao_m), nunca a elevação real do equipamento.
+que ainda não tiver uma placa daquele tipo por perto — usando o nível
+de referência de cada tipo (TipoSinalizacao.nivel_referencia — o do
+próprio equipamento, ou o do abrigo mais próximo pra Sirene/Botoeira,
+ver signage_family.py), na elevação definida por tipo
+(TipoSinalizacao.elevacao_m), nunca a elevação real do equipamento.
 
 Função pública
 --------------
@@ -185,7 +187,7 @@ def _sinalizar_tipo(doc, tipo, output):
         t.Start()
         try:
             for equipamento in equipamentos:
-                nivel = doc.GetElement(equipamento.LevelId)
+                nivel = tipo.nivel_referencia(doc, equipamento)
                 if nivel is None:
                     erros += 1
                     continue
