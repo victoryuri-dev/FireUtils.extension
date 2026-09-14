@@ -36,7 +36,9 @@ except ImportError:
 from alarm_family import (garantir_acionador, garantir_alarme_sonoro,
                            NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME)
 from shelter_family import NOME_FAMILIA_ABRIGO
-from level_offset_utils import forcar_nivel_referencia, definir_elevacao_nivel
+from level_offset_utils import (
+    forcar_nivel_referencia, definir_elevacao_nivel, nivel_mais_proximo_abaixo,
+)
 
 TOL              = 1e-4
 DIST_ALARME_M    = 0.57   # eixo a eixo: abrigo → conjunto de alarme
@@ -171,7 +173,7 @@ def inserir_alarmes(doc, uidoc, output):
             erros += 1
             continue
 
-        nivel = doc.GetElement(abrigo.LevelId)
+        nivel = nivel_mais_proximo_abaixo(doc, pt_abrigo.Z)
         if nivel is None:
             output.print_md(u"| {} | **nível não encontrado** |".format(aid))
             erros += 1
@@ -191,10 +193,11 @@ def inserir_alarmes(doc, uidoc, output):
         except Exception:
             dir_face = XYZ(0.0, 1.0, 0.0)
 
-        # Ponto XY do conjunto de alarme (57 cm no lado OPOSTO ao HandOrientation)
+        # Ponto XY do conjunto de alarme (57 cm no lado do HandOrientation
+        # do abrigo — direita)
         pt_conj = XYZ(
-            pt_abrigo.X - dir_hand.X * dist_ft,
-            pt_abrigo.Y - dir_hand.Y * dist_ft,
+            pt_abrigo.X + dir_hand.X * dist_ft,
+            pt_abrigo.Y + dir_hand.Y * dist_ft,
             pt_abrigo.Z
         )
 

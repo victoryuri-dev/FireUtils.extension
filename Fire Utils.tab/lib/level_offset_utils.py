@@ -27,11 +27,17 @@ Uso:
         XYZ(x, y, nivel.Elevation), simbolo, nivel, StructuralType.NonStructural)
     forcar_nivel_referencia(inst, nivel)
     definir_elevacao_nivel(inst, altura_m)
+
+Também expõe nivel_mais_proximo_abaixo(doc, elevacao_absoluta_ft), que
+resolve "qual é o pavimento real de um ponto" a partir da cota Z real
+(Location.Point.Z) em vez de confiar em Element.LevelId — mesma classe
+de problema, útil pra reconhecer corretamente cada válvula/abrigo de
+uma coluna de hidrantes com uma instância por pavimento.
 """
 
 import clr
 clr.AddReference("RevitAPI")
-from Autodesk.Revit.DB import BuiltInParameter, UnitUtils
+from Autodesk.Revit.DB import BuiltInParameter, UnitUtils, FilteredElementCollector, Level
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -94,3 +100,33 @@ def definir_elevacao_nivel(inst, valor_m):
     de derivá-lo de um Z absoluto. Best-effort, nunca lança.
     """
     _set_primeiro_disponivel(inst, _BIPS_OFFSET_NIVEL, _NOMES_OFFSET_NIVEL, _to_ft(valor_m))
+
+
+_TOL_NIVEL_FT = _to_ft(0.01)  # 1cm — tolerância pra ponto "bem em cima" da elevação do nível
+
+
+def nivel_mais_proximo_abaixo(doc, elevacao_absoluta_ft):
+    """
+    Retorna o Level do documento cuja Elevation é a maior dentre as que
+    são <= `elevacao_absoluta_ft` (pés) — ou seja, o nível do pavimento
+    que fisicamente contém essa cota. Se `elevacao_absoluta_ft` for
+    menor que todos os níveis do projeto, retorna o de menor elevação.
+    Retorna None se não houver nenhum Level no documento.
+
+    Usado em vez de confiar em Element.LevelId: pra várias categorias de
+    família não hospedadas (válvula de hidrante, abrigo, acionador,
+    avisador, sirene/botoeira sinalizadas...) o LevelId pode não
+    refletir o pavimento real da instância — ver
+    forcar_nivel_referencia. Derivar o nível a partir da cota Z real do
+    elemento (Location.Point.Z) é robusto independente dessa
+    confiabilidade, e é o que permite diferenciar corretamente uma
+    coluna de hidrantes com uma válvula por pavimento (cada uma na sua
+    elevação real), mesmo quando o LevelId de cada válvula está errado.
+    """
+    niveis = list(FilteredElementCollector(doc).OfClass(Level).ToElements())
+    if not niveis:
+        return None
+    abaixo_ou_igual = [n for n in niveis if n.Elevation <= elevacao_absoluta_ft + _TOL_NIVEL_FT]
+    if abaixo_ou_igual:
+        return max(abaixo_ou_igual, key=lambda n: n.Elevation)
+    return min(niveis, key=lambda n: n.Elevation)

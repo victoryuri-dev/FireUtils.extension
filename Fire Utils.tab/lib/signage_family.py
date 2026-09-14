@@ -31,6 +31,7 @@ from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance
 from alarm_family import NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME
 from shelter_family import NOME_FAMILIA_ABRIGO
 from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
+from level_offset_utils import nivel_mais_proximo_abaixo
 
 
 def _get_id_value(eid):
@@ -109,16 +110,22 @@ def _instancias_extintor(doc):
 
 
 def _nivel_por_equipamento(doc, equipamento):
-    """Padrão: usa o LevelId do próprio equipamento sinalizado."""
-    return doc.GetElement(equipamento.LevelId)
+    """Padrão: deriva o nível a partir da cota Z real do próprio
+    equipamento (nivel_mais_proximo_abaixo) em vez de confiar no seu
+    LevelId, que pode não refletir o pavimento real pra certas
+    categorias de família — ver level_offset_utils.py."""
+    try:
+        return nivel_mais_proximo_abaixo(doc, equipamento.Location.Point.Z)
+    except Exception:
+        return doc.GetElement(equipamento.LevelId)
 
 
 def _nivel_por_abrigo_mais_proximo(doc, equipamento):
-    """Usa o nível do ABRIGO DE MANGUEIRA mais próximo, em vez do LevelId
-    do próprio equipamento — Sirene e Botoeira são sempre inseridos a uma
-    distância fixa de um abrigo (ver alarm_insert_core.py), e é o nível
-    do abrigo (não o do próprio dispositivo) que deve servir de
-    referência pra placa, pro mesmo pavimento valer pros dois."""
+    """Usa o nível do ABRIGO DE MANGUEIRA mais próximo, em vez do
+    equipamento — Sirene e Botoeira são sempre inseridos a uma distância
+    fixa de um abrigo (ver alarm_insert_core.py), e é o nível do abrigo
+    (não o do próprio dispositivo) que deve servir de referência pra
+    placa, pro mesmo pavimento valer pros dois."""
     try:
         pt = equipamento.Location.Point
     except Exception:
@@ -138,7 +145,7 @@ def _nivel_por_abrigo_mais_proximo(doc, equipamento):
 
     if mais_proximo is None:
         return _nivel_por_equipamento(doc, equipamento)
-    return doc.GetElement(mais_proximo.LevelId)
+    return _nivel_por_equipamento(doc, mais_proximo)
 
 
 class TipoSinalizacao(object):
