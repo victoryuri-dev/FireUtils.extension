@@ -12,9 +12,13 @@ Cada TipoSinalizacao carrega:
   arquivo_slug : nome do arquivo .rfa (sem extensão) da placa no catálogo
                  do Supabase — ver
                  family_supabase.garantir_familia_supabase_por_slug
+  elevacao_m   : elevação (m) da placa em relação ao nível do equipamento
+                 de referência — ver signage_insert_core._inserir_placa
   localizar    : function(doc) -> list[FamilyInstance] dos equipamentos já
                  inseridos no projeto que esse tipo de placa sinaliza
 """
+
+import unicodedata
 
 import clr
 clr.AddReference("RevitAPI")
@@ -22,6 +26,7 @@ from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance
 
 from hydrant_family import NOME_FAMILIA as NOME_FAMILIA_VALVULA
 from alarm_family import NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME
+from alarm_insert_core import ALTURA_ACION_M, ALTURA_ALARME_M
 from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
 
 
@@ -33,16 +38,32 @@ def _get_id_value(eid):
         return eid.IntegerValue
 
 
+def _normalizado(texto):
+    """Minúsculo e sem acento — usado pra comparar Family.Name sem
+    depender de acentuação exata. Existem famílias antigas do projeto
+    carregadas antes da convenção de nomes ASCII deste plugin (ver
+    family_cache.py) cujo Family.Name interno do .rfa ainda está
+    acentuado (ex.: 'Válvula para Hidrante'), enquanto as constantes do
+    código (hydrant_family.NOME_FAMILIA etc.) são ASCII — comparar direto
+    fazia a busca por nome nunca encontrar essas instâncias."""
+    if not texto:
+        return u""
+    sem_acento = unicodedata.normalize(u"NFKD", texto)
+    sem_acento = u"".join(c for c in sem_acento if not unicodedata.combining(c))
+    return sem_acento.strip().lower()
+
+
 def _todas_instancias(doc):
     return FilteredElementCollector(doc).OfClass(FamilyInstance) \
         .WhereElementIsNotElementType().ToElements()
 
 
 def _instancias_por_familia(doc, nome_familia):
+    alvo = _normalizado(nome_familia)
     return [
         e for e in _todas_instancias(doc)
         if e.Symbol is not None and e.Symbol.Family is not None
-        and e.Symbol.Family.Name == nome_familia
+        and _normalizado(e.Symbol.Family.Name) == alvo
     ]
 
 
@@ -70,24 +91,35 @@ def _instancias_extintor(doc):
 
 
 class TipoSinalizacao(object):
-    def __init__(self, chave, rotulo, arquivo_slug, localizar):
+    def __init__(self, chave, rotulo, arquivo_slug, localizar, elevacao_m=0.0):
         self.chave = chave
         self.rotulo = rotulo
         self.arquivo_slug = arquivo_slug
         self.localizar = localizar
+        self.elevacao_m = elevacao_m
 
 
+# Elevação (m) de cada placa em relação ao nível do equipamento de
+# referência. Hidrante e Extintor ficam em 0 — as próprias famílias das
+# placas já têm a altura certa embutida. Sirene e Botoeira usam a MESMA
+# altura da botoeira/avisador de referência (ALTURA_ACION_M/ALTURA_ALARME_M
+# de alarm_insert_core.py), porque essas placas não têm altura própria
+# embutida — precisam ficar na altura real do equipamento que sinalizam.
 TIPOS_SINALIZACAO = [
     TipoSinalizacao(
         u"hidrante", u"Hidrantes — E8", u"placa-de-sinalizacao-e8-8m",
-        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_VALVULA)),
+        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_VALVULA),
+        elevacao_m=0.0),
     TipoSinalizacao(
         u"sirene", u"Sirene — E1", u"placa-de-sinalizacao-e1-8m",
-        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ALARME)),
+        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ALARME),
+        elevacao_m=ALTURA_ALARME_M),
     TipoSinalizacao(
         u"botoeira", u"Botoeira — E2", u"placa-de-sinalizacao-e2-10m",
-        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ACIONADOR)),
+        lambda doc: _instancias_por_familia(doc, NOME_FAMILIA_ACIONADOR),
+        elevacao_m=ALTURA_ACION_M),
     TipoSinalizacao(
         u"extintor", u"Extintores — E5", u"placa-de-sinalizacao-e5-8m",
-        _instancias_extintor),
+        _instancias_extintor,
+        elevacao_m=0.0),
 ]

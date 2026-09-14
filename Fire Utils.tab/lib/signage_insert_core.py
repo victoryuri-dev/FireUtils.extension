@@ -5,8 +5,11 @@ Lógica central do botão "Sinalizar Equipamentos": mostra um painel de
 checkbox (signage_opcoes.xaml) com os tipos de placa disponíveis (ver
 signage_family.py) e, pra cada tipo marcado, garante a família
 correspondente (Supabase — ver family_supabase.py) e insere uma
-instância na mesma posição (X, Y, Z) e orientação de cada equipamento já
-presente no projeto que ainda não tiver uma placa daquele tipo por perto.
+instância na mesma posição (X, Y) e orientação de cada equipamento já
+presente no projeto que ainda não tiver uma placa daquele tipo por
+perto — usando SEMPRE o nível do próprio equipamento como referência,
+na elevação definida por tipo (TipoSinalizacao.elevacao_m), nunca a
+elevação real do equipamento.
 
 Função pública
 --------------
@@ -92,9 +95,19 @@ def _pontos_placas_existentes(doc, nome_familia_placa):
     return pontos
 
 
+def _ponto_insercao(equipamento, nivel, elevacao_m):
+    """X/Y do equipamento, Z = elevação do NÍVEL do equipamento + a
+    elevação própria do tipo de placa (0 pra Hidrante/Extintor — a
+    família já embute a altura certa; ALTURA_ALARME_M/ALTURA_ACION_M
+    pra Sirene/Botoeira, que não têm altura própria embutida) — nunca a
+    elevação real (Z) do equipamento em si."""
+    pt_equip = equipamento.Location.Point
+    return XYZ(pt_equip.X, pt_equip.Y, nivel.Elevation + _to_ft(elevacao_m))
+
+
 def _inserir_placa(doc, simbolo, equipamento, nivel, pt):
-    """Insere a placa na MESMA posição (X, Y, Z) do equipamento, virada
-    pra mesma orientação (FacingOrientation) dele."""
+    """Insere a placa em `pt` (ver _ponto_insercao), virada pra mesma
+    orientação (FacingOrientation) do equipamento."""
     inst = doc.Create.NewFamilyInstance(pt, simbolo, nivel, StructuralType.NonStructural)
 
     doc.Regenerate()
@@ -134,19 +147,19 @@ def _sinalizar_tipo(doc, tipo, output):
         t.Start()
         try:
             for equipamento in equipamentos:
+                nivel = doc.GetElement(equipamento.LevelId)
+                if nivel is None:
+                    erros += 1
+                    continue
+
                 try:
-                    pt = equipamento.Location.Point
+                    pt = _ponto_insercao(equipamento, nivel, tipo.elevacao_m)
                 except Exception:
                     erros += 1
                     continue
 
                 if any(pt.DistanceTo(p) < tol_ft for p in pontos_existentes):
                     puladas += 1
-                    continue
-
-                nivel = doc.GetElement(equipamento.LevelId)
-                if nivel is None:
-                    erros += 1
                     continue
 
                 try:
