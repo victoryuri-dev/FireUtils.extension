@@ -40,7 +40,11 @@ from hydrant_family import NOME_FAMILIA as NOME_FAMILIA_VALVULA
 from level_offset_utils import nivel_mais_proximo_abaixo
 
 TOL = 1e-4
-TOL_DUPLICATA_M = 0.50  # raio 3D (metros) para considerar abrigo já existente
+# Raio 3D (metros) para considerar abrigo já existente. Pequeno de propósito:
+# só precisa cobrir a mesma válvula recalculada de novo (posição idêntica ou
+# quase); um raio maior (30/50cm) tratava dois hidrantes reais em faces
+# opostas de uma parede fina (ex.: 7cm) como duplicata um do outro.
+TOL_DUPLICATA_M = 0.05
 OFFSET_FRENTE_M = 0.10  # deslocamento extra à frente (dir_abrigo) no posicionamento automático
 
 

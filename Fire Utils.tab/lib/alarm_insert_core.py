@@ -45,7 +45,11 @@ DIST_ALARME_M    = 0.57   # eixo a eixo: abrigo → conjunto de alarme
 DESLOC_FRENTE_M  = 0.38   # valor do parâmetro "Desloc. Frente" do acionador
 ALTURA_ACION_M   = 1.35   # elevação do acionador em relação ao NÍVEL DO ABRIGO
 ALTURA_ALARME_M  = 2.20   # elevação do avisador sonoro/visual em relação ao NÍVEL DO ABRIGO
-TOL_DUPLICATA_M  = 0.30   # raio (m) para considerar componente já existente
+# Raio (m) para considerar componente já existente. Pequeno de propósito:
+# só precisa cobrir o mesmo abrigo recalculado de novo; um raio maior (30cm)
+# tratava dois conjuntos reais em abrigos de faces opostas de uma parede
+# fina (ex.: 7cm) como duplicata um do outro.
+TOL_DUPLICATA_M  = 0.05
 
 
 # ===========================================================================

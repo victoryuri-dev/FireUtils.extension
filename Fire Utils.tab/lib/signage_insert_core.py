@@ -45,7 +45,11 @@ except ImportError:
     def _to_ft(v): return UnitUtils.ConvertToInternalUnits(v, DisplayUnitType.DUT_METERS)
 
 TOL              = 1e-4
-TOL_DUPLICATA_M  = 0.30   # raio (m) para considerar já sinalizado
+# Raio (m) para considerar já sinalizado. Pequeno de propósito: só precisa
+# cobrir o mesmo equipamento recalculado de novo; um raio maior (30cm)
+# tratava dois equipamentos reais em faces opostas de uma parede fina (ex.:
+# extintores a 7cm um do outro, um de cada lado) como duplicata um do outro.
+TOL_DUPLICATA_M  = 0.05
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"signage_opcoes.xaml")
