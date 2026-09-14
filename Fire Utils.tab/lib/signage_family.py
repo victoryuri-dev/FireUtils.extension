@@ -30,7 +30,7 @@ from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance
 
 from alarm_family import NOME_FAMILIA_ACIONADOR, NOME_FAMILIA_ALARME
 from shelter_family import NOME_FAMILIA_ABRIGO
-from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
+from extintores.params import CATEGORIAS_EXTINTOR
 from level_offset_utils import nivel_mais_proximo_abaixo
 
 
@@ -87,9 +87,14 @@ def _instancias_por_familia(doc, nome_familia):
 
 
 def _instancias_extintor(doc):
-    """Mesmo critério de extintores/calc.py: categoria Proteção contra
-    Incêndio (OST_FireProtection) + parâmetro 'Capacidade Extintora'
-    (instância ou tipo) preenchido — cobre as 5 famílias de extintor
+    """Categoria Proteção contra Incêndio (OST_FireProtection) — mesma
+    categoria usada por extintores/calc.py, mas SEM exigir o parâmetro
+    'Capacidade Extintora' preenchido: aquele parâmetro só importa pra
+    quem grava dados de dimensionamento (Gravar Dados de Extintores);
+    pra saber se um item precisa de placa de sinalização, a categoria já
+    basta — exigir o parâmetro a mais fazia extintores já posicionados
+    no projeto não serem encontrados quando esse parâmetro de Tipo não
+    estava preenchido na família usada. Cobre as 5 famílias de extintor
     (A/ABC/BC/CO2/K) sem depender de um nome de família específico."""
     cat_ids = set(
         _get_id_value(doc.Settings.Categories.get_Item(bic).Id)
@@ -101,11 +106,7 @@ def _instancias_extintor(doc):
         categoria = e.Category
         if not categoria or _get_id_value(categoria.Id) not in cat_ids:
             continue
-        param = e.LookupParameter(PARAM_CAPACIDADE)
-        if (not param or not param.HasValue) and e.Symbol is not None:
-            param = e.Symbol.LookupParameter(PARAM_CAPACIDADE)
-        if param and param.HasValue:
-            resultado.append(e)
+        resultado.append(e)
     return resultado
 
 
