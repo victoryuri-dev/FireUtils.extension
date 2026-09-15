@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Icon from "../Icon";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
+import { salvarComRetry } from "../../lib/projectData";
 import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../../lib/projetoDados";
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
@@ -95,19 +96,34 @@ function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
  *
  * A potência da bomba é sempre calculada aqui (JS, lib/hidrantesCalc.js) a
  * partir de Qt/Ht do ponto de operação + a eficiência informada — nunca no
- * Python. A eficiência é persistida em Project Information
- * (SET_HIDRANTES_EFICIENCIA_BOMBA) pra sobreviver fechar/reabrir o Revit.
+ * Python. Eficiência e potência adotada são gravadas direto no Supabase
+ * (dados.hidrantes.bombaEficiencia/bombaPotenciaAdotada, via
+ * lib/projectData.salvarComRetry — mesmo mecanismo de
+ * SaidaEmergenciaPage.jsx), NÃO em Project Information: é o mesmo par de
+ * campos que o site edita na Etapa 3 ("Dimensionamento da Bomba de
+ * Incêndio"), então os dois lados precisam ler/escrever o mesmo lugar.
  */
-export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToast }) {
+export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtualizado, adicionarToast }) {
   const [carregando, setCarregando] = useState(true);
   const [resposta, setResposta] = useState(null);
-  const [eficiencia, setEficiencia] = useState("");
+  // Valor inicial vem do Supabase (dados.hidrantes), não do Revit — mesmo
+  // campo que o site preenche na Etapa 3. Lazy initializer: só lido uma vez
+  // no mount; depois disso o próprio salvar() mantém local e Supabase em
+  // sincronia.
+  const [eficiencia, setEficiencia] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaEficiencia;
+    return v != null ? String(v) : "";
+  });
   const [salvandoEficiencia, setSalvandoEficiencia] = useState(false);
   // Potência realmente escolhida pro conjunto motobomba (catálogo do
   // fabricante só vem em potências padronizadas — quase nunca bate exato
-  // com a potência mínima calculada) — só um campo local por enquanto,
-  // sem persistir no Revit.
-  const [potenciaAdotada, setPotenciaAdotada] = useState("");
+  // com a potência mínima calculada) — mesmo esquema de sincronia direta
+  // com o Supabase que a eficiência, acima.
+  const [potenciaAdotada, setPotenciaAdotada] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaPotenciaAdotada;
+    return v != null ? String(v) : "";
+  });
+  const [salvandoPotencia, setSalvandoPotencia] = useState(false);
   const [aplicando, setAplicando] = useState(false);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
@@ -127,22 +143,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAMENTO) {
         setCarregando(false);
         setResposta(mensagem.payload || null);
-        const eta = mensagem.payload?.bombaEficiencia;
-        if (eta != null) setEficiencia(String(eta));
-        return;
-      }
-
-      if (mensagem.type === BridgeMessageTypes.HIDRANTES_EFICIENCIA_SAVED) {
-        setSalvandoEficiencia(false);
-        const { ok, erro } = mensagem.payload || {};
-        if (!ok) {
-          adicionarToast?.({
-            tipo: "erro",
-            titulo: "Não foi possível salvar a eficiência",
-            mensagem: erro,
-            duracaoMs: 9000,
-          });
-        }
         return;
       }
 
@@ -221,11 +221,54 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
     aplicar(tipoEfetivo, rtiParaTipo(tipoEfetivo), i);
   }
 
-  function salvarEficiencia() {
+  // Mescla `changes` em dados.hidrantes e grava direto no Supabase — mesmo
+  // padrão de compare-and-swap com retry usado por SaidaEmergenciaPage.jsx
+  // (lib/projectData.salvarComRetry), só que aqui não há canal Realtime pra
+  // avisar outras sessões: a própria SET faz o dado convergir na próxima
+  // leitura (o site já faz polling/refetch normal do projeto).
+  async function salvarHidrantes(changes) {
+    const { dados: novosDados, version: novaVersao } = await salvarComRetry(projeto.id, projeto, (dados) => ({
+      ...dados,
+      hidrantes: { ...(dados.hidrantes || {}), ...changes },
+    }));
+    onProjetoAtualizado?.({ ...projeto, dados: novosDados, version: novaVersao });
+  }
+
+  async function salvarEficiencia() {
     const valor = parseFloat(eficiencia);
     if (!valor || valor <= 0) return;
     setSalvandoEficiencia(true);
-    postToHost(BridgeMessageTypes.SET_HIDRANTES_EFICIENCIA_BOMBA, { eficiencia: valor });
+    try {
+      await salvarHidrantes({ bombaEficiencia: valor });
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível salvar a eficiência",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    } finally {
+      setSalvandoEficiencia(false);
+    }
+  }
+
+  async function salvarPotenciaAdotada() {
+    const texto = potenciaAdotada.trim();
+    const valor = texto === "" ? null : parseFloat(texto);
+    if (valor != null && (Number.isNaN(valor) || valor <= 0)) return;
+    setSalvandoPotencia(true);
+    try {
+      await salvarHidrantes({ bombaPotenciaAdotada: valor });
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível salvar a potência adotada",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    } finally {
+      setSalvandoPotencia(false);
+    }
   }
 
   // Só cv é mostrado (pedido explícito) — calcPotenciaBomba ainda devolve
@@ -370,12 +413,13 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
                   <CampoNumero
                     value={potenciaAdotada}
                     onChange={(e) => setPotenciaAdotada(e.target.value)}
+                    onCommit={salvarPotenciaAdotada}
                     sufixo="cv"
                     placeholder="ex.: 5"
                   />
                 </Cartao>
               </div>
-              {salvandoEficiencia && <div className="hid-salvando">Salvando...</div>}
+              {(salvandoEficiencia || salvandoPotencia) && <div className="hid-salvando">Salvando...</div>}
               {potCv == null && (
                 <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
               )}

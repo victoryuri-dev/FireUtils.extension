@@ -142,15 +142,9 @@ PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
 # 2.7 ao formatar int.
 PROJECT_INFO_RTI_PARAM = u"FireUtils - RTI Hidrante"
 
-# Eficiência global (%) da bomba de incêndio, informada pelo usuário na
-# página "Sistema de Hidrantes" da dockpane — persistida aqui pra
-# sobreviver fechar/reabrir o Revit (ver hidrantes_dimensionamento_bridge.py).
-PROJECT_INFO_EFICIENCIA_PARAM = u"FireUtils - Eficiencia Bomba Hidrante"
-
 PROJECT_INFO_PARAMS = [
     PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
     PROJECT_INFO_SUCCAO_PARAM, PROJECT_INFO_RTI_PARAM,
-    PROJECT_INFO_EFICIENCIA_PARAM,
 ]
 
 

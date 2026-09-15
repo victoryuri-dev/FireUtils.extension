@@ -140,6 +140,13 @@ export function dadosHidrantes(linha) {
     metodoCalculo: h.metodoCalculo || null,
     succaoAltitude: paraNumero(h.succaoAltitude),
     succaoTemperatura: paraNumero(h.succaoTemperatura),
+    // Eficiência da bomba e potência adotada — informadas na Etapa 3 do
+    // site ("Dimensionamento da Bomba de Incêndio") OU aqui na dockpane,
+    // direto no Supabase (ver SistemaHidrantesPage.jsx), sem passar pelo
+    // Project Information do Revit — um único lugar de verdade pros dois
+    // lados lerem/escreverem.
+    bombaEficiencia: paraNumero(h.bombaEficiencia),
+    bombaPotenciaAdotada: paraNumero(h.bombaPotenciaAdotada),
   };
 }
 

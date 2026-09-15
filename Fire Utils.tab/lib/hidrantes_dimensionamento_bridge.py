@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 hidrantes_dimensionamento_bridge.py — Fire Utils · lib/
-Processa GET_HIDRANTES_DIMENSIONAMENTO e SET_HIDRANTES_EFICIENCIA_BOMBA: a
-página "Sistema de Hidrantes" da dockpane (webapp) precisa de três coisas
-que não vêm do Supabase, só do documento Revit ativo:
+Processa GET_HIDRANTES_DIMENSIONAMENTO: a página "Sistema de Hidrantes" da
+dockpane (webapp) precisa de duas coisas que não vêm do Supabase, só do
+documento Revit ativo:
 
   1. O sistema classificado que está de fato APLICADO no projeto — Tipo,
      RTI, esguicho, mangueira, expedições, vazão/pressão mínima —, lido do
@@ -15,21 +15,21 @@ que não vêm do Supabase, só do documento Revit ativo:
      desfavoráveis, vazão e altura manométrica totais) do último
      "Dimensionar Hidrantes" — lido do cache local (firedata.json,
      hidrantes/calc.py:carregar_cache), sem precisar rodar nada de novo.
-  3. A eficiência da bomba informada pelo usuário nesta página — persistida
-     em Project Information (PROJECT_INFO_EFICIENCIA_PARAM) pra sobreviver
-     fechar/reabrir o Revit. A potência é calculada do lado do React (JS),
-     a partir de Qt/Ht daqui + esta eficiência — não há cálculo de potência
-     no Python (ver src/data/hidrantes_calc.js do site pra fórmula
-     equivalente, e webapp/src/lib/hidrantesCalc.js aqui).
+
+A eficiência da bomba e a potência adotada NÃO passam por aqui: são lidas
+e gravadas direto no Supabase pelo próprio React (dados.hidrantes.
+bombaEficiencia/bombaPotenciaAdotada — ver webapp/src/components/dashboard/
+SistemaHidrantesPage.jsx), o mesmo campo que o site edita na Etapa 3
+("Dimensionamento da Bomba de Incêndio"). A potência é sempre calculada do
+lado do React (JS), a partir de Qt/Ht daqui + a eficiência vinda do
+Supabase — não há cálculo de potência no Python (ver
+src/data/hidrantes_calc.js do site pra fórmula equivalente, e
+webapp/src/lib/hidrantesCalc.js aqui).
 """
 
 import os
 
-from Autodesk.Revit.DB import Transaction
-
-from hidrantes.params import (
-    create_hydrant_params, PROJECT_INFO_RTI_PARAM, PROJECT_INFO_EFICIENCIA_PARAM,
-)
+from hidrantes.params import PROJECT_INFO_RTI_PARAM
 from hidrantes.norm_profiles import get_profile, NormProfileError
 from hidrantes.sistema import resolver_dados_sistema_puro
 import hidrantes.calc as hidrantes_calc
@@ -109,38 +109,4 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
         u"classificacao": classificacao,
         u"pontoOperacao": ponto_operacao,
         u"erroDimensionamento": None if cache else erro_cache,
-        u"bombaEficiencia": _ler_float_param(pi, PROJECT_INFO_EFICIENCIA_PARAM),
     })
-
-
-def tratar_set_hidrantes_eficiencia_bomba(uiapp, payload, postar_mensagem):
-    doc = _doc_ou_erro(uiapp, u"HIDRANTES_EFICIENCIA_SAVED", postar_mensagem)
-    if doc is None:
-        return
-
-    try:
-        eficiencia = float(payload.get(u"eficiencia"))
-    except (TypeError, ValueError):
-        postar_mensagem(u"HIDRANTES_EFICIENCIA_SAVED", {u"ok": False, u"erro": u"Eficiência inválida."})
-        return
-
-    try:
-        create_hydrant_params(doc)
-        pi = doc.ProjectInformation
-        with Transaction(doc, u"FireUtils - Eficiência da bomba de hidrantes") as t:
-            t.Start()
-            param = pi.LookupParameter(PROJECT_INFO_EFICIENCIA_PARAM)
-            if not param or param.IsReadOnly:
-                t.RollBack()
-                postar_mensagem(u"HIDRANTES_EFICIENCIA_SAVED", {
-                    u"ok": False,
-                    u"erro": u"Parâmetro de eficiência não encontrado no projeto. Reabra o Revit e tente novamente.",
-                })
-                return
-            param.Set(u"{}".format(eficiencia))
-            t.Commit()
-    except Exception as ex:
-        postar_mensagem(u"HIDRANTES_EFICIENCIA_SAVED", {u"ok": False, u"erro": texto_erro(ex)})
-        return
-
-    postar_mensagem(u"HIDRANTES_EFICIENCIA_SAVED", {u"ok": True, u"eficiencia": eficiencia})
