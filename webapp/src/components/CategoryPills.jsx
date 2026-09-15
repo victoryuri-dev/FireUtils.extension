@@ -30,6 +30,10 @@ export const ROTULO_CURTO_POR_CATEGORIA = {
   "detector-de-incendio": "Detector",
 };
 
+// Não usada por enquanto — ícones dos pills desligados a pedido, texto puro
+// até decidirmos o visual definitivo. Mantida pronta pra religar (só
+// voltar a chamar <IconePill /> em CategoryPills abaixo).
+// eslint-disable-next-line no-unused-vars
 function IconePill({ categoryId, iconKey, nomeCategoria }) {
   const svgLocal = ICONES_LOCAIS_POR_CATEGORIA[categoryId];
   if (svgLocal) {
@@ -66,7 +70,7 @@ export default function CategoryPills({ categorias, todasIconKey, categoriaAtual
           className={`pill ${categoria.id === categoriaAtual ? "ativa" : ""}`}
           onClick={() => onSelect(categoria.id)}
         >
-          <IconePill categoryId={categoria.id} iconKey={categoria.icon_key} nomeCategoria={categoria.name} />
+          {/* Ícones desligados por enquanto (ver IconePill) — só texto. */}
           {ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name}
         </button>
       ))}
