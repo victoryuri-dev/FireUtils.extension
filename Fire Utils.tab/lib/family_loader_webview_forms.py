@@ -64,7 +64,7 @@ from pyrevit.coreutils.logger import get_logger
 
 from family_loader_events import criar_fila_acoes
 from family_webview_bridge import processar_mensagem_webview
-from family_error_utils import texto_erro
+from family_error_utils import texto_erro, print_seguro
 
 _mlogger = get_logger(__name__)
 
@@ -109,6 +109,44 @@ def _valor_enum_allow(core):
     metodo = core.GetType().GetMethod(u"SetVirtualHostNameToFolderMapping")
     tipo_enum = metodo.GetParameters()[2].ParameterType
     return System.Enum.Parse(tipo_enum, u"Allow")
+
+
+def _string_para_unicode_seguro(valor):
+    """`str` (bytes) acentuado vindo de qualquer lugar do payload (ex.: um
+    nome de família lido de volta do documento) pode não estar em UTF-8 —
+    decodificar direto travaria o json.dumps mais na frente com o mesmo
+    erro de codificação do IronPython documentado em family_error_utils.py.
+    Tenta UTF-8, cai pra latin-1 (nunca falha, todo byte tem correspondente)
+    e, no limite, substitui o que não decodificar."""
+    if isinstance(valor, unicode):
+        return valor
+    try:
+        return valor.decode(u"utf-8")
+    except Exception:
+        try:
+            return valor.decode(u"latin-1")
+        except Exception:
+            return valor.decode(u"ascii", u"replace")
+
+
+def _sanitizar_payload_para_json(valor):
+    """Percorre o payload (dict/list/tuple aninhados) garantindo que toda
+    string vire unicode de verdade antes de chegar no json.dumps — ver
+    _string_para_unicode_seguro. Sem isso, um único nome de família com
+    encoding inesperado no meio de uma lista de dezenas derruba a
+    mensagem INTEIRA (inclusive as famílias que carregaram sem problema
+    nenhum), que é exatamente o sintoma de "carregou no projeto mas a
+    dockpane mostra erro de reportar o resultado"."""
+    if isinstance(valor, dict):
+        return dict(
+            (_sanitizar_payload_para_json(k), _sanitizar_payload_para_json(v))
+            for k, v in valor.items()
+        )
+    if isinstance(valor, (list, tuple)):
+        return [_sanitizar_payload_para_json(v) for v in valor]
+    if isinstance(valor, str):
+        return _string_para_unicode_seguro(valor)
+    return valor
 
 
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
@@ -218,11 +256,27 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         mesmo risco de erro de codificação do IronPython documentado em
         family_error_utils.py, só que na hora de mandar a notificação em
         vez de na hora de carregar a família.
+
+        `_sanitizar_payload_para_json` roda ANTES do dumps: `ensure_ascii`
+        só sabe escapar um texto que o json.dumps já conseguiu enxergar
+        como unicode — se algum valor no payload for um `str` (bytes) que
+        não seja UTF-8 puro (aconteceu na prática com nome de família
+        acentuado vindo de volta do documento), o dumps quebra antes de
+        chegar no ensure_ascii, e isso derrubava a mensagem INTEIRA
+        (LOAD_RESULT de sucesso incluído) — o frontend só via o "Falha ao
+        reportar o resultado" genérico do catch em family_webview_bridge.py,
+        mesmo com a família já carregada no projeto.
         """
         core = self.WebView.CoreWebView2
         if core is None:
             return
-        core.PostWebMessageAsJson(unicode(json.dumps({u"type": tipo, u"payload": payload}, ensure_ascii=True)))
+        payload_seguro = _sanitizar_payload_para_json(payload)
+        try:
+            texto_json = json.dumps({u"type": tipo, u"payload": payload_seguro}, ensure_ascii=True)
+        except Exception as e:
+            print_seguro(u"[AVISO] Falha ao serializar mensagem '{}' pra JSON: {}".format(tipo, texto_erro(e)))
+            texto_json = json.dumps({u"type": tipo, u"payload": {}}, ensure_ascii=True)
+        core.PostWebMessageAsJson(unicode(texto_json))
 
     def _ao_pedir_nova_janela(self, sender, args):
         """Um <a target="_blank"> do React (ex.: "abrir no site" do
