@@ -29,7 +29,6 @@ Dependências externas que NÃO vêm com o pyRevit/Revit:
      Microsoft).
 """
 
-import json
 import os
 
 import clr
@@ -151,11 +150,11 @@ def _sanitizar_payload_para_json(valor):
 
 def _forcar_ascii(valor):
     """Última rede de segurança: substitui todo caractere não-ASCII
-    (acentos, ç, etc.) por '?', em vez de tentar preservá-lo. Só é chamado
-    quando mandar o payload com o texto original — mesmo já sanitizado e
-    com ensure_ascii=True — ainda assim faz o PostWebMessageAsJson falhar;
-    perder a acentuação no texto que chega no React é um preço bem menor
-    que a notificação inteira sumir (ver _postar_mensagem)."""
+    (acentos, ç, etc.) por '?', em vez de tentar preservá-lo. Só entra em
+    ação se até o serializador manual (_json_dumps_seguro, abaixo) falhar
+    por algum motivo inesperado — perder a acentuação no texto que chega
+    no React é um preço bem menor que a notificação inteira sumir (ver
+    _postar_mensagem)."""
     if isinstance(valor, dict):
         return dict((_forcar_ascii(k), _forcar_ascii(v)) for k, v in valor.items())
     if isinstance(valor, (list, tuple)):
@@ -165,6 +164,89 @@ def _forcar_ascii(valor):
     if isinstance(valor, str):
         return _string_para_unicode_seguro(valor).encode(u"ascii", u"replace").decode(u"ascii")
     return valor
+
+
+# json.dumps(ensure_ascii=True) da stdlib NÃO é confiável aqui: na prática,
+# um nome de família como "Painel de controle da bomba de incêndio" (o "ê"
+# na posição 34) faz o PostWebMessageAsJson falhar com o mesmo erro de
+# "codec desconhecido" do IronPython documentado em family_error_utils.py
+# — mesmo depois de garantir que a string de entrada já era unicode de
+# verdade. O suspeito é o próprio módulo json (portado do CPython, cheio
+# de concatenação de literais `str`) fazendo, em algum ponto interno, uma
+# mistura implícita de `str`/`unicode` que dispara o bug — não uma questão
+# de UTF-8 vs. latin-1 na entrada. Pra não depender de entender exatamente
+# ONDE dentro do json.dumps isso acontece, este serializador substitui o
+# json.dumps inteiramente pra este uso: pequeno, escrito à mão, e usando
+# só operações puramente unicode (iteração de caractere, ord(), u"".join),
+# que nunca misturam str com unicode em lugar nenhum.
+_ESCAPES_JSON = {
+    u'"': u'\\"',
+    u"\\": u"\\\\",
+    u"\b": u"\\b",
+    u"\f": u"\\f",
+    u"\n": u"\\n",
+    u"\r": u"\\r",
+    u"\t": u"\\t",
+}
+
+
+def _json_string_literal(texto):
+    """Monta o literal de string JSON (com aspas) caractere a caractere —
+    todo caractere fora do intervalo ASCII imprimível vira um \\uXXXX
+    explícito, então o resultado final é sempre puro ASCII."""
+    pedacos = [u'"']
+    for caractere in texto:
+        substituto = _ESCAPES_JSON.get(caractere)
+        if substituto is not None:
+            pedacos.append(substituto)
+            continue
+        codepoint = ord(caractere)
+        if codepoint < 0x20 or codepoint > 0x7e:
+            pedacos.append(u"\\u%04x" % codepoint)
+        else:
+            pedacos.append(caractere)
+    pedacos.append(u'"')
+    return u"".join(pedacos)
+
+
+def _chave_para_unicode(chave):
+    if isinstance(chave, unicode):
+        return chave
+    if isinstance(chave, str):
+        return _string_para_unicode_seguro(chave)
+    return unicode(chave)
+
+
+def _json_dumps_seguro(valor):
+    """Serializa `valor` (dict/list/tuple/unicode/str/int/long/float/bool/
+    None aninhados — os únicos tipos que este bridge realmente manda pro
+    JS) pra texto JSON, sempre unicode e sempre ASCII puro. Ver o
+    comentário acima de _ESCAPES_JSON pro motivo de não usar json.dumps."""
+    if valor is None:
+        return u"null"
+    if valor is True:
+        return u"true"
+    if valor is False:
+        return u"false"
+    if isinstance(valor, (int, long)):
+        return unicode(valor)
+    if isinstance(valor, float):
+        return unicode(repr(valor))
+    if isinstance(valor, unicode):
+        return _json_string_literal(valor)
+    if isinstance(valor, str):
+        return _json_string_literal(_string_para_unicode_seguro(valor))
+    if isinstance(valor, dict):
+        pares = [
+            u"{}:{}".format(_json_string_literal(_chave_para_unicode(k)), _json_dumps_seguro(v))
+            for k, v in valor.items()
+        ]
+        return u"{" + u",".join(pares) + u"}"
+    if isinstance(valor, (list, tuple)):
+        return u"[" + u",".join(_json_dumps_seguro(v) for v in valor) + u"]"
+    # Tipo inesperado num payload que só devia ter os tipos acima — melhor
+    # um texto genérico do que deixar a serialização inteira quebrar.
+    return _json_string_literal(unicode(repr(valor)))
 
 
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
@@ -266,55 +348,42 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         na UI thread do Revit (mesma thread dona deste WebView) — seguro
         de tocar o WebView diretamente daqui.
 
-        `ensure_ascii=True` explícito (é o padrão do json.dumps, mas
-        deixamos claro de propósito) + `unicode(...)` no resultado: o
-        payload pode ter nome de família com acento (ex.: "Extintor
-        Portátil - A"), e isso garante que o texto que efetivamente
-        cruza pro lado .NET é sempre puro ASCII — sem isso corre o
-        mesmo risco de erro de codificação do IronPython documentado em
-        family_error_utils.py, só que na hora de mandar a notificação em
-        vez de na hora de carregar a família.
+        Usa `_json_dumps_seguro` (serializador escrito à mão, ver comentário
+        acima de _ESCAPES_JSON) em vez do json.dumps da stdlib: na prática,
+        um nome de família como "Painel de controle da bomba de incêndio"
+        (o "ê") fazia o PostWebMessageAsJson falhar com o erro de "codec
+        desconhecido" do IronPython (family_error_utils.py) mesmo com
+        ensure_ascii=True e a string de entrada já sendo unicode de
+        verdade — sinal de que o bug estava dentro do próprio módulo
+        json.dumps sob esse IronPython específico, não na codificação da
+        entrada. `_sanitizar_payload_para_json` continua rodando antes,
+        garantindo que toda string do payload é unicode de verdade (uma
+        `str`/bytes solta faria o serializador quebrar de outro jeito);
+        `_json_dumps_seguro` já devolve texto puro ASCII, então não precisa
+        de nenhum passo de ensure_ascii separado.
 
-        `_sanitizar_payload_para_json` roda ANTES do dumps: `ensure_ascii`
-        só sabe escapar um texto que o json.dumps já conseguiu enxergar
-        como unicode — se algum valor no payload for um `str` (bytes) que
-        não seja UTF-8 puro (aconteceu na prática com nome de família
-        acentuado vindo de volta do documento), o dumps quebra antes de
-        chegar no ensure_ascii, e isso derrubava a mensagem INTEIRA
-        (LOAD_RESULT de sucesso incluído) — o frontend só via o "Falha ao
-        reportar o resultado" genérico do catch em family_webview_bridge.py,
-        mesmo com a família já carregada no projeto.
-
-        A CHAMADA A core.PostWebMessageAsJson TAMBÉM entra no try/except
-        (não só o json.dumps): já aconteceu de um nome com "Ê"/"é"/"ã" no
-        catálogo (mesmo com o .rfa em si sem acento — o texto vem do
-        catalog.json, não do arquivo) derrubar especificamente essa
-        chamada .NET, mesmo depois do ensure_ascii=True já ter escapado a
-        string pra ASCII puro — sinal de que o problema não é só de
-        codificação de bytes, é algo específico dessa combinação
-        IronPython/WebView2 com determinados caracteres. Sem envolver essa
-        chamada também, a exceção escapava direto pro catch genérico de
-        family_webview_bridge.py — exatamente o "Falha ao reportar o
-        resultado" que continuava aparecendo mesmo com o fix anterior.
-        Por isso o fallback final força ASCII puro (troca acento por '?')
-        em vez de tentar de novo com o mesmo texto: garante que a
-        notificação chega, ainda que sem a acentuação.
+        Mesmo assim, o resultado inteiro (serializar + postar) fica num
+        try/except: se algo desse jeito ainda falhar, cai num último
+        fallback que força ASCII puro no payload (troca acento por '?')
+        antes de tentar de novo — garante que a notificação chega, ainda
+        que sem a acentuação, em vez de sumir e cair no catch genérico de
+        family_webview_bridge.py ("Falha ao reportar o resultado").
         """
         core = self.WebView.CoreWebView2
         if core is None:
             return
         payload_seguro = _sanitizar_payload_para_json(payload)
         try:
-            texto_json = json.dumps({u"type": tipo, u"payload": payload_seguro}, ensure_ascii=True)
-            core.PostWebMessageAsJson(unicode(texto_json))
+            texto_json = _json_dumps_seguro({u"type": tipo, u"payload": payload_seguro})
+            core.PostWebMessageAsJson(texto_json)
             return
         except Exception as e:
             print_seguro(u"[AVISO] Falha ao postar mensagem '{}' (tentando fallback ASCII): {}".format(tipo, texto_erro(e)))
 
         try:
             payload_ascii = _forcar_ascii(payload_seguro)
-            texto_json = json.dumps({u"type": tipo, u"payload": payload_ascii}, ensure_ascii=True)
-            core.PostWebMessageAsJson(unicode(texto_json))
+            texto_json = _json_dumps_seguro({u"type": tipo, u"payload": payload_ascii})
+            core.PostWebMessageAsJson(texto_json)
         except Exception as e2:
             print_seguro(u"[AVISO] Fallback ASCII também falhou pra mensagem '{}': {}".format(tipo, texto_erro(e2)))
 
