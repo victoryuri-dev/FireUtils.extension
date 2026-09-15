@@ -328,44 +328,44 @@ export default function App() {
           />
         ) : (
           <>
-            <header className="header">
-              <h1>Biblioteca de Famílias</h1>
-            </header>
+            <div className="biblioteca-scroll">
+              <header className="header">
+                <h1>Biblioteca de Famílias</h1>
+              </header>
 
-            <div className="search-bar">
-              <Icon svg={searchIconSvg} className="icone" />
-              <input
-                type="text"
-                placeholder="Que equipamento você procura?"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
-            </div>
-
-            {!catalogo ? (
-              <p className="vazio">Carregando catálogo...</p>
-            ) : (
-              <>
-                <p className="categorias-rotulo">Categorias</p>
-                <CategoryPills
-                  categorias={catalogo.categories}
-                  todasIconKey={catalogo.todas_icon_key}
-                  categoriaAtual={categoriaAtual}
-                  onSelect={setCategoriaAtual}
+              <div className="search-bar">
+                <Icon svg={searchIconSvg} className="icone" />
+                <input
+                  type="text"
+                  placeholder="Que equipamento você procura?"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
                 />
+              </div>
 
-                <div className="secao-titulo-linha">
-                  <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
-                  {selecionadas.size > 0 && (
-                    <div className="contadores">
-                      <span className="contador">
-                        <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
-                      </span>
-                    </div>
-                  )}
-                </div>
+              {!catalogo ? (
+                <p className="vazio">Carregando catálogo...</p>
+              ) : (
+                <>
+                  <p className="categorias-rotulo">Categorias</p>
+                  <CategoryPills
+                    categorias={catalogo.categories}
+                    todasIconKey={catalogo.todas_icon_key}
+                    categoriaAtual={categoriaAtual}
+                    onSelect={setCategoriaAtual}
+                  />
 
-                <div className="catalogo">
+                  <div className="secao-titulo-linha">
+                    <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
+                    {selecionadas.size > 0 && (
+                      <div className="contadores">
+                        <span className="contador">
+                          <strong>{String(selecionadas.size).padStart(2, "0")}</strong> selecionados
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
                   {familiasFiltradas.length === 0 ? (
                     <p className="vazio">
                       {catalogo.families.length === 0
@@ -384,30 +384,30 @@ export default function App() {
                       ))}
                     </div>
                   )}
-                </div>
+                </>
+              )}
+            </div>
 
-                {selecionadas.size > 0 && (
-                  <div className="acoes">
-                    <button
-                      type="button"
-                      className="botao accent"
-                      disabled={carregando}
-                      onClick={carregarSelecionadas}
-                    >
-                      <Icon svg={carregarIconSvg} />
-                      Carregar no projeto
-                    </button>
-                    <button type="button" className="botao" onClick={marcarTodosFiltrados}>
-                      <Icon svg={checkIconSvg} />
-                      Selecionar todos
-                    </button>
-                    <button type="button" className="botao" onClick={desmarcarTodos}>
-                      <Icon svg={xIconSvg} />
-                      Desmarcar todos
-                    </button>
-                  </div>
-                )}
-              </>
+            {catalogo && selecionadas.size > 0 && (
+              <div className="acoes">
+                <button
+                  type="button"
+                  className="botao accent"
+                  disabled={carregando}
+                  onClick={carregarSelecionadas}
+                >
+                  <Icon svg={carregarIconSvg} />
+                  Carregar no projeto
+                </button>
+                <button type="button" className="botao" onClick={marcarTodosFiltrados}>
+                  <Icon svg={checkIconSvg} />
+                  Selecionar todos
+                </button>
+                <button type="button" className="botao" onClick={desmarcarTodos}>
+                  <Icon svg={xIconSvg} />
+                  Desmarcar todos
+                </button>
+              </div>
             )}
           </>
         )}

@@ -332,6 +332,19 @@
   letter-spacing: 0.01em;
 }
 
+/* Biblioteca de Famílias — um único container rolável (header, categorias
+   e grade sobem juntos); só a barra de busca fica parada, grudada no topo
+   dele via sticky, porque é o único elemento que faz sentido continuar
+   acessível a qualquer altura do scroll. */
+.biblioteca-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Busca ------------------------------------------------------------------ */
 .search-bar {
   display: flex;
@@ -344,6 +357,9 @@
   margin-bottom: 18px;
   border: solid 1px var(--border-2);
   transition: .3s;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .search-bar .icone {
@@ -468,12 +484,6 @@
 }
 
 /* Catálogo / grade de cartões --------------------------------------------- */
-.catalogo {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 6px;
-}
-
 .grade {
   display: flex;
   flex-wrap: wrap;
