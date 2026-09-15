@@ -149,6 +149,24 @@ def _sanitizar_payload_para_json(valor):
     return valor
 
 
+def _forcar_ascii(valor):
+    """Última rede de segurança: substitui todo caractere não-ASCII
+    (acentos, ç, etc.) por '?', em vez de tentar preservá-lo. Só é chamado
+    quando mandar o payload com o texto original — mesmo já sanitizado e
+    com ensure_ascii=True — ainda assim faz o PostWebMessageAsJson falhar;
+    perder a acentuação no texto que chega no React é um preço bem menor
+    que a notificação inteira sumir (ver _postar_mensagem)."""
+    if isinstance(valor, dict):
+        return dict((_forcar_ascii(k), _forcar_ascii(v)) for k, v in valor.items())
+    if isinstance(valor, (list, tuple)):
+        return [_forcar_ascii(v) for v in valor]
+    if isinstance(valor, unicode):
+        return valor.encode(u"ascii", u"replace").decode(u"ascii")
+    if isinstance(valor, str):
+        return _string_para_unicode_seguro(valor).encode(u"ascii", u"replace").decode(u"ascii")
+    return valor
+
+
 class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
     panel_id = u"9f2f6d4a-9d63-4d3b-8c2a-9b6f8b6a1c7e"
@@ -266,6 +284,21 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         (LOAD_RESULT de sucesso incluído) — o frontend só via o "Falha ao
         reportar o resultado" genérico do catch em family_webview_bridge.py,
         mesmo com a família já carregada no projeto.
+
+        A CHAMADA A core.PostWebMessageAsJson TAMBÉM entra no try/except
+        (não só o json.dumps): já aconteceu de um nome com "Ê"/"é"/"ã" no
+        catálogo (mesmo com o .rfa em si sem acento — o texto vem do
+        catalog.json, não do arquivo) derrubar especificamente essa
+        chamada .NET, mesmo depois do ensure_ascii=True já ter escapado a
+        string pra ASCII puro — sinal de que o problema não é só de
+        codificação de bytes, é algo específico dessa combinação
+        IronPython/WebView2 com determinados caracteres. Sem envolver essa
+        chamada também, a exceção escapava direto pro catch genérico de
+        family_webview_bridge.py — exatamente o "Falha ao reportar o
+        resultado" que continuava aparecendo mesmo com o fix anterior.
+        Por isso o fallback final força ASCII puro (troca acento por '?')
+        em vez de tentar de novo com o mesmo texto: garante que a
+        notificação chega, ainda que sem a acentuação.
         """
         core = self.WebView.CoreWebView2
         if core is None:
@@ -273,10 +306,17 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         payload_seguro = _sanitizar_payload_para_json(payload)
         try:
             texto_json = json.dumps({u"type": tipo, u"payload": payload_seguro}, ensure_ascii=True)
+            core.PostWebMessageAsJson(unicode(texto_json))
+            return
         except Exception as e:
-            print_seguro(u"[AVISO] Falha ao serializar mensagem '{}' pra JSON: {}".format(tipo, texto_erro(e)))
-            texto_json = json.dumps({u"type": tipo, u"payload": {}}, ensure_ascii=True)
-        core.PostWebMessageAsJson(unicode(texto_json))
+            print_seguro(u"[AVISO] Falha ao postar mensagem '{}' (tentando fallback ASCII): {}".format(tipo, texto_erro(e)))
+
+        try:
+            payload_ascii = _forcar_ascii(payload_seguro)
+            texto_json = json.dumps({u"type": tipo, u"payload": payload_ascii}, ensure_ascii=True)
+            core.PostWebMessageAsJson(unicode(texto_json))
+        except Exception as e2:
+            print_seguro(u"[AVISO] Fallback ASCII também falhou pra mensagem '{}': {}".format(tipo, texto_erro(e2)))
 
     def _ao_pedir_nova_janela(self, sender, args):
         """Um <a target="_blank"> do React (ex.: "abrir no site" do
