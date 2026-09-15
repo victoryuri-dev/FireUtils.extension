@@ -116,13 +116,24 @@ def _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mens
         # Mesma rede de segurança do lado do envio: se o post em si falhar
         # (ex.: algo no payload que o WebView2 não digere), tenta de novo
         # com uma versão mínima — melhor um aviso genérico do que nenhuma
-        # resposta nenhuma.
-        print_seguro(u"[AVISO] Falha ao enviar LOAD_RESULT: {}".format(texto_erro(e)))
+        # resposta nenhuma. Bota o texto real da exceção na própria
+        # mensagem (não só no print do console) — assim dá pra diagnosticar
+        # o problema a partir do toast que aparece na dockpane, sem
+        # precisar ir catar log no console do pyRevit. Força ASCII aqui
+        # mesmo (não depende do _postar_mensagem do lado do WebView já
+        # fazer isso) porque a mensagem de erro pode ela própria ecoar o
+        # texto acentuado que causou a falha original.
+        mensagem_diagnostico = texto_erro(e)
+        print_seguro(u"[AVISO] Falha ao enviar LOAD_RESULT: {}".format(mensagem_diagnostico))
+        try:
+            mensagem_ascii = mensagem_diagnostico.encode(u"ascii", u"replace").decode(u"ascii")
+        except Exception:
+            mensagem_ascii = u"(erro sem descricao)"
         try:
             postar_mensagem(u"LOAD_RESULT", {
                 u"carregadas": [],
                 u"jaExistentes": [],
-                u"erros": [{u"name": u"?", u"mensagem": u"Falha ao reportar o resultado — confira o projeto."}],
+                u"erros": [{u"name": u"?", u"mensagem": u"Falha ao reportar: {}".format(mensagem_ascii)}],
             })
         except Exception:
             pass
