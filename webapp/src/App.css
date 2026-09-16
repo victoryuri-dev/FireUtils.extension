@@ -1486,7 +1486,7 @@
   border-radius: 3px;
   border: 1px solid var(--text-2);
   background: transparent;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 
 .se-checkbox:hover {
@@ -1494,13 +1494,18 @@
 }
 
 .se-checkbox.se-checkbox-marcado {
-  border-color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent);
 }
 
 .se-checkbox .icon {
   width: 10px;
   height: 10px;
   color: var(--text);
+}
+
+.se-checkbox.se-checkbox-marcado .icon {
+  color: var(--white);
 }
 
 .se-ambiente-up {
