@@ -28,13 +28,12 @@ clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
 from Autodesk.Revit.DB import (
-    FilteredElementCollector, FamilyInstance, Transaction, ElementId,
+    FilteredElementCollector, FamilyInstance, Transaction,
     FlowDirectionType,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script
-from System.Collections.Generic import List
 
 from projeto import exigir_projeto_e_estado
 from hidrantes.params import create_hydrant_params
@@ -44,8 +43,10 @@ from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
 from hidrantes.rede import (
     get_id, to_element_id, get_cota_conector, get_primeiro_tubo, bfs_ate,
     percorre_rotas_hidrantes, get_pontas_abertas, diagnostico_conectores,
+    descricao_curta_elemento, descricao_motivo_ponta_aberta, mostrar_no_revit,
     get_comprimento, get_diametro, get_leq, get_nome,
 )
+from hidrantes.resultado_ui import mostrar_inconsistencias_mapeamento
 
 P_TRECHO        = u"FireUtils - Trecho"
 P_IDENTIFICADOR = u"FireUtils - Identificador"
@@ -70,30 +71,18 @@ def set_param(elem, nome, valor):
     except: pass
     return False
 
-def reporta_quebra(visitados, alvo_desc):
-    """Mostra onde o rastreamento parou: quantos elementos foram
-    alcancados e, se houver, os IDs com conector aberto (clicaveis
-    para selecionar/mostrar no Revit)."""
-    output.print_md(u"**Caminho ate {} nao encontrado.**".format(alvo_desc))
-    output.print_md(u"{} elemento(s) alcancado(s) antes de parar.".format(len(visitados)))
-    pontas = get_pontas_abertas(doc, visitados)
-    if pontas:
-        output.print_md(u"Possivel(is) ponto(s) de quebra (conector desconectado):")
-        for eid in pontas:
-            try:
-                link = output.linkify(to_element_id(eid), title=u"Mostrar ID {}".format(eid))
-            except:
-                link = u"ID {}".format(eid)
-            output.print_md(u"- {}".format(link))
-        try:
-            uidoc.Selection.SetElementIds(List[ElementId]([to_element_id(eid) for eid in pontas]))
-        except: pass
-    else:
-        output.print_md(
-            u"Nenhum conector aberto encontrado no trecho alcancado. "
-            u"A quebra pode ser um elemento sem ConnectorManager "
-            u"(categoria nao suportada) logo apos o ultimo elemento acima."
-        )
+def _linhas_pontas(origem, pontas):
+    """Monta as linhas [Trecho, Elemento, Motivo] pra janela de
+    inconsistências, uma por ponta aberta encontrada em `origem`
+    (Sucção ou Recalque)."""
+    linhas = []
+    for eid in pontas:
+        elem = doc.GetElement(to_element_id(eid))
+        if elem is None:
+            linhas.append([origem, u"ID {}".format(eid), u"Elemento não encontrado no modelo"])
+            continue
+        linhas.append([origem, descricao_curta_elemento(elem), descricao_motivo_ponta_aberta(elem)])
+    return linhas
 
 class PipeFilter(ISelectionFilter):
     def AllowElement(self, e): return isinstance(e, Pipe)
@@ -224,9 +213,19 @@ output.print_md("### 2 - Mapeando Succao (RTI > Bomba)")
 
 caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
 if not caminho_succao:
-    reporta_quebra(visitados_succao, u"entrada da bomba (succao)")
-    forms.alert(u"Caminho nao encontrado entre saida RTI e entrada da bomba.",
-                title="Fire Utils", warn_icon=True)
+    pontas = get_pontas_abertas(doc, visitados_succao)
+    if pontas:
+        linhas = _linhas_pontas(u"Sucção (RTI → Bomba)", pontas)
+        ids_problema = pontas
+    else:
+        linhas = [[u"Sucção (RTI → Bomba)",
+                   u"{} elemento(s) alcançado(s)".format(len(visitados_succao)),
+                   u"Nenhum conector aberto identificado — a quebra pode ser um "
+                   u"elemento de categoria sem suporte a conectores"]]
+        ids_problema = list(visitados_succao)
+    ids_mostrar = mostrar_inconsistencias_mapeamento(linhas, bloqueante=True, ids_problema=ids_problema)
+    if ids_mostrar:
+        mostrar_no_revit(uidoc, ids_mostrar)
     script.exit()
 ids_succao = caminho_succao
 output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
@@ -237,7 +236,18 @@ output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
 output.print_md("---")
 output.print_md("### 3 - Percorrendo a Arvore de Recalque")
 
-rotas = percorre_rotas_hidrantes(tubo_rec, eid_rec)
+rotas, pontas_recalque = percorre_rotas_hidrantes(tubo_rec, eid_rec)
+
+if pontas_recalque:
+    bloqueante = len(rotas) < 2
+    linhas = _linhas_pontas(u"Recalque (Bomba → Válvulas)", pontas_recalque)
+    ids_mostrar = mostrar_inconsistencias_mapeamento(linhas, bloqueante=bloqueante,
+                                                      ids_problema=pontas_recalque)
+    if ids_mostrar:
+        mostrar_no_revit(uidoc, ids_mostrar)
+    if bloqueante:
+        script.exit()
+
 if not rotas:
     forms.alert(
         u"Nenhuma valvula de hidrante ('Valvula para Hidrante') foi encontrada "

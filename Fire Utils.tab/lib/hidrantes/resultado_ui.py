@@ -361,6 +361,45 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.ShowDialog()
 
 
+def mostrar_inconsistencias_mapeamento(linhas, bloqueante, ids_problema=None):
+    """
+    Janela mostrando pontos onde a rede de tubulação está quebrada (conector
+    desconectado, ou um galho que parou sem achar a válvula do hidrante) —
+    chamada por "Mapear Trechos".
+
+    linhas: lista de [Trecho, Elemento, Motivo] já formatados pelo chamador
+        (Revit-dependente — este módulo não importa nada do Revit).
+    bloqueante: True se o mapeamento não pôde continuar por causa dessas
+        quebras (ex.: sucção RTI → Bomba sem caminho); False se o
+        mapeamento seguiu em frente (ex.: hidrantes suficientes foram
+        achados mesmo com um galho morto) — só um aviso pro usuário revisar.
+
+    Retorna a lista de ElementId a selecionar no Revit se o usuário clicou
+    "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
+    janela = _JanelaResultado(
+        titulo=u"Inconsistências no Mapeamento",
+        subtitulo=u"Tubulação sem conexão em {} ponto(s)".format(len(linhas)),
+        status=u"erro",
+    )
+    janela.tabela([u"Trecho", u"Elemento", u"Motivo"], linhas,
+                  alinhas=[u"left", u"left", u"left"])
+    if bloqueante:
+        janela.paragrafo(u"Não foi possível concluir o mapeamento: a rede está "
+                         u"quebrada num ponto que faz parte do caminho obrigatório.")
+        janela.dica(u"Dica: reconecte a tubulação nos pontos acima e execute "
+                    u"\"Mapear Trechos\" novamente.")
+    else:
+        janela.paragrafo(u"O mapeamento foi concluído — hidrantes suficientes foram "
+                         u"encontrados mesmo assim —, mas os pontos acima não levam a "
+                         u"nenhuma válvula e vale revisar.")
+        janela.dica(u"Dica: se for um ramal morto ou dreno de verdade, pode ignorar. "
+                    u"Se não, reconecte a tubulação e execute \"Mapear Trechos\" "
+                    u"novamente.")
+    janela.habilitar_botao_mostrar(ids_problema)
+    janela.ShowDialog()
+    return janela.ids_problema if janela.mostrar_no_revit else None
+
+
 def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None):
     """Janela mostrando que o equilíbrio hidráulico entre os ramais no
     Ponto A não convergiu dentro da variação de pressão máxima admitida

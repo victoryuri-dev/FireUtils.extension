@@ -259,13 +259,22 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
     deveria aparecer em mais de um galho por construção; se aparecer (anel
     fechado por engano na modelagem), aquele galho simplesmente para ali,
     sem erro. PROFUNDIDADE_MAX é um reforço de segurança extra contra o
-    mesmo cenário. Galhos que não terminam em válvula (ramal morto, dreno,
-    tubulação auxiliar) também são ignorados silenciosamente.
+    mesmo cenário.
 
-    Retorna lista de rotas; cada rota é uma lista de ElementId.Value
-    (get_id), de elem_ini até a válvula, ambos inclusive.
+    Um galho que não termina em válvula (ramal morto, dreno, tubulação
+    auxiliar, ou uma quebra de verdade — conector desconectado) não é mais
+    ignorado em silêncio: o elemento onde o galho parou entra em
+    `pontas_abertas`, para o chamador mostrar ao usuário onde investigar
+    (ver mostrar_inconsistencias_mapeamento em resultado_ui.py).
+
+    Retorna (rotas, pontas_abertas):
+      rotas: lista de rotas; cada rota é uma lista de ElementId.Value
+        (get_id), de elem_ini até a válvula, ambos inclusive.
+      pontas_abertas: lista de ElementId.Value (get_id) dos elementos onde
+        um galho parou sem achar válvula.
     """
     rotas = []
+    pontas_abertas = []
     visitados = set([eid_ini])
     pilha = [(elem_ini, [eid_ini])]
     while pilha:
@@ -277,6 +286,7 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
             continue
         if eh_equipamento(elem) and get_id(elem) != eid_ini:
             continue
+        avancou = False
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -286,8 +296,40 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
                     if vid not in visitados:
                         visitados.add(vid)
                         pilha.append((viz, caminho + [vid]))
+                        avancou = True
             except: continue
-    return rotas
+        if not avancou:
+            pontas_abertas.append(get_id(elem))
+    return rotas, pontas_abertas
+
+
+def mostrar_no_revit(uidoc, ids):
+    """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
+    ElementId (int) está em `ids` — callback do botão "Mostrar no Projeto"
+    das janelas de resultado/bloqueio (resultado_ui.py). Chamar só depois
+    que a janela WPF (ShowDialog) já fechou: a API do Revit não é
+    reentrante, não dá pra chamar de dentro do Click de uma janela modal.
+    Ao final o foco volta pro Revit — depois que a janela fecha, o foco
+    costuma ficar com o console do pyRevit, então a seleção acontece mas
+    ninguém vê."""
+    from pyrevit import forms
+    from System.Collections.Generic import List
+    if not ids:
+        return
+    try:
+        eids = List[ElementId]([to_element_id(i) for i in ids])
+        uidoc.Selection.SetElementIds(eids)
+        uidoc.ShowElements(eids)
+        uidoc.RefreshActiveView()
+    except Exception as _e:
+        forms.alert(u"Não foi possível selecionar os elementos no Revit:\n{}".format(_e),
+                    title="Fire Utils", warn_icon=True)
+        return
+    try:
+        import ctypes
+        ctypes.windll.user32.SetForegroundWindow(uidoc.Application.MainWindowHandle)
+    except Exception:
+        pass
 
 
 def get_pontas_abertas(doc, visitados):
@@ -437,3 +479,27 @@ def diagnostico_conectores(elem):
         linhas.append(u"    {}. Direction={} IsConnected={} Z={}".format(
             i + 1, direcao, conectado, z))
     return linhas
+
+
+def descricao_curta_elemento(elem):
+    """Nome curto pra exibir numa linha de tabela: categoria + Id. Não usa
+    Symbol.Family.Name (get_nome) porque um Pipe não tem .Symbol."""
+    try:    cat = elem.Category.Name if elem.Category else u"Elemento"
+    except: cat = u"Elemento"
+    return u"{} (ID {})".format(cat, elem.Id)
+
+
+def descricao_motivo_ponta_aberta(elem):
+    """Por que um elemento entrou em pontas_abertas (bfs_ate ou
+    percorre_rotas_hidrantes): frase curta pra coluna 'Motivo' da janela
+    de inconsistências, sem o detalhe verboso de diagnostico_conectores."""
+    conns = get_conectores(elem)
+    if not conns:
+        return u"Sem conectores identificados (categoria não suportada?)"
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected:
+                return u"Extremidade aberta — conector desconectado"
+        except: continue
+    return u"Fim do trecho sem conexão adiante"
