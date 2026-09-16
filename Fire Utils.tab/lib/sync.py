@@ -3,7 +3,8 @@
 sync.py — Fire Utils · lib/
 Ponte HTTP com o site (Supabase) nos dois sentidos:
   - enviar(): push best-effort do que o plugin calculou (extintores,
-    hidrantes, saidas_emergencia) pra Edge Function `revit-sync`.
+    hidrantes, saidas_emergencia, sinalizacao) pra Edge Function
+    `revit-sync`.
   - buscar(): pull sob demanda de dados cadastrados no site (estruturas,
     ocupação/área por pavimento) via Edge Function `site-sync`.
   - buscar_norma(): pull da base normativa central (tabela `normas_dados`),
@@ -38,7 +39,7 @@ _BUSCA_URL  = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/site-sync"
 _NORMAS_URL = u"https://lngvagifcukglgdjildw.supabase.co/rest/v1/normas_dados"
 _ANON_KEY   = u"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ZhZ2lmY3VrZ2xnZGppbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDUwNzksImV4cCI6MjEwMjMyMTA3OX0.hApUcA5wunyv21JdL8XAVVD1TnGU9oRvyew1uCIlZRw"
 _CACHE_NOME = u"firedata.json"
-_MEDIDAS_VALIDAS = (u"extintores", u"hidrantes", u"saidas_emergencia")
+_MEDIDAS_VALIDAS = (u"extintores", u"hidrantes", u"saidas_emergencia", u"sinalizacao")
 
 
 def _cache_path(projeto_dir):
@@ -192,9 +193,9 @@ def _get_json(url):
 def enviar(medida, payload, projeto_dir, estruturaId=None):
     """Envia `payload` pra Edge Function revit-sync, best-effort.
 
-    `estruturaId` é obrigatório pro site pra 'extintores' e
-    'saidas_emergencia' (o site resolve a estrutura por esse id, não mais
-    por nome) — passe o valor salvo em config_sync(projeto_dir). Pra
+    `estruturaId` é obrigatório pro site pra 'extintores', 'saidas_emergencia'
+    e 'sinalizacao' (o site resolve a estrutura por esse id, não mais por
+    nome) — passe o valor salvo em config_sync(projeto_dir). Pra
     'hidrantes' não deve ser passado: é a única medida que fica geral,
     compartilhada entre todas as estruturas do projeto.
 
