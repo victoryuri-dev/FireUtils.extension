@@ -21,14 +21,19 @@ Tabela 2.
 Além do Tipo/variante, o site agora também manda (o botão "Classificar
 Sistema de Hidrante" foi removido — essa era a única outra forma de
 gravar esses dados no projeto):
-  - rti: Reserva Técnica de Incêndio (m³) — Tabela 3, decidida pelo site a
-    partir de área/ocupação/carga de incêndio do projeto; o plugin não tem
-    como derivar isso sozinho, por isso só guarda o que recebe.
   - metodoCalculo: token u"valvula" | u"esguicho" — onde a norma do
     estado exige verificar Q/Pmin do sistema (site: state.hidrantes,
     a partir de REFERENCIA_PRESSAO_VAZAO da norma do estado do projeto).
   - succaoAltitude / succaoTemperatura: entradas do NPSH disponível
     (site: state.hidrantes) — persistidas via hidrantes.succao.save_dados.
+
+RTI (Reserva Técnica de Incêndio) NÃO é gravado aqui: o motor de cálculo
+("Dimensionar Hidrantes"/"Mapear Trechos") nunca lê RTI do Project
+Information — é só um dado de registro (dimensiona o reservatório, não a
+rede hidráulica), então fica só no Supabase (dados.hidrantes.rti, mesmo
+lugar que o site edita e que SistemaHidrantesPage.jsx já grava direto via
+salvarHidrantes()) — sem essa terceira cópia local que podia divergir das
+outras duas sem ninguém perceber.
 """
 
 import os
@@ -37,7 +42,6 @@ from Autodesk.Revit.DB import Transaction
 
 from hidrantes.params import (
     create_hydrant_params, PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
-    PROJECT_INFO_RTI_PARAM,
 )
 from hidrantes.norm_profiles import get_profile, req, NormProfileError
 from hidrantes.calc import METODO_VALVULA, METODO_ESGUICHO
@@ -116,8 +120,6 @@ def tratar_set_hidrantes_classificacao(uiapp, payload, postar_mensagem):
         u"altitude_m":    payload.get(u"succaoAltitude"),
         u"temperatura_c": payload.get(u"succaoTemperatura"),
     })
-    rti = payload.get(u"rti")
-    valor_rti = u"{}".format(rti) if isinstance(rti, (int, float)) else u""
 
     try:
         create_hydrant_params(doc)
@@ -127,9 +129,7 @@ def tratar_set_hidrantes_classificacao(uiapp, payload, postar_mensagem):
             t.Start()
             param = pi.LookupParameter(PROJECT_INFO_PARAM)
             param_metodo = pi.LookupParameter(PROJECT_INFO_METODO_PARAM)
-            param_rti = pi.LookupParameter(PROJECT_INFO_RTI_PARAM)
-            if not param or param.IsReadOnly or not param_metodo or param_metodo.IsReadOnly \
-                    or not param_rti or param_rti.IsReadOnly:
+            if not param or param.IsReadOnly or not param_metodo or param_metodo.IsReadOnly:
                 t.RollBack()
                 postar_mensagem(u"HIDRANTES_CLASSIFICACAO_SAVED", {
                     u"ok": False,
@@ -138,7 +138,6 @@ def tratar_set_hidrantes_classificacao(uiapp, payload, postar_mensagem):
                 return
             param.Set(valor_param)
             param_metodo.Set(metodo_calculo)
-            param_rti.Set(valor_rti)
             ok_succao, msg_succao = succao.save_dados(doc, dados_succao)
             if not ok_succao:
                 t.RollBack()

@@ -134,17 +134,9 @@ PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
 # (ver hidrantes_classificacao_bridge.py).
 PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
 
-# RTI (Reserva Técnica de Incêndio, m³) — Tabela 3 da norma, decidida pelo
-# site a partir de área/ocupação/carga de incêndio do projeto (o plugin não
-# tem como derivar isso sozinho). Vem junto no mesmo SET_HIDRANTES_CLASSIFICACAO
-# que grava PROJECT_INFO_PARAM. Guardado como texto (ex.: "48") — sem
-# format spec no Set/leitura, pra não esbarrar no ValueError do IronPython
-# 2.7 ao formatar int.
-PROJECT_INFO_RTI_PARAM = u"FireUtils - RTI Hidrante"
-
 PROJECT_INFO_PARAMS = [
     PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
-    PROJECT_INFO_SUCCAO_PARAM, PROJECT_INFO_RTI_PARAM,
+    PROJECT_INFO_SUCCAO_PARAM,
 ]
 
 

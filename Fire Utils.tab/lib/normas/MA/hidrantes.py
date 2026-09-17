@@ -10,6 +10,15 @@ memorial (Pmin, Qmin, limites de velocidade, ponto de referencia de Pmin,
 coeficiente de Hazen-Williams, numero de hidrantes simultaneos, tolerancia de
 equilibrio no no de derivacao etc.) vive aqui - nunca hardcoded no motor
 (hidrantes/calc.py) ou no script de apresentacao (Dimensionar Hidrantes).
+
+Este modulo virou só o FALLBACK offline/de-ultima-instancia pras
+constantes de calculo hidraulico (v_max_*, npshd_*,
+tolerancia_equilibrio_mca, hidrantes_simultaneos, hazen_c) - normas/
+__init__.py:get_estado() busca essas chaves primeiro na base normativa
+central (Supabase, mesma linha 'hidrantes' que o site le em
+src/data/normas/MA/hidrantes.js), com cache em disco por cima. "tipos"/
+"tipos_ref" (Tabela 2, derivada de hidrantes/db.py) continuam vindo só
+daqui, sempre - ver docstring de normas/__init__.py.
 """
 
 # Import absoluto obrigatorio: este arquivo se chama "hidrantes.py" (mesmo

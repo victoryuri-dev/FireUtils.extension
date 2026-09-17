@@ -6,11 +6,15 @@ dockpane (webapp) precisa de duas coisas que não vêm do Supabase, só do
 documento Revit ativo:
 
   1. O sistema classificado que está de fato APLICADO no projeto — Tipo,
-     RTI, esguicho, mangueira, expedições, vazão/pressão mínima —, lido do
+     esguicho, mangueira, expedições, vazão/pressão mínima —, lido do
      Project Information e resolvido pelo perfil normativo do estado
      (mesma lógica de hidrantes/sistema.py, usada por "Dimensionar
      Hidrantes"). Pode divergir do que está pendente no site se "Aplicar
      classificação no Revit" ainda não foi clicado depois de uma mudança.
+     RTI NÃO vem daqui — o motor de cálculo nunca lê RTI do Project
+     Information (dimensiona o reservatório, não a rede hidráulica), então
+     a dockpane lê direto do Supabase (dadosHidrantes(projeto).rti) — ver
+     SistemaHidrantesPage.jsx.
   2. O ponto de operação do sistema (pressão/vazão nos hidrantes
      desfavoráveis, vazão e altura manométrica totais) do último
      "Dimensionar Hidrantes" — lido do cache local (firedata.json,
@@ -29,7 +33,6 @@ webapp/src/lib/hidrantesCalc.js aqui).
 
 import os
 
-from hidrantes.params import PROJECT_INFO_RTI_PARAM
 from hidrantes.norm_profiles import get_profile, NormProfileError
 from hidrantes.sistema import resolver_dados_sistema_puro
 import hidrantes.calc as hidrantes_calc
@@ -46,17 +49,6 @@ def _doc_ou_erro(uiapp, tipo_resposta, postar_mensagem):
         })
         return None
     return uidoc.Document
-
-
-def _ler_float_param(pi, nome_param):
-    param = pi.LookupParameter(nome_param)
-    texto = param.AsString() if param else None
-    if not texto:
-        return None
-    try:
-        return float(texto)
-    except ValueError:
-        return None
 
 
 def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
@@ -78,10 +70,8 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
         postar_mensagem(u"HIDRANTES_DIMENSIONAMENTO", {u"ok": False, u"erro": erro})
         return
 
-    pi = doc.ProjectInformation
     classificacao = dict(dados_sistema)
     classificacao[u"valorSistema"] = valor_sistema
-    classificacao[u"rti"] = _ler_float_param(pi, PROJECT_INFO_RTI_PARAM)
 
     # 'res', dentro do cache, é o dict cru de hidrantes/calc.py:calcular_rede
     # (Qt, P_hd01/02, Q_hd01/02, P_RTI, hid_governa) — ver docstring do
