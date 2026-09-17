@@ -74,7 +74,11 @@ def _ao_localizar(uiapp, eid):
     # NameError na hora do clique - import aqui dentro sempre resolve
     # (mesmo truque usado por mostrar_no_revit com "from pyrevit import forms").
     from hidrantes.rede import mostrar_no_revit
-    mostrar_no_revit(uiapp.ActiveUIDocument, [eid])
+    # `eid` vem de um botão "Localizar" por elemento (_botao, um int só) ou
+    # de um botão "Mostrar no Revit" por trecho inteiro (_botao_lista, já
+    # uma lista de ElementId) - ver resultado_ui.py.
+    eids = list(eid) if isinstance(eid, (list, tuple)) else [eid]
+    mostrar_no_revit(uiapp.ActiveUIDocument, eids)
 
 # ===========================================================================
 # Helpers de UI
@@ -261,13 +265,15 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
                            _ids_succao=ids_succao, _projeto_dir=projeto_dir,
                            _qs=Qs_lmin, _c_hw=C_HW, _set_param=set_param,
                            _p_trecho=P_TRECHO, _p_ident=P_IDENTIFICADOR,
-                           _p_id_hid=P_ID_HIDRANTE):
+                           _p_id_hid=P_ID_HIDRANTE, _fila_acoes=fila_acoes,
+                           _ao_localizar=_ao_localizar):
     from pyrevit import forms as _forms
     from hidrantes.rede import (
         get_id, to_element_id, get_cota_conector, diagnostico_conectores,
         get_comprimento, get_diametro, get_leq, get_nome,
     )
     from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
+    from hidrantes.resultado_ui import mostrar_trechos_mapeados
     from Autodesk.Revit.DB import Transaction, FlowDirectionType
 
     z_recalque_bomba = get_cota_conector(_bomba, (FlowDirectionType.Out,))
@@ -405,6 +411,19 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
         u"ponto_a_id": ponto_a_id,
         u"ranking":    ranking_hidrantes,
     }, _projeto_dir, chave=u"rotas")
+
+    # Janela final: trechos identificados, com botão por linha pra
+    # selecionar/enquadrar no Revit a rota completa (Bomba -> Ponto A ->
+    # hidrante) de cada um dos dois hidrantes mais desfavoraveis, e a
+    # succao (RTI -> Bomba). Modeless (Show(), nao ShowDialog()) - ver
+    # docstring de mostrar_trechos_mapeados.
+    mostrar_trechos_mapeados([
+        {u"nome": u"Sucção (RTI → Bomba)", u"eids": list(_ids_succao)},
+        {u"nome": u"1º Hidrante Mais Desfavorável (H-01)",
+         u"eids": list(ids_rec_comum) + list(ids_ramal_h1)},
+        {u"nome": u"2º Hidrante Mais Desfavorável (H-02)",
+         u"eids": list(ids_rec_comum) + list(ids_ramal_h2)},
+    ], fila_acoes=_fila_acoes, ao_localizar=_ao_localizar)
 
 
 if itens_recalque:

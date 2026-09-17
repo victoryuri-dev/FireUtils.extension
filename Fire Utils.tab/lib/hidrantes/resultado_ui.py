@@ -62,6 +62,20 @@ def _botao(eid, rotulo=u"Localizar"):
     return u"{}{}\x00{}".format(_BOTAO_MARK, eid, rotulo)
 
 
+# Marcador de célula "botão de lista" (mostrar_trechos_mapeados) — como
+# _BOTAO_MARK acima, mas seleciona/enquadra TODOS os elementos de um trecho
+# de uma vez (uma linha = um trecho inteiro, não um elemento só).
+_BOTAO_LISTA_MARK = u"\x00BOTAOLISTA\x00"
+
+
+def _botao_lista(eids, rotulo=u"Mostrar no Revit"):
+    """Marca um valor de tabela para renderizar como botão que seleciona/
+    enquadra TODOS os elementos de `eids` de uma vez — ver
+    _JanelaResultado._on_localizar_lista."""
+    ids_txt = u",".join(u"{}".format(e) for e in eids)
+    return u"{}{}\x00{}".format(_BOTAO_LISTA_MARK, ids_txt, rotulo)
+
+
 # Marcador de célula "checkbox" (coluna "Ignorar" de mostrar_inconsistencias_
 # mapeamento, quando permitir_continuar=True) — mesma convenção acima.
 _CHECKBOX_MARK = u"\x00CHECK\x00"
@@ -100,7 +114,7 @@ def _mca_fina(valor, casas_max=8):
 class _JanelaResultado(forms.WPFWindow):
 
     def __init__(self, titulo, subtitulo, status, fila_acoes=None, ao_localizar=None,
-                 ao_confirmar=None):
+                 ao_confirmar=None, banner_texto=None):
         forms.WPFWindow.__init__(self, _XAML_PATH)
         self.TxtTitulo.Text    = titulo
         self.TxtSubtitulo.Text = subtitulo or u""
@@ -117,16 +131,16 @@ class _JanelaResultado(forms.WPFWindow):
         # se todo checkbox "Ignorar" da tabela estiver marcado.
         self._ao_confirmar = ao_confirmar
         self._checkboxes   = []
-        self._aplicar_status(status)
+        self._aplicar_status(status, banner_texto)
 
-    def _aplicar_status(self, status):
+    def _aplicar_status(self, status, banner_texto=None):
         ok = (status == u"ok")
         cor_fundo = self.Resources[u"BrushOkTint"] if ok else self.Resources[u"BrushAccentTint"]
         cor_borda = self.Resources[u"BrushOk"]      if ok else self.Resources[u"BrushAccent"]
         self.BannerStatus.Background  = cor_fundo
         self.BannerStatus.BorderBrush = cor_borda
         self.TxtBanner.Foreground     = cor_borda
-        self.TxtBanner.Text = (
+        self.TxtBanner.Text = banner_texto or (
             u"{} Dimensionamento concluído — todas as verificações atendem a norma.".format(SIM_OK)
             if ok else
             u"{} Dimensionamento interrompido — verificação normativa não atendida.".format(SIM_X)
@@ -196,6 +210,17 @@ class _JanelaResultado(forms.WPFWindow):
             return
         eid = sender.Tag
         self._fila_acoes.enfileirar(lambda uiapp: self._ao_localizar(uiapp, eid))
+
+    def _on_localizar_lista(self, sender, args):
+        """Clique no botão "Mostrar no Revit" de uma linha da tabela de
+        trechos mapeados (ver _botao_lista) — mesmo mecanismo de
+        fila_acoes/ExternalEvent do _on_localizar, mas seleciona/enquadra
+        TODOS os elementos daquele trecho de uma vez (uma lista de
+        ElementId), não um elemento só."""
+        if self._fila_acoes is None or self._ao_localizar is None:
+            return
+        eids = [int(x) for x in sender.Tag.split(u",") if x]
+        self._fila_acoes.enfileirar(lambda uiapp: self._ao_localizar(uiapp, eids))
 
     # ------------------------------------------------------------------
     # Blocos de conteúdo
@@ -346,6 +371,23 @@ class _JanelaResultado(forms.WPFWindow):
             btn.HorizontalAlignment = HorizontalAlignment.Left
             btn.Tag = int(eid_txt)
             btn.Click += self._on_localizar
+            cel.Child = btn
+            grid.Children.Add(cel)
+            return
+
+        if texto.startswith(_BOTAO_LISTA_MARK):
+            ids_txt, rotulo = texto[len(_BOTAO_LISTA_MARK):].split(u"\x00", 1)
+            btn = Button()
+            btn.Content = rotulo
+            btn.FontSize = 11
+            btn.Padding = Thickness(10, 3, 10, 3)
+            btn.Background = self.Resources[u"BrushBg3"]
+            btn.Foreground = self.Resources[u"BrushText"]
+            btn.BorderBrush = self.Resources[u"BrushBorder2"]
+            btn.BorderThickness = Thickness(1)
+            btn.HorizontalAlignment = HorizontalAlignment.Left
+            btn.Tag = ids_txt
+            btn.Click += self._on_localizar_lista
             cel.Child = btn
             grid.Children.Add(cel)
             return
@@ -596,6 +638,48 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas, ids_problema=Non
     janela.habilitar_botao_mostrar(ids_problema)
     janela.ShowDialog()
     return janela.ids_problema if janela.mostrar_no_revit else None
+
+
+def mostrar_trechos_mapeados(trechos, fila_acoes, ao_localizar):
+    """
+    Janela mostrando os trechos identificados ao final de "Mapear Trechos"
+    (sucção e as rotas completas — Bomba → Ponto A → hidrante — dos dois
+    hidrantes mais desfavoráveis) — chamada tanto no caminho direto (sem
+    inconsistências) quanto depois que o usuário confirma "Ignorar" numa
+    janela de inconsistências (ver _continuar_mapeamento, script.py).
+
+    Cada linha tem um botão que seleciona/enquadra TODOS os elementos
+    daquele trecho de uma vez no Revit — pro usuário conferir visualmente
+    o que foi mapeado, sem precisar abrir os parâmetros de cada elemento.
+
+    Modeless (Show(), não ShowDialog()) — mesmo motivo do "Localizar" em
+    mostrar_inconsistencias_mapeamento: o Revit só processa a fila de
+    ExternalEvent (fila_acoes.py) quando o script termina de rodar, então
+    a janela precisa não bloquear o script pra o clique funcionar ao vivo.
+
+    trechos: lista de dicts {"nome", "eids"} — um por linha, já montada
+        pelo chamador (Revit-dependente — este módulo não importa nada
+        do Revit).
+    fila_acoes/ao_localizar: mesmos parâmetros de mostrar_inconsistencias_
+        mapeamento — fila de ExternalEvent e callback(uiapp, eids) que
+        efetivamente seleciona os elementos (aceita tanto um ElementId
+        único quanto uma lista, ver _ao_localizar em script.py).
+    """
+    janela = _JanelaResultado(
+        titulo=u"Trechos Mapeados",
+        subtitulo=u"{} trecho(s) identificado(s)".format(len(trechos)),
+        status=u"ok",
+        banner_texto=u"{} Mapeamento concluído — confira abaixo os trechos identificados.".format(SIM_OK),
+        fila_acoes=fila_acoes,
+        ao_localizar=ao_localizar,
+    )
+    linhas = [[t[u"nome"], u"{} elemento(s)".format(len(t[u"eids"])),
+               _botao_lista(t[u"eids"])] for t in trechos]
+    janela.tabela([u"Trecho", u"Elementos", u""], linhas,
+                  alinhas=[u"left", u"left", u"left"])
+    janela.paragrafo(u"Clique em \"Mostrar no Revit\" para selecionar e enquadrar, na "
+                     u"view ativa, todos os elementos daquele trecho.")
+    janela.Show()
 
 
 def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,
