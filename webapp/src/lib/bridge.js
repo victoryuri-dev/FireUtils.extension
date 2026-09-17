@@ -78,24 +78,24 @@
  *     Python -> JS: resposta de GET_DIMENSIONAMENTOS_STATUS.
  *
  *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number,
- *     rti?: number, metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
- *     JS -> Python: manda a classificação (Tipo + variante + RTI, Tabela 3
- *     da norma, a partir de área + ocupação + carga de incêndio do
- *     projeto) pra ser gravada no Project Information do documento Revit
- *     ativo. Pode vir de duas origens equivalentes — mesmo método de
- *     classificação (ver lib/hidrantesClassificacao.js aqui e
- *     src/data/hidrantes_calc.js no site): a página "Sistema de
- *     Hidrantes" da própria dockpane (components/dashboard/
- *     SistemaHidrantesPage.jsx — clicar num Tipo já aplica, sem botão
- *     separado) ou o card do Dashboard que reflete a classificação do site
- *     (components/dashboard/DashboardEstrutura.jsx). Gravado — ver
- *     hidrantes_classificacao_bridge.py do lado Python. Os demais
- *     parâmetros da Tabela 2 (esguicho, mangueira, vazão/pressão mínima)
- *     continuam vindo do perfil normativo do próprio plugin, nunca do
- *     site. O extinto pushbutton "Classificar Sistema de Hidrante" foi
- *     removido do plugin — RTI (Tabela 3), método de cálculo e os dados
- *     de sucção (altitude/temperatura, usados no NPSH disponível) que ele
- *     coletava agora vêm daqui também, do state.hidrantes do site.
+ *     metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
+ *     JS -> Python: manda pro Project Information do documento Revit ativo
+ *     só o que o motor de cálculo ("Dimensionar Hidrantes"/"Mapear
+ *     Trechos") de fato lê pra dimensionar: Tipo + variante (resolve
+ *     Q/Pmin/mangueira/esguicho contra o perfil normativo do próprio
+ *     plugin — Tabela 2 nunca vem do site, pra nunca ter dois lugares
+ *     dando valores potencialmente diferentes), método de cálculo (onde a
+ *     norma exige verificar Q/Pmin) e os dados de sucção (altitude/
+ *     temperatura, usados no NPSH disponível). RTI (Reserva Técnica de
+ *     Incêndio, Tabela 3) NÃO entra aqui: o motor de cálculo nunca lê RTI
+ *     do Project Information (dimensiona o reservatório, não a rede
+ *     hidráulica) — fica só no Supabase (dados.hidrantes.rti), gravado
+ *     direto por quem classifica (site ou a própria dockpane — ver
+ *     SistemaHidrantesPage.jsx:salvarHidrantes()), sem essa terceira cópia
+ *     local que podia divergir sem ninguém perceber. Mesmo método de
+ *     classificação em ambos os lados (ver lib/hidrantesClassificacao.js
+ *     aqui e src/data/hidrantes_calc.js no site) — gravado no Project
+ *     Information via hidrantes_classificacao_bridge.py do lado Python.
  *
  *   { type: "HIDRANTES_CLASSIFICACAO_SAVED", payload: { ok, erro?, valorSistema?, metodoCalculo? } }
  *     Python -> JS: resultado de um SET_HIDRANTES_CLASSIFICACAO.
@@ -111,25 +111,25 @@
  *
  *   { type: "HIDRANTES_DIMENSIONAMENTO", payload: { ok, erro?,
  *     classificacao?: { tipo, variante_idx, descricao, esguicho_dn, mang_dn,
- *       mang_comp, expedicoes, q_min, p_min, rti, valorSistema },
+ *       mang_comp, expedicoes, q_min, p_min, valorSistema },
  *     pontoOperacao?: { qt, ht, pHd01, pHd02, qHd01, qHd02, hidGoverna, timestamp } | null,
- *     erroDimensionamento?: string | null,
- *     bombaEficiencia?: number | null } }
+ *     erroDimensionamento?: string | null } }
+ *     `classificacao` não inclui `rti` — quem quiser mostrar RTI lê direto
+ *     do Supabase (dadosHidrantes(projeto).rti, ver lib/projetoDados.js),
+ *     nunca do Project Information (ver comentário de
+ *     SET_HIDRANTES_CLASSIFICACAO acima pra por quê).
  *     Python -> JS: resposta de GET_HIDRANTES_DIMENSIONAMENTO. `ht` é a
  *     altura manométrica total que a bomba precisa desenvolver (P_RTI do
  *     motor de cálculo — pressão que precisaria existir na RTI, referência
  *     atmosférica, pra alimentar o sistema por gravidade; já inclui sucção
  *     e recalque). `pontoOperacao` vem null quando "Dimensionar Hidrantes"
  *     ainda não rodou nesta sessão do projeto (ver erroDimensionamento).
- *
- *   { type: "SET_HIDRANTES_EFICIENCIA_BOMBA", payload: { eficiencia: number } }
- *     JS -> Python: salva a eficiência global (%) da bomba de incêndio
- *     informada na página "Sistema de Hidrantes", persistida em Project
- *     Information pra sobreviver fechar/reabrir o Revit. A potência em si
- *     é calculada aqui no React (lib/hidrantesCalc.js), nunca no Python.
- *
- *   { type: "HIDRANTES_EFICIENCIA_SAVED", payload: { ok, erro?, eficiencia? } }
- *     Python -> JS: resultado de um SET_HIDRANTES_EFICIENCIA_BOMBA.
+ *     A eficiência da bomba e a potência adotada NÃO vêm daqui — são lidas/
+ *     gravadas direto no Supabase (dados.hidrantes.bombaEficiencia/
+ *     bombaPotenciaAdotada, ver lib/projetoDados.js e
+ *     SistemaHidrantesPage.jsx), o mesmo campo que o site edita na Etapa 3
+ *     ("Dimensionamento da Bomba de Incêndio"), sem passar pelo Project
+ *     Information do Revit.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -145,8 +145,6 @@ export const BridgeMessageTypes = {
   HIDRANTES_CLASSIFICACAO_SAVED: "HIDRANTES_CLASSIFICACAO_SAVED",
   GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
-  SET_HIDRANTES_EFICIENCIA_BOMBA: "SET_HIDRANTES_EFICIENCIA_BOMBA",
-  HIDRANTES_EFICIENCIA_SAVED: "HIDRANTES_EFICIENCIA_SAVED",
 };
 
 function obterWebView() {
