@@ -25,7 +25,9 @@ from System.Windows import (
     Thickness, HorizontalAlignment, TextWrapping, FontWeights, CornerRadius,
     Visibility,
 )
-from System.Windows.Controls import Grid, TextBlock, Border, ColumnDefinition, RowDefinition
+from System.Windows.Controls import (
+    Grid, TextBlock, Border, Button, ColumnDefinition, RowDefinition,
+)
 
 from pyrevit import forms
 
@@ -46,6 +48,18 @@ def _pill(ok, texto=None):
     if texto is None:
         texto = u"{} Atende".format(SIM_OK) if ok else u"{} Não atende".format(SIM_X)
     return u"{}{}\x00{}".format(_PILL_MARK, u"1" if ok else u"0", texto)
+
+
+# Marcador de célula "botão" (ex.: "Localizar" por linha, mostrar_inconsistencias_
+# mapeamento) — mesma convenção do _PILL_MARK acima.
+_BOTAO_MARK = u"\x00BOTAO\x00"
+
+
+def _botao(eid, rotulo=u"Localizar"):
+    """Marca um valor de tabela para renderizar como botão em vez de texto —
+    clicar fecha a janela e sinaliza pro chamador mostrar só esse elemento
+    (ElementId int) no Revit; ver _JanelaResultado._on_localizar."""
+    return u"{}{}\x00{}".format(_BOTAO_MARK, eid, rotulo)
 
 
 def _mca(valor):
@@ -117,6 +131,15 @@ class _JanelaResultado(forms.WPFWindow):
         self.BtnMostrarProjeto.Visibility = Visibility.Visible
 
     def on_mostrar_projeto(self, sender, args):
+        self.mostrar_no_revit = True
+        self.Close()
+
+    def _on_localizar(self, sender, args):
+        """Clique no botão "Localizar" de uma linha da tabela (ver _botao/
+        _celula) — mesmo cuidado do botão único (on_mostrar_projeto): só
+        fecha a janela e sinaliza; quem chama a API do Revit é o script,
+        depois que ShowDialog() retorna."""
+        self.ids_problema = [sender.Tag]
         self.mostrar_no_revit = True
         self.Close()
 
@@ -247,6 +270,23 @@ class _JanelaResultado(forms.WPFWindow):
             grid.Children.Add(cel)
             return
 
+        if texto.startswith(_BOTAO_MARK):
+            eid_txt, rotulo = texto[len(_BOTAO_MARK):].split(u"\x00", 1)
+            btn = Button()
+            btn.Content = rotulo
+            btn.FontSize = 11
+            btn.Padding = Thickness(10, 3, 10, 3)
+            btn.Background = self.Resources[u"BrushBg3"]
+            btn.Foreground = self.Resources[u"BrushText"]
+            btn.BorderBrush = self.Resources[u"BrushBorder2"]
+            btn.BorderThickness = Thickness(1)
+            btn.HorizontalAlignment = HorizontalAlignment.Left
+            btn.Tag = int(eid_txt)
+            btn.Click += self._on_localizar
+            cel.Child = btn
+            grid.Children.Add(cel)
+            return
+
         negrito = False
         if texto.startswith(u"**") and texto.endswith(u"**") and len(texto) >= 4:
             negrito = True
@@ -361,31 +401,35 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.ShowDialog()
 
 
-def mostrar_inconsistencias_mapeamento(linhas, bloqueante, ids_problema=None):
+def mostrar_inconsistencias_mapeamento(itens, bloqueante):
     """
-    Janela mostrando pontos onde a rede de tubulação está quebrada (conector
-    desconectado, ou um galho que parou sem achar a válvula do hidrante) —
-    chamada por "Mapear Trechos".
+    Janela mostrando pontos onde a rede de tubulação está quebrada — chamada
+    por "Mapear Trechos". Cada linha tem seu próprio botão "Localizar", em
+    vez do botão único "Mostrar no Projeto" (não usado aqui): clicar fecha
+    a janela e sinaliza pro chamador mostrar só aquele elemento no Revit.
 
-    linhas: lista de [Trecho, Elemento, Motivo] já formatados pelo chamador
-        (Revit-dependente — este módulo não importa nada do Revit).
-    bloqueante: True se o mapeamento não pôde continuar por causa dessas
-        quebras (ex.: sucção RTI → Bomba sem caminho); False se o
-        mapeamento seguiu em frente (ex.: hidrantes suficientes foram
-        achados mesmo com um galho morto) — só um aviso pro usuário revisar.
+    itens: lista de dicts {"trecho", "elemento", "eid"} já formatados pelo
+        chamador (Revit-dependente — este módulo não importa nada do Revit).
+        "eid": ElementId (int) do elemento daquela linha.
+    bloqueante: True se alguma válvula de hidrante ficou sem rota (o
+        mapeamento não pode continuar); False se é só aviso — um galho
+        morto que não leva a nenhuma válvula, mas hidrantes suficientes já
+        foram encontrados e o mapeamento seguiu em frente.
 
-    Retorna a lista de ElementId a selecionar no Revit se o usuário clicou
-    "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
+    Retorna o ElementId (int, numa lista de 1) a selecionar no Revit se o
+    usuário clicou "Localizar" em alguma linha, ou None se só fechou a
+    janela."""
     janela = _JanelaResultado(
         titulo=u"Inconsistências no Mapeamento",
-        subtitulo=u"Tubulação sem conexão em {} ponto(s)".format(len(linhas)),
+        subtitulo=u"Tubulação sem conexão em {} ponto(s)".format(len(itens)),
         status=u"erro",
     )
-    janela.tabela([u"Trecho", u"Elemento", u"Motivo"], linhas,
+    linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"])] for item in itens]
+    janela.tabela([u"Trecho", u"Elemento", u""], linhas,
                   alinhas=[u"left", u"left", u"left"])
     if bloqueante:
-        janela.paragrafo(u"Não foi possível concluir o mapeamento: a rede está "
-                         u"quebrada num ponto que faz parte do caminho obrigatório.")
+        janela.paragrafo(u"Não foi possível concluir o mapeamento: pelo menos uma "
+                         u"válvula de hidrante ficou sem rota até a bomba.")
         janela.dica(u"Dica: reconecte a tubulação nos pontos acima e execute "
                     u"\"Mapear Trechos\" novamente.")
     else:
@@ -395,7 +439,6 @@ def mostrar_inconsistencias_mapeamento(linhas, bloqueante, ids_problema=None):
         janela.dica(u"Dica: se for um ramal morto ou dreno de verdade, pode ignorar. "
                     u"Se não, reconecte a tubulação e execute \"Mapear Trechos\" "
                     u"novamente.")
-    janela.habilitar_botao_mostrar(ids_problema)
     janela.ShowDialog()
     return janela.ids_problema if janela.mostrar_no_revit else None
 
