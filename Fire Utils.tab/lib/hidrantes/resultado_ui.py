@@ -55,11 +55,13 @@ def _pill(ok, texto=None):
 _BOTAO_MARK = u"\x00BOTAO\x00"
 
 
-def _botao(eid, rotulo=u"Localizar"):
+def _botao(eids, rotulo=u"Localizar"):
     """Marca um valor de tabela para renderizar como botão em vez de texto —
-    clicar fecha a janela e sinaliza pro chamador mostrar só esse elemento
-    (ElementId int) no Revit; ver _JanelaResultado._on_localizar."""
-    return u"{}{}\x00{}".format(_BOTAO_MARK, eid, rotulo)
+    clicar NÃO fecha a janela: enfileira (via ExternalEvent) mostrar todos
+    os elementos de `eids` (lista de ElementId int - um só elemento também
+    é uma lista de 1) selecionados/enquadrados juntos no Revit; ver
+    _JanelaResultado._on_localizar."""
+    return u"{}{}\x00{}".format(_BOTAO_MARK, u",".join(u"{}".format(e) for e in eids), rotulo)
 
 
 # Marcador de célula "checkbox" (coluna "Ignorar" de mostrar_inconsistencias_
@@ -194,8 +196,8 @@ class _JanelaResultado(forms.WPFWindow):
         que possível, com a janela continuando aberta."""
         if self._fila_acoes is None or self._ao_localizar is None:
             return
-        eid = sender.Tag
-        self._fila_acoes.enfileirar(lambda uiapp: self._ao_localizar(uiapp, eid))
+        eids = sender.Tag
+        self._fila_acoes.enfileirar(lambda uiapp: self._ao_localizar(uiapp, eids))
 
     # ------------------------------------------------------------------
     # Blocos de conteúdo
@@ -334,7 +336,7 @@ class _JanelaResultado(forms.WPFWindow):
             return
 
         if texto.startswith(_BOTAO_MARK):
-            eid_txt, rotulo = texto[len(_BOTAO_MARK):].split(u"\x00", 1)
+            eids_txt, rotulo = texto[len(_BOTAO_MARK):].split(u"\x00", 1)
             btn = Button()
             btn.Content = rotulo
             btn.FontSize = 11
@@ -344,7 +346,7 @@ class _JanelaResultado(forms.WPFWindow):
             btn.BorderBrush = self.Resources[u"BrushBorder2"]
             btn.BorderThickness = Thickness(1)
             btn.HorizontalAlignment = HorizontalAlignment.Left
-            btn.Tag = int(eid_txt)
+            btn.Tag = [int(e) for e in eids_txt.split(u",") if e]
             btn.Click += self._on_localizar
             cel.Child = btn
             grid.Children.Add(cel)
@@ -492,8 +494,9 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
         permitir_continuar=True; ver abaixo).
     fila_acoes: fila de ExternalEvent (hidrantes/fila_acoes.py), criada
         pelo chamador num contexto de API válido.
-    ao_localizar: callable(uiapp, eid) que efetivamente seleciona/enquadra
-        o elemento no Revit — chamado pela fila, não direto pelo clique.
+    ao_localizar: callable(uiapp, eids) que efetivamente seleciona/enquadra
+        os elementos (lista de ElementId int) no Revit — chamado pela
+        fila, não direto pelo clique.
     permitir_continuar: True quando o mapeamento pode prosseguir mesmo com
         esses itens (ex.: rede de recalque — ainda sobraram rotas válidas
         suficientes até outras válvulas). Nesse caso a tabela ganha uma
@@ -521,12 +524,12 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
         ao_confirmar=ao_confirmar,
     )
     if permitir_continuar:
-        linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"]),
+        linhas = [[item[u"trecho"], item[u"elemento"], _botao([item[u"eid"]]),
                    _checkbox(item[u"eid"])] for item in itens]
         janela.tabela([u"Trecho", u"Elemento", u"", u"Ignorar"], linhas,
                       alinhas=[u"left", u"left", u"left", u"center"])
     else:
-        linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"])] for item in itens]
+        linhas = [[item[u"trecho"], item[u"elemento"], _botao([item[u"eid"]])] for item in itens]
         janela.tabela([u"Trecho", u"Elemento", u""], linhas,
                       alinhas=[u"left", u"left", u"left"])
     if bloqueante:
@@ -575,27 +578,52 @@ def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None):
     return janela.ids_problema if janela.mostrar_no_revit else None
 
 
-def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas, ids_problema=None):
-    """Janela mostrando quais diâmetros do trecho passaram do limite de
-    velocidade — chamada por "Dimensionar Hidrantes" quando o
-    dimensionamento é interrompido nessa verificação.
+def mostrar_ocorrencias_velocidade(ocorrencias, fila_acoes, ao_localizar):
+    """
+    Janela listando TODAS as ocorrências de velocidade acima do limite
+    normativo, em TODOS os tubos/hidrantes do sistema — não só nos 2
+    trechos do dimensionamento (HD01/HD02) — chamada por "Dimensionar
+    Hidrantes". Cada linha tem um botão "Mostrar Trecho" que seleciona/
+    enquadra TODOS os elementos daquele trecho no Revit (não só o(s) tubo(s)
+    do diâmetro que reprovou) — clicar NÃO fecha a janela, mesmo padrão de
+    "Localizar" em mostrar_inconsistencias_mapeamento (ver docstring lá:
+    janela MODELESS/Show(), fila de ExternalEvent).
 
-    Retorna a lista de ElementId a selecionar no Revit se o usuário
-    clicou "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
+    ocorrencias: lista de dicts já prontos (um por combinação trecho +
+        diâmetro que reprovou):
+        {"trecho": nome do trecho (str), "dn": diâmetro nominal (mm),
+         "v": velocidade obtida (m/s), "limite": limite normativo (m/s),
+         "eids": lista de ElementId (int) de TODOS os elementos do trecho
+         (não só os do diâmetro reprovado) — o que o botão "Mostrar
+         Trecho" seleciona}.
+    fila_acoes: fila de ExternalEvent (hidrantes/fila_acoes.py), criada
+        pelo chamador num contexto de API válido.
+    ao_localizar: callable(uiapp, eids) que efetivamente seleciona/
+        enquadra os elementos no Revit — chamado pela fila.
+
+    Não retorna nada — o efeito de cada clique acontece ao vivo, enquanto
+    a janela está aberta (mesmo padrão de mostrar_inconsistencias_mapeamento).
+    """
     janela = _JanelaResultado(
         titulo=u"Verificação não atendida",
-        subtitulo=u"Velocidade acima do limite — {}".format(nome_trecho),
+        subtitulo=u"Velocidade acima do limite em {} ponto(s) do sistema".format(
+            len(ocorrencias)),
         status=u"erro",
+        fila_acoes=fila_acoes,
+        ao_localizar=ao_localizar,
     )
-    janela.tabela([u"DN (mm)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
-                  [[u"{:.1f}".format(s["d_mm"]), u"**{:.3f}**".format(s["V"]),
-                    u"{:.1f}".format(limite), _pill(False)] for s in falhas])
-    janela.paragrafo(u"Não atende: velocidade acima do limite normativo.")
-    janela.dica(u"Dica: aumente o diâmetro do trecho. A vazão é um dado "
-                u"normativo fixo do tipo de sistema e não pode ser reduzida.")
-    janela.habilitar_botao_mostrar(ids_problema)
-    janela.ShowDialog()
-    return janela.ids_problema if janela.mostrar_no_revit else None
+    linhas = [[o[u"trecho"], u"{:.1f}".format(o[u"dn"]), u"**{:.3f}**".format(o[u"v"]),
+               u"{:.1f}".format(o[u"limite"]), _pill(False), _botao(o[u"eids"], u"Mostrar Trecho")]
+              for o in ocorrencias]
+    janela.tabela([u"Trecho", u"DN (mm)", u"V (m/s)", u"Limite (m/s)", u"Verificação", u""],
+                  linhas,
+                  alinhas=[u"left", u"right", u"right", u"right", u"left", u"left"])
+    janela.paragrafo(u"Não atende: velocidade acima do limite normativo em um ou mais "
+                     u"pontos da rede — sucção, recalque, ramais dos hidrantes "
+                     u"dimensionados (HD01/HD02) e/ou demais hidrantes do sistema.")
+    janela.dica(u"Dica: aumente o diâmetro dos trechos listados acima. A vazão é um "
+                u"dado normativo fixo do tipo de sistema e não pode ser reduzida.")
+    janela.Show()
 
 
 def mostrar_bloqueio_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin,

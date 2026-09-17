@@ -13,6 +13,14 @@ alguma verificação não atender a norma, o dimensionamento para naquele
 ponto e mostra onde corrigir, em vez de seguir adiante com um resultado
 que não atende.
 
+A verificação de velocidade cobre TODOS os tubos e hidrantes do sistema,
+não só HD01/HD02 (os 2 mais desfavoráveis do dimensionamento): usa o
+ranking completo salvo por "Mapear Trechos" (chave 'rotas', campo
+'ranking'/'elementos') pra também checar a rede até os demais hidrantes,
+com a vazão nominal simples de um hidrante (Qs) — ver "Demais hidrantes
+do sistema" abaixo. Todas as ocorrências (não só a primeira) aparecem
+numa lista única, cada uma com botão pra localizar o trecho no projeto.
+
 Salva os resultados completos no cache (firedata.json), sincronizado com
 o site — é de lá (state.hidrantes.dimensionamento) que o memorial de
 cálculo e a página "Sistema de Hidrantes" da dockpane leem o passo a
@@ -57,9 +65,10 @@ from hidrantes.calc import (
     COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
 from hidrantes.resultado_ui import (
-    mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
+    mostrar_ocorrencias_velocidade, mostrar_bloqueio_hidrante,
     mostrar_bloqueio_equilibrio, mostrar_resultado_ok,
 )
+from hidrantes.fila_acoes import criar_fila_acoes
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes.norm_profiles import get_profile, req, opt
 from hidrantes import succao as succao_calc
@@ -77,6 +86,20 @@ except NameError:
 doc    = __revit__.ActiveUIDocument.Document
 uidoc  = __revit__.ActiveUIDocument
 output = script.get_output()
+
+# Fila de ExternalEvent pro botao "Mostrar Trecho" da janela de ocorrencias
+# de velocidade (mostrar_ocorrencias_velocidade) - criada aqui, no corpo
+# do script (contexto de API valido), nao dentro de um handler de clique.
+fila_acoes = criar_fila_acoes()
+
+def _ao_localizar(uiapp, eids):
+    # Import local (não do topo do arquivo): o ExternalEvent roda depois
+    # que o Revit já pode ter limpado o namespace global deste script,
+    # então uma referência a uma função importada lá em cima vira
+    # NameError na hora do clique - import aqui dentro sempre resolve
+    # (mesmo truque usado em "Mapear Trechos").
+    from hidrantes.rede import mostrar_no_revit
+    mostrar_no_revit(uiapp.ActiveUIDocument, eids)
 
 # ===========================================================================
 # HELPERS REVIT
@@ -584,7 +607,13 @@ else:
     p_hd02_ref = res["P_hd02"]
     p_ref_desc = u"pressão na válvula"
 
-def _para_por_velocidade(j, limite, nome_trecho, comprimento_min=None):
+# ---------------------------------------------------------------------
+# Velocidade — TODOS os tubos/hidrantes do sistema, não só os 2 trechos
+# (HD01/HD02) do dimensionamento: coleta TODAS as ocorrências (não para
+# na primeira) e mostra uma lista, cada uma com botão pra localizar o
+# trecho inteiro no projeto.
+# ---------------------------------------------------------------------
+def _ocorrencias_de(nome_trecho, j, limite, elems_trecho, comprimento_min=None):
     """comprimento_min (m), quando informado: sub-trechos mais curtos que
     isso (ex.: redução na entrada/saída da bomba) ficam fora da
     verificação — ver COMPRIMENTO_MIN_VERIF_VELOCIDADE_M em calc.py."""
@@ -593,14 +622,63 @@ def _para_por_velocidade(j, limite, nome_trecho, comprimento_min=None):
         segmentos = [s for s in segmentos if s["L"] >= comprimento_min]
     falhas = [s for s in segmentos if s["V"] > limite + 1e-9]
     if not falhas:
-        return
-    ids_falha = [eid for s in falhas for eid in s.get("ids", [])]
-    ids_mostrar = mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
-                                              ids_problema=ids_falha)
-    if ids_mostrar:
-        mostrar_no_revit(ids_mostrar)
+        return []
+    eids_trecho = [get_id(e) for e in elems_trecho]
+    return [{u"trecho": nome_trecho, u"dn": s["d_mm"], u"v": s["V"],
+             u"limite": limite, u"eids": eids_trecho} for s in falhas]
+
+ocorrencias_velocidade = []
+ocorrencias_velocidade += _ocorrencias_de(
+    u"Sucção (RTI → Bomba)", res["j"]["t1"], v_max_succao,
+    trechos_elems[u"RTI - Bomba"], comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
+ocorrencias_velocidade += _ocorrencias_de(
+    u"Bomba → Ponto A (recalque)", res["j"]["t2"], v_max_tubo,
+    trechos_elems[u"Bomba - Ponto A"], comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
+ocorrencias_velocidade += _ocorrencias_de(
+    u"Ponto A → HD01", res["j"]["t3"], v_max_tubo, trechos_elems[u"Ponto A - Hid 01"])
+ocorrencias_velocidade += _ocorrencias_de(
+    u"Ponto A → HD02", res["j"]["t4"], v_max_tubo, trechos_elems[u"Ponto A - Hid 02"])
+
+# Demais hidrantes do sistema (fora do par HD01/HD02 do dimensionamento) -
+# ranking completo salvo por "Mapear Trechos" (chave 'rotas'), com a rota
+# inteira (Bomba -> valvula) de cada um. Verificado com a vazão nominal
+# simples (Qs) de UM hidrante só - a mesma que "Mapear Trechos" já usa
+# pra pontuar/ranquear as rotas - porque não há equilíbrio hidráulico
+# calculado pra hidrantes fora do par governante (isso só existe pro par
+# HD01/HD02 do próprio dimensionamento, acima). Como Qs <= Qt (a vazão
+# real do trecho comum, já verificada acima em t1/t2) e a velocidade
+# cresce com a vazão, um trecho comum que já passou em t1/t2 nunca
+# reprova de novo aqui, só com uma vazão menor - sem risco de aviso
+# duplicado/contraditório no trecho compartilhado.
+for _entry in (payload_rotas.get(u"ranking") or []):
+    if _entry.get(u"selecionado"):
+        continue   # HD01/HD02 já verificados acima, com a vazão real de equilíbrio
+    _elementos = _entry.get(u"elementos")
+    if not _elementos:
+        continue   # ranking salvo por uma versão antiga de "Mapear Trechos", sem
+                   # esse campo - execute "Mapear Trechos" de novo pra cobrir esse hidrante
+    _elems = _resolve_elems(_elementos)
+    if any(e is None for e in _elems):
+        continue   # elemento não existe mais no modelo - "Mapear Trechos" acusa isso
+    try:
+        _trecho_data = extrair_trecho(_elems, get_comprimento, get_diametro, get_leq,
+                                      get_nome, get_id)
+    except ValueError as _e:
+        forms.alert(_txt(_e), title="Fire Utils", warn_icon=True)
+        script.exit()
+    _j = calc_j_trecho(_trecho_data, Qs_lmin, C_HW,
+                       u"{} (vazão simples)".format(_entry.get(u"id")))
+    ocorrencias_velocidade += _ocorrencias_de(
+        u"Bomba → {}".format(_entry.get(u"id", u"?")), _j, v_max_tubo, _elems)
+
+if ocorrencias_velocidade:
+    mostrar_ocorrencias_velocidade(ocorrencias_velocidade, fila_acoes=fila_acoes,
+                                   ao_localizar=_ao_localizar)
     script.exit()
 
+# ---------------------------------------------------------------------
+# Pressão/vazão — só nos 2 hidrantes dimensionados (HD01/HD02)
+# ---------------------------------------------------------------------
 def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc, elems_trecho):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
         return
@@ -611,16 +689,10 @@ def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc, elems_trecho):
         mostrar_no_revit(ids_mostrar)
     script.exit()
 
-_para_por_velocidade(res["j"]["t3"], v_max_tubo, u"Ponto A → HD01")
 _para_por_hidrante(u"HD01", p_hd01_ref, res["Q_hd01"], p_ref_desc, u"Ponto A → HD01",
                    trechos_elems[u"Ponto A - Hid 01"])
-_para_por_velocidade(res["j"]["t4"], v_max_tubo, u"Ponto A → HD02")
 _para_por_hidrante(u"HD02", p_hd02_ref, res["Q_hd02"], p_ref_desc, u"Ponto A → HD02",
                    trechos_elems[u"Ponto A - Hid 02"])
-_para_por_velocidade(res["j"]["t2"], v_max_tubo, u"Bomba → Ponto A (recalque)",
-                     comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
-_para_por_velocidade(res["j"]["t1"], v_max_succao, u"Sucção (RTI → Bomba)",
-                     comprimento_min=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M)
 
 # ===========================================================================
 # Etapa 6 — Verificações e resultados finais (resumo; o passo a passo

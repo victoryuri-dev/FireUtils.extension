@@ -67,14 +67,14 @@ uidoc  = __revit__.ActiveUIDocument
 # (contexto de API valido), nao dentro de um handler de clique.
 fila_acoes = criar_fila_acoes()
 
-def _ao_localizar(uiapp, eid):
+def _ao_localizar(uiapp, eids):
     # Import local (não do topo do arquivo): o ExternalEvent roda depois
     # que o Revit já pode ter limpado o namespace global deste script,
     # então uma referência a uma função importada lá em cima vira
     # NameError na hora do clique - import aqui dentro sempre resolve
     # (mesmo truque usado por mostrar_no_revit com "from pyrevit import forms").
     from hidrantes.rede import mostrar_no_revit
-    mostrar_no_revit(uiapp.ActiveUIDocument, [eid])
+    mostrar_no_revit(uiapp.ActiveUIDocument, eids)
 
 # ===========================================================================
 # Helpers de UI
@@ -311,7 +311,11 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
     # vai pro cache 'rotas' e, de lá, pro payload sincronizado por "Dimensionar
     # Hidrantes" (chave 'ranking_hidrantes'), pro site poder mostrar a
     # verificação de qual hidrante é de fato o mais desfavorável, em vez de só
-    # apresentar H-01/H-02 já escolhidos sem o comparativo.
+    # apresentar H-01/H-02 já escolhidos sem o comparativo. "elementos": a
+    # rota inteira (Bomba -> valvula, na ordem) - "Dimensionar Hidrantes"
+    # usa isso pra verificar a velocidade em TODOS os hidrantes do sistema,
+    # não só nos 2 escolhidos (H-01/H-02) - ver _ocorrencias_de/"outros
+    # hidrantes" no script de Dimensionar Hidrantes.
     ranking_hidrantes = [
         {
             u"id":           u"H-{:02d}".format(i + 1),
@@ -320,6 +324,7 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
             u"dZ":           c[u"dZ"],
             u"score":        c[u"score"],
             u"selecionado":  i < 2,
+            u"elementos":    list(c[u"rota"]),
         }
         for i, c in enumerate(candidatas)
     ]
