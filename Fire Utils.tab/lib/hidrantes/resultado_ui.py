@@ -87,13 +87,18 @@ def _mca_fina(valor, casas_max=8):
 
 class _JanelaResultado(forms.WPFWindow):
 
-    def __init__(self, titulo, subtitulo, status):
+    def __init__(self, titulo, subtitulo, status, fila_acoes=None, ao_localizar=None):
         forms.WPFWindow.__init__(self, _XAML_PATH)
         self.TxtTitulo.Text    = titulo
         self.TxtSubtitulo.Text = subtitulo or u""
         self._primeira_secao   = True
         self.ids_problema      = None
         self.mostrar_no_revit  = False
+        # fila_acoes/ao_localizar: só usados pelos botões "Localizar" por
+        # linha (ver _botao/_on_localizar) - permitem chamar a API do Revit
+        # SEM fechar a janela, ao contrário de habilitar_botao_mostrar.
+        self._fila_acoes  = fila_acoes
+        self._ao_localizar = ao_localizar
         self._aplicar_status(status)
 
     def _aplicar_status(self, status):
@@ -136,12 +141,17 @@ class _JanelaResultado(forms.WPFWindow):
 
     def _on_localizar(self, sender, args):
         """Clique no botão "Localizar" de uma linha da tabela (ver _botao/
-        _celula) — mesmo cuidado do botão único (on_mostrar_projeto): só
-        fecha a janela e sinaliza; quem chama a API do Revit é o script,
-        depois que ShowDialog() retorna."""
-        self.ids_problema = [sender.Tag]
-        self.mostrar_no_revit = True
-        self.Close()
+        _celula) — ao contrário do botão único (on_mostrar_projeto), NÃO
+        fecha a janela: o usuário precisa poder clicar em várias linhas
+        seguidas, conferindo cada elemento, sem perder a lista. A API do
+        Revit ainda não pode ser chamada direto daqui (não é reentrante
+        dentro do Click de uma janela modal) — em vez disso, enfileira a
+        ação num ExternalEvent (fila_acoes.py), que o Revit executa assim
+        que possível, com a janela continuando aberta."""
+        if self._fila_acoes is None or self._ao_localizar is None:
+            return
+        eid = sender.Tag
+        self._fila_acoes.enfileirar(lambda uiapp: self._ao_localizar(uiapp, eid))
 
     # ------------------------------------------------------------------
     # Blocos de conteúdo
@@ -401,12 +411,15 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     janela.ShowDialog()
 
 
-def mostrar_inconsistencias_mapeamento(itens, bloqueante):
+def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localizar):
     """
     Janela mostrando pontos onde a rede de tubulação está quebrada — chamada
-    por "Mapear Trechos". Cada linha tem seu próprio botão "Localizar", em
-    vez do botão único "Mostrar no Projeto" (não usado aqui): clicar fecha
-    a janela e sinaliza pro chamador mostrar só aquele elemento no Revit.
+    por "Mapear Trechos". Cada linha tem seu próprio botão "Localizar", que
+    NÃO fecha a janela (ao contrário do botão único "Mostrar no Projeto",
+    não usado aqui): o usuário confere um elemento, a janela continua
+    aberta, e ele clica no próximo. Clicar chama Revit por um ExternalEvent
+    (ver fila_acoes/_on_localizar) — a API não é reentrante dentro do
+    Click de uma janela modal.
 
     itens: lista de dicts {"trecho", "elemento", "eid"} já formatados pelo
         chamador (Revit-dependente — este módulo não importa nada do Revit).
@@ -415,14 +428,20 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante):
         mapeamento não pode continuar); False se é só aviso — um galho
         morto que não leva a nenhuma válvula, mas hidrantes suficientes já
         foram encontrados e o mapeamento seguiu em frente.
+    fila_acoes: fila de ExternalEvent (hidrantes/fila_acoes.py), criada
+        pelo chamador num contexto de API válido.
+    ao_localizar: callable(uiapp, eid) que efetivamente seleciona/enquadra
+        o elemento no Revit — chamado pela fila, não direto pelo clique.
 
-    Retorna o ElementId (int, numa lista de 1) a selecionar no Revit se o
-    usuário clicou "Localizar" em alguma linha, ou None se só fechou a
-    janela."""
+    Não retorna nada — o efeito de cada clique acontece ao vivo, enquanto
+    a janela está aberta.
+    """
     janela = _JanelaResultado(
         titulo=u"Inconsistências no Mapeamento",
         subtitulo=u"Tubulação sem conexão em {} ponto(s)".format(len(itens)),
         status=u"erro",
+        fila_acoes=fila_acoes,
+        ao_localizar=ao_localizar,
     )
     linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"])] for item in itens]
     janela.tabela([u"Trecho", u"Elemento", u""], linhas,
@@ -440,7 +459,6 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante):
                     u"Se não, reconecte a tubulação e execute \"Mapear Trechos\" "
                     u"novamente.")
     janela.ShowDialog()
-    return janela.ids_problema if janela.mostrar_no_revit else None
 
 
 def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None):
