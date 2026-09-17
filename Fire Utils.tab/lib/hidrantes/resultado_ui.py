@@ -418,8 +418,16 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
     NÃO fecha a janela (ao contrário do botão único "Mostrar no Projeto",
     não usado aqui): o usuário confere um elemento, a janela continua
     aberta, e ele clica no próximo. Clicar chama Revit por um ExternalEvent
-    (ver fila_acoes/_on_localizar) — a API não é reentrante dentro do
-    Click de uma janela modal.
+    (ver fila_acoes/_on_localizar).
+
+    Diferente das outras janelas deste módulo, esta é MODELESS (Show(),
+    não ShowDialog()): o Revit só processa a fila de ExternalEvent quando
+    o script Python que a abriu termina de rodar — com ShowDialog() (que
+    bloqueia o script até a janela fechar) o clique em "Localizar" ficava
+    parado na fila até o usuário fechar a janela. Com Show(), o script
+    termina (ou segue em frente) imediatamente após abrir a janela, o
+    Revit fica livre pra processar a fila, e cada clique em "Localizar"
+    seleciona/enquadra o elemento na hora, com a janela ainda aberta.
 
     itens: lista de dicts {"trecho", "elemento", "eid"} já formatados pelo
         chamador (Revit-dependente — este módulo não importa nada do Revit).
@@ -458,7 +466,7 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
         janela.dica(u"Dica: se for um ramal morto ou dreno de verdade, pode ignorar. "
                     u"Se não, reconecte a tubulação e execute \"Mapear Trechos\" "
                     u"novamente.")
-    janela.ShowDialog()
+    janela.Show()
 
 
 def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None):
