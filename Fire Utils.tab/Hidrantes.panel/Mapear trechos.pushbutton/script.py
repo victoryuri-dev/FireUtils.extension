@@ -55,6 +55,7 @@ from hidrantes.rede import (
     get_comprimento, get_diametro, get_leq, get_nome,
 )
 from hidrantes.resultado_ui import mostrar_inconsistencias_mapeamento
+from hidrantes.fila_acoes import criar_fila_acoes
 
 P_TRECHO        = u"FireUtils - Trecho"
 P_IDENTIFICADOR = u"FireUtils - Identificador"
@@ -62,9 +63,14 @@ P_ID_HIDRANTE   = u"FireUtils - ID Hidrante"
 
 doc    = __revit__.ActiveUIDocument.Document
 uidoc  = __revit__.ActiveUIDocument
-output = script.get_output()
 
-output.print_md("# Fire Utils - Mapear Trechos de Hidrante")
+# Fila de ExternalEvent pro botao "Localizar" das janelas de inconsistencia
+# (mostrar_inconsistencias_mapeamento) - criada aqui, no corpo do script
+# (contexto de API valido), nao dentro de um handler de clique.
+fila_acoes = criar_fila_acoes()
+
+def _ao_localizar(uiapp, eid):
+    mostrar_no_revit(uiapp.ActiveUIDocument, [eid])
 
 # ===========================================================================
 # Helpers de UI
@@ -105,15 +111,11 @@ def seleciona(msg_alert, msg_pick, filtro):
         ref  = uidoc.Selection.PickObject(ObjectType.Element, filtro, msg_pick)
         return doc.GetElement(ref.ElementId)
     except:
-        output.print_md(u"Selecao cancelada.")
         script.exit()
 
 # ===========================================================================
 # 0 — Projeto/estado, sistema classificado e parâmetros
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 0 - Verificando Projeto e Sistema Classificado")
-
 projeto_dir, sigla_estado, _ = exigir_projeto_e_estado(doc, forms, script)
 perfil = get_profile(sigla_estado)
 
@@ -124,16 +126,8 @@ _valor_sistema, _dados_sistema = resolver_dados_sistema(doc, perfil, forms, scri
 Qs_lmin = _dados_sistema[u"q_min"]
 C_HW    = req(perfil, u"hazen_c")[u"galvanizado"]
 
-output.print_md(u"Sistema: **{}** | Vazão nominal: **{:g} L/min**".format(_valor_sistema, Qs_lmin))
-
-output.print_md("---")
-output.print_md("### 0b - Verificando Parametros")
 try:
-    log = create_hydrant_params(doc)
-    for nome, status in log:
-        if status in ("criado", "atualizado"):
-            output.print_md(u"  [{}] {}".format(status, nome))
-    output.print_md(u"Parametros verificados.")
+    create_hydrant_params(doc)
 except Exception as e:
     forms.alert(u"Erro ao criar parametros:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
     script.exit()
@@ -141,23 +135,15 @@ except Exception as e:
 # ===========================================================================
 # 0c — Reset: limpa parâmetros FireUtils de todo o modelo
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 0c - Resetando mapeamento anterior")
-
 _todos = FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements()
-_resetados = 0
 with Transaction(doc, "FireUtils - Reset Mapeamento") as _t:
     _t.Start()
     try:
         for _elem in _todos:
-            _alterou = False
             for _nome_p in (P_TRECHO, P_IDENTIFICADOR, P_ID_HIDRANTE):
                 _p = _elem.LookupParameter(_nome_p)
                 if _p and not _p.IsReadOnly and _p.AsString():
                     _p.Set(u"")
-                    _alterou = True
-            if _alterou:
-                _resetados += 1
         _t.Commit()
     except Exception as _e:
         _t.RollBack()
@@ -165,16 +151,10 @@ with Transaction(doc, "FireUtils - Reset Mapeamento") as _t:
                     title="Fire Utils", warn_icon=True)
         script.exit()
 
-output.print_md(u"{} elemento(s) com parametros resetados.".format(_resetados))
-
 # ===========================================================================
 # 1 — Seleciona RTI e Bomba (usa as conexões nativas de entrada/saída)
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 1 - Selecionar RTI e Bomba")
-
 rti = seleciona(u"Selecione o reservatorio (RTI).", u"Reservatorio (RTI)", FittingFilter())
-output.print_md(u"RTI: ID **{}**".format(get_id(rti)))
 
 tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
 rti_auto_detectada = tubo_rti is not None
@@ -186,7 +166,6 @@ if not tubo_rti:
     )
 
 bomba = seleciona(u"Selecione a bomba de incendio.", u"Bomba de incendio", FittingFilter())
-output.print_md(u"Bomba: ID **{}**".format(get_id(bomba)))
 
 tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
 if not tubo_bomba:
@@ -208,16 +187,9 @@ eid_rti   = get_id(tubo_rti)
 eid_bomba = get_id(tubo_bomba)
 eid_rec   = get_id(tubo_rec)
 
-output.print_md(u"Saida RTI: ID **{}** | Entrada bomba (succao): ID **{}** | Saida bomba (recalque): ID **{}**".format(
-    eid_rti, eid_bomba, eid_rec
-))
-
 # ===========================================================================
 # 2 — BFS: sucção (RTI → Bomba)
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 2 - Mapeando Succao (RTI > Bomba)")
-
 caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
 if not caminho_succao:
     pontas = get_pontas_abertas(doc, visitados_succao)
@@ -229,19 +201,14 @@ if not caminho_succao:
                                u"identificado — categoria sem suporte a conectores?".format(
                                    len(visitados_succao)),
                   u"eid":      eid_rti}]
-    ids_mostrar = mostrar_inconsistencias_mapeamento(itens, bloqueante=True)
-    if ids_mostrar:
-        mostrar_no_revit(uidoc, ids_mostrar)
+    mostrar_inconsistencias_mapeamento(itens, bloqueante=True,
+                                       fila_acoes=fila_acoes, ao_localizar=_ao_localizar)
     script.exit()
 ids_succao = caminho_succao
-output.print_md(u"{} elemento(s) no trecho de succao".format(len(ids_succao)))
 
 # ===========================================================================
 # 3 — Percorre a árvore de recalque até todas as válvulas de hidrante
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 3 - Percorrendo a Arvore de Recalque")
-
 rotas, pontas_recalque = percorre_rotas_hidrantes(tubo_rec, eid_rec)
 
 # Só bloqueia o mapeamento se alguma valvula de hidrante que existe no
@@ -259,9 +226,8 @@ itens_recalque.extend(_itens_pontas(u"Recalque (Bomba → Válvulas)", pontas_re
 
 if itens_recalque:
     bloqueante = bool(valvulas_sem_rota)
-    ids_mostrar = mostrar_inconsistencias_mapeamento(itens_recalque, bloqueante=bloqueante)
-    if ids_mostrar:
-        mostrar_no_revit(uidoc, ids_mostrar)
+    mostrar_inconsistencias_mapeamento(itens_recalque, bloqueante=bloqueante,
+                                       fila_acoes=fila_acoes, ao_localizar=_ao_localizar)
     if bloqueante:
         script.exit()
 
@@ -272,8 +238,6 @@ if not rotas:
         u"Verifique se a tubulacao de recalque esta conectada ate as valvulas.",
         title="Fire Utils", warn_icon=True)
     script.exit()
-
-output.print_md(u"{} rota(s) encontrada(s) ate uma valvula de hidrante.".format(len(rotas)))
 
 if len(rotas) < 2:
     forms.alert(
@@ -286,9 +250,6 @@ if len(rotas) < 2:
 # ===========================================================================
 # 4 — Pontua cada rota: perda por atrito (vazao simples) + desnivel
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 4 - Pontuando as Rotas (Bomba > Valvula, vazao simples)")
-
 z_recalque_bomba = get_cota_conector(bomba, (FlowDirectionType.Out,))
 if z_recalque_bomba is None:
     detalhes = [u"Nao foi possivel ler a elevacao de saida (recalque) da bomba:"]
@@ -326,12 +287,6 @@ for rota in rotas:
 
 candidatas.sort(key=lambda c: c[u"score"], reverse=True)
 
-output.print_md(u"| # | ID Hidrante | ID Elemento | J (mca) | ΔZ (m) | Score (mca) |")
-output.print_md(u"|---|---|---|---|---|---|")
-for i, c in enumerate(candidatas):
-    output.print_md(u"| {} | H-{:02d} | {} | {:.4f} | {:.4f} | {:.4f} |".format(
-        i + 1, i + 1, c[u"valvula"].Id, c[u"J"], c[u"dZ"], c[u"score"]))
-
 # Ranking completo (todos os hidrantes achados, não só os 2 selecionados) —
 # vai pro cache 'rotas' e, de lá, pro payload sincronizado por "Dimensionar
 # Hidrantes" (chave 'ranking_hidrantes'), pro site poder mostrar a
@@ -353,9 +308,6 @@ ranking_hidrantes = [
 # 5 — Grava "FireUtils - ID Hidrante" em todas as valvulas (ordem de
 #     desfavorabilidade) e identifica o Ponto A entre as 2 piores
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 5 - Gravando ID Hidrante e Identificando Ponto A")
-
 rota_h1, rota_h2 = candidatas[0][u"rota"], candidatas[1][u"rota"]
 set_h2   = set(rota_h2)
 comuns   = [eid for eid in rota_h1 if eid in set_h2]
@@ -372,18 +324,9 @@ ids_rec_comum = rota_h1[:idx_a_h1 + 1]   # Bomba -> Ponto A (inclusive)
 ids_ramal_h1  = rota_h1[idx_a_h1 + 1:]   # Ponto A -> H-01 (inclusive da valvula)
 ids_ramal_h2  = rota_h2[idx_a_h2 + 1:]   # Ponto A -> H-02 (inclusive da valvula)
 
-output.print_md(u"Ponto A: ID **{}**".format(ponto_a_id))
-output.print_md(u"[debug] Rec. comum: {} | Ramal H-01: {} | Ramal H-02: {} elementos".format(
-    len(ids_rec_comum), len(ids_ramal_h1), len(ids_ramal_h2)))
-
 # ===========================================================================
 # 6 — Preenche parâmetros (visual — o motor de cálculo lê o cache, não isso)
 # ===========================================================================
-output.print_md("---")
-output.print_md("### 6 - Preenchendo Parametros")
-
-cont = {}
-
 with Transaction(doc, "FireUtils - Mapear Trechos") as t:
     t.Start()
     try:
@@ -409,7 +352,6 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
             elem = doc.GetElement(to_element_id(eid))
             if elem:
                 set_param(elem, P_TRECHO, u"RTI - Bomba")
-                cont[u"RTI - Bomba"] = cont.get(u"RTI - Bomba", 0) + 1
 
         # Recalque comum
         for eid in ids_rec_comum:
@@ -418,21 +360,18 @@ with Transaction(doc, "FireUtils - Mapear Trechos") as t:
             set_param(elem, P_TRECHO, u"Bomba - Ponto A")
             if eid == ponto_a_id:
                 set_param(elem, P_IDENTIFICADOR, u"Ponto A")
-            cont[u"Bomba - Ponto A"] = cont.get(u"Bomba - Ponto A", 0) + 1
 
         # Ramal H-01
         for eid in ids_ramal_h1:
             elem = doc.GetElement(to_element_id(eid))
             if elem:
                 set_param(elem, P_TRECHO, u"Ponto A - Hid 01")
-                cont[u"Ponto A - Hid 01"] = cont.get(u"Ponto A - Hid 01", 0) + 1
 
         # Ramal H-02
         for eid in ids_ramal_h2:
             elem = doc.GetElement(to_element_id(eid))
             if elem:
                 set_param(elem, P_TRECHO, u"Ponto A - Hid 02")
-                cont[u"Ponto A - Hid 02"] = cont.get(u"Ponto A - Hid 02", 0) + 1
 
         t.Commit()
     except Exception as e:
@@ -452,14 +391,3 @@ salvar_cache({
     u"ponto_a_id": ponto_a_id,
     u"ranking":    ranking_hidrantes,
 }, projeto_dir, chave=u"rotas")
-
-# ===========================================================================
-# Resumo
-# ===========================================================================
-output.print_md("---")
-output.print_md(u"### Mapeamento concluido")
-output.print_md(u"| Trecho | Elementos |")
-output.print_md(u"|---|---|")
-for trecho, qtd in sorted(cont.items()):
-    output.print_md(u"| {} | {} |".format(trecho, qtd))
-output.print_md(u"\n_Proximo passo: Dimensionar Hidrantes._")
