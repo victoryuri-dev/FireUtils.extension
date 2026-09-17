@@ -96,12 +96,17 @@ function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
  *
  * Tipo/variante/RTI são a MESMA escolha que o site faz na Etapa 1
  * (Classificação do Sistema) — só editável nos dois lugares. Clicar aqui
- * grava nos dois destinos: Project Information (SET_HIDRANTES_CLASSIFICACAO
- * — o motor de cálculo do Revit lê de lá) E dados.hidrantes no Supabase
- * (mesmo dado que o site mostra/edita), via salvarHidrantes() abaixo. Pra
- * decidir o que mostrar como "ativo" nas pills, o Supabase (o que o site
- * também vê) tem prioridade sobre a classificação aplicada no Revit — que
- * pode estar desatualizada se a mudança veio do site e ainda não foi
+ * grava em dois destinos, mas não os mesmos três campos nos dois: Project
+ * Information recebe só o que "Dimensionar Hidrantes"/"Mapear Trechos" de
+ * fato leem pra calcular (tipo, tipoVariante, método de cálculo, dados de
+ * sucção — via SET_HIDRANTES_CLASSIFICACAO); RTI nunca vai pro Project
+ * Information (o motor de cálculo nunca lê RTI de lá — é reservatório, não
+ * rede hidráulica) e fica só no Supabase (dados.hidrantes.rti, via
+ * salvarHidrantes() abaixo), mesmo lugar que tipo/tipoVariante TAMBÉM são
+ * gravados (esses dois, nos dois destinos). Pra decidir o que mostrar
+ * como "ativo" nas pills e no card "Sistema Classificado", o Supabase (o
+ * que o site também vê) tem prioridade sobre o Project Information — que
+ * pode estar desatualizado se a mudança veio do site e ainda não foi
  * reaplicada aqui.
  *
  * A potência da bomba é sempre calculada aqui (JS, lib/hidrantesCalc.js) a
@@ -195,17 +200,19 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // sucção continua vindo do que o site já tem salvo (ou o padrão, se o
   // site ainda não preencheu). tipo/tipoVariante já salvos no Supabase
   // (possivelmente escolhidos pelo site) alimentam o "tipo efetivo" abaixo.
-  const { tipo: tipoSalvo, tipoVariante: varianteSalva, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
+  const { tipo: tipoSalvo, tipoVariante: varianteSalva, rti: rtiSalvo, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
 
   const classificacao = resposta?.classificacao;
   const ponto = resposta?.pontoOperacao;
 
   async function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
+    // RTI não vai pro Project Information — o motor de cálculo nunca lê
+    // RTI de lá (dimensiona o reservatório, não a rede hidráulica). Só o
+    // que "Dimensionar Hidrantes"/"Mapear Trechos" de fato consomem.
     postToHost(BridgeMessageTypes.SET_HIDRANTES_CLASSIFICACAO, {
       tipo,
       tipoVariante,
-      rti,
       metodoCalculo: normaHidrantesMA.REFERENCIA_PRESSAO_VAZAO,
       succaoAltitude,
       succaoTemperatura,
@@ -232,7 +239,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const variantesDoTipoEfetivo = tipoEfetivo ? normaHidrantesMA.TIPOS_SISTEMA[tipoEfetivo]?.variantes || [] : [];
 
   function rtiParaTipo(tipo) {
-    return sugestao.opcoes.find((o) => o.tipo === tipo)?.rti ?? (classificacao?.tipo === tipo ? classificacao.rti : null);
+    return sugestao.opcoes.find((o) => o.tipo === tipo)?.rti ?? (tipoSalvo === tipo ? rtiSalvo : null);
   }
 
   function escolherTipo(opcao) {
@@ -362,7 +369,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                   label="Tipo"
                   valor={`Tipo ${classificacao.tipo}${classificacao.descricao ? ` — ${classificacao.descricao}` : ""}`}
                 />
-                <Linha label="RTI" valor={classificacao.rti != null ? `${classificacao.rti} m³` : "—"} />
+                <Linha label="RTI" valor={rtiSalvo != null ? `${rtiSalvo} m³` : "—"} />
                 <Linha label="Esguicho" valor={`DN${fmt(classificacao.esguicho_dn, 0)}`} />
                 <Linha
                   label="Mangueira"
