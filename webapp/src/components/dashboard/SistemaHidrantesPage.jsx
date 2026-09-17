@@ -94,6 +94,16 @@ function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
  * último "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO).
  * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado.
  *
+ * Tipo/variante/RTI são a MESMA escolha que o site faz na Etapa 1
+ * (Classificação do Sistema) — só editável nos dois lugares. Clicar aqui
+ * grava nos dois destinos: Project Information (SET_HIDRANTES_CLASSIFICACAO
+ * — o motor de cálculo do Revit lê de lá) E dados.hidrantes no Supabase
+ * (mesmo dado que o site mostra/edita), via salvarHidrantes() abaixo. Pra
+ * decidir o que mostrar como "ativo" nas pills, o Supabase (o que o site
+ * também vê) tem prioridade sobre a classificação aplicada no Revit — que
+ * pode estar desatualizada se a mudança veio do site e ainda não foi
+ * reaplicada aqui.
+ *
  * A potência da bomba é sempre calculada aqui (JS, lib/hidrantesCalc.js) a
  * partir de Qt/Ht do ponto de operação + a eficiência informada — nunca no
  * Python. Eficiência e potência adotada são gravadas direto no Supabase
@@ -127,7 +137,8 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const [aplicando, setAplicando] = useState(false);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
-  // como ativa) é o que já está aplicado no Revit (classificacao.tipo).
+  // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
+  // já está aplicado no Revit (classificacao.tipo) — ver tipoEfetivo abaixo.
   const [tipoSelecionado, setTipoSelecionado] = useState(null);
 
   function recarregar() {
@@ -182,13 +193,14 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // Método de cálculo e dados de sucção (NPSH) não são escolha desta
   // página — método é fixo pela norma (REFERENCIA_PRESSAO_VAZAO) e a
   // sucção continua vindo do que o site já tem salvo (ou o padrão, se o
-  // site ainda não preencheu).
-  const { succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
+  // site ainda não preencheu). tipo/tipoVariante já salvos no Supabase
+  // (possivelmente escolhidos pelo site) alimentam o "tipo efetivo" abaixo.
+  const { tipo: tipoSalvo, tipoVariante: varianteSalva, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
 
   const classificacao = resposta?.classificacao;
   const ponto = resposta?.pontoOperacao;
 
-  function aplicar(tipo, rti, tipoVariante) {
+  async function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
     postToHost(BridgeMessageTypes.SET_HIDRANTES_CLASSIFICACAO, {
       tipo,
@@ -198,13 +210,25 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       succaoAltitude,
       succaoTemperatura,
     });
+    try {
+      await salvarHidrantes({ tipo, tipoVariante, rti });
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível sincronizar a classificação com o site",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    }
     setTimeout(() => setAplicando(false), 1500);
   }
 
-  // Tipo efetivo pra decidir o que mostrar: a seleção local, se houver, ou
-  // o que já está aplicado no Revit — mesmo sem nenhum clique ainda, um
-  // Tipo com mais de uma variante (Tipo 4) já mostra as pills de variante.
-  const tipoEfetivo = tipoSelecionado ?? classificacao?.tipo ?? null;
+  // Tipo efetivo pra decidir o que mostrar: a seleção local (clique ainda
+  // não confirmado), senão o que está salvo no Supabase (a mesma escolha
+  // que o site vê/edita), senão o que já está aplicado no Revit — mesmo
+  // sem nenhum clique ainda, um Tipo com mais de uma variante (Tipo 4) já
+  // mostra as pills de variante.
+  const tipoEfetivo = tipoSelecionado ?? tipoSalvo ?? classificacao?.tipo ?? null;
   const variantesDoTipoEfetivo = tipoEfetivo ? normaHidrantesMA.TIPOS_SISTEMA[tipoEfetivo]?.variantes || [] : [];
 
   function rtiParaTipo(tipo) {
@@ -308,7 +332,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                   {variantesDoTipoEfetivo.map((v, i) => (
                     <Pill
                       key={i}
-                      active={classificacao?.tipo === tipoEfetivo && classificacao?.variante_idx === i}
+                      active={(tipoSalvo ?? classificacao?.tipo) === tipoEfetivo && (varianteSalva ?? classificacao?.variante_idx) === i}
                       onClick={() => escolherVariante(i)}
                       disabled={aplicando}
                     >
