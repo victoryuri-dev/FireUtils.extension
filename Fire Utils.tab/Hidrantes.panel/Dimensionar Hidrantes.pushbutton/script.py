@@ -642,20 +642,25 @@ mostrar_resultado_ok(
 import datetime
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 payload_hid = {
-    "res":           res,
-    "dados_sistema": dados_sistema,
-    "valor_sistema": valor_sistema,
-    "metodo":        metodo_calculo,
-    "cotas":         cotas,
-    "succao":        succao,
-    "verif_succao":  verif_succao,
-    "dados_succao":  dados_succao,
-    "verif_npshd":   verif_npshd,
-    "erro_npshd":    erro_npshd,
-    "j_succao_npsh": j_succao_npsh,
-    "C_HW":          C_HW,
-    "uf":            perfil.get(u"_uf_efetiva"),
-    "timestamp":     timestamp,
-    "_nome_projeto": doc.Title,
+    "res":              res,
+    "dados_sistema":    dados_sistema,
+    "valor_sistema":    valor_sistema,
+    "metodo":           metodo_calculo,
+    "cotas":            cotas,
+    "succao":           succao,
+    "verif_succao":     verif_succao,
+    "dados_succao":     dados_succao,
+    "verif_npshd":      verif_npshd,
+    "erro_npshd":       erro_npshd,
+    "j_succao_npsh":    j_succao_npsh,
+    "C_HW":             C_HW,
+    "uf":               perfil.get(u"_uf_efetiva"),
+    "timestamp":        timestamp,
+    "_nome_projeto":    doc.Title,
+    # Ranking COMPLETO de hidrantes (vazão simples, "Mapear Trechos") — não
+    # só H-01/H-02: o site usa isso pra mostrar a verificação de qual
+    # hidrante é de fato o mais desfavorável, comparado com os demais
+    # achados na rede (ver docstring de Mapear Trechos/script.py).
+    "ranking_hidrantes": payload_rotas.get(u"ranking"),
 }
 salvar_cache(payload_hid, projeto_dir)

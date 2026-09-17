@@ -21,6 +21,14 @@ sendo gravados nesses elementos — mas só para o usuário acompanhar
 visualmente no Revit. O motor de cálculo ("Dimensionar Hidrantes") não lê
 mais esses parâmetros: lê as listas de ElementId salvas no cache
 (firedata.json, chave 'rotas'), abaixo.
+
+O ranking COMPLETO (todos os hidrantes achados, não só os 2 escolhidos —
+ver `ranking_hidrantes` abaixo) também vai pra chave 'rotas' do cache.
+"Dimensionar Hidrantes" relê esse ranking e inclui no payload sincronizado
+com o site (chave 'ranking_hidrantes'), pra a página "Dimensionamento do
+Sistema" mostrar a verificação de qual hidrante é de fato o mais
+desfavorável — o comparativo entre todos, não só o resultado final de
+H-01/H-02.
 """
 
 import clr
@@ -296,21 +304,41 @@ for rota in rotas:
         forms.alert(u"{}".format(_e), title="Fire Utils", warn_icon=True)
         script.exit()
     jt = calc_j_trecho(trecho_data, Qs_lmin, C_HW, u"Bomba > Valvula (score)")
-    score = jt["J"] + (z_valvula - z_recalque_bomba)
+    dz = z_valvula - z_recalque_bomba
+    score = jt["J"] + dz
 
     candidatas.append({
         u"rota":    rota,
         u"valvula": valvula,
+        u"J":       jt["J"],
+        u"dZ":      dz,
         u"score":   score,
     })
 
 candidatas.sort(key=lambda c: c[u"score"], reverse=True)
 
-output.print_md(u"| # | ID Hidrante | ID Elemento | Score (mca) |")
-output.print_md(u"|---|---|---|---|")
+output.print_md(u"| # | ID Hidrante | ID Elemento | J (mca) | ΔZ (m) | Score (mca) |")
+output.print_md(u"|---|---|---|---|---|---|")
 for i, c in enumerate(candidatas):
-    output.print_md(u"| {} | H-{:02d} | {} | {:.4f} |".format(
-        i + 1, i + 1, c[u"valvula"].Id, c[u"score"]))
+    output.print_md(u"| {} | H-{:02d} | {} | {:.4f} | {:.4f} | {:.4f} |".format(
+        i + 1, i + 1, c[u"valvula"].Id, c[u"J"], c[u"dZ"], c[u"score"]))
+
+# Ranking completo (todos os hidrantes achados, não só os 2 selecionados) —
+# vai pro cache 'rotas' e, de lá, pro payload sincronizado por "Dimensionar
+# Hidrantes" (chave 'ranking_hidrantes'), pro site poder mostrar a
+# verificação de qual hidrante é de fato o mais desfavorável, em vez de só
+# apresentar H-01/H-02 já escolhidos sem o comparativo.
+ranking_hidrantes = [
+    {
+        u"id":           u"H-{:02d}".format(i + 1),
+        u"elementId":    get_id(c[u"valvula"]),
+        u"J":            c[u"J"],
+        u"dZ":           c[u"dZ"],
+        u"score":        c[u"score"],
+        u"selecionado":  i < 2,
+    }
+    for i, c in enumerate(candidatas)
+]
 
 # ===========================================================================
 # 5 — Grava "FireUtils - ID Hidrante" em todas as valvulas (ordem de
@@ -413,6 +441,7 @@ salvar_cache({
     u"t3":         list(ids_ramal_h1),
     u"t4":         list(ids_ramal_h2),
     u"ponto_a_id": ponto_a_id,
+    u"ranking":    ranking_hidrantes,
 }, projeto_dir, chave=u"rotas")
 
 # ===========================================================================
