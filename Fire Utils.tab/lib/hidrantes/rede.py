@@ -406,6 +406,46 @@ def get_diametro(elem):
     except Exception: return 0.065
 
 
+def get_diametro_no_trecho(elem, ids_no_trecho):
+    """
+    Diâmetro nominal de `elem` para fins de agrupamento por segmento DENTRO
+    de um trecho específico (`ids_no_trecho` = get_id() de todos os
+    elementos daquele trecho). Pra um Pipe, delega direto a get_diametro()
+    (sempre confiável). Pra um acessório/conexão (FamilyInstance), NÃO usa
+    o parâmetro "Diâmetro" (RBS_PIPE_DIAMETER_PARAM) nem o diâmetro interno
+    da própria família: peças como Tê de redução guardam ali o diâmetro do
+    ramal reduzido, não o da linha principal por onde o trecho passa — e
+    famílias genéricas de acessório (comuns em catálogos importados, ex.
+    "Cotovelo de Aço Galvanizado", "Registro de Gaveta Industrial") muitas
+    vezes não têm NENHUM dos dois parâmetros preenchido, e get_diametro()
+    caía num valor padrão fixo de 65 mm — criando um "segmento fantasma"
+    de 65 mm cheio de acessórios num trecho inteiro de outro diâmetro (ex.:
+    80 mm), mesmo com nenhum tubo de fato modelado nesse diâmetro.
+
+    Em vez disso, acha o Pipe fisicamente conectado a `elem` que também
+    faz parte deste mesmo trecho e usa o diâmetro DELE — sempre o run
+    principal por onde o trecho de fato passa, e sempre confiável (Pipe
+    nunca cai em valor padrão). Só cai em get_diametro(elem) se nenhum
+    vizinho do trecho for encontrado (ex.: acessório bem na ponta do
+    trecho, colado a um elemento fora dele - equipamento, válvula de
+    hidrante etc.).
+    """
+    if isinstance(elem, Pipe):
+        return get_diametro(elem)
+    try:
+        for conn in get_conectores(elem):
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected: continue
+            for outro in conn.AllRefs:
+                if outro.ConnectorType == ConnectorType.Logical: continue
+                vizinho = outro.Owner
+                if vizinho is None or not isinstance(vizinho, Pipe): continue
+                if get_id(vizinho) in ids_no_trecho:
+                    return get_diametro(vizinho)
+    except Exception: pass
+    return get_diametro(elem)
+
+
 def get_leq(elem):
     try:
         p = elem.LookupParameter(u"Perda de Carga")

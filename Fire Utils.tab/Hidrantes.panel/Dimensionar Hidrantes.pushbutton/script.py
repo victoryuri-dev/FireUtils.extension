@@ -56,6 +56,7 @@ from hidrantes.calc import (
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
     COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
+from hidrantes.rede import get_diametro_no_trecho
 from hidrantes.resultado_ui import (
     mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
     mostrar_bloqueio_equilibrio, mostrar_resultado_ok,
@@ -131,37 +132,6 @@ def get_comprimento(pipe):
         p = pipe.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)
         return to_m(p.AsDouble()) if p else 0.0
     except: return 0.0
-
-def get_diametro(elem):
-    """
-    Diâmetro NOMINAL (DN) do elemento — não o diâmetro interno real medido
-    pelo schedule/material. Ex.: um tubo DN 65 pode ter diâmetro interno
-    de 68,8 mm; o cálculo (Jun, J, V) usa o nominal, como no dimensionamento
-    de referência. RBS_PIPE_DIAMETER_PARAM é o parâmetro "Diâmetro" do tubo
-    (o tamanho nominal da lista de segmentos/tipos de tubo do Revit).
-
-    Para um Pipe o diâmetro TEM que ser lido com sucesso: um fallback
-    silencioso aqui faria dois tubos de tamanhos diferentes caírem no
-    mesmo valor "adivinhado" e o dimensionamento perderia a diferença
-    real de velocidade entre eles sem avisar. Por isso lança erro em vez
-    de chutar — o chamador mostra qual elemento é. Só um acessório
-    (FamilyInstance sem "Diâmetro" cadastrado, ex.: conexão atípica) usa
-    o diâmetro interno e, na falta dele, um valor padrão.
-    """
-    try:
-        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
-        if p and p.AsDouble() > 0:
-            return to_m(p.AsDouble())
-    except Exception: pass
-    if isinstance(elem, Pipe):
-        raise ValueError(
-            u"Não foi possível ler o diâmetro nominal do tubo ID {} "
-            u"(parâmetro 'Diâmetro' ausente ou zerado). Verifique o tipo "
-            u"de tubo/segmento desse trecho no Revit.".format(elem.Id))
-    try:
-        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
-        return to_m(p.AsDouble()) if p and p.AsDouble() > 0 else 0.065
-    except Exception: return 0.065
 
 def get_leq(elem):
     try:
@@ -494,12 +464,20 @@ if _chaves_erro:
 dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
 # --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
+def _diametro_fn(chave_trecho):
+    # Cada trecho tem seu próprio conjunto de ElementId — um acessório sem
+    # diâmetro próprio confiável (get_diametro_no_trecho) usa o Pipe
+    # vizinho DESTE trecho, nunca de outro (ex.: o ramal de um hidrante
+    # diferente, ou o desvio de uma Tê de redução que sai do trecho).
+    ids_no_trecho = set(get_id(e) for e in trechos_elems[chave_trecho])
+    return lambda e, _ids=ids_no_trecho: get_diametro_no_trecho(e, _ids)
+
 try:
     trechos_data = {
-        "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome, get_id),
-        "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome, get_id),
-        "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
-        "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
+        "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id),
+        "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id),
+        "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id),
+        "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id),
     }
 except ValueError as _e:
     forms.alert(_txt(_e), title="Fire Utils", warn_icon=True)

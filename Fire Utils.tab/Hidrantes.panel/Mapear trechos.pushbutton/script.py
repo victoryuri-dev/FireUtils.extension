@@ -270,7 +270,7 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
     from pyrevit import forms as _forms
     from hidrantes.rede import (
         get_id, to_element_id, get_cota_conector, diagnostico_conectores,
-        get_comprimento, get_diametro, get_leq, get_nome,
+        get_comprimento, get_diametro_no_trecho, get_leq, get_nome,
     )
     from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
     from hidrantes.resultado_ui import mostrar_trechos_mapeados
@@ -294,8 +294,12 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
             return
 
         elems = [_doc.GetElement(to_element_id(eid)) for eid in rota]
+        ids_no_trecho = set(rota)
         try:
-            trecho_data = extrair_trecho(elems, get_comprimento, get_diametro, get_leq, get_nome)
+            trecho_data = extrair_trecho(
+                elems, get_comprimento,
+                lambda e, _ids=ids_no_trecho: get_diametro_no_trecho(e, _ids),
+                get_leq, get_nome)
         except ValueError as _e:
             _forms.alert(u"{}".format(_e), title="Fire Utils", warn_icon=True)
             return
