@@ -51,7 +51,7 @@ from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
 from hidrantes.rede import (
     get_id, to_element_id, get_cota_conector, get_primeiro_tubo, bfs_ate,
     percorre_rotas_hidrantes, get_pontas_abertas, diagnostico_conectores,
-    descricao_curta_elemento, todas_valvulas_hidrante, mostrar_no_revit,
+    descricao_curta_elemento, todas_valvulas_hidrante,
     get_comprimento, get_diametro, get_leq, get_nome,
 )
 from hidrantes.resultado_ui import mostrar_inconsistencias_mapeamento
@@ -70,6 +70,12 @@ uidoc  = __revit__.ActiveUIDocument
 fila_acoes = criar_fila_acoes()
 
 def _ao_localizar(uiapp, eid):
+    # Import local (não do topo do arquivo): o ExternalEvent roda depois
+    # que o Revit já pode ter limpado o namespace global deste script,
+    # então uma referência a uma função importada lá em cima vira
+    # NameError na hora do clique - import aqui dentro sempre resolve
+    # (mesmo truque usado por mostrar_no_revit com "from pyrevit import forms").
+    from hidrantes.rede import mostrar_no_revit
     mostrar_no_revit(uiapp.ActiveUIDocument, [eid])
 
 # ===========================================================================
