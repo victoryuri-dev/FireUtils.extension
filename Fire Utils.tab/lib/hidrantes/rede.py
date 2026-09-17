@@ -19,6 +19,7 @@ from collections import deque
 from Autodesk.Revit.DB import (
     FamilyInstance, BuiltInCategory, BuiltInParameter, ElementId,
     ConnectorType, LocationCurve, LocationPoint, UnitUtils,
+    FilteredElementCollector,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from System import Int64
@@ -104,6 +105,17 @@ def eh_valvula_hidrante(elem):
     try:
         return elem.Symbol.Family.Name == _NOME_FAMILIA_VALVULA
     except: return False
+
+
+def todas_valvulas_hidrante(doc):
+    """Todas as instâncias de 'Valvula para Hidrante' no projeto inteiro,
+    independente de estarem conectadas à rede de recalque - usado por
+    "Mapear Trechos" pra achar válvulas que existem no modelo mas nunca
+    foram alcançadas por percorre_rotas_hidrantes (sinal de que a rede
+    está quebrada em algum ponto antes delas, não só um galho morto sem
+    válvula nenhuma)."""
+    return [e for e in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements()
+            if eh_valvula_hidrante(e)]
 
 
 # ===========================================================================

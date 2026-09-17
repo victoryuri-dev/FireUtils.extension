@@ -43,7 +43,7 @@ from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
 from hidrantes.rede import (
     get_id, to_element_id, get_cota_conector, get_primeiro_tubo, bfs_ate,
     percorre_rotas_hidrantes, get_pontas_abertas, diagnostico_conectores,
-    descricao_curta_elemento, descricao_motivo_ponta_aberta, mostrar_no_revit,
+    descricao_curta_elemento, todas_valvulas_hidrante, mostrar_no_revit,
     get_comprimento, get_diametro, get_leq, get_nome,
 )
 from hidrantes.resultado_ui import mostrar_inconsistencias_mapeamento
@@ -71,18 +71,17 @@ def set_param(elem, nome, valor):
     except: pass
     return False
 
-def _linhas_pontas(origem, pontas):
-    """Monta as linhas [Trecho, Elemento, Motivo] pra janela de
-    inconsistências, uma por ponta aberta encontrada em `origem`
+def _itens_pontas(origem, pontas):
+    """Monta os itens {trecho, elemento, eid} pra janela de
+    inconsistências, um por ponta aberta encontrada em `origem`
     (Sucção ou Recalque)."""
-    linhas = []
+    itens = []
     for eid in pontas:
         elem = doc.GetElement(to_element_id(eid))
-        if elem is None:
-            linhas.append([origem, u"ID {}".format(eid), u"Elemento não encontrado no modelo"])
-            continue
-        linhas.append([origem, descricao_curta_elemento(elem), descricao_motivo_ponta_aberta(elem)])
-    return linhas
+        descricao = (descricao_curta_elemento(elem) if elem is not None
+                     else u"ID {} (elemento não encontrado no modelo)".format(eid))
+        itens.append({u"trecho": origem, u"elemento": descricao, u"eid": eid})
+    return itens
 
 class PipeFilter(ISelectionFilter):
     def AllowElement(self, e): return isinstance(e, Pipe)
@@ -215,15 +214,14 @@ caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
 if not caminho_succao:
     pontas = get_pontas_abertas(doc, visitados_succao)
     if pontas:
-        linhas = _linhas_pontas(u"Sucção (RTI → Bomba)", pontas)
-        ids_problema = pontas
+        itens = _itens_pontas(u"Sucção (RTI → Bomba)", pontas)
     else:
-        linhas = [[u"Sucção (RTI → Bomba)",
-                   u"{} elemento(s) alcançado(s)".format(len(visitados_succao)),
-                   u"Nenhum conector aberto identificado — a quebra pode ser um "
-                   u"elemento de categoria sem suporte a conectores"]]
-        ids_problema = list(visitados_succao)
-    ids_mostrar = mostrar_inconsistencias_mapeamento(linhas, bloqueante=True, ids_problema=ids_problema)
+        itens = [{u"trecho":   u"Sucção (RTI → Bomba)",
+                  u"elemento": u"{} elemento(s) alcançado(s), sem conector aberto "
+                               u"identificado — categoria sem suporte a conectores?".format(
+                                   len(visitados_succao)),
+                  u"eid":      eid_rti}]
+    ids_mostrar = mostrar_inconsistencias_mapeamento(itens, bloqueante=True)
     if ids_mostrar:
         mostrar_no_revit(uidoc, ids_mostrar)
     script.exit()
@@ -238,11 +236,22 @@ output.print_md("### 3 - Percorrendo a Arvore de Recalque")
 
 rotas, pontas_recalque = percorre_rotas_hidrantes(tubo_rec, eid_rec)
 
-if pontas_recalque:
-    bloqueante = len(rotas) < 2
-    linhas = _linhas_pontas(u"Recalque (Bomba → Válvulas)", pontas_recalque)
-    ids_mostrar = mostrar_inconsistencias_mapeamento(linhas, bloqueante=bloqueante,
-                                                      ids_problema=pontas_recalque)
+# Só bloqueia o mapeamento se alguma valvula de hidrante que existe no
+# projeto ficou de fora - nao por qualquer beco sem saida (dreno, ramal
+# morto etc.), que e so um aviso pro usuario revisar.
+ids_valvulas_alcancadas = set(rota[-1] for rota in rotas)
+valvulas_sem_rota = [v for v in todas_valvulas_hidrante(doc)
+                     if get_id(v) not in ids_valvulas_alcancadas]
+
+itens_recalque = [
+    {u"trecho": u"Válvula sem rota", u"elemento": descricao_curta_elemento(v), u"eid": get_id(v)}
+    for v in valvulas_sem_rota
+]
+itens_recalque.extend(_itens_pontas(u"Recalque (Bomba → Válvulas)", pontas_recalque))
+
+if itens_recalque:
+    bloqueante = bool(valvulas_sem_rota)
+    ids_mostrar = mostrar_inconsistencias_mapeamento(itens_recalque, bloqueante=bloqueante)
     if ids_mostrar:
         mostrar_no_revit(uidoc, ids_mostrar)
     if bloqueante:
