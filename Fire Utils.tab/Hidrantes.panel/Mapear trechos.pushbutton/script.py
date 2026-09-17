@@ -47,12 +47,10 @@ from projeto import exigir_projeto_e_estado
 from hidrantes.params import create_hydrant_params
 from hidrantes.norm_profiles import get_profile, req
 from hidrantes.sistema import resolver_dados_sistema
-from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
 from hidrantes.rede import (
-    get_id, to_element_id, get_cota_conector, get_primeiro_tubo, bfs_ate,
-    percorre_rotas_hidrantes, get_pontas_abertas, diagnostico_conectores,
+    get_id, to_element_id, get_primeiro_tubo, bfs_ate,
+    percorre_rotas_hidrantes, get_pontas_abertas,
     descricao_curta_elemento, todas_valvulas_hidrante,
-    get_comprimento, get_diametro, get_leq, get_nome,
 )
 from hidrantes.resultado_ui import mostrar_inconsistencias_mapeamento
 from hidrantes.fila_acoes import criar_fila_acoes
@@ -217,9 +215,6 @@ ids_succao = caminho_succao
 # ===========================================================================
 rotas, pontas_recalque = percorre_rotas_hidrantes(tubo_rec, eid_rec)
 
-# Só bloqueia o mapeamento se alguma valvula de hidrante que existe no
-# projeto ficou de fora - nao por qualquer beco sem saida (dreno, ramal
-# morto etc.), que e so um aviso pro usuario revisar.
 ids_valvulas_alcancadas = set(rota[-1] for rota in rotas)
 valvulas_sem_rota = [v for v in todas_valvulas_hidrante(doc)
                      if get_id(v) not in ids_valvulas_alcancadas]
@@ -229,13 +224,6 @@ itens_recalque = [
     for v in valvulas_sem_rota
 ]
 itens_recalque.extend(_itens_pontas(u"Recalque (Bomba → Válvulas)", pontas_recalque))
-
-if itens_recalque:
-    bloqueante = bool(valvulas_sem_rota)
-    mostrar_inconsistencias_mapeamento(itens_recalque, bloqueante=bloqueante,
-                                       fila_acoes=fila_acoes, ao_localizar=_ao_localizar)
-    if bloqueante:
-        script.exit()
 
 if not rotas:
     forms.alert(
@@ -254,146 +242,183 @@ if len(rotas) < 2:
     script.exit()
 
 # ===========================================================================
-# 4 — Pontua cada rota: perda por atrito (vazao simples) + desnivel
+# 4-7 — Pontua as rotas, grava os parametros e salva o cache. Chamada direto
+# abaixo se nao ha inconsistencias; senao so mais tarde, se/quando o usuario
+# confirmar (na janela de inconsistencias) que pode ignorar TODOS os itens
+# encontrados - ver o bloco "if itens_recalque" logo depois desta definicao.
+#
+# Os parametros default (_doc=doc, _bomba=bomba etc.) "congelam" o estado
+# atual do script no momento em que esta funcao e definida: quando chamada
+# depois, pelo ExternalEvent dessa confirmacao, isso ja pode estar rodando
+# bem depois do script original ter terminado (o pyRevit pode ja ter
+# limpado o namespace global dele nesse ponto) - por isso os imports de
+# hidrantes.rede/hidrantes.calc tambem sao feitos aqui dentro, na hora,
+# em vez de contar com os imports la no topo do arquivo (mesmo motivo/
+# mesmo truque do _ao_localizar, acima).
 # ===========================================================================
-z_recalque_bomba = get_cota_conector(bomba, (FlowDirectionType.Out,))
-if z_recalque_bomba is None:
-    detalhes = [u"Nao foi possivel ler a elevacao de saida (recalque) da bomba:"]
-    detalhes.extend(diagnostico_conectores(bomba))
-    forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
+def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
+                           _rti_auto=rti_auto_detectada, _tubo_rti=tubo_rti,
+                           _ids_succao=ids_succao, _projeto_dir=projeto_dir,
+                           _qs=Qs_lmin, _c_hw=C_HW, _set_param=set_param,
+                           _p_trecho=P_TRECHO, _p_ident=P_IDENTIFICADOR,
+                           _p_id_hid=P_ID_HIDRANTE):
+    from pyrevit import forms as _forms
+    from hidrantes.rede import (
+        get_id, to_element_id, get_cota_conector, diagnostico_conectores,
+        get_comprimento, get_diametro, get_leq, get_nome,
+    )
+    from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
+    from Autodesk.Revit.DB import Transaction, FlowDirectionType
+
+    z_recalque_bomba = get_cota_conector(_bomba, (FlowDirectionType.Out,))
+    if z_recalque_bomba is None:
+        detalhes = [u"Nao foi possivel ler a elevacao de saida (recalque) da bomba:"]
+        detalhes.extend(diagnostico_conectores(_bomba))
+        _forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
+        return
+
+    candidatas = []
+    for rota in rotas_validas:
+        valvula = _doc.GetElement(to_element_id(rota[-1]))
+        z_valvula = get_cota_conector(valvula)
+        if z_valvula is None:
+            detalhes = [u"Nao foi possivel ler a elevacao da valvula (ID {}):".format(valvula.Id)]
+            detalhes.extend(diagnostico_conectores(valvula))
+            _forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
+            return
+
+        elems = [_doc.GetElement(to_element_id(eid)) for eid in rota]
+        try:
+            trecho_data = extrair_trecho(elems, get_comprimento, get_diametro, get_leq, get_nome)
+        except ValueError as _e:
+            _forms.alert(u"{}".format(_e), title="Fire Utils", warn_icon=True)
+            return
+        jt = calc_j_trecho(trecho_data, _qs, _c_hw, u"Bomba > Valvula (score)")
+        dz = z_valvula - z_recalque_bomba
+        score = jt["J"] + dz
+
+        candidatas.append({
+            u"rota":    rota,
+            u"valvula": valvula,
+            u"J":       jt["J"],
+            u"dZ":      dz,
+            u"score":   score,
+        })
+
+    candidatas.sort(key=lambda c: c[u"score"], reverse=True)
+
+    # Ranking completo (todos os hidrantes achados, não só os 2 selecionados) —
+    # vai pro cache 'rotas' e, de lá, pro payload sincronizado por "Dimensionar
+    # Hidrantes" (chave 'ranking_hidrantes'), pro site poder mostrar a
+    # verificação de qual hidrante é de fato o mais desfavorável, em vez de só
+    # apresentar H-01/H-02 já escolhidos sem o comparativo.
+    ranking_hidrantes = [
+        {
+            u"id":           u"H-{:02d}".format(i + 1),
+            u"elementId":    get_id(c[u"valvula"]),
+            u"J":            c[u"J"],
+            u"dZ":           c[u"dZ"],
+            u"score":        c[u"score"],
+            u"selecionado":  i < 2,
+        }
+        for i, c in enumerate(candidatas)
+    ]
+
+    # Grava "FireUtils - ID Hidrante" em todas as valvulas (ordem de
+    # desfavorabilidade) e identifica o Ponto A entre as 2 piores
+    rota_h1, rota_h2 = candidatas[0][u"rota"], candidatas[1][u"rota"]
+    set_h2   = set(rota_h2)
+    comuns   = [eid for eid in rota_h1 if eid in set_h2]
+    if not comuns:
+        _forms.alert(u"Ponto A nao encontrado entre as 2 rotas mais desfavoraveis.",
+                    title="Fire Utils", warn_icon=True)
+        return
+
+    ponto_a_id = comuns[-1]
+    idx_a_h1   = rota_h1.index(ponto_a_id)
+    idx_a_h2   = rota_h2.index(ponto_a_id)
+
+    ids_rec_comum = rota_h1[:idx_a_h1 + 1]   # Bomba -> Ponto A (inclusive)
+    ids_ramal_h1  = rota_h1[idx_a_h1 + 1:]   # Ponto A -> H-01 (inclusive da valvula)
+    ids_ramal_h2  = rota_h2[idx_a_h2 + 1:]   # Ponto A -> H-02 (inclusive da valvula)
+
+    # Preenche parâmetros (visual — o motor de cálculo lê o cache, não isso)
+    with Transaction(_doc, "FireUtils - Mapear Trechos") as t:
+        t.Start()
+        try:
+            # RTI e bomba - marcados direto na propria familia, para o
+            # "Dimensionar Hidrantes" achar o elemento sem precisar percorrer
+            # a rede e ler a cota do conector real dele. Se a RTI nao foi
+            # detectada automaticamente (fallback manual: o tubo de saida foi
+            # clicado, nao achado pelo conector), quem recebe o identificador
+            # "RTI" e o proprio tubo, nao a familia - so um dos dois pode
+            # carregar essa tag.
+            if _rti_auto:
+                _set_param(_rti, _p_ident, u"RTI")
+            else:
+                _set_param(_tubo_rti, _p_ident, u"RTI")
+            _set_param(_bomba, _p_ident, u"Bomba")
+
+            # ID Hidrante em TODAS as valvulas achadas, na ordem de desfavorabilidade
+            for i, c in enumerate(candidatas):
+                _set_param(c[u"valvula"], _p_id_hid, u"H-{:02d}".format(i + 1))
+
+            # Sucção
+            for eid in _ids_succao:
+                elem = _doc.GetElement(to_element_id(eid))
+                if elem:
+                    _set_param(elem, _p_trecho, u"RTI - Bomba")
+
+            # Recalque comum
+            for eid in ids_rec_comum:
+                elem = _doc.GetElement(to_element_id(eid))
+                if not elem: continue
+                _set_param(elem, _p_trecho, u"Bomba - Ponto A")
+                if eid == ponto_a_id:
+                    _set_param(elem, _p_ident, u"Ponto A")
+
+            # Ramal H-01
+            for eid in ids_ramal_h1:
+                elem = _doc.GetElement(to_element_id(eid))
+                if elem:
+                    _set_param(elem, _p_trecho, u"Ponto A - Hid 01")
+
+            # Ramal H-02
+            for eid in ids_ramal_h2:
+                elem = _doc.GetElement(to_element_id(eid))
+                if elem:
+                    _set_param(elem, _p_trecho, u"Ponto A - Hid 02")
+
+            t.Commit()
+        except Exception as e:
+            t.RollBack()
+            _forms.alert(u"Erro:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
+            return
+
+    # Salva a rota interna no cache (chave 'rotas'), para "Dimensionar
+    # Hidrantes" ler direto por ElementId — sem depender dos parametros
+    salvar_cache({
+        u"t1":         list(_ids_succao),
+        u"t2":         list(ids_rec_comum),
+        u"t3":         list(ids_ramal_h1),
+        u"t4":         list(ids_ramal_h2),
+        u"ponto_a_id": ponto_a_id,
+        u"ranking":    ranking_hidrantes,
+    }, _projeto_dir, chave=u"rotas")
+
+
+if itens_recalque:
+    # Nao bloqueia (nem decide) nada aqui na hora - so mostra a janela e
+    # encerra o script; a decisao de prosseguir e do usuario, tomada no
+    # clique de "Confirmar e Continuar" (so libera se TODOS os itens da
+    # lista estiverem marcados como "Ignorar").
+    def _ao_confirmar(uiapp, _continuar=_continuar_mapeamento, _rotas=rotas):
+        _continuar(_rotas)
+
+    mostrar_inconsistencias_mapeamento(
+        itens_recalque, bloqueante=bool(valvulas_sem_rota),
+        fila_acoes=fila_acoes, ao_localizar=_ao_localizar,
+        permitir_continuar=True, ao_confirmar=_ao_confirmar)
     script.exit()
 
-candidatas = []
-for rota in rotas:
-    valvula = doc.GetElement(to_element_id(rota[-1]))
-    z_valvula = get_cota_conector(valvula)
-    if z_valvula is None:
-        detalhes = [u"Nao foi possivel ler a elevacao da valvula (ID {}):".format(valvula.Id)]
-        detalhes.extend(diagnostico_conectores(valvula))
-        forms.alert(u"\n".join(detalhes), title="Fire Utils", warn_icon=True)
-        script.exit()
-
-    elems = [doc.GetElement(to_element_id(eid)) for eid in rota]
-    try:
-        trecho_data = extrair_trecho(elems, get_comprimento, get_diametro, get_leq, get_nome)
-    except ValueError as _e:
-        forms.alert(u"{}".format(_e), title="Fire Utils", warn_icon=True)
-        script.exit()
-    jt = calc_j_trecho(trecho_data, Qs_lmin, C_HW, u"Bomba > Valvula (score)")
-    dz = z_valvula - z_recalque_bomba
-    score = jt["J"] + dz
-
-    candidatas.append({
-        u"rota":    rota,
-        u"valvula": valvula,
-        u"J":       jt["J"],
-        u"dZ":      dz,
-        u"score":   score,
-    })
-
-candidatas.sort(key=lambda c: c[u"score"], reverse=True)
-
-# Ranking completo (todos os hidrantes achados, não só os 2 selecionados) —
-# vai pro cache 'rotas' e, de lá, pro payload sincronizado por "Dimensionar
-# Hidrantes" (chave 'ranking_hidrantes'), pro site poder mostrar a
-# verificação de qual hidrante é de fato o mais desfavorável, em vez de só
-# apresentar H-01/H-02 já escolhidos sem o comparativo.
-ranking_hidrantes = [
-    {
-        u"id":           u"H-{:02d}".format(i + 1),
-        u"elementId":    get_id(c[u"valvula"]),
-        u"J":            c[u"J"],
-        u"dZ":           c[u"dZ"],
-        u"score":        c[u"score"],
-        u"selecionado":  i < 2,
-    }
-    for i, c in enumerate(candidatas)
-]
-
-# ===========================================================================
-# 5 — Grava "FireUtils - ID Hidrante" em todas as valvulas (ordem de
-#     desfavorabilidade) e identifica o Ponto A entre as 2 piores
-# ===========================================================================
-rota_h1, rota_h2 = candidatas[0][u"rota"], candidatas[1][u"rota"]
-set_h2   = set(rota_h2)
-comuns   = [eid for eid in rota_h1 if eid in set_h2]
-if not comuns:
-    forms.alert(u"Ponto A nao encontrado entre as 2 rotas mais desfavoraveis.",
-                title="Fire Utils", warn_icon=True)
-    script.exit()
-
-ponto_a_id = comuns[-1]
-idx_a_h1   = rota_h1.index(ponto_a_id)
-idx_a_h2   = rota_h2.index(ponto_a_id)
-
-ids_rec_comum = rota_h1[:idx_a_h1 + 1]   # Bomba -> Ponto A (inclusive)
-ids_ramal_h1  = rota_h1[idx_a_h1 + 1:]   # Ponto A -> H-01 (inclusive da valvula)
-ids_ramal_h2  = rota_h2[idx_a_h2 + 1:]   # Ponto A -> H-02 (inclusive da valvula)
-
-# ===========================================================================
-# 6 — Preenche parâmetros (visual — o motor de cálculo lê o cache, não isso)
-# ===========================================================================
-with Transaction(doc, "FireUtils - Mapear Trechos") as t:
-    t.Start()
-    try:
-        # RTI e bomba - marcados direto na propria familia, para o
-        # "Dimensionar Hidrantes" achar o elemento sem precisar percorrer
-        # a rede e ler a cota do conector real dele. Se a RTI nao foi
-        # detectada automaticamente (fallback manual: o tubo de saida foi
-        # clicado, nao achado pelo conector), quem recebe o identificador
-        # "RTI" e o proprio tubo, nao a familia - so um dos dois pode
-        # carregar essa tag.
-        if rti_auto_detectada:
-            set_param(rti, P_IDENTIFICADOR, u"RTI")
-        else:
-            set_param(tubo_rti, P_IDENTIFICADOR, u"RTI")
-        set_param(bomba, P_IDENTIFICADOR, u"Bomba")
-
-        # ID Hidrante em TODAS as valvulas achadas, na ordem de desfavorabilidade
-        for i, c in enumerate(candidatas):
-            set_param(c[u"valvula"], P_ID_HIDRANTE, u"H-{:02d}".format(i + 1))
-
-        # Sucção
-        for eid in ids_succao:
-            elem = doc.GetElement(to_element_id(eid))
-            if elem:
-                set_param(elem, P_TRECHO, u"RTI - Bomba")
-
-        # Recalque comum
-        for eid in ids_rec_comum:
-            elem = doc.GetElement(to_element_id(eid))
-            if not elem: continue
-            set_param(elem, P_TRECHO, u"Bomba - Ponto A")
-            if eid == ponto_a_id:
-                set_param(elem, P_IDENTIFICADOR, u"Ponto A")
-
-        # Ramal H-01
-        for eid in ids_ramal_h1:
-            elem = doc.GetElement(to_element_id(eid))
-            if elem:
-                set_param(elem, P_TRECHO, u"Ponto A - Hid 01")
-
-        # Ramal H-02
-        for eid in ids_ramal_h2:
-            elem = doc.GetElement(to_element_id(eid))
-            if elem:
-                set_param(elem, P_TRECHO, u"Ponto A - Hid 02")
-
-        t.Commit()
-    except Exception as e:
-        t.RollBack()
-        forms.alert(u"Erro:\n{}".format(str(e)), title="Fire Utils", warn_icon=True)
-        script.exit()
-
-# ===========================================================================
-# 7 — Salva a rota interna no cache (chave 'rotas'), para "Dimensionar
-#     Hidrantes" ler direto por ElementId — sem depender dos parametros
-# ===========================================================================
-salvar_cache({
-    u"t1":         list(ids_succao),
-    u"t2":         list(ids_rec_comum),
-    u"t3":         list(ids_ramal_h1),
-    u"t4":         list(ids_ramal_h2),
-    u"ponto_a_id": ponto_a_id,
-    u"ranking":    ranking_hidrantes,
-}, projeto_dir, chave=u"rotas")
+_continuar_mapeamento(rotas)

@@ -85,6 +85,9 @@
         <!-- Rodapé -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right"
                     Margin="0,16,0,0">
+            <Button x:Name="BtnConfirmar" Content="Confirmar e Continuar" Width="180"
+                    Style="{StaticResource AccentButtonStyle}" Click="on_confirmar"
+                    Margin="0,0,10,0" Visibility="Collapsed"/>
             <Button x:Name="BtnMostrarProjeto" Content="Mostrar no Projeto"
                     Style="{StaticResource OutlineButtonStyle}" Click="on_mostrar_projeto"
                     Margin="0,0,10,0" Visibility="Collapsed"/>
