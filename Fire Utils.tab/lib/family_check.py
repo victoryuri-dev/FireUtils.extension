@@ -3,8 +3,8 @@
 family_check.py — Fire Utils · lib/
 Confirma que uma família específica JÁ ESTÁ carregada e ativada no
 documento ativo. NÃO baixa nem carrega nada — se a família estiver
-ausente, orienta o usuário a carregá-la pela dockpane (Biblioteca de
-Famílias, Fire Utils.tab/Biblioteca.panel/Carregador de Familias), que é
+ausente, orienta o usuário a carregá-la pela dockpane (FireUtils,
+Fire Utils.tab/Biblioteca.panel/Carregador de Familias), que é
 quem sabe buscar no catálogo do Supabase.
 
 A comparação de Family.Name ignora acentuação (normaliza NFKD antes de
@@ -30,7 +30,7 @@ from Autodesk.Revit.DB import Transaction, Family, FilteredElementCollector
 
 _MSG_CARREGUE_PELA_DOCKPANE = (
     u"Família '{}' não encontrada no projeto.\n\n"
-    u"Abra a Biblioteca de Famílias (Fire Utils → Biblioteca) e "
+    u"Abra o FireUtils (aba Fire Utils) e "
     u"carregue essa família antes de continuar."
 )
 

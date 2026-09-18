@@ -6,7 +6,7 @@ __doc__ = (
     "insere a placa correspondente na mesma posição de cada equipamento "
     "já presente no projeto que ainda não estiver sinalizado. As "
     "famílias das placas precisam já estar carregadas no projeto — "
-    "carregue-as pela Biblioteca de Famílias (dockpane) antes de usar "
+    "carregue-as pelo FireUtils (dockpane) antes de usar "
     "este botão."
 )
 
