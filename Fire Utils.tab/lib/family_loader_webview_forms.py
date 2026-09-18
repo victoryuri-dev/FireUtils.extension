@@ -255,8 +255,18 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
     panel_source = _XAML_PATH
     panel_title = u"Fire Utils — Biblioteca de Famílias"
 
+    # Instância viva de verdade, guardada assim que o Revit a cria (no
+    # registro, startup.py) — forms.get_dockable_panel() NÃO devolve isso:
+    # devolve o wrapper Autodesk.Revit.UI.DockablePane (só tem Show/Hide/
+    # IsShown, nenhum dos nossos métodos/atributos - WebView, fila_acoes,
+    # _postar_mensagem etc.). Quem precisa falar com o WebView2 de fora
+    # desta classe (abrir_secao_hidrantes, abrir_dashboard) usa esta
+    # referência, não get_dockable_panel().
+    _instancia_ativa = None
+
     def __init__(self):
         forms.WPFPanel.__init__(self)
+        PainelCarregadorFamiliasWeb._instancia_ativa = self
 
         self.fila_acoes = criar_fila_acoes()
 
@@ -464,6 +474,19 @@ def alternar_painel(uiapp):
         )
 
 
+def _postar_para_painel(tipo):
+    """Posta uma mensagem (sem payload) pro React via a instância viva do
+    painel (PainelCarregadorFamiliasWeb._instancia_ativa, ver __init__) —
+    nunca via forms.get_dockable_panel(), que devolve só o wrapper
+    Autodesk.Revit.UI.DockablePane (Show/Hide/IsShown), sem
+    _postar_mensagem nem nenhum outro atributo nosso. Não faz nada
+    (silencioso) se a instância ainda não existir por algum motivo — quem
+    chama já mostrou/tentou mostrar o painel antes."""
+    painel = PainelCarregadorFamiliasWeb._instancia_ativa
+    if painel is not None:
+        painel._postar_mensagem(tipo, {})
+
+
 def abrir_secao_hidrantes(uiapp):
     """
     Mostra a dockpane (se estiver escondida) e manda o React trocar pra a
@@ -492,7 +515,7 @@ def abrir_secao_hidrantes(uiapp):
         painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
         if not painel.IsShown():
             painel.Show()
-        painel._postar_mensagem(u"ABRIR_HIDRANTES", {})
+        _postar_para_painel(u"ABRIR_HIDRANTES")
     except Exception as ex:
         _mlogger.warning(u"Falha ao abrir a dockpane na seção de hidrantes: {}".format(texto_erro(ex)))
 
@@ -536,7 +559,7 @@ def abrir_dashboard(uiapp):
         painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
         if not painel.IsShown():
             painel.Show()
-        painel._postar_mensagem(u"ABRIR_DASHBOARD", {})
+        _postar_para_painel(u"ABRIR_DASHBOARD")
     except Exception as ex:
         forms.alert(
             u"Não foi possível abrir o Dashboard agora ({}).\n\nTente "
