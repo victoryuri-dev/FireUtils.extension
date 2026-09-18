@@ -255,18 +255,8 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
     panel_source = _XAML_PATH
     panel_title = u"Fire Utils — Biblioteca de Famílias"
 
-    # Instância viva de verdade, guardada assim que o Revit a cria (no
-    # registro, startup.py) — forms.get_dockable_panel() NÃO devolve isso:
-    # devolve o wrapper Autodesk.Revit.UI.DockablePane (só tem Show/Hide/
-    # IsShown, nenhum dos nossos métodos/atributos - WebView, fila_acoes,
-    # _postar_mensagem etc.). Quem precisa falar com o WebView2 de fora
-    # desta classe (abrir_secao_hidrantes, abrir_dashboard) usa esta
-    # referência, não get_dockable_panel().
-    _instancia_ativa = None
-
     def __init__(self):
         forms.WPFPanel.__init__(self)
-        PainelCarregadorFamiliasWeb._instancia_ativa = self
 
         self.fila_acoes = criar_fila_acoes()
 
@@ -470,100 +460,5 @@ def alternar_painel(uiapp):
             u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
             u"Revit.".format(texto_erro(ex)),
             title=u"Fire Utils - Biblioteca de Famílias",
-            warn_icon=True,
-        )
-
-
-def _postar_para_painel(tipo):
-    """Posta uma mensagem (sem payload) pro React via a instância viva do
-    painel (PainelCarregadorFamiliasWeb._instancia_ativa, ver __init__) —
-    nunca via forms.get_dockable_panel(), que devolve só o wrapper
-    Autodesk.Revit.UI.DockablePane (Show/Hide/IsShown), sem
-    _postar_mensagem nem nenhum outro atributo nosso. Não faz nada
-    (silencioso) se a instância ainda não existir por algum motivo — quem
-    chama já mostrou/tentou mostrar o painel antes."""
-    painel = PainelCarregadorFamiliasWeb._instancia_ativa
-    if painel is not None:
-        painel._postar_mensagem(tipo, {})
-
-
-def abrir_secao_hidrantes(uiapp):
-    """
-    Mostra a dockpane (se estiver escondida) e manda o React trocar pra a
-    aba "Sistema de Hidrantes" do Dashboard (mensagem ABRIR_HIDRANTES, ver
-    webapp/src/lib/bridge.js) — chamada por "Dimensionar Hidrantes" ao
-    final de um dimensionamento bem-sucedido, pra o RT já cair direto nos
-    resultados na dockpane, sem precisar abrir o painel e navegar até lá
-    manualmente.
-
-    Deliberadamente silenciosa (sem popup, só um aviso no output do
-    pyRevit): "Dimensionar Hidrantes" já fez o trabalho principal (mostrou
-    o resultado, salvou o cache) antes de chegar aqui — abrir a dockpane é
-    só uma conveniência extra, nunca motivo pra interromper esse fluxo com
-    um erro. Isso inclui o caso da toda primeira vez que o painel é
-    mostrado nesta sessão do Revit: o CoreWebView2 ainda pode estar
-    inicializando de forma assíncrona (ver __init__ acima) quando
-    _postar_mensagem roda logo em seguida — a mensagem some sem erro
-    (core is None), e o RT só precisa clicar em "Hidrantes" na sidebar
-    dessa vez.
-    """
-    if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb):
-        return
-    if uiapp.ActiveUIDocument is None:
-        return
-    try:
-        painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
-        if not painel.IsShown():
-            painel.Show()
-        _postar_para_painel(u"ABRIR_HIDRANTES")
-    except Exception as ex:
-        _mlogger.warning(u"Falha ao abrir a dockpane na seção de hidrantes: {}".format(texto_erro(ex)))
-
-
-def abrir_dashboard(uiapp):
-    """
-    Mostra a dockpane (se estiver escondida) e manda o React ir direto pra
-    a aba "Dashboard" (mensagem ABRIR_DASHBOARD, ver webapp/src/lib/
-    bridge.js) — de onde o RT vincula o projeto Revit ativo a um projeto/
-    estrutura do site (ConectarProjeto/SelecionarEstrutura, ver App.jsx e
-    DashboardEstrutura.jsx). Chamada pelo botão "Vincular Projeto"
-    (Biblioteca.panel), próprio pra isso porque nem todo RT quer passar
-    pela Biblioteca de Famílias (aba inicial padrão) só pra chegar lá.
-
-    Ao contrário de abrir_secao_hidrantes (conveniência ao final de outro
-    comando, silenciosa), abrir o Dashboard É o propósito do clique nesse
-    botão — falhas aparecem em alert, como alternar_painel, em vez de
-    silenciosas.
-    """
-    if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb):
-        forms.alert(
-            u"O painel do Dashboard não foi registrado.\n\n"
-            u"Confira o output do pyRevit na inicialização da extensão — "
-            u"provavelmente falta o WebView2 SDK "
-            u"(Fire Utils.tab/lib/webview2_runtime/) ou o build do "
-            u"frontend (webapp/dist/).",
-            title=u"Fire Utils - Dashboard",
-            warn_icon=True,
-        )
-        return
-
-    if uiapp.ActiveUIDocument is None:
-        forms.alert(
-            u"Abra ou crie um projeto no Revit antes de abrir o Dashboard.",
-            title=u"Fire Utils - Dashboard",
-            warn_icon=True,
-        )
-        return
-
-    try:
-        painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
-        if not painel.IsShown():
-            painel.Show()
-        _postar_para_painel(u"ABRIR_DASHBOARD")
-    except Exception as ex:
-        forms.alert(
-            u"Não foi possível abrir o Dashboard agora ({}).\n\nTente "
-            u"novamente; se persistir, reinicie o Revit.".format(texto_erro(ex)),
-            title=u"Fire Utils - Dashboard",
             warn_icon=True,
         )

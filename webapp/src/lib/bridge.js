@@ -130,22 +130,6 @@
  *     SistemaHidrantesPage.jsx), o mesmo campo que o site edita na Etapa 3
  *     ("Dimensionamento da Bomba de Incêndio"), sem passar pelo Project
  *     Information do Revit.
- *
- *   { type: "ABRIR_HIDRANTES" }
- *     Python -> JS: manda a aba do Dashboard trocar pra "hidrantes" (ver
- *     App.jsx, mesmo destino do cartão/atalho "Sistema de Hidrantes") —
- *     enviada por "Dimensionar Hidrantes" (family_loader_webview_forms.
- *     abrir_secao_hidrantes) ao final de um dimensionamento bem-sucedido,
- *     pra o RT já cair direto nos resultados na dockpane, sem precisar
- *     abrir o painel e navegar até lá manualmente. Sem payload.
- *
- *   { type: "ABRIR_DASHBOARD" }
- *     Python -> JS: manda a aba do Dashboard trocar pra "dashboard" (tela
- *     de vínculo projeto/estrutura, ConectarProjeto/SelecionarEstrutura —
- *     ver App.jsx) — enviada pelo botão "Vincular Projeto"
- *     (family_loader_webview_forms.abrir_dashboard), pra abrir a dockpane
- *     direto nessa tela sem passar pela Biblioteca de Famílias (aba
- *     inicial padrão). Sem payload.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -161,8 +145,6 @@ export const BridgeMessageTypes = {
   HIDRANTES_CLASSIFICACAO_SAVED: "HIDRANTES_CLASSIFICACAO_SAVED",
   GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
-  ABRIR_HIDRANTES: "ABRIR_HIDRANTES",
-  ABRIR_DASHBOARD: "ABRIR_DASHBOARD",
 };
 
 function obterWebView() {

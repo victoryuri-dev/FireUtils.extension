@@ -655,14 +655,3 @@ payload_hid = {
     "ranking_hidrantes": payload_rotas.get(u"ranking"),
 }
 salvar_cache(payload_hid, projeto_dir)
-
-# --- Etapa 8: abre a dockpane direto na secao de Hidrantes, se disponivel
-# (import local: family_loader_webview_forms so existe/funciona se o
-# WebView2 SDK e o build do frontend estiverem presentes - ver docstring
-# de abrir_secao_hidrantes; nunca deve interromper "Dimensionar Hidrantes"
-# se isso faltar) ---
-try:
-    from family_loader_webview_forms import abrir_secao_hidrantes
-    abrir_secao_hidrantes(__revit__)
-except Exception:
-    pass
