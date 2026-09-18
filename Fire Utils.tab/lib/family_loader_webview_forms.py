@@ -462,3 +462,36 @@ def alternar_painel(uiapp):
             title=u"Fire Utils - Biblioteca de Famílias",
             warn_icon=True,
         )
+
+
+def abrir_secao_hidrantes(uiapp):
+    """
+    Mostra a dockpane (se estiver escondida) e manda o React trocar pra a
+    aba "Sistema de Hidrantes" do Dashboard (mensagem ABRIR_HIDRANTES, ver
+    webapp/src/lib/bridge.js) — chamada por "Dimensionar Hidrantes" ao
+    final de um dimensionamento bem-sucedido, pra o RT já cair direto nos
+    resultados na dockpane, sem precisar abrir o painel e navegar até lá
+    manualmente.
+
+    Deliberadamente silenciosa (sem popup, só um aviso no output do
+    pyRevit): "Dimensionar Hidrantes" já fez o trabalho principal (mostrou
+    o resultado, salvou o cache) antes de chegar aqui — abrir a dockpane é
+    só uma conveniência extra, nunca motivo pra interromper esse fluxo com
+    um erro. Isso inclui o caso da toda primeira vez que o painel é
+    mostrado nesta sessão do Revit: o CoreWebView2 ainda pode estar
+    inicializando de forma assíncrona (ver __init__ acima) quando
+    _postar_mensagem roda logo em seguida — a mensagem some sem erro
+    (core is None), e o RT só precisa clicar em "Hidrantes" na sidebar
+    dessa vez.
+    """
+    if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb):
+        return
+    if uiapp.ActiveUIDocument is None:
+        return
+    try:
+        painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
+        if not painel.IsShown():
+            painel.Show()
+        painel._postar_mensagem(u"ABRIR_HIDRANTES", {})
+    except Exception as ex:
+        _mlogger.warning(u"Falha ao abrir a dockpane na seção de hidrantes: {}".format(texto_erro(ex)))
