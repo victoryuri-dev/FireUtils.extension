@@ -23,8 +23,8 @@ já usam.
 
 Uso:
     from sync import enviar, gravar_e_enviar, buscar, buscar_norma, config_sync, salvar_config_sync
-    enviar(u"extintores", payload, projeto_dir)
-    path = gravar_e_enviar(u"sinalizacao", itens, projeto_dir, estruturaId=est_id)
+    ok, motivo = enviar(u"extintores", payload, projeto_dir)
+    path, ok, motivo = gravar_e_enviar(u"sinalizacao", itens, projeto_dir, estruturaId=est_id)
     resultado, erro = buscar(u"listar_estruturas", projeto_dir)
     dados, erro = buscar_norma(u"MA", u"saida_emergencia")
 """
@@ -88,7 +88,9 @@ def gravar_e_enviar(medida, itens, projeto_dir, estruturaId=None):
     individualmente antes; use isso em vez de duplicar a lógica de
     gravação em cada módulo novo.
 
-    Retorna o caminho do firedata.json gravado.
+    Retorna (path, ok, motivo) — path é o firedata.json gravado (a
+    gravação local sempre acontece, mesmo se o envio falhar); ok/motivo
+    vêm direto de enviar() (ver ali o que cada um significa).
     """
     payload = {
         u"_timestamp": datetime.datetime.utcnow().strftime(u"%Y-%m-%dT%H:%M:%SZ"),
@@ -106,9 +108,9 @@ def gravar_e_enviar(medida, itens, projeto_dir, estruturaId=None):
     with io.open(path, u"w", encoding=u"utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
-    enviar(medida, payload, projeto_dir, estruturaId=estruturaId)
+    ok, motivo = enviar(medida, payload, projeto_dir, estruturaId=estruturaId)
 
-    return path
+    return path, ok, motivo
 
 
 def _forcar_tls12():
@@ -234,24 +236,32 @@ def enviar(medida, payload, projeto_dir, estruturaId=None):
     'hidrantes' não deve ser passado: é a única medida que fica geral,
     compartilhada entre todas as estruturas do projeto.
 
-    Nunca lança exceção nem retorna nada útil pro chamador — qualquer
-    falha (sem projeto vinculado, sem rede, timeout, erro do servidor,
-    estruturaId desatualizado) é silenciosamente ignorada, porque o
-    firedata.json local já foi gravado antes desta chamada e continua
-    sendo a fonte de verdade offline.
+    Nunca lança exceção — qualquer falha (sem projeto vinculado, sem
+    rede, timeout, erro do servidor, estruturaId desatualizado) é
+    tratada aqui dentro, porque o firedata.json local já foi gravado
+    antes desta chamada e continua sendo a fonte de verdade offline.
+
+    Retorna (ok, motivo): `ok` é True só quando o servidor confirmou o
+    envio; `motivo` é None nesse caso, ou uma mensagem curta explicando
+    por que não foi (útil pra quem quiser reportar o status ao usuário —
+    ver quantitativos_core.py). Quem ignora o retorno (hidrantes/calc.py,
+    saidas/calc.py) continua funcionando exatamente como antes.
     """
     if medida not in _MEDIDAS_VALIDAS:
-        return
+        return False, u"medida inválida: {}".format(medida)
     projeto_id = config_sync(projeto_dir).get(u"projetoId")
     if not projeto_id:
-        return
+        return False, u"Nenhum projeto vinculado a este arquivo Revit — vincule pelo Dashboard (dockpane)."
     corpo = {u"projetoId": projeto_id, u"medida": medida, u"payload": payload}
     if estruturaId:
         corpo[u"estruturaId"] = estruturaId
     try:
-        _post_json(_SYNC_URL, corpo)
-    except Exception:
-        pass
+        resultado, erro = _post_json(_SYNC_URL, corpo)
+    except Exception as ex:
+        return False, u"Falha de rede: {}".format(texto_erro(ex))
+    if erro:
+        return False, erro
+    return True, None
 
 
 def buscar(acao, projeto_dir, **params):

@@ -152,12 +152,22 @@ def _processar_medida(medida, doc, projeto_dir, output):
         output.print_md(u"✔ {} item(ns) encontrado(s).".format(len(itens)))
 
     try:
-        path = medida.salvar(itens, projeto_dir)
+        path, ok, motivo = medida.salvar(itens, projeto_dir)
     except Exception as e:
         output.print_md(u"**Falhou ao gravar/enviar:** `{}`".format(e))
         return
 
     output.print_md(u"✔ Dados gravados em `{}`".format(path))
+    if ok:
+        output.print_md(u"✔ Enviado pro site.")
+    else:
+        # Nunca é exceção (ver sync.enviar) — o caso mais comum é o
+        # arquivo Revit ainda não estar vinculado a um projeto/estrutura
+        # no Dashboard (dockpane). Reporta aqui porque antes disso era
+        # silencioso: o firedata.json gravava certinho e ninguém percebia
+        # que nada tinha chegado no site.
+        output.print_md(u"**⚠ Não enviado pro site:** {}".format(motivo))
+
     for it in itens:
         output.print_md(u"- {}".format(medida.rotulo_item(it)))
 
