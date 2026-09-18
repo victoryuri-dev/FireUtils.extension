@@ -19,7 +19,7 @@ from collections import deque
 from Autodesk.Revit.DB import (
     FamilyInstance, BuiltInCategory, BuiltInParameter, ElementId,
     ConnectorType, LocationCurve, LocationPoint, UnitUtils,
-    FilteredElementCollector,
+    FilteredElementCollector, FlowDirectionType,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from System import Int64
@@ -127,13 +127,26 @@ def get_cota_conector(elem, direcoes=None):
     Se `direcoes` for informado (RTI/bomba), usa o primeiro conector com
     essa Direction; senao (valvula do hidrante), prioriza um conector
     conectado e cai no primeiro conector que existir. None se nao
-    encontrar - sem nenhum fallback por geometria."""
+    encontrar - sem nenhum fallback por geometria.
+
+    Quando `direcoes` e informado e nenhum conector bate exatamente, cai
+    pra um conector Bidirectional conectado (2a passada) - algumas familias
+    de bomba/equipamento modelam sucção/recalque como Bidirectional em vez
+    de In/Out explicito, e um conector Bidirectional nao restringe o
+    sentido do fluxo, entao serve tanto pra pedido de In quanto de Out."""
     conns = get_conectores(elem)
     if direcoes is not None:
         for conn in conns:
             try:
                 if conn.ConnectorType == ConnectorType.Logical: continue
                 if conn.Direction not in direcoes: continue
+                if not conn.IsConnected: continue
+                return to_m(conn.Origin.Z)
+            except: continue
+        for conn in conns:
+            try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
+                if conn.Direction != FlowDirectionType.Bidirectional: continue
                 if not conn.IsConnected: continue
                 return to_m(conn.Origin.Z)
             except: continue
@@ -195,13 +208,22 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
     que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
     primeiro Pipe encontrado. Nao atravessa outros equipamentos (ex.: uma
     segunda bomba) pelo caminho. Retorna None se a rede nao alcancar
-    nenhum tubo nessa direcao."""
+    nenhum tubo nessa direcao.
+
+    Se nenhum conector bater exatamente com `direcoes_ini`, cai pra um
+    conector Bidirectional conectado - mesmo motivo/fallback de
+    get_cota_conector (familias que modelam sucção/recalque como
+    Bidirectional em vez de In/Out explicito)."""
     eid_ini = get_id(elem_ini)
     visitados = set([eid_ini])
     fila = deque()
-    for conn in get_conectores(elem_ini):
+    conns_partida = [c for c in get_conectores(elem_ini)
+                     if getattr(c, "Direction", None) in direcoes_ini]
+    if not conns_partida:
+        conns_partida = [c for c in get_conectores(elem_ini)
+                         if getattr(c, "Direction", None) == FlowDirectionType.Bidirectional]
+    for conn in conns_partida:
         try:
-            if conn.Direction not in direcoes_ini: continue
             if not conn.IsConnected: continue
             for ref in conn.AllRefs:
                 viz = ref.Owner

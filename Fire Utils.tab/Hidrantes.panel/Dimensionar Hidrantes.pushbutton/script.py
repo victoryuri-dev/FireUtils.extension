@@ -188,13 +188,26 @@ def get_cota_conector(elem, direcoes=None):
     Se `direcoes` for informado (RTI/bomba), usa o primeiro conector com
     essa Direction; senao (valvula do hidrante), prioriza um conector
     conectado e cai no primeiro conector que existir. None se nao
-    encontrar - sem nenhum fallback por geometria."""
+    encontrar - sem nenhum fallback por geometria.
+
+    Quando `direcoes` e informado e nenhum conector bate exatamente, cai
+    pra um conector Bidirectional conectado (2a passada) - algumas familias
+    de bomba/equipamento modelam sucção/recalque como Bidirectional em vez
+    de In/Out explicito, e um conector Bidirectional nao restringe o
+    sentido do fluxo, entao serve tanto pra pedido de In quanto de Out."""
     conns = get_conectores(elem)
     if direcoes is not None:
         for conn in conns:
             try:
                 if conn.ConnectorType == ConnectorType.Logical: continue
                 if conn.Direction not in direcoes: continue
+                if not conn.IsConnected: continue
+                return to_m(conn.Origin.Z)
+            except: continue
+        for conn in conns:
+            try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
+                if conn.Direction != FlowDirectionType.Bidirectional: continue
                 if not conn.IsConnected: continue
                 return to_m(conn.Origin.Z)
             except: continue
