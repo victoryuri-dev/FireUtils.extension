@@ -1,0 +1,5 @@
+title: Quantitativos
+tooltip: Coleta, grava e envia os quantitativos das medidas de segurança pro site
+author: Fire Utils
+layout:
+  - Gravar Quantitativos

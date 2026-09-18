@@ -22,8 +22,9 @@ próprio firedata.json — mesmo padrão ler-arquivo-inteiro → mesclar chave
 já usam.
 
 Uso:
-    from sync import enviar, buscar, buscar_norma, config_sync, salvar_config_sync
+    from sync import enviar, gravar_e_enviar, buscar, buscar_norma, config_sync, salvar_config_sync
     enviar(u"extintores", payload, projeto_dir)
+    path = gravar_e_enviar(u"sinalizacao", itens, projeto_dir, estruturaId=est_id)
     resultado, erro = buscar(u"listar_estruturas", projeto_dir)
     dados, erro = buscar_norma(u"MA", u"saida_emergencia")
 """
@@ -31,6 +32,7 @@ Uso:
 import io
 import os
 import json
+import datetime
 
 from family_error_utils import texto_erro
 
@@ -74,6 +76,39 @@ def salvar_config_sync(projeto_dir, **campos):
     dados[u"sync"] = sync
     with io.open(path, u"w", encoding=u"utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
+
+
+def gravar_e_enviar(medida, itens, projeto_dir, estruturaId=None):
+    """Grava `itens` na chave `medida` do firedata.json — mesclando com o
+    resto do arquivo, sem apagar outras medidas/config já gravadas — e
+    envia o mesmo payload pro site via enviar(), best-effort.
+
+    Centraliza aqui o padrão ler-arquivo-inteiro→mesclar chave→regravar
+    que cada `calc.py` de medida (extintores, sinalizacao, ...) repetia
+    individualmente antes; use isso em vez de duplicar a lógica de
+    gravação em cada módulo novo.
+
+    Retorna o caminho do firedata.json gravado.
+    """
+    payload = {
+        u"_timestamp": datetime.datetime.utcnow().strftime(u"%Y-%m-%dT%H:%M:%SZ"),
+        u"itens":      itens,
+    }
+
+    path = _cache_path(projeto_dir)
+    try:
+        with io.open(path, u"r", encoding=u"utf-8") as f:
+            dados = json.loads(f.read())
+    except Exception:
+        dados = {}
+
+    dados[medida] = payload
+    with io.open(path, u"w", encoding=u"utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+
+    enviar(medida, payload, projeto_dir, estruturaId=estruturaId)
+
+    return path
 
 
 def _forcar_tls12():

@@ -20,25 +20,14 @@ sync.config_sync) — o quantitativo já sai agregado por código de placa,
 somando todas as instâncias do modelo (ver agrupar_por_placa).
 """
 
-import json
-import os
-import io
-import datetime
-
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInCategory, StorageType,
 )
 
-from sync import enviar as enviar_sync, config_sync
-
-_CACHE_NOME = u"firedata.json"
+from sync import gravar_e_enviar, config_sync
 
 CATEGORIA_SINALIZACAO = BuiltInCategory.OST_SecurityDevices
 PARAM_CODIGO_PLACA    = u"Código da Placa"
-
-
-def _cache_path(projeto_dir):
-    return os.path.join(projeto_dir, _CACHE_NOME)
 
 
 def _get_id_value(eid):
@@ -127,25 +116,8 @@ def agrupar_por_placa(itens):
 def salvar_cache(itens_agrupados, projeto_dir):
     """Grava os itens de sinalização (já agregados por código — ver
     agrupar_por_placa) na chave 'sinalizacao' do firedata.json e envia
-    (best-effort) pro site, escopado pela estrutura vinculada no plugin
-    (ver sync.config_sync)."""
-    payload = {
-        u"_timestamp": datetime.datetime.utcnow().strftime(u"%Y-%m-%dT%H:%M:%SZ"),
-        u"itens":      itens_agrupados,
-    }
-
-    path = _cache_path(projeto_dir)
-    try:
-        with io.open(path, "r", encoding="utf-8") as f:
-            dados = json.loads(f.read())
-    except Exception:
-        dados = {}
-
-    dados[u"sinalizacao"] = payload
-    with io.open(path, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
-
+    pro site — ver sync.gravar_e_enviar (compartilhado com as demais
+    medidas de quantitativo, ver quantitativos_core.py), escopado pela
+    estrutura vinculada no plugin (ver sync.config_sync)."""
     estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-    enviar_sync(u"sinalizacao", payload, projeto_dir, estruturaId=estrutura_id)
-
-    return path
+    return gravar_e_enviar(u"sinalizacao", itens_agrupados, projeto_dir, estruturaId=estrutura_id)
