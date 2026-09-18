@@ -152,6 +152,11 @@ export default function App() {
         return;
       }
 
+      if (mensagem.type === BridgeMessageTypes.ABRIR_DASHBOARD) {
+        setAbaAtual("dashboard");
+        return;
+      }
+
       if (mensagem.type !== BridgeMessageTypes.LOAD_RESULT) return;
 
       const { carregadas: nomesCarregados = [], jaExistentes = [], erros = [] } = mensagem.payload || {};

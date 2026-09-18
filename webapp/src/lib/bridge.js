@@ -138,6 +138,14 @@
  *     abrir_secao_hidrantes) ao final de um dimensionamento bem-sucedido,
  *     pra o RT já cair direto nos resultados na dockpane, sem precisar
  *     abrir o painel e navegar até lá manualmente. Sem payload.
+ *
+ *   { type: "ABRIR_DASHBOARD" }
+ *     Python -> JS: manda a aba do Dashboard trocar pra "dashboard" (tela
+ *     de vínculo projeto/estrutura, ConectarProjeto/SelecionarEstrutura —
+ *     ver App.jsx) — enviada pelo botão "Vincular Projeto"
+ *     (family_loader_webview_forms.abrir_dashboard), pra abrir a dockpane
+ *     direto nessa tela sem passar pela Biblioteca de Famílias (aba
+ *     inicial padrão). Sem payload.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -154,6 +162,7 @@ export const BridgeMessageTypes = {
   GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
   ABRIR_HIDRANTES: "ABRIR_HIDRANTES",
+  ABRIR_DASHBOARD: "ABRIR_DASHBOARD",
 };
 
 function obterWebView() {

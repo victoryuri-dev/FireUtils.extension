@@ -495,3 +495,52 @@ def abrir_secao_hidrantes(uiapp):
         painel._postar_mensagem(u"ABRIR_HIDRANTES", {})
     except Exception as ex:
         _mlogger.warning(u"Falha ao abrir a dockpane na seção de hidrantes: {}".format(texto_erro(ex)))
+
+
+def abrir_dashboard(uiapp):
+    """
+    Mostra a dockpane (se estiver escondida) e manda o React ir direto pra
+    a aba "Dashboard" (mensagem ABRIR_DASHBOARD, ver webapp/src/lib/
+    bridge.js) — de onde o RT vincula o projeto Revit ativo a um projeto/
+    estrutura do site (ConectarProjeto/SelecionarEstrutura, ver App.jsx e
+    DashboardEstrutura.jsx). Chamada pelo botão "Vincular Projeto"
+    (Biblioteca.panel), próprio pra isso porque nem todo RT quer passar
+    pela Biblioteca de Famílias (aba inicial padrão) só pra chegar lá.
+
+    Ao contrário de abrir_secao_hidrantes (conveniência ao final de outro
+    comando, silenciosa), abrir o Dashboard É o propósito do clique nesse
+    botão — falhas aparecem em alert, como alternar_painel, em vez de
+    silenciosas.
+    """
+    if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb):
+        forms.alert(
+            u"O painel do Dashboard não foi registrado.\n\n"
+            u"Confira o output do pyRevit na inicialização da extensão — "
+            u"provavelmente falta o WebView2 SDK "
+            u"(Fire Utils.tab/lib/webview2_runtime/) ou o build do "
+            u"frontend (webapp/dist/).",
+            title=u"Fire Utils - Dashboard",
+            warn_icon=True,
+        )
+        return
+
+    if uiapp.ActiveUIDocument is None:
+        forms.alert(
+            u"Abra ou crie um projeto no Revit antes de abrir o Dashboard.",
+            title=u"Fire Utils - Dashboard",
+            warn_icon=True,
+        )
+        return
+
+    try:
+        painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
+        if not painel.IsShown():
+            painel.Show()
+        painel._postar_mensagem(u"ABRIR_DASHBOARD", {})
+    except Exception as ex:
+        forms.alert(
+            u"Não foi possível abrir o Dashboard agora ({}).\n\nTente "
+            u"novamente; se persistir, reinicie o Revit.".format(texto_erro(ex)),
+            title=u"Fire Utils - Dashboard",
+            warn_icon=True,
+        )
