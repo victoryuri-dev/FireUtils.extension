@@ -269,6 +269,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         PainelCarregadorFamiliasWeb._instancia_ativa = self
 
         self.fila_acoes = criar_fila_acoes()
+        self._acao_pendente = None
 
         if not os.path.isdir(_WEBAPP_DIST_DIR):
             self._erro_fatal(
@@ -420,6 +421,14 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             self._erro_fatal(
                 u"Falha ao carregar a página do Carregador de Famílias: {}".format(args.WebErrorStatus)
             )
+            return
+
+        # Se há uma ação pendente (ex.: ABRIR_DASHBOARD via abrir_dashboard()),
+        # envia agora que o WebView2 está pronto e a navegação completou.
+        if self._acao_pendente is not None:
+            acao = self._acao_pendente
+            self._acao_pendente = None
+            self._postar_mensagem(acao, {})
 
 
 # ---------------------------------------------------------------------------
@@ -534,6 +543,11 @@ def abrir_dashboard(uiapp):
     comando, silenciosa), abrir o Dashboard É o propósito do clique nesse
     botão — falhas aparecem em alert, como alternar_painel, em vez de
     silenciosas.
+
+    Armazena a ação como pendente em vez de postar imediatamente — garante
+    que o WebView2 já está pronto e a navegação completou antes de enviar
+    a mensagem, evitando que ela se perca se chegar antes do painel estar
+    completamente inicializado.
     """
     if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb):
         forms.alert(
@@ -557,9 +571,11 @@ def abrir_dashboard(uiapp):
 
     try:
         painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
+        painel_instancia = PainelCarregadorFamiliasWeb._instancia_ativa
+        if painel_instancia is not None:
+            painel_instancia._acao_pendente = u"ABRIR_DASHBOARD"
         if not painel.IsShown():
             painel.Show()
-        _postar_para_painel(u"ABRIR_DASHBOARD")
     except Exception as ex:
         forms.alert(
             u"Não foi possível abrir o Dashboard agora ({}).\n\nTente "
