@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 linha_limite_core.py — Fire Utils · lib/
-Inserir linha com limite: desenha sequência de linhas com preview
-em tempo real acompanhando o mouse (via threading).
-Valida comprimento máximo conforme os segmentos são criados.
-Último segmento é encurtado ao atingir limite.
+Lógica de "Inserir linha com limite": desenha uma sequência de Detail
+Lines (clique a clique) no estilo de linha escolhido pelo usuário,
+até um comprimento total máximo — ao ultrapassar o limite num segmento,
+esse segmento é ENCURTADO (não descartado) pra fechar exatamente no
+valor máximo, em vez de simplesmente recusar o clique.
+
+Detail Line (não Model Line): não depende de SketchPlane,
+funciona direto na vista ativa.
 """
 
-from Autodesk.Revit.DB import (
-    Line, DetailCurve, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType, XYZ
-)
+from Autodesk.Revit.DB import Line, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType
 from pyrevit import forms
-from System.Windows.Forms import Cursor
-import threading
-import time
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -55,14 +54,14 @@ def _criar_detail_line(doc, view, linha, graphics_style):
 
 def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m):
     """
-    Desenha linhas com preview em tempo real conforme mouse se move:
-    - Clica ponto inicial
-    - Linha acompanha mouse (preview via threading)
-    - Clica para confirmar ponto final
-    - Segmento criado, próximo preview começa
-    - Repete até ESC ou atingir limite máximo
+    Loop de picking: cada clique fecha um segmento (Detail Line) a partir
+    do ponto anterior, no estilo escolhido. ESC a qualquer momento termina.
 
-    Ao atingir limite, último segmento é encurtado automaticamente.
+    Ao ultrapassar comprimento_max_m, o segmento ATUAL é encurtado
+    (endpoint recalculado na mesma direção, à distância restante)
+    pra fechar exatamente no limite, e o desenho para sozinho.
+
+    Cada segmento é criado em transação PRÓPRIA para visibilidade imediata.
     """
     limite_interno = _metros_para_interno(comprimento_max_m)
 
@@ -76,123 +75,21 @@ def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m
 
     while True:
         restante_m = _interno_para_metros(limite_interno - total_interno)
-        preview_id = [None]  # usamos lista para poder modificar em thread
-        cursor_state = {'stop': False}
-        thread_obj = [None]
-
-        def monitor_preview():
-            """Thread que monitora mouse e desenha preview."""
-            try:
-                last_cursor_pos = None
-                cursor_pos_original = None
-
-                while not cursor_state['stop']:
-                    try:
-                        cursor_pos = Cursor.Position
-
-                        if cursor_pos_original is None:
-                            cursor_pos_original = cursor_pos
-
-                        if cursor_pos != last_cursor_pos:
-                            last_cursor_pos = cursor_pos
-
-                            # Estima ponto 3D baseado em movimento do mouse
-                            # Calibração: 100 pixels = 1 metro aproximadamente
-                            px_per_meter = 100.0
-
-                            delta_x = (cursor_pos.X - cursor_pos_original.X) / px_per_meter
-                            delta_y = (cursor_pos.Y - cursor_pos_original.Y) / px_per_meter
-
-                            ponto_fim_aprox = XYZ(
-                                ponto_atual.X + delta_x,
-                                ponto_atual.Y - delta_y,
-                                ponto_atual.Z
-                            )
-
-                            distancia = ponto_atual.DistanceTo(ponto_fim_aprox)
-
-                            if distancia > 1e-9:
-                                try:
-                                    if preview_id[0] is not None:
-                                        try:
-                                            doc.Delete(preview_id[0])
-                                        except:
-                                            pass
-                                        preview_id[0] = None
-
-                                    restante_interno = limite_interno - total_interno
-
-                                    if distancia > restante_interno:
-                                        vetor = ponto_fim_aprox - ponto_atual
-                                        direcao = vetor.Normalize()
-                                        ponto_fim = ponto_atual + direcao.Multiply(restante_interno)
-                                    else:
-                                        ponto_fim = ponto_fim_aprox
-
-                                    linha = Line.CreateBound(ponto_atual, ponto_fim)
-                                    with Transaction(doc, u"Preview") as t:
-                                        t.Start()
-                                        preview_curve = doc.Create.NewDetailCurve(view, linha)
-                                        try:
-                                            preview_curve.LineStyle = graphics_style
-                                        except:
-                                            pass
-                                        preview_id[0] = preview_curve.Id
-                                        t.Commit()
-                                except:
-                                    pass
-
-                        time.sleep(0.05)
-                    except:
-                        time.sleep(0.05)
-            except:
-                pass
 
         try:
-            msg = u"Mova o mouse para ver preview — {:.2f}m restantes (ESC para terminar)".format(restante_m)
-
-            # Inicia thread de monitoramento
-            thread_obj[0] = threading.Thread(target=monitor_preview)
-            thread_obj[0].daemon = True
-            thread_obj[0].start()
-
-            # Faz picking (bloqueante)
-            proximo_ponto = uidoc.Selection.PickPoint(msg)
-
-            # Para thread
-            cursor_state['stop'] = True
-            thread_obj[0].join(timeout=0.5)
-
+            proximo_ponto = uidoc.Selection.PickPoint(
+                u"Próximo ponto — faltam {:.2f} m (ESC para terminar)".format(restante_m)
+            )
         except Exception:
-            cursor_state['stop'] = True
-            if thread_obj[0] is not None:
-                thread_obj[0].join(timeout=0.5)
-            if preview_id[0] is not None:
-                try:
-                    doc.Delete(preview_id[0])
-                except:
-                    pass
-            break
-
-        # Remove preview
-        if preview_id[0] is not None:
-            try:
-                doc.Delete(preview_id[0])
-            except:
-                pass
-
-        if proximo_ponto is None:
             break
 
         vetor = proximo_ponto - ponto_atual
         comprimento_segmento = vetor.GetLength()
-
         if comprimento_segmento < 1e-9:
             continue
 
         restante_interno = limite_interno - total_interno
         excedeu = comprimento_segmento >= restante_interno
-
         if excedeu:
             direcao = vetor.Normalize()
             ponto_final = ponto_atual + direcao.Multiply(restante_interno)
