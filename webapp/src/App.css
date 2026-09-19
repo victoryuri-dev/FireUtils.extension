@@ -75,7 +75,7 @@
 }
 
 .loader-bar {
-  animation: loader-cascade 4.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation: loader-cascade 3.7s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 .loader-bar-3 {
@@ -91,25 +91,25 @@
 }
 
 /* Mesmo timing de cascata de antes (0 a 2.7s, só reescalado em % pra
-   caber num ciclo de 4.2s) + 1.5s de pausa parada no fim (64.29% a 100%)
+   caber num ciclo de 3.7s) + 1s de pausa parada no fim (72.97% a 100%)
    antes de repetir — sem a pausa, o loop ficava martelando sem descanso. */
 @keyframes loader-cascade {
   0% {
     transform: translateY(216px);
     opacity: 0;
   }
-  7.14% {
+  8.11% {
     opacity: 1;
   }
-  17.86% {
+  20.27% {
     transform: translateY(0);
   }
-  53.57% {
+  60.81% {
     transform: translateY(0);
     opacity: 1;
     animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4);
   }
-  64.29% {
+  72.97% {
     transform: translateY(-216px);
     opacity: 0;
   }
@@ -290,8 +290,8 @@
   cursor: default;
 }
 
-/* Configurações e Desconectar projeto — cinza por padrão, branco no hover
-   (diferente dos demais ícones da sidebar, que já são brancos). */
+/* Configurações — cinza por padrão, branco no hover (diferente dos demais
+   ícones da sidebar, que já são brancos). */
 .sidebar-item-neutro {
   color: var(--sidebar-icon-neutro);
 }
@@ -742,6 +742,19 @@
   overflow-y: auto;
   padding-right: 6px;
   animation: surgir 0.2s;
+}
+
+.dashboard-aviso-salvar {
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.dashboard-aviso-salvar-icone {
+  width: 40px;
+  height: 40px;
+  color: var(--text-3);
 }
 
 .dashboard-cabecalho-secao {

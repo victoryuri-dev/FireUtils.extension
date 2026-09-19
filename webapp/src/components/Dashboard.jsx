@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import Loader from "./Loader";
+import Icon from "./Icon";
+import saveIconSvg from "../assets/icons/save-icon.svg?raw";
 import { postToHost, BridgeMessageTypes } from "../lib/bridge";
 import { buscarProjeto } from "../lib/projectData";
 import { estruturasDoProjeto, dashboardEstrutura } from "../lib/projetoDados";
@@ -139,7 +141,8 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
 
   if (vinculo.docSalvo === false) {
     return (
-      <div className="dashboard-tela">
+      <div className="dashboard-tela dashboard-aviso-salvar">
+        <Icon svg={saveIconSvg} className="dashboard-aviso-salvar-icone" />
         <p className="vazio">Salve o projeto Revit (.rvt) antes de conectar um projeto.</p>
       </div>
     );

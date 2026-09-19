@@ -63,15 +63,16 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
         <button type="button" className="sidebar-item sidebar-item-neutro" disabled title="Configurações (em breve)">
           <Icon svg={configuracoesIconSvg} title="Configurações" />
         </button>
-        <button
-          type="button"
-          className="sidebar-item sidebar-item-neutro"
-          disabled={!projetoVinculado}
-          onClick={onDesconectar}
-          title={projetoVinculado ? "Desconectar projeto" : "Nenhum projeto conectado"}
-        >
-          <Icon svg={unlinkIconSvg} title="Desconectar projeto" />
-        </button>
+        {projetoVinculado && (
+          <button
+            type="button"
+            className="sidebar-item"
+            onClick={onDesconectar}
+            title="Vincular projeto"
+          >
+            <Icon svg={unlinkIconSvg} title="Vincular projeto" />
+          </button>
+        )}
         <div className="sidebar-avatar-wrap" ref={menuRef}>
           <button
             type="button"
