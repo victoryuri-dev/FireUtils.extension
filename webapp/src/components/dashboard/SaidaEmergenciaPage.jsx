@@ -244,9 +244,9 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
           {erro ? (
             <p className="vazio">{erro}</p>
           ) : !seNorma ? (
-            <p className="vazio vazio-carregando">
-              <Loader size={18} /> Carregando dados normativos...
-            </p>
+            <div className="tela-carregando">
+              <Loader size={40} />
+            </div>
           ) : pavimentos.length === 0 ? (
             <p className="vazio">Nenhum pavimento cadastrado no site para esta estrutura.</p>
           ) : (

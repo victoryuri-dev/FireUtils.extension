@@ -134,7 +134,7 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
   }, [estado.estruturaId]);
 
   if (!vinculo) {
-    return <p className="vazio vazio-carregando"><Loader size={14} /> Carregando...</p>;
+    return <div className="tela-carregando"><Loader size={40} /></div>;
   }
 
   if (vinculo.docSalvo === false) {
@@ -146,7 +146,7 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
   }
 
   if (estado.carregando && !estado.linha) {
-    return <p className="vazio vazio-carregando"><Loader size={14} /> Carregando projeto...</p>;
+    return <div className="tela-carregando"><Loader size={40} /></div>;
   }
 
   if (estado.erro) {

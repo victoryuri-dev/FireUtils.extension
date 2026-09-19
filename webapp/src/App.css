@@ -673,13 +673,17 @@
   margin-top: 20px;
 }
 
-/* Variante de .vazio pros estados de carregamento (não os de "nada
-   encontrado") — mesmo texto, só com o Loader ao lado. */
-.vazio-carregando {
+/* Carregamento de tela inteira (uma seção/página ainda sem conteúdo) — só
+   a marca animada, sem texto nenhum do lado ("Carregando...", etc). É
+   proposital: reforça a marca em qualquer momento de espera em vez de
+   competir com um texto genérico. Nada a ver com os estados de "nada
+   encontrado" (esses continuam em .vazio, só texto). */
+.tela-carregando {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  padding: 60px 0;
+  color: var(--text-3);
 }
 
 /* Botões de ação — só aparecem quando há alguma família selecionada;

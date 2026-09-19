@@ -358,9 +358,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       </div>
 
       {carregando && !resposta && (
-        <p className="vazio vazio-carregando">
-          <Loader size={18} /> Carregando...
-        </p>
+        <div className="tela-carregando">
+          <Loader size={40} />
+        </div>
       )}
 
       {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}

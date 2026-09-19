@@ -65,9 +65,9 @@ export default function ConectarProjeto({ onSelecionar }) {
 
       {erro && <p className="vazio">Não foi possível buscar os projetos: {erro}</p>}
       {!erro && projetos === null && (
-        <p className="vazio vazio-carregando">
-          <Loader size={14} /> Buscando projetos...
-        </p>
+        <div className="tela-carregando">
+          <Loader size={40} />
+        </div>
       )}
       {!erro && projetos && projetos.length === 0 && (
         <p className="vazio">Nenhum projeto encontrado{busca ? " com esse filtro" : ""}.</p>
