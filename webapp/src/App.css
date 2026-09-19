@@ -75,7 +75,7 @@
 }
 
 .loader-bar {
-  animation: loader-cascade 1.75s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  animation: loader-cascade 4.1s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
 .loader-bar-3 {
@@ -90,28 +90,28 @@
   animation-delay: 0.28s;
 }
 
-/* Ordem invertida: parte da logo parada (0%), some rapido pra cima
-   (0% -> 20%, 0.35s), reaparece de baixo quase sem intervalo (22.86% ->
-   42.86%, 0.35s, só 0.05s de "salto" invisivel entre as duas) e segura
-   parada na logo ate fechar o ciclo de 1.75s — os ultimos 57.14%
-   (42.86% a 100%) são exatamente 1s parada, o delay pedido entre uma
-   animação e a próxima. */
+/* Logo parada (0%), some pra cima suavemente (0% -> 12.2%, 0.5s, ease-in-out
+   em vez da curva mais brusca de antes), reaparece de baixo quase sem
+   intervalo (14.63% -> 26.83%, 0.5s, só 0.1s de "salto" invisível entre as
+   duas) e segura parada na logo até fechar o ciclo de 4.1s — os últimos
+   73.17% (26.83% a 100%) são exatamente 3s parada, o delay pedido entre
+   um looping de subir/descer e o próximo. */
 @keyframes loader-cascade {
   0% {
     transform: translateY(0);
     opacity: 1;
-    animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4);
+    animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
   }
-  20% {
+  12.2% {
     transform: translateY(-216px);
     opacity: 0;
   }
-  22.86% {
+  14.63% {
     transform: translateY(216px);
     opacity: 0;
     animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
-  42.86% {
+  26.83% {
     transform: translateY(0);
     opacity: 1;
   }

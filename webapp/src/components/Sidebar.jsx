@@ -22,11 +22,11 @@ const ITENS_NAV = [
 ];
 
 // Duração até a barra de maior delay (loader-bar-1: 0.28s) terminar de
-// sumir pra cima e reaparecer de baixo (0.75s desse ponto, keyframe de
+// sumir pra cima e reaparecer de baixo (1.1s desse ponto, keyframe de
 // loader-cascade em App.css) — depois disso a marca já está de volta à
-// posição normal, então some pra logo estática sem esperar o 1s de pausa
-// parada do loop (que não faz sentido num hover único).
-const DURACAO_LOGO_HOVER_MS = 1030;
+// posição normal, então volta pra logo estática sem esperar os 3s de
+// pausa parada do loop (que não fazem sentido num hover único).
+const DURACAO_LOGO_HOVER_MS = 1380;
 
 export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar, email }) {
   const [menuAberto, setMenuAberto] = useState(false);
