@@ -142,7 +142,14 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
     return (
       <div className="dashboard-tela dashboard-aviso-salvar">
         <img src={saveIconPng} alt="" className="dashboard-aviso-salvar-icone" />
-        <p className="vazio">Salve o projeto Revit (.rvt) antes de conectar um projeto.</p>
+        <p className="dashboard-aviso-salvar-texto">
+          Salve o projeto Revit
+          <br />
+          antes de conectar.
+        </p>
+        <button type="button" className="se-botao" onClick={() => window.location.reload()}>
+          Recarregar página
+        </button>
       </div>
     );
   }
