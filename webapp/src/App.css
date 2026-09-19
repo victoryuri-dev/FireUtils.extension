@@ -249,11 +249,29 @@
   margin-bottom: 28px;
 }
 
+/* Sem isso, o <span class="icon"> (Icon.jsx) não tinha tamanho explícito
+   nenhum aqui — só o pai .sidebar-logo é que tem 30x30 — então a logo
+   estática acabava renderizando num tamanho diferente do Loader (que
+   força 30px via `size`), e o hover parecia "encolher" a marca antes de
+   animar. Com isso os dois ficam no mesmo box exato; o aspect ratio real
+   (65:84) é preservado sozinho pelo preserveAspectRatio padrão do SVG. */
+.sidebar-logo .icon {
+  width: 30px;
+  height: 30px;
+}
+
 /* Hover na logo da sidebar: toca a cascata do loader (mesma marca, animada)
    só UMA vez — não em loop como nas telas de carregamento — por isso
    sobrescreve animation-iteration-count aqui em vez de usar .loader-bar
    direto (ver Sidebar.jsx: troca pro <Loader/> no mouseEnter e volta pra
-   logo estática sozinho depois da cascata). */
+   logo estática sozinho depois da cascata). O !important é necessário pra
+   sobrescrever o width/height inline que o próprio Loader define via
+   `size` — sem isso o box não bateria exatamente com o da logo estática. */
+.sidebar-logo-loader {
+  width: 30px !important;
+  height: 30px !important;
+}
+
 .sidebar-logo-loader .loader-bar {
   animation-iteration-count: 1;
 }
