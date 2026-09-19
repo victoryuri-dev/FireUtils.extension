@@ -21,11 +21,12 @@ const ITENS_NAV = [
   { id: "saidas", label: "Saídas de Emergência", svg: exitIconSvg },
 ];
 
-// Duração real da cascata+desaparecimento de uma barra (a de maior delay,
-// loader-bar-1: 0.28s de delay + 2.7s até sumir de novo, no keyframe de
-// loader-cascade em App.css) — depois disso a marca volta a ficar estática,
-// sem esperar o resto da pausa do loop (que não faz sentido num hover único).
-const DURACAO_LOGO_HOVER_MS = 2980;
+// Duração até a barra de maior delay (loader-bar-1: 0.28s) terminar de
+// sumir pra cima e reaparecer de baixo (0.75s desse ponto, keyframe de
+// loader-cascade em App.css) — depois disso a marca já está de volta à
+// posição normal, então some pra logo estática sem esperar o 1s de pausa
+// parada do loop (que não faz sentido num hover único).
+const DURACAO_LOGO_HOVER_MS = 1030;
 
 export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar, email }) {
   const [menuAberto, setMenuAberto] = useState(false);
