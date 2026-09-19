@@ -60,7 +60,7 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
     <nav className="sidebar">
       <div className="sidebar-logo" onMouseEnter={aoPassarMouseNaLogo}>
         {logoAnimando ? (
-          <Loader size={30} className="sidebar-logo-loader" />
+          <Loader size={38} className="sidebar-logo-loader" />
         ) : (
           <Icon svg={logoSvg} title="Fire Utils" />
         )}

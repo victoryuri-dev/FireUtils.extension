@@ -233,7 +233,7 @@
 
 /* Sidebar --------------------------------------------------------------- */
 .sidebar {
-  width: 64px;
+  width: 58px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
   display: flex;
@@ -243,21 +243,22 @@
 }
 
 .sidebar-logo {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
   color: white;
   margin-bottom: 28px;
 }
 
 /* Sem isso, o <span class="icon"> (Icon.jsx) não tinha tamanho explícito
-   nenhum aqui — só o pai .sidebar-logo é que tem 30x30 — então a logo
+   nenhum aqui — só o pai .sidebar-logo é que tem o tamanho — então a logo
    estática acabava renderizando num tamanho diferente do Loader (que
-   força 30px via `size`), e o hover parecia "encolher" a marca antes de
-   animar. Com isso os dois ficam no mesmo box exato; o aspect ratio real
-   (65:84) é preservado sozinho pelo preserveAspectRatio padrão do SVG. */
+   força o mesmo tamanho via `size`), e o hover parecia "encolher" a marca
+   antes de animar. Com isso os dois ficam no mesmo box exato; o aspect
+   ratio real (65:84) é preservado sozinho pelo preserveAspectRatio padrão
+   do SVG. */
 .sidebar-logo .icon {
-  width: 30px;
-  height: 30px;
+  width: 38px;
+  height: 38px;
 }
 
 /* Hover na logo da sidebar: toca a cascata do loader (mesma marca, animada)
@@ -268,8 +269,8 @@
    sobrescrever o width/height inline que o próprio Loader define via
    `size` — sem isso o box não bateria exatamente com o da logo estática. */
 .sidebar-logo-loader {
-  width: 30px !important;
-  height: 30px !important;
+  width: 38px !important;
+  height: 38px !important;
 }
 
 .sidebar-logo-loader .loader-bar {
@@ -307,8 +308,8 @@
 }
 
 .sidebar-item .icon {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 
 .sidebar-item.ativa {
@@ -334,6 +335,11 @@
   border-radius: 50%;
   background: var(--sidebar-avatar-bg);
   color: var(--sidebar-avatar-icon);
+}
+
+.sidebar-item-avatar .icon {
+  width: 16px;
+  height: 16px;
 }
 
 /* Popover do avatar (email + Sair) ---------------------------------------- */
