@@ -10,24 +10,14 @@ Uma instância é considerada extintor quando:
   - o parâmetro "Capacidade Extintora" (instância ou tipo) está preenchido.
 """
 
-import json
-import os
-import io
 import re
-import datetime
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, ElementId, StorageType,
 )
 
 from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
-from sync import enviar as enviar_sync, config_sync
-
-_CACHE_NOME = u"firedata.json"
-
-
-def _cache_path(projeto_dir):
-    return os.path.join(projeto_dir, _CACHE_NOME)
+from sync import gravar_e_enviar, config_sync
 
 
 def _get_id_value(eid):
@@ -132,24 +122,8 @@ def coletar_itens(doc):
 
 
 def salvar_cache(itens, projeto_dir):
-    """Grava os itens de extintor na chave 'extintores' do firedata.json."""
-    payload = {
-        u"_timestamp": datetime.datetime.utcnow().strftime(u"%Y-%m-%dT%H:%M:%SZ"),
-        u"itens":      itens,
-    }
-
-    path = _cache_path(projeto_dir)
-    try:
-        with io.open(path, "r", encoding="utf-8") as f:
-            dados = json.loads(f.read())
-    except Exception:
-        dados = {}
-
-    dados[u"extintores"] = payload
-    with io.open(path, "w", encoding="utf-8") as f:
-        json.dump(dados, f, ensure_ascii=False, indent=2)
-
+    """Grava os itens de extintor na chave 'extintores' do firedata.json e
+    envia pro site — ver sync.gravar_e_enviar (compartilhado com as demais
+    medidas de quantitativo, ver quantitativos_core.py)."""
     estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-    enviar_sync(u"extintores", payload, projeto_dir, estruturaId=estrutura_id)
-
-    return path
+    return gravar_e_enviar(u"extintores", itens, projeto_dir, estruturaId=estrutura_id)

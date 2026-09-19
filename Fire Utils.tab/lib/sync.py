@@ -3,7 +3,8 @@
 sync.py — Fire Utils · lib/
 Ponte HTTP com o site (Supabase) nos dois sentidos:
   - enviar(): push best-effort do que o plugin calculou (extintores,
-    hidrantes, saidas_emergencia) pra Edge Function `revit-sync`.
+    hidrantes, saidas_emergencia, sinalizacao) pra Edge Function
+    `revit-sync`.
   - buscar(): pull sob demanda de dados cadastrados no site (estruturas,
     ocupação/área por pavimento) via Edge Function `site-sync`.
   - buscar_norma(): pull da base normativa central (tabela `normas_dados`),
@@ -21,8 +22,9 @@ próprio firedata.json — mesmo padrão ler-arquivo-inteiro → mesclar chave
 já usam.
 
 Uso:
-    from sync import enviar, buscar, buscar_norma, config_sync, salvar_config_sync
-    enviar(u"extintores", payload, projeto_dir)
+    from sync import enviar, gravar_e_enviar, buscar, buscar_norma, config_sync, salvar_config_sync
+    ok, motivo = enviar(u"extintores", payload, projeto_dir)
+    path, ok, motivo = gravar_e_enviar(u"sinalizacao", itens, projeto_dir, estruturaId=est_id)
     resultado, erro = buscar(u"listar_estruturas", projeto_dir)
     dados, erro = buscar_norma(u"MA", u"saida_emergencia")
 """
@@ -30,6 +32,7 @@ Uso:
 import io
 import os
 import json
+import datetime
 
 from family_error_utils import texto_erro
 
@@ -38,7 +41,7 @@ _BUSCA_URL  = u"https://lngvagifcukglgdjildw.supabase.co/functions/v1/site-sync"
 _NORMAS_URL = u"https://lngvagifcukglgdjildw.supabase.co/rest/v1/normas_dados"
 _ANON_KEY   = u"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ZhZ2lmY3VrZ2xnZGppbGR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NDUwNzksImV4cCI6MjEwMjMyMTA3OX0.hApUcA5wunyv21JdL8XAVVD1TnGU9oRvyew1uCIlZRw"
 _CACHE_NOME = u"firedata.json"
-_MEDIDAS_VALIDAS = (u"extintores", u"hidrantes", u"saidas_emergencia")
+_MEDIDAS_VALIDAS = (u"extintores", u"hidrantes", u"saidas_emergencia", u"sinalizacao")
 
 
 def _cache_path(projeto_dir):
@@ -73,6 +76,41 @@ def salvar_config_sync(projeto_dir, **campos):
     dados[u"sync"] = sync
     with io.open(path, u"w", encoding=u"utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
+
+
+def gravar_e_enviar(medida, itens, projeto_dir, estruturaId=None):
+    """Grava `itens` na chave `medida` do firedata.json — mesclando com o
+    resto do arquivo, sem apagar outras medidas/config já gravadas — e
+    envia o mesmo payload pro site via enviar(), best-effort.
+
+    Centraliza aqui o padrão ler-arquivo-inteiro→mesclar chave→regravar
+    que cada `calc.py` de medida (extintores, sinalizacao, ...) repetia
+    individualmente antes; use isso em vez de duplicar a lógica de
+    gravação em cada módulo novo.
+
+    Retorna (path, ok, motivo) — path é o firedata.json gravado (a
+    gravação local sempre acontece, mesmo se o envio falhar); ok/motivo
+    vêm direto de enviar() (ver ali o que cada um significa).
+    """
+    payload = {
+        u"_timestamp": datetime.datetime.utcnow().strftime(u"%Y-%m-%dT%H:%M:%SZ"),
+        u"itens":      itens,
+    }
+
+    path = _cache_path(projeto_dir)
+    try:
+        with io.open(path, u"r", encoding=u"utf-8") as f:
+            dados = json.loads(f.read())
+    except Exception:
+        dados = {}
+
+    dados[medida] = payload
+    with io.open(path, u"w", encoding=u"utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+
+    ok, motivo = enviar(medida, payload, projeto_dir, estruturaId=estruturaId)
+
+    return path, ok, motivo
 
 
 def _forcar_tls12():
@@ -192,30 +230,38 @@ def _get_json(url):
 def enviar(medida, payload, projeto_dir, estruturaId=None):
     """Envia `payload` pra Edge Function revit-sync, best-effort.
 
-    `estruturaId` é obrigatório pro site pra 'extintores' e
-    'saidas_emergencia' (o site resolve a estrutura por esse id, não mais
-    por nome) — passe o valor salvo em config_sync(projeto_dir). Pra
+    `estruturaId` é obrigatório pro site pra 'extintores', 'saidas_emergencia'
+    e 'sinalizacao' (o site resolve a estrutura por esse id, não mais por
+    nome) — passe o valor salvo em config_sync(projeto_dir). Pra
     'hidrantes' não deve ser passado: é a única medida que fica geral,
     compartilhada entre todas as estruturas do projeto.
 
-    Nunca lança exceção nem retorna nada útil pro chamador — qualquer
-    falha (sem projeto vinculado, sem rede, timeout, erro do servidor,
-    estruturaId desatualizado) é silenciosamente ignorada, porque o
-    firedata.json local já foi gravado antes desta chamada e continua
-    sendo a fonte de verdade offline.
+    Nunca lança exceção — qualquer falha (sem projeto vinculado, sem
+    rede, timeout, erro do servidor, estruturaId desatualizado) é
+    tratada aqui dentro, porque o firedata.json local já foi gravado
+    antes desta chamada e continua sendo a fonte de verdade offline.
+
+    Retorna (ok, motivo): `ok` é True só quando o servidor confirmou o
+    envio; `motivo` é None nesse caso, ou uma mensagem curta explicando
+    por que não foi (útil pra quem quiser reportar o status ao usuário —
+    ver quantitativos_core.py). Quem ignora o retorno (hidrantes/calc.py,
+    saidas/calc.py) continua funcionando exatamente como antes.
     """
     if medida not in _MEDIDAS_VALIDAS:
-        return
+        return False, u"medida inválida: {}".format(medida)
     projeto_id = config_sync(projeto_dir).get(u"projetoId")
     if not projeto_id:
-        return
+        return False, u"Nenhum projeto vinculado a este arquivo Revit — vincule pelo Dashboard (dockpane)."
     corpo = {u"projetoId": projeto_id, u"medida": medida, u"payload": payload}
     if estruturaId:
         corpo[u"estruturaId"] = estruturaId
     try:
-        _post_json(_SYNC_URL, corpo)
-    except Exception:
-        pass
+        resultado, erro = _post_json(_SYNC_URL, corpo)
+    except Exception as ex:
+        return False, u"Falha de rede: {}".format(texto_erro(ex))
+    if erro:
+        return False, erro
+    return True, None
 
 
 def buscar(acao, projeto_dir, **params):
