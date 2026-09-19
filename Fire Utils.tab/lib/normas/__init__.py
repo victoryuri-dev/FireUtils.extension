@@ -27,8 +27,16 @@ ETOS.FireUtils e src/lib/normasRemote.js lá), com cache em memória
 (por sessão do Revit) e em disco (entre sessões, offline) por cima disso.
 Os módulos locais (normas/<UF>/saidas.py) viram só o fallback de última
 instância — usados quando não há rede E não há cache em disco ainda (ex.:
-instalação nova, nunca conectou). "hidrantes" ainda não foi migrado pra
-base central, então continua vindo sempre do módulo local.
+instalação nova, nunca conectou).
+
+"hidrantes" segue o mesmo mecanismo, mas só pras constantes de cálculo
+hidráulico (v_max_*, npshd_*, tolerancia_equilibrio_mca,
+hidrantes_simultaneos, hazen_c — ver _CHAVES_HIDRANTES abaixo), que são o
+mesmo payload que src/data/normas/MA/hidrantes.js (ETOS.FireUtils) já lê
+do Supabase. "tipos"/"tipos_ref" (Tabela 2, derivada de hidrantes/db.py —
+ligada aos componentes de família do Revit) continuam vindo só do módulo
+local (normas/<UF>/hidrantes.py) — não têm o mesmo formato do payload do
+site, então não é uma migração 1:1 como as demais chaves.
 """
 
 import os
@@ -51,13 +59,35 @@ _CACHE_NORMAS = os.path.join(
 )
 
 # Chaves do domínio "saídas" que a base central pode sobrescrever no
-# ESTADO local — "hidrantes" nunca entra aqui porque ainda não foi
-# migrado pra base central (ver Fire Utils.tab/lib/normas/MA/hidrantes.py).
+# ESTADO local.
 _CHAVES_SAIDAS = (
     u"sigla", u"nome", u"corpo", u"norma_ocupacoes", u"norma_saidas",
     u"ocupacoes", u"tabela", u"notas", u"larguras_minimas",
     u"distancias_maximas", u"_pendencias",
 )
+
+# Chaves do domínio "hidrantes" (dentro de estado["hidrantes"]) que a base
+# central pode sobrescrever — só as constantes de cálculo hidráulico, não
+# "tipos"/"tipos_ref" (Tabela 2, ligada aos componentes de família do
+# Revit via hidrantes/db.py — sem payload equivalente no Supabase ainda).
+_CHAVES_HIDRANTES = (
+    u"v_max_tubulacao", u"v_max_tubulacao_ref",
+    u"v_max_succao_positiva", u"v_max_succao_negativa", u"v_max_succao_ref",
+    u"tolerancia_equilibrio_mca", u"tolerancia_equilibrio_mca_ref",
+    u"npshd_fator_vazao", u"npshd_ref",
+    u"hidrantes_simultaneos", u"hidrantes_simultaneos_ref",
+)
+
+# hazen_c local usa apelidos curtos (ff_sem_revest, ff_revest_cimento) que
+# o payload da base central (materiais_tubulacao — mesmo array que o site
+# consome, ver src/data/normas/MA/hidrantes.js:MATERIAIS_TUBULACAO) não
+# usa (ferro_fundido_sem_revest, ferro_fundido_com_cimento). Convertido de
+# volta pro apelido local aqui, sem mudar a chave que o motor de cálculo
+# ("Dimensionar Hidrantes"/script.py) já indexa (hazen_c[u"galvanizado"]).
+_ALIAS_MATERIAL_TUBULACAO = {
+    u"ferro_fundido_sem_revest":  u"ff_sem_revest",
+    u"ferro_fundido_com_cimento": u"ff_revest_cimento",
+}
 
 
 def salvar_estado_ativo(sigla):
@@ -106,6 +136,7 @@ def _gravar_cache_normas(uf, sistema, dados):
 # buscado nesta sessão; False = já tentou e não achou nem rede nem cache
 # em disco (também não tenta de novo até a sessão do Revit reiniciar).
 _SESSION_CACHE = {}
+_SESSION_CACHE_HIDRANTES = {}  # separado de _SESSION_CACHE — sistema diferente, mesmo uf
 
 
 def _buscar_saidas(uf):
@@ -133,12 +164,49 @@ def _buscar_saidas(uf):
     return dados
 
 
+def _hazen_c_da_base_central(materiais_tubulacao):
+    """Reconstroi o dict hazen_c (apelido local -> fator C) a partir do
+    array materiais_tubulacao vindo da base central — ver
+    _ALIAS_MATERIAL_TUBULACAO acima."""
+    hazen_c = {}
+    for item in materiais_tubulacao or []:
+        chave = item.get(u"key")
+        fator = item.get(u"fatorC")
+        if not chave or fator is None:
+            continue
+        hazen_c[_ALIAS_MATERIAL_TUBULACAO.get(chave, chave)] = fator
+    return hazen_c
+
+
+def _buscar_hidrantes(uf):
+    """Mesmo esquema de _buscar_saidas, pro sistema 'hidrantes' (mesma
+    linha de normas_dados que src/data/normas/MA/hidrantes.js, no site,
+    já lê)."""
+    if uf in _SESSION_CACHE_HIDRANTES:
+        return _SESSION_CACHE_HIDRANTES[uf] or None
+
+    from sync import buscar_norma
+
+    dados, erro = buscar_norma(uf, u"hidrantes")
+    if dados:
+        _gravar_cache_normas(uf, u"hidrantes", dados)
+        _SESSION_CACHE_HIDRANTES[uf] = dados
+        return dados
+
+    dados = _ler_cache_normas().get(uf, {}).get(u"hidrantes")
+    _SESSION_CACHE_HIDRANTES[uf] = dados or False
+    return dados
+
+
 def get_estado(sigla):
     """Retorna o dict ESTADO para a sigla fornecida, ou None se não encontrado.
 
-    As chaves de saídas de emergência vêm preferencialmente da base
-    normativa central (com cache em memória/disco); "hidrantes" e qualquer
-    chave ausente na resposta central continuam vindo do módulo local.
+    As chaves de saídas de emergência, e as constantes de cálculo
+    hidráulico de hidrantes (_CHAVES_HIDRANTES + hazen_c), vêm
+    preferencialmente da base normativa central (com cache em
+    memória/disco); qualquer chave ausente na resposta central (incluindo
+    "tipos"/"tipos_ref" de hidrantes, nunca migrados) continua vindo do
+    módulo local.
     """
     sigla = sigla.upper()
     if sigla == u"MA":
@@ -154,6 +222,19 @@ def get_estado(sigla):
         for chave in _CHAVES_SAIDAS:
             if chave in remoto:
                 estado[chave] = remoto[chave]
+
+    remoto_hid = _buscar_hidrantes(sigla)
+    if remoto_hid and estado.get(u"hidrantes"):
+        hidrantes = dict(estado[u"hidrantes"])
+        for chave in _CHAVES_HIDRANTES:
+            if chave in remoto_hid:
+                hidrantes[chave] = remoto_hid[chave]
+        hazen_c_remoto = _hazen_c_da_base_central(remoto_hid.get(u"materiais_tubulacao"))
+        if hazen_c_remoto:
+            hidrantes[u"hazen_c"] = dict(hidrantes.get(u"hazen_c") or {})
+            hidrantes[u"hazen_c"].update(hazen_c_remoto)
+        estado[u"hidrantes"] = hidrantes
+
     return estado
 
 

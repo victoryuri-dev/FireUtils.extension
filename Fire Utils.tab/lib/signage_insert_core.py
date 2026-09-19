@@ -173,7 +173,7 @@ def _sinalizar_tipo(doc, tipo, output):
     if familia is None:
         output.print_md(
             u"**{}** — a família da placa ainda não está no projeto. Abra "
-            u"a Biblioteca de Famílias (dockpane) e carregue-a antes de "
+            u"o FireUtils (dockpane) e carregue-a antes de "
             u"sinalizar este tipo.".format(tipo.rotulo))
         return
 

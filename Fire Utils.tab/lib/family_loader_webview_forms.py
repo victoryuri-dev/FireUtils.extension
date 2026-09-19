@@ -253,7 +253,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
     panel_id = u"9f2f6d4a-9d63-4d3b-8c2a-9b6f8b6a1c7e"
     panel_source = _XAML_PATH
-    panel_title = u"Fire Utils — Biblioteca de Famílias"
+    panel_title = u"FireUtils"
 
     def __init__(self):
         forms.WPFPanel.__init__(self)
@@ -310,7 +310,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         print(u"[ERRO] {}".format(mensagem))
         forms.alert(
             mensagem,
-            title=u"Fire Utils - Biblioteca de Famílias",
+            title=u"FireUtils",
             warn_icon=True,
         )
 
@@ -434,7 +434,7 @@ def alternar_painel(uiapp):
             u"provavelmente falta o WebView2 SDK "
             u"(Fire Utils.tab/lib/webview2_runtime/) ou o build do "
             u"frontend (webapp/dist/).",
-            title=u"Fire Utils - Biblioteca de Famílias",
+            title=u"FireUtils",
             warn_icon=True,
         )
         return
@@ -443,7 +443,7 @@ def alternar_painel(uiapp):
         forms.alert(
             u"Abra ou crie um projeto no Revit antes de abrir o Carregador "
             u"de Famílias.",
-            title=u"Fire Utils - Biblioteca de Famílias",
+            title=u"FireUtils",
             warn_icon=True,
         )
         return
@@ -459,6 +459,6 @@ def alternar_painel(uiapp):
             u"Não foi possível abrir o painel do Carregador de Famílias "
             u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
             u"Revit.".format(texto_erro(ex)),
-            title=u"Fire Utils - Biblioteca de Famílias",
+            title=u"FireUtils",
             warn_icon=True,
         )

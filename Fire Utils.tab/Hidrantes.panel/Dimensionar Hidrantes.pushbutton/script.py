@@ -56,6 +56,7 @@ from hidrantes.calc import (
     METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
     COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
 )
+from hidrantes.rede import get_diametro_no_trecho
 from hidrantes.resultado_ui import (
     mostrar_bloqueio_velocidade, mostrar_bloqueio_hidrante,
     mostrar_bloqueio_equilibrio, mostrar_resultado_ok,
@@ -132,37 +133,6 @@ def get_comprimento(pipe):
         return to_m(p.AsDouble()) if p else 0.0
     except: return 0.0
 
-def get_diametro(elem):
-    """
-    Diâmetro NOMINAL (DN) do elemento — não o diâmetro interno real medido
-    pelo schedule/material. Ex.: um tubo DN 65 pode ter diâmetro interno
-    de 68,8 mm; o cálculo (Jun, J, V) usa o nominal, como no dimensionamento
-    de referência. RBS_PIPE_DIAMETER_PARAM é o parâmetro "Diâmetro" do tubo
-    (o tamanho nominal da lista de segmentos/tipos de tubo do Revit).
-
-    Para um Pipe o diâmetro TEM que ser lido com sucesso: um fallback
-    silencioso aqui faria dois tubos de tamanhos diferentes caírem no
-    mesmo valor "adivinhado" e o dimensionamento perderia a diferença
-    real de velocidade entre eles sem avisar. Por isso lança erro em vez
-    de chutar — o chamador mostra qual elemento é. Só um acessório
-    (FamilyInstance sem "Diâmetro" cadastrado, ex.: conexão atípica) usa
-    o diâmetro interno e, na falta dele, um valor padrão.
-    """
-    try:
-        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM)
-        if p and p.AsDouble() > 0:
-            return to_m(p.AsDouble())
-    except Exception: pass
-    if isinstance(elem, Pipe):
-        raise ValueError(
-            u"Não foi possível ler o diâmetro nominal do tubo ID {} "
-            u"(parâmetro 'Diâmetro' ausente ou zerado). Verifique o tipo "
-            u"de tubo/segmento desse trecho no Revit.".format(elem.Id))
-    try:
-        p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
-        return to_m(p.AsDouble()) if p and p.AsDouble() > 0 else 0.065
-    except Exception: return 0.065
-
 def get_leq(elem):
     try:
         p = elem.LookupParameter(u"Perda de Carga")
@@ -218,13 +188,26 @@ def get_cota_conector(elem, direcoes=None):
     Se `direcoes` for informado (RTI/bomba), usa o primeiro conector com
     essa Direction; senao (valvula do hidrante), prioriza um conector
     conectado e cai no primeiro conector que existir. None se nao
-    encontrar - sem nenhum fallback por geometria."""
+    encontrar - sem nenhum fallback por geometria.
+
+    Quando `direcoes` e informado e nenhum conector bate exatamente, cai
+    pra um conector Bidirectional conectado (2a passada) - algumas familias
+    de bomba/equipamento modelam sucção/recalque como Bidirectional em vez
+    de In/Out explicito, e um conector Bidirectional nao restringe o
+    sentido do fluxo, entao serve tanto pra pedido de In quanto de Out."""
     conns = get_conectores(elem)
     if direcoes is not None:
         for conn in conns:
             try:
                 if conn.ConnectorType == ConnectorType.Logical: continue
                 if conn.Direction not in direcoes: continue
+                if not conn.IsConnected: continue
+                return to_m(conn.Origin.Z)
+            except: continue
+        for conn in conns:
+            try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
+                if conn.Direction != FlowDirectionType.Bidirectional: continue
                 if not conn.IsConnected: continue
                 return to_m(conn.Origin.Z)
             except: continue
@@ -494,12 +477,20 @@ if _chaves_erro:
 dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
 # --- Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha ---
+def _diametro_fn(chave_trecho):
+    # Cada trecho tem seu próprio conjunto de ElementId — um acessório sem
+    # diâmetro próprio confiável (get_diametro_no_trecho) usa o Pipe
+    # vizinho DESTE trecho, nunca de outro (ex.: o ramal de um hidrante
+    # diferente, ou o desvio de uma Tê de redução que sai do trecho).
+    ids_no_trecho = set(get_id(e) for e in trechos_elems[chave_trecho])
+    return lambda e, _ids=ids_no_trecho: get_diametro_no_trecho(e, _ids)
+
 try:
     trechos_data = {
-        "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, get_diametro, get_leq, get_nome, get_id),
-        "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, get_diametro, get_leq, get_nome, get_id),
-        "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
-        "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, get_diametro, get_leq, get_nome, get_id),
+        "t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id),
+        "t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id),
+        "t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id),
+        "t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id),
     }
 except ValueError as _e:
     forms.alert(_txt(_e), title="Fire Utils", warn_icon=True)
@@ -642,20 +633,25 @@ mostrar_resultado_ok(
 import datetime
 timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
 payload_hid = {
-    "res":           res,
-    "dados_sistema": dados_sistema,
-    "valor_sistema": valor_sistema,
-    "metodo":        metodo_calculo,
-    "cotas":         cotas,
-    "succao":        succao,
-    "verif_succao":  verif_succao,
-    "dados_succao":  dados_succao,
-    "verif_npshd":   verif_npshd,
-    "erro_npshd":    erro_npshd,
-    "j_succao_npsh": j_succao_npsh,
-    "C_HW":          C_HW,
-    "uf":            perfil.get(u"_uf_efetiva"),
-    "timestamp":     timestamp,
-    "_nome_projeto": doc.Title,
+    "res":              res,
+    "dados_sistema":    dados_sistema,
+    "valor_sistema":    valor_sistema,
+    "metodo":           metodo_calculo,
+    "cotas":            cotas,
+    "succao":           succao,
+    "verif_succao":     verif_succao,
+    "dados_succao":     dados_succao,
+    "verif_npshd":      verif_npshd,
+    "erro_npshd":       erro_npshd,
+    "j_succao_npsh":    j_succao_npsh,
+    "C_HW":             C_HW,
+    "uf":               perfil.get(u"_uf_efetiva"),
+    "timestamp":        timestamp,
+    "_nome_projeto":    doc.Title,
+    # Ranking COMPLETO de hidrantes (vazão simples, "Mapear Trechos") — não
+    # só H-01/H-02: o site usa isso pra mostrar a verificação de qual
+    # hidrante é de fato o mais desfavorável, comparado com os demais
+    # achados na rede (ver docstring de Mapear Trechos/script.py).
+    "ranking_hidrantes": payload_rotas.get(u"ranking"),
 }
 salvar_cache(payload_hid, projeto_dir)

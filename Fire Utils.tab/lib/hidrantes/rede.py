@@ -19,6 +19,7 @@ from collections import deque
 from Autodesk.Revit.DB import (
     FamilyInstance, BuiltInCategory, BuiltInParameter, ElementId,
     ConnectorType, LocationCurve, LocationPoint, UnitUtils,
+    FilteredElementCollector, FlowDirectionType,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe
 from System import Int64
@@ -106,6 +107,17 @@ def eh_valvula_hidrante(elem):
     except: return False
 
 
+def todas_valvulas_hidrante(doc):
+    """Todas as instâncias de 'Valvula para Hidrante' no projeto inteiro,
+    independente de estarem conectadas à rede de recalque - usado por
+    "Mapear Trechos" pra achar válvulas que existem no modelo mas nunca
+    foram alcançadas por percorre_rotas_hidrantes (sinal de que a rede
+    está quebrada em algum ponto antes delas, não só um galho morto sem
+    válvula nenhuma)."""
+    return [e for e in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements()
+            if eh_valvula_hidrante(e)]
+
+
 # ===========================================================================
 # Cotas — sempre lidas ao vivo pelos conectores nativos, nunca gravadas
 # ===========================================================================
@@ -115,13 +127,26 @@ def get_cota_conector(elem, direcoes=None):
     Se `direcoes` for informado (RTI/bomba), usa o primeiro conector com
     essa Direction; senao (valvula do hidrante), prioriza um conector
     conectado e cai no primeiro conector que existir. None se nao
-    encontrar - sem nenhum fallback por geometria."""
+    encontrar - sem nenhum fallback por geometria.
+
+    Quando `direcoes` e informado e nenhum conector bate exatamente, cai
+    pra um conector Bidirectional conectado (2a passada) - algumas familias
+    de bomba/equipamento modelam sucção/recalque como Bidirectional em vez
+    de In/Out explicito, e um conector Bidirectional nao restringe o
+    sentido do fluxo, entao serve tanto pra pedido de In quanto de Out."""
     conns = get_conectores(elem)
     if direcoes is not None:
         for conn in conns:
             try:
                 if conn.ConnectorType == ConnectorType.Logical: continue
                 if conn.Direction not in direcoes: continue
+                if not conn.IsConnected: continue
+                return to_m(conn.Origin.Z)
+            except: continue
+        for conn in conns:
+            try:
+                if conn.ConnectorType == ConnectorType.Logical: continue
+                if conn.Direction != FlowDirectionType.Bidirectional: continue
                 if not conn.IsConnected: continue
                 return to_m(conn.Origin.Z)
             except: continue
@@ -183,13 +208,22 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
     que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
     primeiro Pipe encontrado. Nao atravessa outros equipamentos (ex.: uma
     segunda bomba) pelo caminho. Retorna None se a rede nao alcancar
-    nenhum tubo nessa direcao."""
+    nenhum tubo nessa direcao.
+
+    Se nenhum conector bater exatamente com `direcoes_ini`, cai pra um
+    conector Bidirectional conectado - mesmo motivo/fallback de
+    get_cota_conector (familias que modelam sucção/recalque como
+    Bidirectional em vez de In/Out explicito)."""
     eid_ini = get_id(elem_ini)
     visitados = set([eid_ini])
     fila = deque()
-    for conn in get_conectores(elem_ini):
+    conns_partida = [c for c in get_conectores(elem_ini)
+                     if getattr(c, "Direction", None) in direcoes_ini]
+    if not conns_partida:
+        conns_partida = [c for c in get_conectores(elem_ini)
+                         if getattr(c, "Direction", None) == FlowDirectionType.Bidirectional]
+    for conn in conns_partida:
         try:
-            if conn.Direction not in direcoes_ini: continue
             if not conn.IsConnected: continue
             for ref in conn.AllRefs:
                 viz = ref.Owner
@@ -259,13 +293,22 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
     deveria aparecer em mais de um galho por construção; se aparecer (anel
     fechado por engano na modelagem), aquele galho simplesmente para ali,
     sem erro. PROFUNDIDADE_MAX é um reforço de segurança extra contra o
-    mesmo cenário. Galhos que não terminam em válvula (ramal morto, dreno,
-    tubulação auxiliar) também são ignorados silenciosamente.
+    mesmo cenário.
 
-    Retorna lista de rotas; cada rota é uma lista de ElementId.Value
-    (get_id), de elem_ini até a válvula, ambos inclusive.
+    Um galho que não termina em válvula (ramal morto, dreno, tubulação
+    auxiliar, ou uma quebra de verdade — conector desconectado) não é mais
+    ignorado em silêncio: o elemento onde o galho parou entra em
+    `pontas_abertas`, para o chamador mostrar ao usuário onde investigar
+    (ver mostrar_inconsistencias_mapeamento em resultado_ui.py).
+
+    Retorna (rotas, pontas_abertas):
+      rotas: lista de rotas; cada rota é uma lista de ElementId.Value
+        (get_id), de elem_ini até a válvula, ambos inclusive.
+      pontas_abertas: lista de ElementId.Value (get_id) dos elementos onde
+        um galho parou sem achar válvula.
     """
     rotas = []
+    pontas_abertas = []
     visitados = set([eid_ini])
     pilha = [(elem_ini, [eid_ini])]
     while pilha:
@@ -277,6 +320,7 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
             continue
         if eh_equipamento(elem) and get_id(elem) != eid_ini:
             continue
+        avancou = False
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -286,8 +330,40 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
                     if vid not in visitados:
                         visitados.add(vid)
                         pilha.append((viz, caminho + [vid]))
+                        avancou = True
             except: continue
-    return rotas
+        if not avancou:
+            pontas_abertas.append(get_id(elem))
+    return rotas, pontas_abertas
+
+
+def mostrar_no_revit(uidoc, ids):
+    """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
+    ElementId (int) está em `ids` — callback do botão "Mostrar no Projeto"
+    das janelas de resultado/bloqueio (resultado_ui.py). Chamar só depois
+    que a janela WPF (ShowDialog) já fechou: a API do Revit não é
+    reentrante, não dá pra chamar de dentro do Click de uma janela modal.
+    Ao final o foco volta pro Revit — depois que a janela fecha, o foco
+    costuma ficar com o console do pyRevit, então a seleção acontece mas
+    ninguém vê."""
+    from pyrevit import forms
+    from System.Collections.Generic import List
+    if not ids:
+        return
+    try:
+        eids = List[ElementId]([to_element_id(i) for i in ids])
+        uidoc.Selection.SetElementIds(eids)
+        uidoc.ShowElements(eids)
+        uidoc.RefreshActiveView()
+    except Exception as _e:
+        forms.alert(u"Não foi possível selecionar os elementos no Revit:\n{}".format(_e),
+                    title="Fire Utils", warn_icon=True)
+        return
+    try:
+        import ctypes
+        ctypes.windll.user32.SetForegroundWindow(uidoc.Application.MainWindowHandle)
+    except Exception:
+        pass
 
 
 def get_pontas_abertas(doc, visitados):
@@ -350,6 +426,46 @@ def get_diametro(elem):
         p = elem.get_Parameter(BuiltInParameter.RBS_PIPE_INNER_DIAM_PARAM)
         return to_m(p.AsDouble()) if p and p.AsDouble() > 0 else 0.065
     except Exception: return 0.065
+
+
+def get_diametro_no_trecho(elem, ids_no_trecho):
+    """
+    Diâmetro nominal de `elem` para fins de agrupamento por segmento DENTRO
+    de um trecho específico (`ids_no_trecho` = get_id() de todos os
+    elementos daquele trecho). Pra um Pipe, delega direto a get_diametro()
+    (sempre confiável). Pra um acessório/conexão (FamilyInstance), NÃO usa
+    o parâmetro "Diâmetro" (RBS_PIPE_DIAMETER_PARAM) nem o diâmetro interno
+    da própria família: peças como Tê de redução guardam ali o diâmetro do
+    ramal reduzido, não o da linha principal por onde o trecho passa — e
+    famílias genéricas de acessório (comuns em catálogos importados, ex.
+    "Cotovelo de Aço Galvanizado", "Registro de Gaveta Industrial") muitas
+    vezes não têm NENHUM dos dois parâmetros preenchido, e get_diametro()
+    caía num valor padrão fixo de 65 mm — criando um "segmento fantasma"
+    de 65 mm cheio de acessórios num trecho inteiro de outro diâmetro (ex.:
+    80 mm), mesmo com nenhum tubo de fato modelado nesse diâmetro.
+
+    Em vez disso, acha o Pipe fisicamente conectado a `elem` que também
+    faz parte deste mesmo trecho e usa o diâmetro DELE — sempre o run
+    principal por onde o trecho de fato passa, e sempre confiável (Pipe
+    nunca cai em valor padrão). Só cai em get_diametro(elem) se nenhum
+    vizinho do trecho for encontrado (ex.: acessório bem na ponta do
+    trecho, colado a um elemento fora dele - equipamento, válvula de
+    hidrante etc.).
+    """
+    if isinstance(elem, Pipe):
+        return get_diametro(elem)
+    try:
+        for conn in get_conectores(elem):
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected: continue
+            for outro in conn.AllRefs:
+                if outro.ConnectorType == ConnectorType.Logical: continue
+                vizinho = outro.Owner
+                if vizinho is None or not isinstance(vizinho, Pipe): continue
+                if get_id(vizinho) in ids_no_trecho:
+                    return get_diametro(vizinho)
+    except Exception: pass
+    return get_diametro(elem)
 
 
 def get_leq(elem):
@@ -437,3 +553,27 @@ def diagnostico_conectores(elem):
         linhas.append(u"    {}. Direction={} IsConnected={} Z={}".format(
             i + 1, direcao, conectado, z))
     return linhas
+
+
+def descricao_curta_elemento(elem):
+    """Nome curto pra exibir numa linha de tabela: categoria + Id. Não usa
+    Symbol.Family.Name (get_nome) porque um Pipe não tem .Symbol."""
+    try:    cat = elem.Category.Name if elem.Category else u"Elemento"
+    except: cat = u"Elemento"
+    return u"{} (ID {})".format(cat, elem.Id)
+
+
+def descricao_motivo_ponta_aberta(elem):
+    """Por que um elemento entrou em pontas_abertas (bfs_ate ou
+    percorre_rotas_hidrantes): frase curta pra coluna 'Motivo' da janela
+    de inconsistências, sem o detalhe verboso de diagnostico_conectores."""
+    conns = get_conectores(elem)
+    if not conns:
+        return u"Sem conectores identificados (categoria não suportada?)"
+    for conn in conns:
+        try:
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected:
+                return u"Extremidade aberta — conector desconectado"
+        except: continue
+    return u"Fim do trecho sem conexão adiante"
