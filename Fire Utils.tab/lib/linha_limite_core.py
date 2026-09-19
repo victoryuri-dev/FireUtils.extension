@@ -11,10 +11,7 @@ Detail Line (não Model Line) de propósito: funciona direto na vista ativa.
 """
 
 from Autodesk.Revit.DB import Line, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType
-from Autodesk.Revit.UI.Selection import DynamicUpdateDelegate
 from pyrevit import forms
-import threading
-import time
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -56,69 +53,16 @@ def _criar_detail_line(doc, view, linha, graphics_style):
     return detail_curve
 
 
-class PreviewUpdater(DynamicUpdateDelegate):
-    """Delegate que atualiza preview enquanto picking acontece."""
-    def __init__(self, state, ponto_inicio, view, doc, graphics_style):
-        self.state = state
-        self.ponto_inicio = ponto_inicio
-        self.view = view
-        self.doc = doc
-        self.graphics_style = graphics_style
-        self.preview_id = None
-
-    def Update(self, elem_id):
-        """Chamado pelo Revit conforme picking progride."""
-        try:
-            ponto_fim = self.state.get('cursor_point')
-            if ponto_fim is None or ponto_fim == self.ponto_inicio:
-                return True
-
-            if self.preview_id is not None:
-                try:
-                    self.doc.Delete(self.preview_id)
-                except:
-                    pass
-                self.preview_id = None
-
-            distancia = self.ponto_inicio.DistanceTo(ponto_fim)
-            if distancia < 1e-9:
-                return True
-
-            limite_restante = self.state.get('limite_restante', float('inf'))
-            if distancia > limite_restante:
-                vetor = ponto_fim - self.ponto_inicio
-                direcao = vetor.Normalize()
-                ponto_ajustado = self.ponto_inicio + direcao.Multiply(limite_restante)
-            else:
-                ponto_ajustado = ponto_fim
-
-            linha = Line.CreateBound(self.ponto_inicio, ponto_ajustado)
-            with Transaction(self.doc, u"Preview Linha com Limite") as t:
-                t.Start()
-                preview_curve = self.doc.Create.NewDetailCurve(self.view, linha)
-                try:
-                    preview_curve.LineStyle = self.graphics_style
-                except:
-                    pass
-                self.preview_id = preview_curve.Id
-                t.Commit()
-        except:
-            pass
-
-        return True
 
 
 def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m):
     """
-    Desenha linhas interativamente com preview em tempo real:
-    1. Clica no ponto inicial
-    2. Uma linha acompanha o mouse (como ferramenta nativa do Revit)
-    3. Clica para confirmar o ponto final
-    4. O segmento é criado, inicia novo preview a partir desse ponto
-    5. Repete até ESC ou atingir o limite de comprimento
+    Desenha linhas sequencialmente (clique a clique) até um comprimento máximo.
+    Cada clique inicia um novo segmento a partir do ponto anterior.
+    ESC a qualquer momento termina o desenho.
 
-    Ao atingir o limite, o último segmento é encurtado automaticamente
-    para fechar no valor máximo informado.
+    Ao ultrapassar o comprimento máximo, o último segmento é encurtado
+    para fechar exatamente no limite (em vez de descartado).
     """
     limite_interno = _metros_para_interno(comprimento_max_m)
 
@@ -129,70 +73,15 @@ def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m
 
     total_interno = 0.0
     parou_no_limite = False
-    picking_active = False
-    abort_flag = threading.Event()
-
-    def monitor_mouse():
-        """Thread que monitora posição do mouse durante picking."""
-        state = {'cursor_point': None}
-        while not abort_flag.is_set():
-            try:
-                restante_m = _interno_para_metros(limite_interno - total_interno)
-                msg = u"Mova para preview — faltam {:.2f} m (ESC para terminar)".format(restante_m)
-
-                updater = PreviewUpdater(state, ponto_atual, view, doc, graphics_style)
-
-                try:
-                    proximo = uidoc.Selection.PickPoint(updater, msg)
-                    if updater.preview_id is not None:
-                        try:
-                            doc.Delete(updater.preview_id)
-                        except:
-                            pass
-                    state['cursor_point'] = proximo
-                    return proximo, state
-                except Exception:
-                    if updater.preview_id is not None:
-                        try:
-                            doc.Delete(updater.preview_id)
-                        except:
-                            pass
-                    return None, state
-            except:
-                time.sleep(0.05)
-        return None, state
 
     while True:
         restante_m = _interno_para_metros(limite_interno - total_interno)
-        abort_flag.clear()
-
-        state = {
-            'cursor_point': None,
-            'limite_restante': limite_interno - total_interno,
-        }
-
-        updater = PreviewUpdater(state, ponto_atual, view, doc, graphics_style)
 
         try:
             proximo_ponto = uidoc.Selection.PickPoint(
-                updater,
-                u"Mova para preview — faltam {:.2f} m (ESC para terminar)".format(restante_m)
+                u"Próximo ponto — faltam {:.2f} m (ESC para terminar)".format(restante_m)
             )
         except Exception:
-            if updater.preview_id is not None:
-                try:
-                    doc.Delete(updater.preview_id)
-                except:
-                    pass
-            break
-
-        if updater.preview_id is not None:
-            try:
-                doc.Delete(updater.preview_id)
-            except:
-                pass
-
-        if proximo_ponto is None:
             break
 
         vetor = proximo_ponto - ponto_atual
