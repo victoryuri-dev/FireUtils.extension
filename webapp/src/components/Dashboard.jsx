@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Loader from "./Loader";
 import { postToHost, BridgeMessageTypes } from "../lib/bridge";
 import { buscarProjeto } from "../lib/projectData";
 import { estruturasDoProjeto, dashboardEstrutura } from "../lib/projetoDados";
@@ -133,7 +134,7 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
   }, [estado.estruturaId]);
 
   if (!vinculo) {
-    return <p className="vazio">Carregando...</p>;
+    return <p className="vazio vazio-carregando"><Loader size={14} /> Carregando...</p>;
   }
 
   if (vinculo.docSalvo === false) {
@@ -145,7 +146,7 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
   }
 
   if (estado.carregando && !estado.linha) {
-    return <p className="vazio">Carregando projeto...</p>;
+    return <p className="vazio vazio-carregando"><Loader size={14} /> Carregando projeto...</p>;
   }
 
   if (estado.erro) {

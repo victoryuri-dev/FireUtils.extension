@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Icon from "../Icon";
+import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../../lib/projetoDados";
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
@@ -282,7 +283,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, adicionarToas
         </Cartao>
       </div>
 
-      {carregando && !resposta && <p className="vazio">Carregando...</p>}
+      {carregando && !resposta && (
+        <p className="vazio vazio-carregando">
+          <Loader size={18} /> Carregando...
+        </p>
+      )}
 
       {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
 

@@ -4,6 +4,7 @@ import { resumoProjeto } from "../../lib/projetoDados";
 import { formatarArea, formatarEditadoHa } from "../../lib/format";
 import { urlNovoProjeto } from "../../lib/site";
 import Icon from "../Icon";
+import Loader from "../Loader";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 import linkIconSvg from "../../assets/icons/link-icon.svg?raw";
 
@@ -63,7 +64,11 @@ export default function ConectarProjeto({ onSelecionar }) {
       </div>
 
       {erro && <p className="vazio">Não foi possível buscar os projetos: {erro}</p>}
-      {!erro && projetos === null && <p className="vazio">Buscando projetos...</p>}
+      {!erro && projetos === null && (
+        <p className="vazio vazio-carregando">
+          <Loader size={14} /> Buscando projetos...
+        </p>
+      )}
       {!erro && projetos && projetos.length === 0 && (
         <p className="vazio">Nenhum projeto encontrado{busca ? " com esse filtro" : ""}.</p>
       )}

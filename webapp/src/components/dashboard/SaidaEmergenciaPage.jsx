@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "../Icon";
+import Loader from "../Loader";
 import { pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
 import { getSeNorma } from "../../lib/normasCentral";
 import { calcPopPav, contarSaidasPavimento, getDistanciaPavimento } from "../../data/se_calc";
@@ -243,7 +244,9 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
           {erro ? (
             <p className="vazio">{erro}</p>
           ) : !seNorma ? (
-            <p className="vazio">Carregando dados normativos...</p>
+            <p className="vazio vazio-carregando">
+              <Loader size={18} /> Carregando dados normativos...
+            </p>
           ) : pavimentos.length === 0 ? (
             <p className="vazio">Nenhum pavimento cadastrado no site para esta estrutura.</p>
           ) : (
