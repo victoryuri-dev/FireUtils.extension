@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
+import Loader from "./Loader";
 import { supabase } from "../lib/supabaseClient";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
@@ -20,9 +21,17 @@ const ITENS_NAV = [
   { id: "saidas", label: "Saídas de Emergência", svg: exitIconSvg },
 ];
 
+// Duração real da cascata+desaparecimento de uma barra (a de maior delay,
+// loader-bar-1: 0.28s de delay + 2.7s até sumir de novo, no keyframe de
+// loader-cascade em App.css) — depois disso a marca volta a ficar estática,
+// sem esperar o resto da pausa do loop (que não faz sentido num hover único).
+const DURACAO_LOGO_HOVER_MS = 2980;
+
 export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar, email }) {
   const [menuAberto, setMenuAberto] = useState(false);
+  const [logoAnimando, setLogoAnimando] = useState(false);
   const menuRef = useRef(null);
+  const logoTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!menuAberto) return;
@@ -33,6 +42,14 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
     return () => document.removeEventListener("mousedown", aoClicarFora);
   }, [menuAberto]);
 
+  useEffect(() => () => clearTimeout(logoTimeoutRef.current), []);
+
+  function aoPassarMouseNaLogo() {
+    if (logoAnimando) return;
+    setLogoAnimando(true);
+    logoTimeoutRef.current = setTimeout(() => setLogoAnimando(false), DURACAO_LOGO_HOVER_MS);
+  }
+
   async function sair() {
     setMenuAberto(false);
     await supabase?.auth.signOut();
@@ -40,8 +57,12 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
 
   return (
     <nav className="sidebar">
-      <div className="sidebar-logo">
-        <Icon svg={logoSvg} title="Fire Utils" />
+      <div className="sidebar-logo" onMouseEnter={aoPassarMouseNaLogo}>
+        {logoAnimando ? (
+          <Loader size={30} className="sidebar-logo-loader" />
+        ) : (
+          <Icon svg={logoSvg} title="Fire Utils" />
+        )}
       </div>
 
       <div className="sidebar-nav">
