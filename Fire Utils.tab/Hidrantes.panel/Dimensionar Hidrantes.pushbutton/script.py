@@ -24,6 +24,7 @@ Os elementos de cada trecho não vêm mais de uma varredura por parâmetro:
 continuam sendo achados pela tag "FireUtils - Identificador" na própria
 família, como antes.
 """
+__title__ = "Dimensionar\nHidrantes"
 
 import clr
 clr.AddReference("RevitAPI")

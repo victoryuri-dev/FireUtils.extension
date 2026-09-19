@@ -30,6 +30,7 @@ Sistema" mostrar a verificação de qual hidrante é de fato o mais
 desfavorável — o comparativo entre todos, não só o resultado final de
 H-01/H-02.
 """
+__title__ = "Mapear\ntrechos"
 
 import clr
 clr.AddReference("RevitAPI")

@@ -12,6 +12,7 @@ e "Gravar Dados de Sinalização" (Sinalizacao.panel), que faziam a mesma
 coisa isoladamente — ver quantitativos_core.py pra lógica central e o
 registro de medidas.
 """
+__title__ = "Gravar\nQuantitativos"
 
 from pyrevit import script
 
