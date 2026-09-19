@@ -65,6 +65,13 @@ def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m
     ATUAL é encurtado (endpoint recalculado na mesma direção, à distância
     restante) pra fechar exatamente no limite, e o desenho para sozinho —
     mostra uma mensagem com o comprimento total inserido.
+
+    Cada segmento é criado numa transação PRÓPRIA (Start+Commit logo após
+    o clique que o fecha) — não uma transação só pro desenho inteiro. Sem
+    isso, nenhum segmento aparecia na tela até o commit final (só depois
+    de ESC ou do limite ser atingido): o Revit só redesenha uma vista com
+    o que já foi de fato commitado, então uma transação única deixava o
+    usuário "cego" durante todo o desenho.
     """
     limite_interno = _metros_para_interno(comprimento_max_m)
 
@@ -76,38 +83,41 @@ def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m
     total_interno = 0.0
     parou_no_limite = False
 
-    with Transaction(doc, u"Inserir Linha com Limite") as t:
-        t.Start()
-        while True:
-            restante_m = _interno_para_metros(limite_interno - total_interno)
-            try:
-                proximo_ponto = uidoc.Selection.PickPoint(
-                    u"Clique o próximo ponto (ESC para terminar) — faltam {:.2f} m".format(restante_m)
-                )
-            except Exception:
-                break  # ESC — usuário decidiu terminar antes do limite
+    while True:
+        restante_m = _interno_para_metros(limite_interno - total_interno)
+        try:
+            proximo_ponto = uidoc.Selection.PickPoint(
+                u"Clique o próximo ponto (ESC para terminar) — faltam {:.2f} m".format(restante_m)
+            )
+        except Exception:
+            break  # ESC — usuário decidiu terminar antes do limite
 
-            vetor = proximo_ponto - ponto_atual
-            comprimento_segmento = vetor.GetLength()
-            if comprimento_segmento < 1e-9:
-                continue  # clique em cima do ponto anterior — ignora, sem travar o loop
+        vetor = proximo_ponto - ponto_atual
+        comprimento_segmento = vetor.GetLength()
+        if comprimento_segmento < 1e-9:
+            continue  # clique em cima do ponto anterior — ignora, sem travar o loop
 
-            restante_interno = limite_interno - total_interno
-            if comprimento_segmento >= restante_interno:
-                direcao = vetor.Normalize()
-                ponto_final = ponto_atual + direcao.Multiply(restante_interno)
-                linha = Line.CreateBound(ponto_atual, ponto_final)
-                _criar_detail_line(doc, view, linha, graphics_style)
-                total_interno = limite_interno
-                parou_no_limite = True
-                break
+        restante_interno = limite_interno - total_interno
+        excedeu = comprimento_segmento >= restante_interno
+        if excedeu:
+            direcao = vetor.Normalize()
+            ponto_final = ponto_atual + direcao.Multiply(restante_interno)
+        else:
+            ponto_final = proximo_ponto
 
-            linha = Line.CreateBound(ponto_atual, proximo_ponto)
+        linha = Line.CreateBound(ponto_atual, ponto_final)
+        with Transaction(doc, u"Inserir Linha com Limite") as t:
+            t.Start()
             _criar_detail_line(doc, view, linha, graphics_style)
-            total_interno += comprimento_segmento
-            ponto_atual = proximo_ponto
+            t.Commit()
 
-        t.Commit()
+        if excedeu:
+            total_interno = limite_interno
+            parou_no_limite = True
+            break
+
+        total_interno += comprimento_segmento
+        ponto_atual = proximo_ponto
 
     if parou_no_limite:
         total_m = _interno_para_metros(total_interno)
