@@ -29,9 +29,14 @@ migration/output/
 
 # WebView2 SDK (Fire Utils.tab/lib/webview2_runtime/*.dll) e o build do
 # frontend (webapp/dist/) SÃO commitados de propósito, apesar de serem
-# binário/artefato gerado — este plugin é distribuído via git clone/pull
-# direto pra cada computador (sem CI/CD nem instalador), então esses
-# arquivos precisam estar no repo pra instalar em uma máquina nova sem
-# repetir o download do NuGet e o `npm run build` toda vez.
+# binário/artefato gerado — sem CI/CD, é o repositório que alimenta o
+# instalador (installer/build.ps1 copia webapp/dist/ para o payload). Se
+# não estivessem versionados, gerar o instalador exigiria refazer o
+# download do NuGet e o `npm run build` toda vez.
 
 webapp/node_modules/
+
+# Instalador: payload/ é remontado a cada build e output/ guarda o .exe
+# gerado (dezenas de MB). Nenhum dos dois entra no repositório.
+installer/payload/
+installer/output/
