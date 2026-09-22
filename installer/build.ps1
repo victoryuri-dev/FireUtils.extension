@@ -96,36 +96,54 @@ function Find-Iscc {
            "ou adicione o ISCC.exe ao PATH.")
 }
 
+function Get-DataUltimoCommit {
+    param([Parameter(Mandatory)] [string] $CaminhoRelativo)
+
+    try {
+        $saida = & git -C $RepoRoot log -1 --format=%ct -- $CaminhoRelativo 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $saida) { return $null }
+        return [long]$saida
+    } catch {
+        # Sem git instalado ou fora de um repositorio: a verificacao
+        # simplesmente nao se aplica.
+        return $null
+    }
+}
+
 function Test-FrontendAtualizado {
     <#
         webapp\dist e versionado de proposito, para o cliente nao precisar
         de Node. O risco disso e empacotar um dist antigo depois de mexer
-        em webapp\src -- o plugin instala e roda a interface velha, sem
-        nenhum erro visivel. Comparar as datas pega exatamente esse caso.
+        em webapp\src: o plugin instala sem erro nenhum e roda a interface
+        velha.
+
+        A comparacao e feita pela data do ultimo commit de cada pasta, nao
+        pela data de modificacao dos arquivos. Um clone do git carimba todo
+        arquivo com a hora do checkout, entao comparar mtime acusaria
+        desatualizacao em qualquer maquina recem-clonada.
     #>
-    $srcDir  = Join-Path $RepoRoot 'webapp\src'
-    $distDir = Join-Path $RepoRoot 'webapp\dist'
+    $commitSrc  = Get-DataUltimoCommit 'webapp/src'
+    $commitDist = Get-DataUltimoCommit 'webapp/dist'
 
-    if (-not (Test-Path -LiteralPath $srcDir)) { return }
+    if ($null -eq $commitSrc -or $null -eq $commitDist) {
+        Write-Aviso 'Nao deu para comparar src e dist pelo historico do git; verificacao pulada.'
+        return
+    }
 
-    $srcMaisNovo = Get-ChildItem -LiteralPath $srcDir -Recurse -File -ErrorAction SilentlyContinue |
-                   Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    $distMaisNovo = Get-ChildItem -LiteralPath $distDir -Recurse -File -ErrorAction SilentlyContinue |
-                    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($commitSrc -le $commitDist) { return }
 
-    if (-not $srcMaisNovo -or -not $distMaisNovo) { return }
+    $dataSrc  = [DateTimeOffset]::FromUnixTimeSeconds($commitSrc).LocalDateTime
+    $dataDist = [DateTimeOffset]::FromUnixTimeSeconds($commitDist).LocalDateTime
 
-    if ($srcMaisNovo.LastWriteTime -gt $distMaisNovo.LastWriteTime) {
-        Write-Aviso "webapp\dist parece desatualizado em relacao a webapp\src."
-        Write-Aviso "  src  modificado em: $($srcMaisNovo.LastWriteTime)"
-        Write-Aviso "  dist gerado em:     $($distMaisNovo.LastWriteTime)"
-        Write-Aviso "Rode 'npm run build' dentro de webapp\ antes de gerar o instalador,"
-        Write-Aviso "senao o cliente recebe a interface antiga."
+    Write-Aviso 'webapp\dist esta desatualizado em relacao a webapp\src.'
+    Write-Aviso "  ultimo commit em src:  $dataSrc"
+    Write-Aviso "  ultimo commit em dist: $dataDist"
+    Write-Aviso "Rode 'npm run build' dentro de webapp\ e comite o dist atualizado,"
+    Write-Aviso 'senao o cliente recebe a interface antiga.'
 
-        $resposta = Read-Host "Continuar mesmo assim? (s/N)"
-        if ($resposta -notmatch '^[sS]') {
-            throw 'Build cancelado. Atualize webapp\dist e rode de novo.'
-        }
+    $resposta = Read-Host 'Continuar mesmo assim? (s/N)'
+    if ($resposta -notmatch '^[sS]') {
+        throw 'Build cancelado. Atualize webapp\dist e rode de novo.'
     }
 }
 
@@ -197,12 +215,18 @@ foreach ($item in $ItensDoPayload) {
 # versao do interpretador que os gerou.
 Get-ChildItem -LiteralPath $PayloadDir -Recurse -Force -Directory -Filter '__pycache__' -ErrorAction SilentlyContinue |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-Get-ChildItem -LiteralPath $PayloadDir -Recurse -Force -File -Include '*.pyc', '*.pyo' -ErrorAction SilentlyContinue |
+Get-ChildItem -LiteralPath $PayloadDir -Recurse -Force -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -in @('.pyc', '.pyo') } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
-$tamanhoMb = [math]::Round(
-    ((Get-ChildItem -LiteralPath $PayloadDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB), 1
-)
+# Soma acumulada em vez de Measure-Object -Sum: sob Set-StrictMode, ler a
+# propriedade Sum do resultado quebra quando o pipeline nao produz o objeto
+# esperado.
+$totalBytes = 0
+foreach ($arquivo in @(Get-ChildItem -LiteralPath $PayloadDir -Recurse -File)) {
+    $totalBytes += $arquivo.Length
+}
+$tamanhoMb = [math]::Round($totalBytes / 1MB, 1)
 Write-Host "    Payload: $tamanhoMb MB"
 
 Write-Passo 'Compilando o instalador'
