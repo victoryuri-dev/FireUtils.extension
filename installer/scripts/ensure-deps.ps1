@@ -48,10 +48,10 @@ $script:WebView2ClientGuid = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
 # Link oficial e estavel do Evergreen Bootstrapper (~2 MB, baixa o resto).
 $script:WebView2BootstrapperUrl = 'https://go.microsoft.com/fwlink/p/?LinkId=2124703'
 
-# ATENCAO: valide este ID rodando `winget search pyrevit` numa maquina real
-# antes de distribuir. Se estiver errado, o script apenas cai para o
-# download do GitHub -- nao quebra, so fica mais lento.
-$script:PyRevitWingetId = 'pyRevitLabs.pyRevit'
+# Confirmado com `winget search pyrevit` (22/09/2026, retornou 6.5.5.26237).
+# Nao confundir com pyRevit.pyRevit.CLI, que e o CLI -- pacote separado que
+# nao carrega no Revit.
+$script:PyRevitWingetId = 'pyRevit.pyRevit'
 
 $script:PyRevitReleasesApi = 'https://api.github.com/repos/pyrevitlabs/pyRevit/releases/latest'
 $script:PyRevitReleasesPage = 'https://github.com/pyrevitlabs/pyRevit/releases/latest'
@@ -68,6 +68,37 @@ function Write-Log {
     } catch {
         # Log e diagnostico, nunca motivo para abortar a instalacao.
     }
+}
+
+function Invoke-ProcessoComTimeout {
+    <#
+        Start-Process -Wait nao aceita timeout. Se o processo chamado abrir
+        um prompt interativo -- o winget faz isso na primeira execucao,
+        pedindo aceite dos termos das fontes -- a espera nunca termina. Como
+        o instalador executa este script com a janela oculta, o cliente
+        veria a instalacao travada sem nenhuma explicacao.
+
+        Devolve o codigo de saida, ou $null se estourou o tempo.
+    #>
+    param(
+        [Parameter(Mandatory)] [string]   $Caminho,
+        [Parameter(Mandatory)] [string[]] $Argumentos,
+        [int] $TimeoutSegundos = 600
+    )
+
+    $processo = Start-Process -FilePath $Caminho -ArgumentList $Argumentos -PassThru -NoNewWindow
+
+    # Ler .Handle cacheia o handle nativo. Sem isso, ExitCode pode vir
+    # indisponivel depois que o processo termina.
+    $null = $processo.Handle
+
+    if (-not $processo.WaitForExit($TimeoutSegundos * 1000)) {
+        Write-Log ("Tempo esgotado ({0}s), encerrando: {1}" -f $TimeoutSegundos, $Caminho) 'ERRO'
+        try { $processo.Kill() } catch { }
+        return $null
+    }
+
+    return $processo.ExitCode
 }
 
 function Test-PyRevitInstalled {
@@ -107,19 +138,29 @@ function Install-PyRevitViaWinget {
 
     Write-Log ("Instalando pyRevit via winget (id={0})..." -f $script:PyRevitWingetId)
     try {
-        $p = Start-Process -FilePath $winget.Source -Wait -PassThru -NoNewWindow -ArgumentList @(
+        $codigo = Invoke-ProcessoComTimeout -Caminho $winget.Source -Argumentos @(
             'install',
             '--id', $script:PyRevitWingetId,
             '--exact',
             '--silent',
             '--accept-package-agreements',
-            '--accept-source-agreements'
+            '--accept-source-agreements',
+            # Sem isto o winget pode parar pedindo confirmacao (o aceite dos
+            # termos das fontes aparece na primeira execucao da maquina).
+            # Com a flag, ele falha na hora em vez de esperar -- e a falha
+            # cai no download direto do GitHub.
+            '--disable-interactivity'
         )
-        if ($p.ExitCode -eq 0) {
+
+        if ($null -eq $codigo) {
+            Write-Log 'winget nao respondeu no tempo esperado.' 'WARN'
+            return $false
+        }
+        if ($codigo -eq 0) {
             Write-Log 'winget concluiu a instalacao do pyRevit.'
             return $true
         }
-        Write-Log ("winget retornou codigo {0}." -f $p.ExitCode) 'WARN'
+        Write-Log ("winget retornou codigo {0}." -f $codigo) 'WARN'
         return $false
     } catch {
         Write-Log ("Falha ao executar winget: {0}" -f $_.Exception.Message) 'WARN'
@@ -191,15 +232,19 @@ function Install-PyRevitViaDownload {
 
         Write-Log 'Executando o instalador do pyRevit em modo silencioso...'
         # O pyRevit usa Inno Setup; estes sao os switches padrao dele.
-        $p = Start-Process -FilePath $destino -Wait -PassThru -ArgumentList @(
+        $codigo = Invoke-ProcessoComTimeout -Caminho $destino -Argumentos @(
             '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
         )
 
-        if ($p.ExitCode -eq 0) {
+        if ($null -eq $codigo) {
+            Write-Log 'Instalador do pyRevit nao respondeu no tempo esperado.' 'WARN'
+            return $false
+        }
+        if ($codigo -eq 0) {
             Write-Log 'Instalador do pyRevit concluiu com sucesso.'
             return $true
         }
-        Write-Log ("Instalador do pyRevit retornou codigo {0}." -f $p.ExitCode) 'WARN'
+        Write-Log ("Instalador do pyRevit retornou codigo {0}." -f $codigo) 'WARN'
         return $false
     } catch {
         Write-Log ("Falha ao baixar/instalar o pyRevit: {0}" -f $_.Exception.Message) 'ERRO'
@@ -252,13 +297,17 @@ function Install-WebView2 {
         }
 
         Write-Log 'Instalando o WebView2 Runtime...'
-        $p = Start-Process -FilePath $destino -Wait -PassThru -ArgumentList @('/silent', '/install')
+        $codigo = Invoke-ProcessoComTimeout -Caminho $destino -Argumentos @('/silent', '/install') -TimeoutSegundos 300
 
-        if ($p.ExitCode -eq 0) {
+        if ($null -eq $codigo) {
+            Write-Log 'Instalador do WebView2 nao respondeu no tempo esperado.' 'WARN'
+            return $false
+        }
+        if ($codigo -eq 0) {
             Write-Log 'WebView2 Runtime instalado.'
             return $true
         }
-        Write-Log ("Instalador do WebView2 retornou codigo {0}." -f $p.ExitCode) 'WARN'
+        Write-Log ("Instalador do WebView2 retornou codigo {0}." -f $codigo) 'WARN'
         return $false
     } catch {
         Write-Log ("Falha ao instalar o WebView2: {0}" -f $_.Exception.Message) 'WARN'

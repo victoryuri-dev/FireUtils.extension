@@ -113,15 +113,12 @@ cliente usa. A instrução no aviso é remover por
 
 ## Pendências de validação
 
-Nada aqui foi executado em Windows ainda — foi escrito a partir da
-estrutura do repositório e da documentação do pyRevit. Dois pontos
-precisam ser confirmados numa máquina real antes da primeira distribuição:
+Já validado em Windows: o build compila e gera o `.exe` (~45 MB), e o ID do
+winget é `pyRevit.pyRevit`, confirmado por `winget search pyrevit`.
 
-1. **ID do pacote winget.** `ensure-deps.ps1` usa `pyRevitLabs.pyRevit`.
-   Confirme com `winget search pyrevit`. Se estiver errado, o script apenas
-   cai para o download do GitHub — mais lento, mas não quebra.
+Falta confirmar antes da primeira distribuição:
 
-2. **Filtro do instalador do pyRevit no GitHub.** `Resolve-PyRevitInstallerUrl`
+1. **Filtro do instalador do pyRevit no GitHub.** `Resolve-PyRevitInstallerUrl`
    descarta os arquivos com `admin` e `CLI` no nome, esperando sobrar
    exatamente um `.exe`. Se a release passar a ter outros arquivos, a função
    devolve `$null` de propósito (em vez de baixar o errado) e a instalação
