@@ -63,14 +63,39 @@ certificadora. Depois de obtê-lo, assine com `signtool.exe`.
 
 ```
 installer/
-├── build.ps1           Monta o payload e chama o compilador
-├── FireUtils.iss       Script do Inno Setup (UI, cópia, desinstalador)
-├── VERSION             Versão padrão quando -Version não é passado
+├── build.ps1              Monta o payload e chama o compilador
+├── FireUtils.iss          Script do Inno Setup (UI, cópia, desinstalador)
+├── VERSION                Versão padrão quando -Version não é passado
 ├── scripts/
-│   └── ensure-deps.ps1 Detecta e instala pyRevit + WebView2
-├── payload/            Gerado pelo build (fora do git)
-└── output/             .exe gerado (fora do git)
+│   ├── ensure-deps.ps1    Detecta e instala pyRevit + WebView2
+│   └── gerar-imagens.ps1  Converte a logo em ícone e imagens do assistente
+├── assets/                Ícone e .bmp gerados (fora do git)
+├── payload/               Gerado pelo build (fora do git)
+└── output/                .exe gerado (fora do git)
 ```
+
+### Identidade visual
+
+O Inno Setup não aceita PNG: exige `.ico` para o ícone e `.bmp` para as
+imagens do assistente. O `gerar-imagens.ps1` faz essa conversão a partir de
+`Fire Utils.tab/lib/assets/fireutils-logo-h.png`, usando o `System.Drawing`
+do .NET — sem dependência para instalar.
+
+O `build.ps1` o executa sozinho quando os arquivos ainda não existem. Depois
+de trocar a logo, regere com:
+
+```powershell
+.\scripts\gerar-imagens.ps1 -Forcar
+```
+
+Dois detalhes que o script resolve: o ícone sai com sete resoluções (16 a
+256 px), porque o Windows escolhe conforme o contexto e um tamanho único
+fica borrado; e as imagens do assistente levam fundo escuro, porque o nome
+na logo é branco e sumiria sobre o fundo claro padrão.
+
+O símbolo do ícone é recortado detectando os pixels vermelhos da marca, em
+vez de uma região fixa — assim o script continua correto se a logo for
+redesenhada com outras proporções.
 
 ### Por que não usamos o CLI do pyRevit
 

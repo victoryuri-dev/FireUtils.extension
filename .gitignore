@@ -36,7 +36,10 @@ migration/output/
 
 webapp/node_modules/
 
-# Instalador: payload/ é remontado a cada build e output/ guarda o .exe
-# gerado (dezenas de MB). Nenhum dos dois entra no repositório.
+# Instalador: payload/ é remontado a cada build, output/ guarda o .exe
+# gerado (dezenas de MB) e assets/ são o ícone e as imagens do assistente,
+# derivados da logo por scripts/gerar-imagens.ps1. Nenhum dos três entra no
+# repositório.
 installer/payload/
 installer/output/
+installer/assets/

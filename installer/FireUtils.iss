@@ -47,6 +47,13 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 
+; Geradas por scripts\gerar-imagens.ps1 a partir da logo do repositório
+; (build.ps1 chama sozinho quando faltam). O desinstalador herda o ícone do
+; SetupIconFile, então não precisa de UninstallDisplayIcon.
+SetupIconFile=assets\fireutils.ico
+WizardImageFile=assets\wizard-large.bmp
+WizardSmallImageFile=assets\wizard-small.bmp
+
 ; Sem diretiva de arquitetura de proposito: a instalacao so copia arquivos
 ; para %APPDATA%, sem tocar em Program Files nem no registro, entao nada
 ; aqui depende de 32/64 bits. Evita tambem a incompatibilidade entre

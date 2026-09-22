@@ -183,6 +183,12 @@ Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz
 Write-Host '    OK'
 
+Write-Passo 'Preparando icone e imagens do assistente'
+& (Join-Path $PSScriptRoot 'scripts\gerar-imagens.ps1')
+if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
+    throw 'Falha ao gerar as imagens do instalador.'
+}
+
 Write-Passo 'Montando o payload'
 if (Test-Path -LiteralPath $PayloadDir) {
     Remove-Item -LiteralPath $PayloadDir -Recurse -Force
