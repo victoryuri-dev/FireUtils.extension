@@ -13,11 +13,11 @@
         <SolidColorBrush x:Key="BrushBorder"  Color="#D5D5D5"/>
         <SolidColorBrush x:Key="BrushLabel"   Color="#646464"/>
         <SolidColorBrush x:Key="BrushValor"   Color="#1E1E1E"/>
-        <SolidColorBrush x:Key="BrushAccent"  Color="#D83B01"/>
+        <SolidColorBrush x:Key="BrushAccent"  Color="#CC1A32"/>
         <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
         <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
         <SolidColorBrush x:Key="BrushOk"      Color="#1B7A3D"/>
-        <SolidColorBrush x:Key="BrushWarn"    Color="#B03A2E"/>
+        <SolidColorBrush x:Key="BrushWarn"    Color="#CC1A32"/>
 
         <Style x:Key="LabelStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="11"/>

@@ -11,10 +11,10 @@
         <SolidColorBrush x:Key="BrushCard"    Color="#FFFFFF"/>
         <SolidColorBrush x:Key="BrushBorder"  Color="#D5D5D5"/>
         <SolidColorBrush x:Key="BrushValor"   Color="#1E1E1E"/>
-        <SolidColorBrush x:Key="BrushAccent"  Color="#D83B01"/>
+        <SolidColorBrush x:Key="BrushAccent"  Color="#CC1A32"/>
         <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
         <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
-        <SolidColorBrush x:Key="BrushWarn"    Color="#B03A2E"/>
+        <SolidColorBrush x:Key="BrushWarn"    Color="#CC1A32"/>
 
         <Style x:Key="BotaoStyle" TargetType="Button">
             <Setter Property="Height" Value="30"/>

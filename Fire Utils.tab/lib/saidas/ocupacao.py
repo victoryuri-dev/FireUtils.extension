@@ -114,8 +114,8 @@ def _form_wpf(estado):
     COR_BORDA    = SWM.SolidColorBrush(SWM.Color.FromRgb(213, 213, 213))
     COR_LABEL    = SWM.SolidColorBrush(SWM.Color.FromRgb(100, 100, 100))
     COR_VALOR    = SWM.SolidColorBrush(SWM.Color.FromRgb(30,  30,  30))
-    COR_DESTAQUE = SWM.SolidColorBrush(SWM.Color.FromRgb(216, 59,  1))
-    COR_BTN_OK   = SWM.SolidColorBrush(SWM.Color.FromRgb(216, 59,  1))
+    COR_DESTAQUE = SWM.SolidColorBrush(SWM.Color.FromRgb(204, 26, 50))
+    COR_BTN_OK   = SWM.SolidColorBrush(SWM.Color.FromRgb(204, 26, 50))
     COR_BTN_TXT  = SWM.SolidColorBrush(SWM.Color.FromRgb(255, 255, 255))
     COR_BTN_CAN  = SWM.SolidColorBrush(SWM.Color.FromRgb(225, 225, 225))
 
