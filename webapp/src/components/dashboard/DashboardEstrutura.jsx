@@ -118,7 +118,7 @@ export default function DashboardEstrutura({
             </div>
             <div>
               <dt>Altura piso a piso:</dt>
-              <dd>{formatarMetros(estrutura.alturaPisoAPiso)}</dd>
+              <dd>{formatarMetros(estrutura.alturaPisoAPiso)}{estrutura.edificacaoTerrea ? " (Edificação Térrea)" : ""}</dd>
             </div>
           </dl>
         </div>
@@ -136,7 +136,7 @@ export default function DashboardEstrutura({
             </div>
             <div>
               <dt>Altura da edificação:</dt>
-              <dd>{formatarMetros(estrutura.alturaEdificacao)}</dd>
+              <dd>{formatarMetros(estrutura.alturaEdificacao)}{estrutura.edificacaoTerrea ? " (Edificação Térrea)" : ""}</dd>
             </div>
           </dl>
         </div>

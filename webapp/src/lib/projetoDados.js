@@ -1,7 +1,8 @@
 /**
  * Decodifica a coluna `dados` (jsonb) de uma linha da tabela `projetos` —
  * schema real do site, sem tabela "estruturas" separada: um projeto tem
- * `dados.estruturas[]` (id, nome, areaTotal, alturaPisoPiso, altura, ...) e
+ * `dados.estruturas[]` (id, nome, areaTotal, altura, alturaPisoPiso,
+ * nPavimentos, nSubsolos, profundidadeSubsolo, alturaEdificacao, ...) e
  * `dados.pavimentos[]` (cada um com `estruturaId` + `divisao`, o código de
  * ocupação daquele pavimento). Tudo derivado aqui é client-side, a partir
  * de uma linha já buscada (lib/projectData.js) — sem chamada adicional.
@@ -28,6 +29,30 @@ function rotuloOcupacao(pavimentos) {
   if (divisoes.length === 0) return null;
   if (divisoes.length === 1) return divisoes[0];
   return "Mista";
+}
+
+/** Espelha alturaEdificacaoBase (ETOS.FireUtils/src/data/trrf_calc.js):
+ * altura "pura" da edificação, do piso de descarga ao último pavimento,
+ * sem subsolo. Prédio térreo (1 pavimento acima do solo) não tem o campo
+ * "Altura da edificação" próprio no site — quando há subsolo, a medida
+ * parte dele (item 4.31, NT 03 CBMMA); sem subsolo, é 0 (edificação
+ * térrea). Sem isso, o dashboard mostraria "—" pra toda estrutura térrea,
+ * já que ela nunca preenche `alturaEdificacao` no site (o campo fica
+ * escondido nesse caso). */
+function alturaEdificacaoBase(estrutura) {
+  const nPav = Number(estrutura.nPavimentos) || 1;
+  if (nPav === 1) {
+    const sub = Number(estrutura.nSubsolos) || 0;
+    return sub > 0 ? (paraNumero(estrutura.profundidadeSubsolo) ?? 0) : 0;
+  }
+  return paraNumero(estrutura.alturaEdificacao);
+}
+
+/** Verdadeiro só quando a edificação é de fato térrea (1 pavimento acima
+ * do solo e altura pura em 0 — sem subsolo). Usado só pra rotular a altura
+ * no dashboard ("0 m (Edificação Térrea)"). */
+function edificacaoEhTerrea(estrutura) {
+  return (Number(estrutura.nPavimentos) || 1) === 1 && alturaEdificacaoBase(estrutura) === 0;
 }
 
 function rotuloPavimentos(estruturas) {
@@ -173,7 +198,8 @@ export function dashboardEstrutura(linha, estruturaId) {
     areaConstruida: paraNumero(estrutura.areaTotal),
     areaTerreno: paraNumero(dados.areaTerreno),
     alturaPisoAPiso: paraNumero(estrutura.alturaPisoPiso),
-    alturaEdificacao: paraNumero(estrutura.altura),
+    alturaEdificacao: alturaEdificacaoBase(estrutura),
+    edificacaoTerrea: edificacaoEhTerrea(estrutura),
     ocupacao: rotuloOcupacao(pavimentosEstrutura),
     divisoes: divisoesDe(pavimentosEstrutura),
     cargaIncendio,
