@@ -491,11 +491,32 @@ def _global_pt(ref):
         return None
 
 
+_TOL_LINHA_CENTRAL = _to_ft(0.03)  # 3 cm — clique só é aceito perto da
+                                    # linha central do tubo; conectores
+                                    # (pontas, ramais de tê) já ficam sobre
+                                    # ela, então são cobertos automaticamente
+
+
 class _FiltroPipe(ISelectionFilter):
+    """Só permite Pipe — e, dentro do tubo, só clique perto da linha
+    central (ou de um ponto de conexão, que sempre está sobre ela), em vez
+    de qualquer ponto da superfície visível do tubo (clique/pointer normal).
+    doc é opcional só por compatibilidade; sem ele, cai no comportamento
+    antigo (qualquer ponto do tubo é aceito)."""
+    def __init__(self, doc=None):
+        self.doc = doc
+
     def AllowElement(self, e):
         return isinstance(e, Pipe)
+
     def AllowReference(self, r, p):
-        return True
+        if self.doc is None:
+            return True
+        try:
+            curve = self.doc.GetElement(r.ElementId).Location.Curve
+            return curve.Project(p).Distance <= _TOL_LINHA_CENTRAL
+        except Exception:
+            return True
 
 
 # ============================================================================
@@ -684,7 +705,7 @@ def run(doc, uidoc, output):
     # ── Clique 1: ponta do PIPE_DESC ────────────────────────────────────────
     try:
         ref1         = uidoc.Selection.PickObject(
-            ObjectType.Element, _FiltroPipe(),
+            ObjectType.PointOnElement, _FiltroPipe(doc),
             u"[1/2] Clique em uma PONTA do tubo desconectado"
         )
         pipe_desc    = doc.GetElement(ref1.ElementId)
@@ -695,7 +716,7 @@ def run(doc, uidoc, output):
     # ── Clique 2: PIPE_REF (corpo ou ponta) ─────────────────────────────────
     try:
         ref2         = uidoc.Selection.PickObject(
-            ObjectType.Element, _FiltroPipe(),
+            ObjectType.PointOnElement, _FiltroPipe(doc),
             u"[2/2] Clique no tubo referência — corpo para Tê, ponta para joelho"
         )
         pipe_ref     = doc.GetElement(ref2.ElementId)
