@@ -15,11 +15,10 @@ Fluxo:
              • onde conectar em pipe_ref: ponto clicado no corpo (Tê,
                padrão) ou ponta livre — se houver (ver modo_conexao_ref em
                _construir_conexao)
-             • onde a rota sobe/desce de altura: junto ao tubo desconectado
-               (padrão) ou junto ao tubo de referência (ver modo_altura em
-               _construir_conexao)
-             • ordem dos eixos horizontais X/Y: padrão (primeiro paralelo ao
-               eixo do tubo referência) ou invertida (ver inverter_eixos)
+             • ordem dos até 3 trechos retos da rota (Vertical/Z, Paralelo
+               e Perpendicular ao eixo de pipe_ref) — livre, escolhida pelo
+               usuário; só os eixos que realmente precisam de ajuste
+               aparecem como opção (ver ordem_eixos/_eixos_disponiveis)
              Se essa janela falhar por qualquer motivo, cai para diálogos
              forms.SelectFromList em sequência + fluxo sem prévia
              (_escolher_opcoes_rota_fallback + _conectar).
@@ -29,43 +28,41 @@ Etapa 1 — Extensão direta:
   E as retas forem REALMENTE colineares (não só paralelas), apenas estende
   e conecta (tê ou joelho conforme posição).
 
-Etapa 2 — Roteamento em L:
-  modo_altura="origem"  (padrão): sobe/desce logo na saída de pipe_desc
-    pipe_desc horizontal  → tubo vertical P_start→P_knee + joelho em P_start
-    pipe_desc vertical    → estende a curva do tubo até z_ref
-    mesma cota            → conecta direto sem segmento vertical
-  modo_altura="destino": roteia horizontal na cota de pipe_desc e só
-    sobe/desce no último trecho, já junto ao ponto de conexão em pipe_ref
+Etapa 2 — Roteamento genérico em até 3 trechos retos:
+  A rota vai de P_start (ponta livre de pipe_desc) até P_final (ponto no
+  corpo ou ponta livre de pipe_ref) fechando, em sequência, cada um dos
+  eixos que realmente precisam de ajuste — z (vertical), par (paralelo ao
+  eixo de pipe_ref) e perp (perpendicular a ele). A ORDEM é escolhida pelo
+  usuário via ordem_eixos (ver _JanelaOpcoesRota) — qualquer uma das até
+  3! permutações possíveis, ex.: (z, par, perp) [padrão/histórico: sobe/
+  desce logo na saída, depois ajusta paralelo, depois perpendicular] ou
+  (par, perp, z) [roteia tudo na horizontal primeiro, sobe/desce só no
+  fim] — não fica mais travado a "só no começo ou só no fim".
+  _eixos_necessarios decide quais dos 3 eixos entram de verdade na rota
+  (um já alinhado não gera trecho nenhum) — ver também
+  _eixos_disponiveis, usado pra só oferecer ao usuário as opções cabíveis.
 
-  inverter_eixos=False (padrão): seg1 fica paralelo ao eixo de pipe_ref e
-    seg2 perpendicular (entra em pipe_ref em ângulo reto — comportamento
-    histórico). inverter_eixos=True: troca a ordem — seg1 fica perpendicular
-    ao eixo de pipe_ref (ajusta o outro eixo primeiro) e seg2 paralelo.
+  1º trecho "colinear com pipe_desc": antes de criar o 1º trecho como
+    tubo novo, tenta prolongar o próprio pipe_desc até lá em vez de criar
+    tubo + joelho: _tenta_estender_colinear (trechos par/perp) ou extensão
+    direta da curva (trecho z, quando pipe_desc já é vertical). Só se
+    aplica ao trecho que é de fato o primeiro da rota.
 
-    modo_conexao_ref="corpo" + inverter_eixos=True + ainda sobra seg2:
-    seg1 (perpendicular) sempre termina EXATAMENTE sobre a reta infinita
-    de pipe_ref — _ajustar_alvo_corpo_invertido decide o que fazer com
-    isso ANTES de criar seg2 (que rodaria por cima do próprio pipe_ref):
-      ponto de seg1 dentro do corpo físico → conecta ali mesmo (Tê em
-        P_mid), dispensa seg2 e o ponto clicado original.
-      ponto de seg1 fora do corpo físico  → cai para a ponta LIVRE mais
-        próxima de pipe_ref e recalcula a rota pra esse novo alvo (modo
-        joelho, clicou_ponta passa a True).
-    Só se aplica quando a rota horizontal já está na cota de pipe_ref
-    (sempre em modo_altura="origem"; em "destino" só quando not need_vert
-    — do contrário seg2 fica numa cota diferente de pipe_ref e não
-    sobrepõe nada de verdade).
-
-  seg1 "colinear com pipe_desc": antes de criar seg1 como tubo novo,
-    _tenta_estender_colinear checa se pipe_desc já aponta reto (mesma
-    direção, mesma reta) para P_mid — se sim, PROLONGA pipe_desc até lá
-    (move só o endpoint solto) em vez de criar um tubo novo + joelho ali.
-    Só se aplica quando pipe_desc ainda não sofreu nenhum ajuste de altura
-    nesse trecho (ver pipe_desc_no_knee/modo_altura="destino").
+  Corpo + a ordem escolhida fecha o trecho perpendicular ANTES do
+  paralelo (com o vertical já resolvido antes, ou nem necessário): o
+  ponto onde o perpendicular termina cai, por construção, EXATAMENTE
+  sobre a reta infinita de pipe_ref — _ajustar_alvo_corpo_invertido decide
+  o que fazer com isso ANTES de criar o trecho paralelo (que rodaria por
+  cima do próprio pipe_ref):
+    ponto dentro do corpo físico → conecta ali mesmo (Tê), dispensa o
+      trecho paralelo e o ponto clicado original.
+    ponto fora do corpo físico  → cai para a ponta LIVRE mais próxima de
+      pipe_ref e recalcula a rota pra esse novo alvo (modo joelho,
+      clicou_ponta passa a True).
 
 Casos PIPE_REF (modo_conexao_ref):
-  corpo  → tubo horizontal P_knee→P_target + Tê (BreakCurve)
-  ponta  → rota em L (seg1/seg2 conforme inverter_eixos) + joelhos
+  corpo  → Tê no ponto final da rota (BreakCurve)
+  ponta  → joelho na ponta livre de pipe_ref
 """
 
 import os
@@ -136,6 +133,21 @@ def _projetar_segmento(pt, pt_a, pt_b):
     return XYZ(pt_a.X + n.X * t, pt_a.Y + n.Y * t, pt_a.Z + n.Z * t)
 
 
+def _perp_horizontal(d_ref):
+    """
+    Direção unitária no plano horizontal, perpendicular ao eixo de
+    pipe_ref (d_ref). Renormaliza a projeção horizontal de d_ref antes de
+    girar 90° — necessário porque d_ref pode ter uma componente em Z (se
+    pipe_ref tiver alguma inclinação), e nesse caso XYZ(d_ref.X, d_ref.Y)
+    sozinho não tem módulo 1.
+    """
+    d_horiz = XYZ(d_ref.X, d_ref.Y, 0.0)
+    L_h     = d_horiz.GetLength()
+    if L_h > TOL:
+        d_horiz = XYZ(d_horiz.X / L_h, d_horiz.Y / L_h, 0.0)
+    return XYZ(-d_horiz.Y, d_horiz.X, 0.0)
+
+
 def _rota_ate_endpoint(P_knee, P_target, d_ref, inverter_eixos=False):
     """
     Calcula a rota em L de P_knee até P_target.
@@ -146,14 +158,7 @@ def _rota_ate_endpoint(P_knee, P_target, d_ref, inverter_eixos=False):
       d_ref como direção primária — inverte a ordem dos ajustes X/Y.
     Retorna (P_mid, needs_seg1, needs_seg2).
     """
-    if inverter_eixos:
-        d_horiz = XYZ(d_ref.X, d_ref.Y, 0.0)
-        L_h     = d_horiz.GetLength()
-        if L_h > TOL:
-            d_horiz = XYZ(d_horiz.X / L_h, d_horiz.Y / L_h, 0.0)
-        d_prim = XYZ(-d_horiz.Y, d_horiz.X, 0.0)
-    else:
-        d_prim = d_ref
+    d_prim = _perp_horizontal(d_ref) if inverter_eixos else d_ref
 
     v = P_target - P_knee
     a = v.DotProduct(d_prim)
@@ -171,6 +176,77 @@ def _rota_ate_endpoint(P_knee, P_target, d_ref, inverter_eixos=False):
         # despercebida: sem erro, mas sem encostar de fato. Encaixa exato.
         P_mid = P_target
     return P_mid, needs_seg1, needs_seg2
+
+
+# ── Roteamento em até 3 trechos retos, ordem livre (Z / paralelo / perpendicular) ──
+
+_NOME_EIXO = {u"z": u"Vertical (Z)", u"par": u"Paralelo", u"perp": u"Perpendicular"}
+
+
+def _eixos_necessarios(P_start, P_final, d_ref):
+    """
+    Quais dos 3 eixos (z = vertical, par = paralelo ao eixo de pipe_ref,
+    perp = perpendicular a ele) realmente precisam de ajuste pra ir de
+    P_start até P_final. Um eixo já alinhado (dentro da tolerância) não
+    entra na lista — o usuário não escolhe a ordem de um trecho que nem
+    vai existir. Retorna uma lista com os códigos necessários, SEM ordem
+    definida (a ordem de execução é decidida pelo usuário — ver ordem_eixos
+    em _construir_conexao).
+    """
+    d_perp = _perp_horizontal(d_ref)
+    dz     = P_final.Z - P_start.Z
+    v_h    = XYZ(P_final.X - P_start.X, P_final.Y - P_start.Y, 0.0)
+    a_par  = v_h.DotProduct(d_ref)
+    a_perp = v_h.DotProduct(d_perp)
+    necessarios = []
+    if abs(dz) > TOL_DZ:
+        necessarios.append(u"z")
+    if abs(a_par) > TOL_SEG:
+        necessarios.append(u"par")
+    if abs(a_perp) > TOL_SEG:
+        necessarios.append(u"perp")
+    return necessarios
+
+
+def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref):
+    """
+    Alvo NOMINAL da conexão em pipe_ref — antes de qualquer redirecionamento
+    por sobreposição (que só é decidido depois, já com a ordem escolhida —
+    ver o bloco de _ajustar_alvo_corpo_invertido em _construir_conexao).
+    Retorna (P_final, d_ref). Propaga _ConexaoError se modo "ponta" e
+    nenhuma ponta de pipe_ref estiver livre.
+    """
+    loc_ref = pipe_ref.Location.Curve
+    pt_A    = loc_ref.GetEndPoint(0)
+    pt_B    = loc_ref.GetEndPoint(1)
+    d_ref   = (pt_B - pt_A).Normalize()
+    if modo_conexao_ref == u"ponta":
+        P_final = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+    else:
+        ref_proj = pt_click_ref if pt_click_ref is not None else pt_A
+        P_final  = _projetar_segmento(ref_proj, pt_A, pt_B)
+    return P_final, d_ref
+
+
+def _eixos_disponiveis(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, modo_conexao_ref):
+    """
+    Igual a _eixos_necessarios, mas calculando P_start/P_final a partir dos
+    próprios elementos — usado tanto pela prévia ao vivo (pra só oferecer
+    ao usuário os botões dos eixos que realmente vão existir na rota)
+    quanto pelo fallback sem prévia (pra decidir quantas perguntas de
+    ordem fazer). Nunca levanta exceção — se não conseguir decidir (ex.:
+    modo "ponta" sem nenhuma ponta livre), libera os 3 eixos; o erro de
+    verdade aparece depois, quando _construir_conexao rodar pra valer.
+    """
+    conn_desc = None
+    if pt_click_desc is not None:
+        conn_desc = _conn_nearest(pipe_desc, pt_click_desc)
+    P_start = conn_desc.Origin if conn_desc is not None else pipe_desc.Location.Curve.GetEndPoint(0)
+    try:
+        P_final, d_ref = _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref)
+    except _ConexaoError:
+        return [u"z", u"par", u"perp"]
+    return _eixos_necessarios(P_start, P_final, d_ref)
 
 
 def _intersecao_com_pipe(P_start, d_ext, pt_A, pt_B):
@@ -491,11 +567,32 @@ def _global_pt(ref):
         return None
 
 
+_TOL_LINHA_CENTRAL = _to_ft(0.03)  # 3 cm — clique só é aceito perto da
+                                    # linha central do tubo; conectores
+                                    # (pontas, ramais de tê) já ficam sobre
+                                    # ela, então são cobertos automaticamente
+
+
 class _FiltroPipe(ISelectionFilter):
+    """Só permite Pipe — e, dentro do tubo, só clique perto da linha
+    central (ou de um ponto de conexão, que sempre está sobre ela), em vez
+    de qualquer ponto da superfície visível do tubo (clique/pointer normal).
+    doc é opcional só por compatibilidade; sem ele, cai no comportamento
+    antigo (qualquer ponto do tubo é aceito)."""
+    def __init__(self, doc=None):
+        self.doc = doc
+
     def AllowElement(self, e):
         return isinstance(e, Pipe)
+
     def AllowReference(self, r, p):
-        return True
+        if self.doc is None:
+            return True
+        try:
+            curve = self.doc.GetElement(r.ElementId).Location.Curve
+            return curve.Project(p).Distance <= _TOL_LINHA_CENTRAL
+        except Exception:
+            return True
 
 
 # ============================================================================
@@ -504,11 +601,20 @@ class _FiltroPipe(ISelectionFilter):
 
 class _JanelaOpcoesRota(forms.WPFWindow):
     """Janela WPF (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a cada troca
-    de opção (altura / ordem dos eixos X-Y), o tubo é reconstruído no modelo
-    dentro de uma transação já aberta — revertida e refeita a cada mudança —
-    para o usuário ver o resultado antes de confirmar. Só é gravado de fato
-    (Commit) quando o usuário clica OK; Cancelar ou fechar a janela reverte
-    (RollBack) tudo o que foi mostrado na prévia."""
+    de opção (onde conectar / ordem dos eixos), o tubo é reconstruído no
+    modelo dentro de uma transação já aberta — revertida e refeita a cada
+    mudança — para o usuário ver o resultado antes de confirmar. Só é
+    gravado de fato (Commit) quando o usuário clica OK; Cancelar ou fechar
+    a janela reverte (RollBack) tudo o que foi mostrado na prévia.
+
+    Ordem dos eixos: até 3 trechos retos (z = vertical, par = paralelo ao
+    eixo de pipe_ref, perp = perpendicular a ele) — só os que realmente
+    precisam de ajuste aparecem como opção (ver _eixos_disponiveis). O
+    usuário escolhe livremente a ordem entre eles ("1º eixo" / "2º eixo";
+    o que sobra é sempre o último, mostrado só como informação)."""
+
+    _BOTOES_ORDEM1 = {u"z": u"RbO1Z", u"par": u"RbO1Par", u"perp": u"RbO1Perp"}
+    _BOTOES_ORDEM2 = {u"z": u"RbO2Z", u"par": u"RbO2Par", u"perp": u"RbO2Perp"}
 
     def __init__(self, doc, uidoc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                  clicou_ponta_exata=False):
@@ -524,6 +630,8 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self.confirmado        = False
         self._preview_ok       = False
         self._transacao_ativa  = False
+        self._sincronizando    = False
+        self._ordem_pref       = [u"z", u"par", u"perp"]
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -539,8 +647,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self.RbRefPonta.IsChecked = True
         else:
             self.RbRefCorpo.IsChecked = True
-        self.RbAlturaOrigem.IsChecked = True
-        self.RbEixoPadrao.IsChecked   = True
+        self._sincronizar_ordem()
 
         self._t = Transaction(doc, u"FireUtils - Conectar Tubo")
         self._t.Start()
@@ -563,14 +670,80 @@ class _JanelaOpcoesRota(forms.WPFWindow):
                 pass
             self._transacao_ativa = False
 
-    def _modo_altura_atual(self):
-        return u"destino" if self.RbAlturaDestino.IsChecked else u"origem"
-
-    def _inverter_eixos_atual(self):
-        return bool(self.RbEixoInvertido.IsChecked)
+    def _restaurar_pristino(self):
+        """Desfaz a prévia do ciclo anterior sem construir uma nova ainda —
+        chamado antes de _sincronizar_ordem, que lê a geometria atual de
+        pipe_desc/pipe_ref pra decidir quais eixos precisam de ajuste; sem
+        isso, ela leria o tubo ainda modificado pela prévia anterior (só
+        desfeita dentro de _atualizar_preview, chamado depois)."""
+        if self._transacao_ativa:
+            self._t.RollBack()
+            self._t.Start()
 
     def _modo_conexao_ref_atual(self):
         return u"ponta" if self.RbRefPonta.IsChecked else u"corpo"
+
+    def _ordem1_atual(self):
+        for eixo, nome_btn in self._BOTOES_ORDEM1.items():
+            if getattr(self, nome_btn).IsChecked:
+                return eixo
+        return None
+
+    def _ordem2_atual(self):
+        for eixo, nome_btn in self._BOTOES_ORDEM2.items():
+            if getattr(self, nome_btn).IsChecked:
+                return eixo
+        return None
+
+    def _sincronizar_ordem(self):
+        """Recalcula quais eixos ainda precisam de ajuste (dado o modo de
+        conexão atual) e mostra só os botões cabíveis em "1º eixo"/"2º
+        eixo" — o resto (0 ou 1 eixo necessário) não precisa de escolha
+        nenhuma, então a seção some. Preserva ao máximo a preferência já
+        escolhida pelo usuário (self._ordem_pref)."""
+        necessarios = _eixos_disponiveis(
+            self.pipe_desc, self.pipe_ref, self.pt_click_desc, self.pt_click_ref,
+            self._modo_conexao_ref_atual())
+
+        ordem = [e for e in self._ordem_pref if e in necessarios]
+        for e in necessarios:
+            if e not in ordem:
+                ordem.append(e)
+        self._ordem_pref = ordem
+
+        n = len(ordem)
+        self._sincronizando = True
+        try:
+            self.SecaoOrdem.Visibility = (SW.Visibility.Visible if n >= 1
+                                           else SW.Visibility.Collapsed)
+
+            mostrar1 = SW.Visibility.Visible if n >= 2 else SW.Visibility.Collapsed
+            self.LinhaOrdem1.Visibility = mostrar1
+            self.LblOrdem1.Visibility   = mostrar1
+            if n >= 2:
+                for eixo, nome_btn in self._BOTOES_ORDEM1.items():
+                    getattr(self, nome_btn).Visibility = (
+                        SW.Visibility.Visible if eixo in ordem else SW.Visibility.Collapsed)
+                getattr(self, self._BOTOES_ORDEM1[ordem[0]]).IsChecked = True
+
+            mostrar2 = SW.Visibility.Visible if n >= 3 else SW.Visibility.Collapsed
+            self.LinhaOrdem2.Visibility = mostrar2
+            self.LblOrdem2.Visibility   = mostrar2
+            if n >= 3:
+                restantes = ordem[1:]
+                for eixo, nome_btn in self._BOTOES_ORDEM2.items():
+                    getattr(self, nome_btn).Visibility = (
+                        SW.Visibility.Visible if eixo in restantes else SW.Visibility.Collapsed)
+                getattr(self, self._BOTOES_ORDEM2[ordem[1]]).IsChecked = True
+
+            if n == 0:
+                self.TxtOrdemInfo.Text = u""
+            elif n == 1:
+                self.TxtOrdemInfo.Text = u"Único ajuste necessário: {}".format(_NOME_EIXO[ordem[0]])
+            else:
+                self.TxtOrdemInfo.Text = u"Por último: {}".format(_NOME_EIXO[ordem[-1]])
+        finally:
+            self._sincronizando = False
 
     def _atualizar_preview(self):
         """Descarta a prévia anterior e reconstrói a conexão com as opções
@@ -583,8 +756,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             _construir_conexao(
                 self.doc, self.pipe_desc, self.pipe_ref,
                 self.pt_click_desc, self.pt_click_ref, self.output,
-                modo_altura=self._modo_altura_atual(),
-                inverter_eixos=self._inverter_eixos_atual(),
+                ordem_eixos=self._ordem_pref,
                 modo_conexao_ref=self._modo_conexao_ref_atual(),
             )
             self.doc.Regenerate()
@@ -607,6 +779,32 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             pass
 
     def on_opcao_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        self._restaurar_pristino()
+        self._sincronizar_ordem()
+        self._atualizar_preview()
+
+    def on_ordem1_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        self._restaurar_pristino()
+        novo = self._ordem1_atual()
+        if novo is not None:
+            self._ordem_pref = [novo] + [e for e in self._ordem_pref if e != novo]
+        self._sincronizar_ordem()
+        self._atualizar_preview()
+
+    def on_ordem2_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        self._restaurar_pristino()
+        novo2 = self._ordem2_atual()
+        if novo2 is not None and self._ordem_pref:
+            primeiro = self._ordem_pref[0]
+            self._ordem_pref = ([primeiro, novo2] +
+                                 [e for e in self._ordem_pref if e not in (primeiro, novo2)])
+        self._sincronizar_ordem()
         self._atualizar_preview()
 
     def on_cancel(self, sender, args):
@@ -636,7 +834,8 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self._descartar()
 
 
-def _escolher_opcoes_rota_fallback(clicou_ponta_exata=False):
+def _escolher_opcoes_rota_fallback(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
+                                    clicou_ponta_exata=False):
     if clicou_ponta_exata:
         # Clique já caiu exatamente na ponta de pipe_ref — resposta óbvia,
         # pula a pergunta em vez de fazer o usuário confirmar o óbvio.
@@ -652,28 +851,40 @@ def _escolher_opcoes_rota_fallback(clicou_ponta_exata=False):
             return None
         modo_conexao_ref = u"ponta" if escolha_ref.startswith(u"Ponta") else u"corpo"
 
-    escolha_altura = forms.SelectFromList.show(
-        [u"No tubo desconectado", u"No tubo referência"],
-        title=u"Fire Utils — Conectar Tubo",
-        prompt=u"Onde a tubulação deve subir/descer?",
-        multiselect=False
-    )
-    if not escolha_altura:
-        return None
-    modo_altura = (u"destino" if escolha_altura == u"No tubo referência"
-                   else u"origem")
+    # Só pergunta a ordem dos eixos que realmente vão existir na rota —
+    # um tubo já alinhado num eixo não aparece como escolha.
+    necessarios = _eixos_disponiveis(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
+                                      modo_conexao_ref)
+    ordem_eixos = [u"z", u"par", u"perp"]
 
-    escolha_eixo = forms.SelectFromList.show(
-        [u"Paralelo", u"Perpendicular"],
-        title=u"Fire Utils — Conectar Tubo",
-        prompt=u"Qual eixo alinhar primeiro?",
-        multiselect=False
-    )
-    if not escolha_eixo:
-        return None
-    inverter_eixos = escolha_eixo.startswith(u"Perpendicular")
+    if len(necessarios) >= 2:
+        escolha1 = forms.SelectFromList.show(
+            [_NOME_EIXO[e] for e in necessarios],
+            title=u"Fire Utils — Conectar Tubo",
+            prompt=u"Qual eixo alinhar primeiro?",
+            multiselect=False
+        )
+        if not escolha1:
+            return None
+        primeiro  = [e for e in necessarios if _NOME_EIXO[e] == escolha1][0]
+        restantes = [e for e in necessarios if e != primeiro]
 
-    return modo_altura, inverter_eixos, modo_conexao_ref
+        if len(restantes) >= 2:
+            escolha2 = forms.SelectFromList.show(
+                [_NOME_EIXO[e] for e in restantes],
+                title=u"Fire Utils — Conectar Tubo",
+                prompt=u"E depois?",
+                multiselect=False
+            )
+            if not escolha2:
+                return None
+            segundo   = [e for e in restantes if _NOME_EIXO[e] == escolha2][0]
+            terceiro  = [e for e in restantes if e != segundo][0]
+            ordem_eixos = [primeiro, segundo, terceiro]
+        else:
+            ordem_eixos = [primeiro] + restantes
+
+    return ordem_eixos, modo_conexao_ref
 
 
 # ============================================================================
@@ -684,7 +895,7 @@ def run(doc, uidoc, output):
     # ── Clique 1: ponta do PIPE_DESC ────────────────────────────────────────
     try:
         ref1         = uidoc.Selection.PickObject(
-            ObjectType.Element, _FiltroPipe(),
+            ObjectType.PointOnElement, _FiltroPipe(doc),
             u"[1/2] Clique em uma PONTA do tubo desconectado"
         )
         pipe_desc    = doc.GetElement(ref1.ElementId)
@@ -695,7 +906,7 @@ def run(doc, uidoc, output):
     # ── Clique 2: PIPE_REF (corpo ou ponta) ─────────────────────────────────
     try:
         ref2         = uidoc.Selection.PickObject(
-            ObjectType.Element, _FiltroPipe(),
+            ObjectType.PointOnElement, _FiltroPipe(doc),
             u"[2/2] Clique no tubo referência — corpo para Tê, ponta para joelho"
         )
         pipe_ref     = doc.GetElement(ref2.ElementId)
@@ -735,14 +946,14 @@ def run(doc, uidoc, output):
         print(u"[AVISO] Formulário WPF com prévia de Conectar Tubo falhou ({}), "
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
-    opcoes = _escolher_opcoes_rota_fallback(clicou_ponta_exata=clicou_ponta_exata)
+    opcoes = _escolher_opcoes_rota_fallback(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
+                                             clicou_ponta_exata=clicou_ponta_exata)
     if opcoes is None:
         pyscript.exit()
-    modo_altura, inverter_eixos, modo_conexao_ref = opcoes
+    ordem_eixos, modo_conexao_ref = opcoes
 
     _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-               modo_altura=modo_altura, inverter_eixos=inverter_eixos,
-               modo_conexao_ref=modo_conexao_ref)
+               ordem_eixos=ordem_eixos, modo_conexao_ref=modo_conexao_ref)
 
 
 # ============================================================================
@@ -805,22 +1016,28 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_r
 
 
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-                        modo_altura=u"origem", inverter_eixos=False,
+                        ordem_eixos=(u"z", u"par", u"perp"),
                         modo_conexao_ref=u"auto"):
     """
     Lógica pura de conexão — NÃO abre/fecha transação (fica a cargo de
     quem chama: _conectar, no fluxo direto, ou a janela de prévia, que
     reconstrói isso a cada mudança de opção dentro da MESMA transação).
 
-    modo_altura : "origem"  → sobe/desce logo na saída do tubo desconectado
-                              (comportamento padrão/histórico).
-                  "destino" → roteia horizontalmente na cota do tubo
-                              desconectado e só sobe/desce por último,
-                              já junto ao tubo de referência.
-    inverter_eixos : False (padrão) → no trecho horizontal em L, ajusta
-                              primeiro o eixo paralelo ao tubo de referência.
-                     True  → inverte a ordem, ajustando primeiro o eixo
-                              perpendicular (troca X/Y).
+    ordem_eixos : ordem de preferência em que os até 3 trechos retos da
+                              rota são fechados — "z" (vertical), "par"
+                              (paralelo ao eixo de pipe_ref) e "perp"
+                              (perpendicular a ele), ex.:
+                              (u"z", u"par", u"perp"). Só os eixos
+                              realmente necessários (ver _eixos_necessarios)
+                              entram na rota de verdade — os demais
+                              elementos de ordem_eixos, se houver, são
+                              ignorados. O trecho executado primeiro tenta
+                              prolongar o próprio pipe_desc em vez de criar
+                              tubo + joelho, se pipe_desc já apontar
+                              naquela direção (ver _tenta_estender_colinear,
+                              ou a extensão direta de tubo vertical, se
+                              pipe_desc já for vertical e o 1º eixo for
+                              "z").
     modo_conexao_ref : escolhe ponta vs corpo em pipe_ref — decisão do
                               usuário, não mais adivinhada pela distância do
                               clique (raio de tolerância dava falso positivo
@@ -859,7 +1076,6 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     loc_ref = pipe_ref.Location.Curve
     pt_A    = loc_ref.GetEndPoint(0)
     pt_B    = loc_ref.GetEndPoint(1)
-    z_ref   = (pt_A.Z + pt_B.Z) / 2.0
     d_ref   = (pt_B - pt_A).Normalize()
 
     # ── Modo de conexão: ponta ou corpo? ────────────────────────────────────
@@ -956,183 +1172,112 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                     conn_end.ConnectTo(c_ep)
                 return
 
-    # ── Etapa 2: roteamento em L ─────────────────────────────────────────────
-    P_knee    = XYZ(P_start.X, P_start.Y, z_ref)
-    dz        = abs(P_start.Z - z_ref)
-    need_vert = dz > TOL_DZ
-    desc_vert = _pipe_is_vertical(pipe_desc)
-
+    # ── Etapa 2: roteamento genérico em até 3 trechos retos ───────────────────
+    # Alvo NOMINAL da conexão em pipe_ref (antes de qualquer redirecionamento
+    # por sobreposição, decidido mais abaixo já com a ordem escolhida).
     if not clicou_ponta:
-        # Usa a posição do CLIQUE do usuário (não P_knee) para determinar
-        # ONDE no pipe_ref a conexão deve ser feita.
-        # P_knee pode estar fora da extensão do pipe_ref e causaria projeção
-        # clamped para um endpoint → gerava joelho em vez de tê.
-        ref_proj = pt_click_ref if pt_click_ref is not None else P_knee
-        P_target   = _projetar_segmento(ref_proj, pt_A, pt_B)
-        dist_horiz = P_knee.DistanceTo(P_target)
-        need_horiz = dist_horiz > TOL_SEG
-        if not need_horiz:
-            P_target = P_knee
+        ref_proj = pt_click_ref if pt_click_ref is not None else P_start
+        P_target = _projetar_segmento(ref_proj, pt_A, pt_B)
     else:
-        P_target   = None
-        need_horiz = True
+        P_target = None
+    P_final = pt_endpoint if clicou_ponta else P_target
 
-    if not need_vert and not need_horiz and not clicou_ponta:
+    if (not clicou_ponta and P_start.DistanceTo(P_final) <= TOL_SEG
+            and abs(P_start.Z - P_final.Z) <= TOL_DZ):
         raise _ConexaoError(u"Os tubos já estão alinhados — nenhuma conexão necessária.")
 
-    # Ponto final da rota — onde o último trecho encontra pipe_ref.
-    P_final = pt_endpoint if clicou_ponta else P_target
+    necessarios = _eixos_necessarios(P_start, P_final, d_ref)
+    ordem_ativa = [e for e in ordem_eixos if e in necessarios]
+    for e in necessarios:
+        if e not in ordem_ativa:
+            ordem_ativa.append(e)
+
+    # Corpo + a ordem escolhida fecha o trecho perpendicular ANTES do
+    # paralelo, já na cota de pipe_ref (sem outro trecho de Z pelo meio): o
+    # ponto onde o perpendicular termina cai, por construção, EXATAMENTE
+    # sobre a reta infinita de pipe_ref — se isso acontece antes do
+    # paralelo, o trecho paralelo posterior rodaria por cima do próprio
+    # pipe_ref. _ajustar_alvo_corpo_invertido decide o que fazer com isso
+    # ANTES de criar o trecho paralelo: ponto dentro do corpo físico →
+    # conecta ali mesmo (Tê), dispensa o paralelo; fora → cai pra ponta
+    # LIVRE mais próxima (modo joelho).
+    if modo_conexao_ref == u"corpo" and not clicou_ponta and u"perp" in ordem_ativa and u"par" in ordem_ativa:
+        i_perp  = ordem_ativa.index(u"perp")
+        i_par   = ordem_ativa.index(u"par")
+        z_antes = u"z" not in ordem_ativa or ordem_ativa.index(u"z") < i_perp
+        if i_perp < i_par and z_antes:
+            P_mid_check, _, _ = _rota_ate_endpoint(
+                XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
+            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
+                pipe_ref, pt_A, pt_B, d_ref, P_mid_check, pt_click_ref)
+            if modo_resultado == u"corpo":
+                P_final = alvo
+            else:
+                clicou_ponta = True
+                P_final = alvo
+            necessarios = _eixos_necessarios(P_start, P_final, d_ref)
+            ordem_ativa = [e for e in ordem_eixos if e in necessarios]
+            for e in necessarios:
+                if e not in ordem_ativa:
+                    ordem_ativa.append(e)
 
     pt_id, sys_id, _,      diam_ft = _pipe_params(doc, pipe_desc)
     _,     _,      lvl_id, _       = _pipe_params(doc, pipe_ref)
 
-    _elbows_pend = []
+    _elbows_pend   = []
+    conn_cur       = conn_desc
+    P_cur          = P_start
+    primeira_perna = True
+    d_perp         = _perp_horizontal(d_ref)
+    dirs_horiz     = {u"par": d_ref, u"perp": d_perp}
 
-    if modo_altura == u"destino":
-        # ── Muda de altura junto ao tubo de REFERÊNCIA ────────────────────
-        # Roteia horizontalmente ainda na cota do tubo desconectado,
-        # alinhando X/Y ao ponto final; sobe/desce só no último trecho.
-        P_pre = XYZ(P_final.X, P_final.Y, P_start.Z)
-        P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
-            P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
-
-        # Corpo + invertida + ainda sobra 2º trecho: só é um problema real
-        # de sobreposição quando essa rota horizontal já está na cota de
-        # pipe_ref (not need_vert) — se a subida/descida ainda vai
-        # acontecer depois (need_vert), o 2º trecho fica numa cota
-        # diferente da de pipe_ref e não sobrepõe nada de verdade.
-        if (modo_conexao_ref == u"corpo" and inverter_eixos and needs_s2
-                and not clicou_ponta and not need_vert):
-            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
-                pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref)
-            if modo_resultado == u"corpo":
-                P_final  = alvo
-                P_pre    = alvo
-                needs_s2 = False
-            else:
-                clicou_ponta = True
-                P_final = alvo
-                P_pre   = XYZ(P_final.X, P_final.Y, P_start.Z)
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
-                    P_start, P_pre, d_ref, inverter_eixos=inverter_eixos)
-
-        conn_cur = conn_desc
-
-        if needs_s1:
-            # Se pipe_desc já aponta reto para P_mid, prolonga o próprio
-            # tubo em vez de criar um segmento novo + joelho desnecessário.
-            P_other_desc = _extremo_oposto(pipe_desc.Location.Curve, P_start)
-            if _tenta_estender_colinear(doc, pipe_desc, P_other_desc, P_start, P_mid):
-                conn_cur = _conn_near(pipe_desc, P_mid)
-            else:
-                seg1   = _mk_pipe(doc, P_start, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-                c_s1_k = _conn_near(seg1, P_start)
-                c_s1_m = _conn_near(seg1, P_mid)
-                _elbows_pend.append((conn_cur, c_s1_k))
-                conn_cur = c_s1_m
-
-        if needs_s2:
-            seg2   = _mk_pipe(doc, P_mid, P_pre, pt_id, sys_id, lvl_id, diam_ft)
-            c_s2_m = _conn_near(seg2, P_mid)
-            c_s2_e = _conn_near(seg2, P_pre)
-            _elbows_pend.append((conn_cur, c_s2_m))
-            conn_cur = c_s2_e
-
-        if need_vert:
-            pipe_vert = _mk_pipe(doc, P_pre, P_final, pt_id, sys_id, lvl_id, diam_ft)
-            c_v_pre   = _conn_near(pipe_vert, P_pre)
-            c_v_final = _conn_near(pipe_vert, P_final)
-            _elbows_pend.append((conn_cur, c_v_pre))
-            conn_cur = c_v_final
-
-        conn_final = conn_cur
-
-    else:
-        # ── Muda de altura junto ao tubo DESCONECTADO (padrão) ────────────
-        conn_knee = None
-        # True só quando conn_knee ainda é o conector original de pipe_desc
-        # (nenhum trecho vertical foi criado/aplicado) — só nesse caso faz
-        # sentido tentar prolongar o próprio pipe_desc no passo seguinte.
-        pipe_desc_no_knee = False
-
-        if not need_vert:
-            conn_knee = _conn_near(pipe_desc, P_start)
-            pipe_desc_no_knee = True
-
-        elif desc_vert:
-            # pipe_desc vertical: estende a curva até z_ref
-            c  = pipe_desc.Location.Curve
-            p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
-            if p0.DistanceTo(P_start) < p1.DistanceTo(P_start):
-                pipe_desc.Location.Curve = Line.CreateBound(
-                    XYZ(p0.X, p0.Y, z_ref), p1)
-            else:
-                pipe_desc.Location.Curve = Line.CreateBound(
-                    p0, XYZ(p1.X, p1.Y, z_ref))
-            doc.Regenerate()
-            conn_knee = _conn_near(pipe_desc, P_knee)
-
+    for eixo in ordem_ativa:
+        if eixo == u"z":
+            P_next  = XYZ(P_cur.X, P_cur.Y, P_final.Z)
+            tol_leg = TOL_DZ
         else:
-            # pipe_desc horizontal: cria tubo vertical P_start → P_knee
-            pipe_vert = _mk_pipe(doc, P_start, P_knee, pt_id, sys_id, lvl_id, diam_ft)
-            conn_knee = _conn_near(pipe_vert, P_knee)
-            c_d       = _conn_near(pipe_desc,  P_start)
-            c_v       = _conn_near(pipe_vert,  P_start)
-            _elbows_pend.append((c_d, c_v))
+            d_eixo = dirs_horiz[eixo]
+            delta  = (P_final.X - P_cur.X) * d_eixo.X + (P_final.Y - P_cur.Y) * d_eixo.Y
+            P_next = XYZ(P_cur.X + d_eixo.X * delta, P_cur.Y + d_eixo.Y * delta, P_cur.Z)
+            tol_leg = TOL_SEG
 
-        if conn_knee is None:
-            raise _ConexaoError(u"Não foi possível localizar o conector em P_knee.")
+        if P_cur.DistanceTo(P_next) <= tol_leg:
+            continue
 
-        # Roteamento em L: seg1 paralelo ao eixo de pipe_ref,
-        # seg2 perpendicular. Garante ângulos retos mesmo quando
-        # P_knee está fora da extensão lateral de pipe_ref.
-        P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
-            P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
-
-        # Corpo + invertida + ainda sobra 2º trecho: aqui a rota horizontal
-        # já está sempre na cota de pipe_ref (P_knee.Z == z_ref), então a
-        # sobreposição é sempre real quando isso acontece.
-        if (modo_conexao_ref == u"corpo" and inverter_eixos and needs_s2
-                and not clicou_ponta):
-            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
-                pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref)
-            if modo_resultado == u"corpo":
-                P_final  = alvo
-                needs_s2 = False
+        estendeu = False
+        if primeira_perna and eixo == u"z" and _pipe_is_vertical(pipe_desc):
+            # pipe_desc já é vertical: estende/encolhe a própria curva até
+            # a nova cota (só move a ponta livre) em vez de criar tubo +
+            # joelho — o sentido (subir ou descer) não importa aqui, só a
+            # coordenada final.
+            c = pipe_desc.Location.Curve
+            p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
+            if p0.DistanceTo(P_cur) < p1.DistanceTo(P_cur):
+                pipe_desc.Location.Curve = Line.CreateBound(XYZ(p0.X, p0.Y, P_next.Z), p1)
             else:
-                clicou_ponta = True
-                P_final = alvo
-                P_mid, needs_s1, needs_s2 = _rota_ate_endpoint(
-                    P_knee, P_final, d_ref, inverter_eixos=inverter_eixos)
+                pipe_desc.Location.Curve = Line.CreateBound(p0, XYZ(p1.X, p1.Y, P_next.Z))
+            doc.Regenerate()
+            conn_cur = _conn_near(pipe_desc, P_next)
+            estendeu = True
+        elif primeira_perna:
+            # Se pipe_desc já aponta reto para P_next, prolonga o próprio
+            # tubo em vez de criar um segmento novo + joelho desnecessário.
+            P_other_desc = _extremo_oposto(pipe_desc.Location.Curve, P_cur)
+            estendeu = _tenta_estender_colinear(doc, pipe_desc, P_other_desc, P_cur, P_next)
+            if estendeu:
+                conn_cur = _conn_near(pipe_desc, P_next)
 
-        conn_cur = conn_knee
+        if not estendeu:
+            seg   = _mk_pipe(doc, P_cur, P_next, pt_id, sys_id, lvl_id, diam_ft)
+            c_ini = _conn_near(seg, P_cur)
+            c_fim = _conn_near(seg, P_next)
+            _elbows_pend.append((conn_cur, c_ini))
+            conn_cur = c_fim
 
-        if needs_s1:
-            estendeu = False
-            if pipe_desc_no_knee:
-                # P_knee == P_start aqui (não houve trecho vertical) — se
-                # pipe_desc já aponta reto para P_mid, prolonga o próprio
-                # tubo em vez de criar um segmento novo + joelho.
-                P_other_desc = _extremo_oposto(pipe_desc.Location.Curve, P_knee)
-                estendeu = _tenta_estender_colinear(doc, pipe_desc, P_other_desc, P_knee, P_mid)
-                if estendeu:
-                    conn_cur = _conn_near(pipe_desc, P_mid)
+        P_cur          = P_next
+        primeira_perna = False
 
-            if not estendeu:
-                seg1   = _mk_pipe(doc, P_knee, P_mid, pt_id, sys_id, lvl_id, diam_ft)
-                c_s1_k = _conn_near(seg1, P_knee)
-                c_s1_m = _conn_near(seg1, P_mid)
-                _elbows_pend.append((conn_cur, c_s1_k))
-                conn_cur = c_s1_m
-
-        if needs_s2:
-            seg2   = _mk_pipe(doc, P_mid, P_final, pt_id, sys_id, lvl_id, diam_ft)
-            c_s2_m = _conn_near(seg2, P_mid)
-            c_s2_e = _conn_near(seg2, P_final)
-            _elbows_pend.append((conn_cur, c_s2_m))
-            conn_cur = c_s2_e
-
-        conn_final = conn_cur
+    conn_final = conn_cur
 
     # ── Conexão final a pipe_ref: Tê (modo corpo) ou joelho (modo ponta) ──────
     if not clicou_ponta:
@@ -1184,14 +1329,14 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
 
 
 def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
-              modo_altura=u"origem", inverter_eixos=False, modo_conexao_ref=u"auto"):
+              ordem_eixos=(u"z", u"par", u"perp"), modo_conexao_ref=u"auto"):
     """Fluxo direto (sem prévia) — abre/fecha a transação e mostra alerta em
     caso de falha. Usado como fallback quando a janela de prévia falha."""
     with Transaction(doc, u"FireUtils - Conectar Tubo") as t:
         t.Start()
         try:
             _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
-                                output, modo_altura=modo_altura, inverter_eixos=inverter_eixos,
+                                output, ordem_eixos=ordem_eixos,
                                 modo_conexao_ref=modo_conexao_ref)
             t.Commit()
         except _ConexaoError as ex:

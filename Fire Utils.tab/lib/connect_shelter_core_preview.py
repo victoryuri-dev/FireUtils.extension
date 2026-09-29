@@ -12,11 +12,11 @@ Fluxo de cliques
   2. Clicar no tubo de referência — corpo → Tê  |  ponta → joelhos em L
   3. Janela WPF (connect_shelter_opcoes.xaml, classe _JanelaOpcoesAbrigo)
      pergunta:
-       • lado do ramal (esquerda/direita da face do abrigo) — antes era
-         escolhido por um clique de direção; agora é por botões, igual à
-         pergunta de altura
-       • onde a tubulação sobe/desce de altura — junto à válvula (padrão)
-         ou junto ao tubo de referência
+       • lado do ramal (esquerda/direita da face do abrigo)
+       • onde conectar em pipe_ref (corpo/ponta)
+       • ordem dos até 3 trechos retos da rota (Vertical/Z, Paralelo e
+         Perpendicular ao eixo de pipe_ref) — livre, só com os eixos que
+         realmente precisam de ajuste (ver connect_pipe._eixos_disponiveis)
      A cada troca de opção, válvula + stub + roteamento são reconstruídos
      no modelo dentro de uma transação já aberta (revertida/refeita a cada
      mudança) — nada é gravado de fato até o usuário confirmar em OK.
@@ -73,7 +73,10 @@ from hydrant_insert_core import (
     ALTURA_VALVULA_M, COMP_HORIZ_M, DIAM_RAMAL_M, TOL,
     _angulo_entre, _conector_mais_proximo, _setar_diametro_ft,
 )
-from connect_pipe import _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params, TOL_SEG
+from connect_pipe import (
+    _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params, TOL_SEG,
+    _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO,
+)
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"connect_shelter_opcoes.xaml")
@@ -107,6 +110,44 @@ def _direcao_lado(dir_face, lado):
     return XYZ(-dir_face.Y, dir_face.X, 0.0)        # 90° CCW da face (direita)
 
 
+def _pt_stub_end(pt_abrigo, nivel, dir_face, lado):
+    """Ponta livre do stub, calculada geometricamente (sem criar nada) —
+    mesma fórmula usada dentro de _construir_valvula_stub_e_rota. Usada
+    pra saber quais eixos precisam de ajuste antes mesmo de o tubo/válvula
+    existirem de verdade (ver _eixos_disponiveis_abrigo)."""
+    dir_pipe = _direcao_lado(dir_face, lado)
+    z_val    = nivel.Elevation + _to_ft(ALTURA_VALVULA_M)
+    comp_ft  = _to_ft(COMP_HORIZ_M)
+    pt_valvula = XYZ(
+        pt_abrigo.X + _to_ft(0.18) * dir_pipe.X - _to_ft(0.085) * dir_face.X,
+        pt_abrigo.Y + _to_ft(0.18) * dir_pipe.Y - _to_ft(0.085) * dir_face.Y,
+        z_val,
+    )
+    return XYZ(
+        pt_valvula.X + dir_pipe.X * comp_ft,
+        pt_valvula.Y + dir_pipe.Y * comp_ft,
+        z_val,
+    )
+
+
+def _eixos_disponiveis_abrigo(pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face,
+                               lado, modo_conexao_ref):
+    """
+    Quais dos eixos (z/par/perp) precisam de ajuste pra ir do stub (ainda
+    nem criado — só calculado geometricamente) até o alvo em pipe_ref.
+    Espelha connect_pipe._eixos_disponiveis, mas sem precisar de um
+    elemento Pipe real pro lado do stub. Nunca levanta exceção — se não
+    conseguir decidir, libera os 3 eixos; o erro de verdade aparece
+    depois, quando a rota for construída pra valer.
+    """
+    P_start = _pt_stub_end(pt_abrigo, nivel, dir_face, lado)
+    try:
+        P_final, d_ref = _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref)
+    except _ConexaoError:
+        return [u"z", u"par", u"perp"]
+    return _eixos_necessarios(P_start, P_final, d_ref)
+
+
 # ===========================================================================
 # LÓGICA DE CONSTRUÇÃO — válvula + stub + roteamento
 # ===========================================================================
@@ -114,8 +155,8 @@ def _direcao_lado(dir_face, lado):
 def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
                                     pt_abrigo, nivel, dir_face,
                                     pipe_type_id, sys_type_id, output,
-                                    lado=u"direita", modo_altura=u"origem",
-                                    inverter_eixos=False,
+                                    lado=u"direita",
+                                    ordem_eixos=(u"z", u"par", u"perp"),
                                     modo_conexao_ref=u"corpo"):
     """
     Cria a válvula + stub no lado escolhido e roteia até pipe_ref. NÃO abre
@@ -188,8 +229,7 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
     # decide corpo (Tê) vs ponta (joelho) de pipe_ref — escolha explícita
     # do usuário no diálogo, não mais adivinhada pela distância do clique.
     _construir_conexao(doc, tubo_stub, pipe_ref, pt_stub_end, pt_click_ref,
-                        output, modo_altura=modo_altura,
-                        inverter_eixos=inverter_eixos,
+                        output, ordem_eixos=ordem_eixos,
                         modo_conexao_ref=modo_conexao_ref)
 
 
@@ -199,12 +239,19 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
 
 class _JanelaOpcoesAbrigo(forms.WPFWindow):
     """Janela WPF (connect_shelter_opcoes.xaml) com PRÉVIA AO VIVO: a cada
-    troca de opção (lado do ramal / onde a rota sobe-desce de altura),
+    troca de opção (lado do ramal / onde conectar / ordem dos eixos),
     válvula + stub + roteamento são reconstruídos no modelo dentro de uma
     transação já aberta — revertida e refeita a cada mudança. Só é gravado
     de fato (Commit) quando o usuário clica OK; Cancelar ou fechar a janela
     reverte (RollBack) tudo o que foi mostrado na prévia, válvula e stub
-    incluídos."""
+    incluídos.
+
+    Ordem dos eixos: mesmo mecanismo de connect_pipe._JanelaOpcoesRota —
+    até 3 trechos retos (z/par/perp), só os necessários aparecem como
+    opção, ordem livre escolhida pelo usuário."""
+
+    _BOTOES_ORDEM1 = {u"z": u"RbO1Z", u"par": u"RbO1Par", u"perp": u"RbO1Perp"}
+    _BOTOES_ORDEM2 = {u"z": u"RbO2Z", u"par": u"RbO2Par", u"perp": u"RbO2Perp"}
 
     def __init__(self, doc, uidoc, pipe_ref, pt_click_ref, simbolo,
                  pt_abrigo, nivel, dir_face, pipe_type_id, sys_type_id, output,
@@ -225,6 +272,8 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self.confirmado        = False
         self._preview_ok       = False
         self._transacao_ativa  = False
+        self._sincronizando    = False
+        self._ordem_pref       = [u"z", u"par", u"perp"]
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -241,8 +290,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         else:
             self.RbRefCorpo.IsChecked = True
         self.RbLadoDireita.IsChecked  = True
-        self.RbAlturaOrigem.IsChecked = True
-        self.RbEixoPadrao.IsChecked   = True
+        self._sincronizar_ordem()
 
         self._t = Transaction(doc, u"FireUtils - Conectar Abrigo")
         self._t.Start()
@@ -265,17 +313,83 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 pass
             self._transacao_ativa = False
 
+    def _restaurar_pristino(self):
+        """Desfaz a prévia do ciclo anterior sem construir uma nova ainda —
+        chamado antes de _sincronizar_ordem, que lê a geometria atual de
+        pipe_ref pra decidir quais eixos precisam de ajuste; sem isso, ela
+        leria pipe_ref ainda quebrado pelo Tê da prévia anterior (só
+        desfeito dentro de _atualizar_preview, chamado depois)."""
+        if self._transacao_ativa:
+            self._t.RollBack()
+            self._t.Start()
+
     def _lado_atual(self):
         return u"esquerda" if self.RbLadoEsquerda.IsChecked else u"direita"
 
-    def _modo_altura_atual(self):
-        return u"destino" if self.RbAlturaDestino.IsChecked else u"origem"
-
-    def _inverter_eixos_atual(self):
-        return bool(self.RbEixoInvertido.IsChecked)
-
     def _modo_conexao_ref_atual(self):
         return u"ponta" if self.RbRefPonta.IsChecked else u"corpo"
+
+    def _ordem1_atual(self):
+        for eixo, nome_btn in self._BOTOES_ORDEM1.items():
+            if getattr(self, nome_btn).IsChecked:
+                return eixo
+        return None
+
+    def _ordem2_atual(self):
+        for eixo, nome_btn in self._BOTOES_ORDEM2.items():
+            if getattr(self, nome_btn).IsChecked:
+                return eixo
+        return None
+
+    def _sincronizar_ordem(self):
+        """Recalcula quais eixos ainda precisam de ajuste (dado o lado e o
+        modo de conexão atuais) e mostra só os botões cabíveis em "1º
+        eixo"/"2º eixo" — o resto (0 ou 1 eixo necessário) não precisa de
+        escolha nenhuma, então a seção some. Preserva ao máximo a
+        preferência já escolhida pelo usuário (self._ordem_pref)."""
+        necessarios = _eixos_disponiveis_abrigo(
+            self.pipe_ref, self.pt_click_ref, self.pt_abrigo, self.nivel,
+            self.dir_face, self._lado_atual(), self._modo_conexao_ref_atual())
+
+        ordem = [e for e in self._ordem_pref if e in necessarios]
+        for e in necessarios:
+            if e not in ordem:
+                ordem.append(e)
+        self._ordem_pref = ordem
+
+        n = len(ordem)
+        self._sincronizando = True
+        try:
+            self.SecaoOrdem.Visibility = (SW.Visibility.Visible if n >= 1
+                                           else SW.Visibility.Collapsed)
+
+            mostrar1 = SW.Visibility.Visible if n >= 2 else SW.Visibility.Collapsed
+            self.LinhaOrdem1.Visibility = mostrar1
+            self.LblOrdem1.Visibility   = mostrar1
+            if n >= 2:
+                for eixo, nome_btn in self._BOTOES_ORDEM1.items():
+                    getattr(self, nome_btn).Visibility = (
+                        SW.Visibility.Visible if eixo in ordem else SW.Visibility.Collapsed)
+                getattr(self, self._BOTOES_ORDEM1[ordem[0]]).IsChecked = True
+
+            mostrar2 = SW.Visibility.Visible if n >= 3 else SW.Visibility.Collapsed
+            self.LinhaOrdem2.Visibility = mostrar2
+            self.LblOrdem2.Visibility   = mostrar2
+            if n >= 3:
+                restantes = ordem[1:]
+                for eixo, nome_btn in self._BOTOES_ORDEM2.items():
+                    getattr(self, nome_btn).Visibility = (
+                        SW.Visibility.Visible if eixo in restantes else SW.Visibility.Collapsed)
+                getattr(self, self._BOTOES_ORDEM2[ordem[1]]).IsChecked = True
+
+            if n == 0:
+                self.TxtOrdemInfo.Text = u""
+            elif n == 1:
+                self.TxtOrdemInfo.Text = u"Único ajuste necessário: {}".format(_NOME_EIXO[ordem[0]])
+            else:
+                self.TxtOrdemInfo.Text = u"Por último: {}".format(_NOME_EIXO[ordem[-1]])
+        finally:
+            self._sincronizando = False
 
     def _atualizar_preview(self):
         """Descarta a prévia anterior e reconstrói válvula + stub + rota com
@@ -289,8 +403,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 self.doc, self.pipe_ref, self.pt_click_ref, self.simbolo,
                 self.pt_abrigo, self.nivel, self.dir_face,
                 self.pipe_type_id, self.sys_type_id, self.output,
-                lado=self._lado_atual(), modo_altura=self._modo_altura_atual(),
-                inverter_eixos=self._inverter_eixos_atual(),
+                lado=self._lado_atual(), ordem_eixos=self._ordem_pref,
                 modo_conexao_ref=self._modo_conexao_ref_atual(),
             )
             self.doc.Regenerate()
@@ -313,6 +426,32 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             pass
 
     def on_opcao_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        self._restaurar_pristino()
+        self._sincronizar_ordem()
+        self._atualizar_preview()
+
+    def on_ordem1_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        self._restaurar_pristino()
+        novo = self._ordem1_atual()
+        if novo is not None:
+            self._ordem_pref = [novo] + [e for e in self._ordem_pref if e != novo]
+        self._sincronizar_ordem()
+        self._atualizar_preview()
+
+    def on_ordem2_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        self._restaurar_pristino()
+        novo2 = self._ordem2_atual()
+        if novo2 is not None and self._ordem_pref:
+            primeiro = self._ordem_pref[0]
+            self._ordem_pref = ([primeiro, novo2] +
+                                 [e for e in self._ordem_pref if e not in (primeiro, novo2)])
+        self._sincronizar_ordem()
         self._atualizar_preview()
 
     def on_cancel(self, sender, args):
@@ -343,7 +482,8 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             self._descartar()
 
 
-def _escolher_opcoes_abrigo_fallback(clicou_ponta_exata=False):
+def _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face,
+                                      clicou_ponta_exata=False):
     if clicou_ponta_exata:
         # Clique já caiu exatamente na ponta de pipe_ref — resposta óbvia,
         # pula a pergunta em vez de fazer o usuário confirmar o óbvio.
@@ -369,28 +509,40 @@ def _escolher_opcoes_abrigo_fallback(clicou_ponta_exata=False):
         return None
     lado = u"esquerda" if escolha_lado == u"Esquerda" else u"direita"
 
-    escolha_altura = forms.SelectFromList.show(
-        [u"Na válvula", u"No tubo referência"],
-        title=u"Fire Utils — Conectar Abrigo",
-        prompt=u"Onde a tubulação deve subir/descer?",
-        multiselect=False
-    )
-    if not escolha_altura:
-        return None
-    modo_altura = (u"destino" if escolha_altura == u"No tubo referência"
-                   else u"origem")
+    # Só pergunta a ordem dos eixos que realmente vão existir na rota —
+    # um trecho já alinhado num eixo não aparece como escolha.
+    necessarios = _eixos_disponiveis_abrigo(pipe_ref, pt_click_ref, pt_abrigo, nivel,
+                                             dir_face, lado, modo_conexao_ref)
+    ordem_eixos = [u"z", u"par", u"perp"]
 
-    escolha_eixo = forms.SelectFromList.show(
-        [u"Paralelo", u"Perpendicular"],
-        title=u"Fire Utils — Conectar Abrigo",
-        prompt=u"Qual eixo alinhar primeiro?",
-        multiselect=False
-    )
-    if not escolha_eixo:
-        return None
-    inverter_eixos = escolha_eixo.startswith(u"Perpendicular")
+    if len(necessarios) >= 2:
+        escolha1 = forms.SelectFromList.show(
+            [_NOME_EIXO[e] for e in necessarios],
+            title=u"Fire Utils — Conectar Abrigo",
+            prompt=u"Qual eixo alinhar primeiro?",
+            multiselect=False
+        )
+        if not escolha1:
+            return None
+        primeiro  = [e for e in necessarios if _NOME_EIXO[e] == escolha1][0]
+        restantes = [e for e in necessarios if e != primeiro]
 
-    return lado, modo_altura, inverter_eixos, modo_conexao_ref
+        if len(restantes) >= 2:
+            escolha2 = forms.SelectFromList.show(
+                [_NOME_EIXO[e] for e in restantes],
+                title=u"Fire Utils — Conectar Abrigo",
+                prompt=u"E depois?",
+                multiselect=False
+            )
+            if not escolha2:
+                return None
+            segundo  = [e for e in restantes if _NOME_EIXO[e] == escolha2][0]
+            terceiro = [e for e in restantes if e != segundo][0]
+            ordem_eixos = [primeiro, segundo, terceiro]
+        else:
+            ordem_eixos = [primeiro] + restantes
+
+    return lado, ordem_eixos, modo_conexao_ref
 
 
 # ===========================================================================
@@ -438,7 +590,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
     # ── Clique 2: tubo de referência ─────────────────────────────────────
     try:
         ref_p        = uidoc.Selection.PickObject(
-            ObjectType.PointOnElement, _FiltroPipe(),
+            ObjectType.PointOnElement, _FiltroPipe(doc),
             u"[2/2] Clique no tubo de referência — corpo para Tê, ponta para joelho"
         )
         pipe_ref     = doc.GetElement(ref_p.ElementId)
@@ -478,10 +630,11 @@ def conectar_abrigo_preview(doc, uidoc, output):
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
     # ── Fallback sem prévia ──────────────────────────────────────────────
-    opcoes = _escolher_opcoes_abrigo_fallback(clicou_ponta_exata=clicou_ponta_exata)
+    opcoes = _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel,
+                                               dir_face, clicou_ponta_exata=clicou_ponta_exata)
     if opcoes is None:
         pyscript.exit()
-    lado, modo_altura, inverter_eixos, modo_conexao_ref = opcoes
+    lado, ordem_eixos, modo_conexao_ref = opcoes
 
     with Transaction(doc, u"FireUtils - Conectar Abrigo") as t:
         t.Start()
@@ -490,8 +643,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
                 doc, pipe_ref, pt_click_ref, simbolo,
                 pt_abrigo, nivel, dir_face,
                 pipe_type_id, sys_type_id, output,
-                lado=lado, modo_altura=modo_altura,
-                inverter_eixos=inverter_eixos,
+                lado=lado, ordem_eixos=ordem_eixos,
                 modo_conexao_ref=modo_conexao_ref,
             )
             t.Commit()
