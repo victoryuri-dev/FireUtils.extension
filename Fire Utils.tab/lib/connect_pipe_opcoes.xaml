@@ -90,29 +90,42 @@
                     </UniformGrid>
                 </StackPanel>
 
-                <TextBlock Text="Onde a tubulação deve subir/descer?" Style="{StaticResource LabelStyle}"/>
-                <UniformGrid Columns="2" Margin="0,0,0,14">
-                    <RadioButton x:Name="RbAlturaOrigem" GroupName="GrupoAltura" Margin="0,0,4,0"
-                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="No tubo desconectado" TextWrapping="Wrap"/>
-                    </RadioButton>
-                    <RadioButton x:Name="RbAlturaDestino" GroupName="GrupoAltura" Margin="4,0,0,0"
-                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="No tubo referência" TextWrapping="Wrap"/>
-                    </RadioButton>
-                </UniformGrid>
+                <StackPanel x:Name="SecaoOrdem">
+                    <TextBlock x:Name="LblOrdem1" Text="Qual eixo alinhar primeiro?" Style="{StaticResource LabelStyle}"/>
+                    <StackPanel x:Name="LinhaOrdem1" Orientation="Horizontal" Margin="0,0,0,10">
+                        <RadioButton x:Name="RbO1Z" GroupName="GrupoOrdem1" Margin="0,0,6,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_ordem1_changed">
+                            <TextBlock Text="Vertical (Z)" TextWrapping="Wrap"/>
+                        </RadioButton>
+                        <RadioButton x:Name="RbO1Par" GroupName="GrupoOrdem1" Margin="0,0,6,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_ordem1_changed">
+                            <TextBlock Text="Paralelo" TextWrapping="Wrap"/>
+                        </RadioButton>
+                        <RadioButton x:Name="RbO1Perp" GroupName="GrupoOrdem1"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_ordem1_changed">
+                            <TextBlock Text="Perpendicular" TextWrapping="Wrap"/>
+                        </RadioButton>
+                    </StackPanel>
 
-                <TextBlock Text="Qual eixo alinhar primeiro?" Style="{StaticResource LabelStyle}"/>
-                <UniformGrid Columns="2">
-                    <RadioButton x:Name="RbEixoPadrao" GroupName="GrupoEixo" Margin="0,0,4,0"
-                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Paralelo" TextWrapping="Wrap"/>
-                    </RadioButton>
-                    <RadioButton x:Name="RbEixoInvertido" GroupName="GrupoEixo" Margin="4,0,0,0"
-                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_opcao_changed">
-                        <TextBlock Text="Perpendicular" TextWrapping="Wrap"/>
-                    </RadioButton>
-                </UniformGrid>
+                    <TextBlock x:Name="LblOrdem2" Text="E depois?" Style="{StaticResource LabelStyle}"/>
+                    <StackPanel x:Name="LinhaOrdem2" Orientation="Horizontal" Margin="0,0,0,10">
+                        <RadioButton x:Name="RbO2Z" GroupName="GrupoOrdem2" Margin="0,0,6,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_ordem2_changed">
+                            <TextBlock Text="Vertical (Z)" TextWrapping="Wrap"/>
+                        </RadioButton>
+                        <RadioButton x:Name="RbO2Par" GroupName="GrupoOrdem2" Margin="0,0,6,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_ordem2_changed">
+                            <TextBlock Text="Paralelo" TextWrapping="Wrap"/>
+                        </RadioButton>
+                        <RadioButton x:Name="RbO2Perp" GroupName="GrupoOrdem2"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_ordem2_changed">
+                            <TextBlock Text="Perpendicular" TextWrapping="Wrap"/>
+                        </RadioButton>
+                    </StackPanel>
+
+                    <TextBlock x:Name="TxtOrdemInfo" Text="" FontSize="10"
+                               Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap"/>
+                </StackPanel>
 
             </StackPanel>
         </Border>
