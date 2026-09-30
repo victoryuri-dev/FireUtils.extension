@@ -252,6 +252,15 @@ def get_estado(sigla):
         if hazen_c_remoto:
             hidrantes[u"hazen_c"] = dict(hidrantes.get(u"hazen_c") or {})
             hidrantes[u"hazen_c"].update(hazen_c_remoto)
+        # "norma" na base central vem como objeto ({desc, nome, estado} —
+        # ver src/data/normas/<UF>/hidrantes.js:NORMA no site), mas todo
+        # código do plugin (norm_profiles.py, Dimensionar Hidrantes/script.py
+        # etc.) espera uma string simples nessa chave, como nos módulos
+        # locais (normas/<UF>/hidrantes.py: u"norma": u"NT 22/2021 - CBMMA").
+        # Extrai só o nome pra manter o mesmo formato.
+        norma_remota = remoto_hid.get(u"norma")
+        if isinstance(norma_remota, dict) and norma_remota.get(u"nome"):
+            hidrantes[u"norma"] = norma_remota[u"nome"]
         if hidrantes:
             estado[u"hidrantes"] = hidrantes
 
