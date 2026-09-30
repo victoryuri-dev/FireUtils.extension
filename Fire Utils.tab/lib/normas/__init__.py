@@ -58,6 +58,17 @@ _CHAVES_HIDRANTES = (
     u"hidrantes_simultaneos", u"hidrantes_simultaneos_ref",
 )
 
+# Chaves numéricas de _CHAVES_HIDRANTES (as "_ref" são citações, string) —
+# um valor sem casa decimal (ex.: 5, não 5.0) chega do JSON do Supabase
+# como int, e o IronPython 2.7 do Revit (diferente do CPython) lança
+# ValueError em "{:.1f}".format(x) quando x é int — normalizadas pra
+# float no merge abaixo, mesmo motivo/consertos já feitos pra Tabela 2 em
+# hidrantes/sistema.py e "Dimensionar Hidrantes"/script.py.
+_CHAVES_HIDRANTES_NUMERICAS = (
+    u"v_max_tubulacao", u"v_max_succao_positiva", u"v_max_succao_negativa",
+    u"tolerancia_equilibrio_mca", u"npshd_fator_vazao", u"hidrantes_simultaneos",
+)
+
 # hazen_c usa apelidos curtos (ff_sem_revest, ff_revest_cimento) que o
 # payload central (materiais_tubulacao — mesmo array que o site consome,
 # ver src/data/normas/MA/hidrantes.js:MATERIAIS_TUBULACAO) não usa
@@ -204,7 +215,10 @@ def get_estado(sigla, projeto_dir):
         hidrantes = {}
         for chave in _CHAVES_HIDRANTES:
             if chave in remoto_hid:
-                hidrantes[chave] = remoto_hid[chave]
+                valor = remoto_hid[chave]
+                if chave in _CHAVES_HIDRANTES_NUMERICAS and valor is not None:
+                    valor = float(valor)
+                hidrantes[chave] = valor
 
         hazen_c_remoto = _hazen_c_da_base_central(remoto_hid.get(u"materiais_tubulacao"))
         if hazen_c_remoto:
