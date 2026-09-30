@@ -126,7 +126,7 @@ def seleciona(msg_alert, msg_pick, filtro):
 # 0 — Projeto/estado, sistema classificado e parâmetros
 # ===========================================================================
 projeto_dir, sigla_estado, _ = exigir_projeto_e_estado(doc, forms, script)
-perfil = get_profile(sigla_estado)
+perfil = get_profile(sigla_estado, projeto_dir)
 
 # Precisa do sistema já classificado ("Classificar Sistema de Hidrante")
 # para saber a vazão nominal de um hidrante (Qs) - usada abaixo para

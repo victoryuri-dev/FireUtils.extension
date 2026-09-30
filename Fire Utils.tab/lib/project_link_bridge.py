@@ -25,7 +25,7 @@ import os
 
 from sync import config_sync, salvar_config_sync
 from projeto import salvar_dados_projeto, limpar_vinculo_projeto
-from normas import get_label
+from normas import get_estado
 from family_error_utils import texto_erro
 import hidrantes.calc as hidrantes_calc
 import saidas.calc as saidas_calc
@@ -91,7 +91,8 @@ def tratar_set_project_link(uiapp, payload, postar_mensagem):
 
     try:
         uf = payload.get(u"uf") or u""
-        estado_nome = get_label(uf).split(u" — ")[0] if uf else u""
+        estado = get_estado(uf, projeto_dir) if uf else None
+        estado_nome = (estado.get(u"nome") if estado else None) or uf
         salvar_dados_projeto(
             projeto_dir,
             identificador=payload.get(u"projetoNome") or u"",

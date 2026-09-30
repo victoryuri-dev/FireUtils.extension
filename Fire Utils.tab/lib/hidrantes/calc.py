@@ -92,7 +92,7 @@ COEF_JM     = 8.0     # coeficiente da fórmula de Jm, de Darcy-Weisbach com Vm=
 # CBMMA: "para efeito de equilíbrio de pressão no ponto de derivação da
 # vazão total ... é admitida a variação máxima de 0,50 mca") — por isso não
 # tem default aqui: calcular_rede() exige que o chamador informe o valor do
-# perfil normativo ativo (lib/normas/<UF>/hidrantes.py, chave
+# perfil normativo ativo (normas/__init__.py:get_estado(), chave
 # "tolerancia_equilibrio_mca").
 MAX_ITER_EQUILIBRIO = 30   # trava de segurança contra não-convergência (não normativo)
 

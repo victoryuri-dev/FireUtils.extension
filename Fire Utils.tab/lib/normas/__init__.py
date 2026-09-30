@@ -1,78 +1,55 @@
 # -*- coding: utf-8 -*-
 """
 normas/__init__.py — Fire Utils
-Centro normativo unificado: um pacote por estado, um arquivo por fonte
-normativa (saidas.py, hidrantes.py, ...) dentro da pasta de cada estado.
+Centro normativo unificado. TODA a normativa (saídas de emergência e
+hidrantes) vem exclusivamente da base normativa central (Supabase, tabela
+`normas_dados`) — mesma base que o site (ETOS.FireUtils) lê, ver
+src/lib/normasRemote.js lá. O plugin não guarda nenhuma cópia própria de
+norma de estado nenhum: sem isso, um estado que muda de norma no Supabase
+(ou corrige um valor) ficava com o plugin desatualizado até alguém lembrar
+de editar um arquivo .py aqui também.
 
 Uso:
-    from normas import get_estado, lista_estados
+    from normas import get_estado
 
-    estado = get_estado("MA")
-    ocupacoes = estado["ocupacoes"]           # domínio saídas (chaves planas)
-    tabela    = estado["tabela"]
-    larg_min  = estado["larguras_minimas"]
+    estado = get_estado("MA", projeto_dir)
+    tabela     = estado["tabela"]           # domínio saídas
+    larg_min   = estado["larguras_minimas"]
     distancias = estado["distancias_maximas"]
-    hidrantes = estado.get("hidrantes")       # domínio hidrantes (pode não existir)
+    hidrantes  = estado.get("hidrantes")    # domínio hidrantes (pode não existir)
 
-Para adicionar um estado novo: criar a pasta normas/<UF>/ com um arquivo por
-fonte normativa (ex.: saidas.py, hidrantes.py) e um __init__.py que monte o
-ESTADO combinando essas fontes (ver normas/MA/__init__.py como referência).
-Depois, registrar a sigla em get_estado() e lista_estados() abaixo.
+Cache offline: a última resposta boa de cada (uf, sistema) fica gravada
+dentro do próprio firedata.json do projeto (chave "normas_cache") — assim
+o plugin continua funcionando sem rede depois da primeira consulta bem-
+sucedida daquele projeto, sempre com o dado mais recente que já buscou
+(nunca um snapshot desatualizado embutido no instalador). Por cima disso,
+um cache em memória do processo evita repetir a consulta (rede ou disco) a
+cada clique de botão na mesma sessão do Revit.
 
-BASE NORMATIVA CENTRAL — desde esta versão, get_estado() tenta primeiro
-buscar as chaves de saídas de emergência (ocupacoes/tabela/notas/
-larguras_minimas/distancias_maximas) na tabela `normas_dados` do Supabase
-(mesma base que o site lê — ver supabase/migrations/*normas_dados* em
-ETOS.FireUtils e src/lib/normasRemote.js lá), com cache em memória
-(por sessão do Revit) e em disco (entre sessões, offline) por cima disso.
-Os módulos locais (normas/<UF>/saidas.py) viram só o fallback de última
-instância — usados quando não há rede E não há cache em disco ainda (ex.:
-instalação nova, nunca conectou).
-
-"hidrantes" segue o mesmo mecanismo, mas só pras constantes de cálculo
-hidráulico (v_max_*, npshd_*, tolerancia_equilibrio_mca,
-hidrantes_simultaneos, hazen_c — ver _CHAVES_HIDRANTES abaixo), que são o
-mesmo payload que src/data/normas/MA/hidrantes.js (ETOS.FireUtils) já lê
-do Supabase. "tipos"/"tipos_ref" (Tabela 2, derivada de hidrantes/db.py —
-ligada aos componentes de família do Revit) continuam vindo só do módulo
-local (normas/<UF>/hidrantes.py) — não têm o mesmo formato do payload do
-site, então não é uma migração 1:1 como as demais chaves.
+"tipos" (Tabela 2 de hidrantes — quais Tipos de sistema existem e seus
+parâmetros de vazão/pressão/mangueira/esguicho) também vem da base central
+agora, a partir da chave "tipos_sistema" do payload "hidrantes" (mesmo
+formato que o site usa em src/data/normas/<UF>/hidrantes.js:TIPOS_SISTEMA)
+— convertida aqui pro vocabulário que hidrantes/sistema.py já indexa
+(q_min/p_min/mang_dn/mang_comp/esguicho_dn/expedicoes).
 """
 
-from __future__ import absolute_import
-
-import os
-import json
 import io
-import importlib
+import json
 
 
-_CACHE_ESTADO = os.path.join(
-    os.environ.get("TEMP", os.path.expanduser("~")),
-    u"fireutils_estado.json"
-)
-
-# Cache em disco da última resposta bem-sucedida da base normativa central,
-# por (uf, sistema) — permite o plugin continuar funcionando offline depois
-# da primeira busca (a máquina do engenheiro pode não ter internet na hora
-# de rodar "Dimensionar Saídas" em campo).
-_CACHE_NORMAS = os.path.join(
-    os.environ.get("TEMP", os.path.expanduser("~")),
-    u"fireutils_normas_cache.json"
-)
-
-# Chaves do domínio "saídas" que a base central pode sobrescrever no
-# ESTADO local.
+# Chaves do domínio "saídas" que vêm do payload central (sistema=
+# "saida_emergencia").
 _CHAVES_SAIDAS = (
     u"sigla", u"nome", u"corpo", u"norma_ocupacoes", u"norma_saidas",
     u"ocupacoes", u"tabela", u"notas", u"larguras_minimas",
     u"distancias_maximas", u"_pendencias",
 )
 
-# Chaves do domínio "hidrantes" (dentro de estado["hidrantes"]) que a base
-# central pode sobrescrever — só as constantes de cálculo hidráulico, não
-# "tipos"/"tipos_ref" (Tabela 2, ligada aos componentes de família do
-# Revit via hidrantes/db.py — sem payload equivalente no Supabase ainda).
+# Chaves do domínio "hidrantes" (dentro de estado["hidrantes"]) que vêm
+# direto do payload central (sistema="hidrantes") sem conversão de forma —
+# "hazen_c"/"norma"/"tipos" têm forma diferente da do payload e são
+# tratadas à parte (_hazen_c_da_base_central / abaixo / _tipos_da_base_central).
 _CHAVES_HIDRANTES = (
     u"v_max_tubulacao", u"v_max_tubulacao_ref",
     u"v_max_succao_positiva", u"v_max_succao_negativa", u"v_max_succao_ref",
@@ -81,76 +58,51 @@ _CHAVES_HIDRANTES = (
     u"hidrantes_simultaneos", u"hidrantes_simultaneos_ref",
 )
 
-# hazen_c local usa apelidos curtos (ff_sem_revest, ff_revest_cimento) que
-# o payload da base central (materiais_tubulacao — mesmo array que o site
-# consome, ver src/data/normas/MA/hidrantes.js:MATERIAIS_TUBULACAO) não
-# usa (ferro_fundido_sem_revest, ferro_fundido_com_cimento). Convertido de
-# volta pro apelido local aqui, sem mudar a chave que o motor de cálculo
-# ("Dimensionar Hidrantes"/script.py) já indexa (hazen_c[u"galvanizado"]).
+# hazen_c usa apelidos curtos (ff_sem_revest, ff_revest_cimento) que o
+# payload central (materiais_tubulacao — mesmo array que o site consome,
+# ver src/data/normas/MA/hidrantes.js:MATERIAIS_TUBULACAO) não usa
+# (ferro_fundido_sem_revest, ferro_fundido_com_cimento). Convertido pro
+# apelido aqui, sem mudar a chave que o motor de cálculo ("Dimensionar
+# Hidrantes"/script.py) já indexa (hazen_c[u"galvanizado"]).
 _ALIAS_MATERIAL_TUBULACAO = {
     u"ferro_fundido_sem_revest":  u"ff_sem_revest",
     u"ferro_fundido_com_cimento": u"ff_revest_cimento",
 }
 
 
-def salvar_estado_ativo(sigla):
-    """Persiste a sigla do estado ativo entre sessões do pyRevit."""
-    with io.open(_CACHE_ESTADO, "w", encoding="utf-8") as f:
-        json.dump({u"sigla": sigla.upper()}, f, ensure_ascii=False)
+# ── Cache offline (dentro do firedata.json do projeto) ─────────────────────
+
+def _ler_cache_normas(projeto_dir):
+    """Lê a chave 'normas_cache' (uf -> sistema -> dados) do firedata.json
+    do projeto — última resposta boa de uma consulta anterior."""
+    from projeto import carregar_cache
+    return carregar_cache(projeto_dir).get(u"normas_cache") or {}
 
 
-def carregar_estado_ativo():
-    """Retorna a sigla do estado ativo salvo, ou None."""
-    if not os.path.exists(_CACHE_ESTADO):
-        return None
-    try:
-        with io.open(_CACHE_ESTADO, "r", encoding="utf-8") as f:
-            return json.load(f).get(u"sigla")
-    except Exception:
-        return None
-
-
-def _ler_cache_normas():
-    if not os.path.exists(_CACHE_NORMAS):
-        return {}
-    try:
-        with io.open(_CACHE_NORMAS, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-def _gravar_cache_normas(uf, sistema, dados):
-    cache = _ler_cache_normas()
+def _gravar_cache_normas(projeto_dir, uf, sistema, dados):
+    from projeto import cache_path, carregar_cache
+    arquivo = carregar_cache(projeto_dir)
+    cache = arquivo.get(u"normas_cache") or {}
     cache.setdefault(uf, {})[sistema] = dados
+    arquivo[u"normas_cache"] = cache
     try:
-        with io.open(_CACHE_NORMAS, "w", encoding="utf-8") as f:
-            json.dump(cache, f, ensure_ascii=False)
+        with io.open(cache_path(projeto_dir), u"w", encoding=u"utf-8") as f:
+            json.dump(arquivo, f, ensure_ascii=False, indent=2)
     except Exception:
         pass  # cache é só otimização — falha ao gravar não deve travar nada
 
 
 # Cache em memória do processo — enquanto o engine do pyRevit continuar
 # carregado (normalmente o caso entre cliques de botão na mesma sessão do
-# Revit), a rede só é consultada UMA vez por uf: sem isso, cada clique em
-# "Dimensionar Saídas"/"Identificar Ambiente" pagaria de novo o custo de
-# rede (até o timeout de 5s de sync.buscar_norma, se estiver offline) só
-# pra buscar a mesma coisa de novo. Valor None (chave ausente) = ainda não
-# buscado nesta sessão; False = já tentou e não achou nem rede nem cache
-# em disco (também não tenta de novo até a sessão do Revit reiniciar).
+# Revit), a rede/disco só são consultados UMA vez por uf. Valor None (chave
+# ausente) = ainda não buscado nesta sessão; False = já tentou e não achou
+# nem rede nem cache em disco (também não tenta de novo até a sessão do
+# Revit reiniciar).
 _SESSION_CACHE = {}
 _SESSION_CACHE_HIDRANTES = {}  # separado de _SESSION_CACHE — sistema diferente, mesmo uf
 
 
-def _buscar_saidas(uf):
-    """
-    Busca a fatia de saídas de emergência na base normativa central, com
-    fallback pro cache em disco se a rede falhar — e um cache em memória
-    por cima dos dois pra só pagar esse custo (rede ou disco) uma vez por
-    sessão do Revit, não a cada clique de botão. Retorna um dict com as
-    chaves de _CHAVES_SAIDAS já presentes na resposta, ou None se não há
-    nem resposta de rede nem cache (quem chama cai pro módulo local).
-    """
+def _buscar_saidas(uf, projeto_dir):
     if uf in _SESSION_CACHE:
         return _SESSION_CACHE[uf] or None
 
@@ -158,18 +110,18 @@ def _buscar_saidas(uf):
 
     dados, erro = buscar_norma(uf, u"saida_emergencia")
     if dados:
-        _gravar_cache_normas(uf, u"saida_emergencia", dados)
+        _gravar_cache_normas(projeto_dir, uf, u"saida_emergencia", dados)
         _SESSION_CACHE[uf] = dados
         return dados
 
-    dados = _ler_cache_normas().get(uf, {}).get(u"saida_emergencia")
+    dados = _ler_cache_normas(projeto_dir).get(uf, {}).get(u"saida_emergencia")
     _SESSION_CACHE[uf] = dados or False
     return dados
 
 
 def _hazen_c_da_base_central(materiais_tubulacao):
-    """Reconstroi o dict hazen_c (apelido local -> fator C) a partir do
-    array materiais_tubulacao vindo da base central — ver
+    """Constrói o dict hazen_c (apelido local -> fator C) a partir do array
+    materiais_tubulacao vindo da base central — ver
     _ALIAS_MATERIAL_TUBULACAO acima."""
     hazen_c = {}
     for item in materiais_tubulacao or []:
@@ -181,9 +133,40 @@ def _hazen_c_da_base_central(materiais_tubulacao):
     return hazen_c
 
 
-def _buscar_hidrantes(uf):
+def _tipos_da_base_central(tipos_sistema_remoto):
+    """Constrói 'tipos' (Tabela 2 — quais Tipos de sistema existem e seus
+    parâmetros) a partir do payload remoto 'tipos_sistema' (mesmo formato
+    que TIPOS_SISTEMA no site: {"1": {label, vazaoMin, expedicoes,
+    variantes:[{esguicho, pressaoMin, mangueiraDn, mangueiraComprimento}]}, ...})
+    pro vocabulário que hidrantes/sistema.py já indexa. "esguicho_dn" fica
+    dentro de cada variante (não um só valor por Tipo): o Tipo 4, por
+    exemplo, tem uma variante com esguicho DN40 e outra com DN65."""
+    tipos = {}
+    for tipo_str, dados in (tipos_sistema_remoto or {}).items():
+        try:
+            tipo_num = int(tipo_str)
+        except (TypeError, ValueError):
+            continue
+        tipos[tipo_num] = {
+            u"descricao": dados.get(u"label"),
+            u"variantes": [
+                {
+                    u"mang_dn":     v.get(u"mangueiraDn"),
+                    u"mang_comp":   v.get(u"mangueiraComprimento"),
+                    u"q_min":       dados.get(u"vazaoMin"),
+                    u"p_min":       v.get(u"pressaoMin"),
+                    u"expedicoes":  dados.get(u"expedicoes"),
+                    u"esguicho_dn": v.get(u"esguicho"),
+                }
+                for v in (dados.get(u"variantes") or [])
+            ],
+        }
+    return tipos
+
+
+def _buscar_hidrantes(uf, projeto_dir):
     """Mesmo esquema de _buscar_saidas, pro sistema 'hidrantes' (mesma
-    linha de normas_dados que src/data/normas/MA/hidrantes.js, no site,
+    linha de normas_dados que src/data/normas/<UF>/hidrantes.js, no site,
     já lê)."""
     if uf in _SESSION_CACHE_HIDRANTES:
         return _SESSION_CACHE_HIDRANTES[uf] or None
@@ -192,75 +175,52 @@ def _buscar_hidrantes(uf):
 
     dados, erro = buscar_norma(uf, u"hidrantes")
     if dados:
-        _gravar_cache_normas(uf, u"hidrantes", dados)
+        _gravar_cache_normas(projeto_dir, uf, u"hidrantes", dados)
         _SESSION_CACHE_HIDRANTES[uf] = dados
         return dados
 
-    dados = _ler_cache_normas().get(uf, {}).get(u"hidrantes")
+    dados = _ler_cache_normas(projeto_dir).get(uf, {}).get(u"hidrantes")
     _SESSION_CACHE_HIDRANTES[uf] = dados or False
     return dados
 
 
-def _importar_estado_local(sigla):
-    """Tenta importar o ESTADO local de normas/<sigla>/__init__.py.
-
-    Retorna {} (não None) quando não existe pacote local pra essa UF — a
-    ausência de um normas/<UF>/ não deve mais, por si só, bloquear o
-    estado: um UF sem pacote local ainda pode ter dados reais cadastrados
-    na base normativa central (Supabase), buscados logo depois em
-    get_estado(). O pacote local continua sendo o fallback de última
-    instância (offline, ou chaves que a base central não cobre, como
-    "tipos"/"tipos_ref" de hidrantes) — só deixa de ser pré-requisito.
-    """
-    try:
-        modulo = importlib.import_module(u"normas.{}".format(sigla))
-    except ImportError:
-        return {}
-    return dict(getattr(modulo, u"ESTADO", {}))
-
-
-def get_estado(sigla):
-    """Retorna o dict ESTADO para a sigla fornecida, ou None se não houver
-    nenhum dado (nem local, nem na base normativa central) pra essa UF.
-
-    As chaves de saídas de emergência, e as constantes de cálculo
-    hidráulico de hidrantes (_CHAVES_HIDRANTES + hazen_c), vêm
-    preferencialmente da base normativa central (com cache em
-    memória/disco); qualquer chave ausente na resposta central (incluindo
-    "tipos"/"tipos_ref" de hidrantes, nunca migrados) continua vindo do
-    módulo local quando ele existir. Um UF sem pacote local (normas/<UF>/)
-    ainda é aceito normalmente se a base central já tiver dados reais
-    cadastrados pra ele — o pacote local nunca foi a fonte da verdade,
-    só o fallback offline (ver docstring do módulo).
-    """
+def get_estado(sigla, projeto_dir):
+    """Retorna o dict ESTADO pra sigla (uf) informada, buscado inteiramente
+    na base normativa central (com cache em memória/no firedata.json do
+    projeto por cima) — ou None se não houver nada cadastrado pra essa UF
+    (nem saída de emergência nem hidrantes, nem uma consulta anterior
+    guardada no cache do projeto)."""
     sigla = sigla.upper()
-    estado = _importar_estado_local(sigla)
+    estado = {}
 
-    remoto = _buscar_saidas(sigla)
+    remoto = _buscar_saidas(sigla, projeto_dir)
     if remoto:
         for chave in _CHAVES_SAIDAS:
             if chave in remoto:
                 estado[chave] = remoto[chave]
 
-    remoto_hid = _buscar_hidrantes(sigla)
+    remoto_hid = _buscar_hidrantes(sigla, projeto_dir)
     if remoto_hid:
-        hidrantes = dict(estado.get(u"hidrantes") or {})
+        hidrantes = {}
         for chave in _CHAVES_HIDRANTES:
             if chave in remoto_hid:
                 hidrantes[chave] = remoto_hid[chave]
+
         hazen_c_remoto = _hazen_c_da_base_central(remoto_hid.get(u"materiais_tubulacao"))
         if hazen_c_remoto:
-            hidrantes[u"hazen_c"] = dict(hidrantes.get(u"hazen_c") or {})
-            hidrantes[u"hazen_c"].update(hazen_c_remoto)
-        # "norma" na base central vem como objeto ({desc, nome, estado} —
-        # ver src/data/normas/<UF>/hidrantes.js:NORMA no site), mas todo
-        # código do plugin (norm_profiles.py, Dimensionar Hidrantes/script.py
-        # etc.) espera uma string simples nessa chave, como nos módulos
-        # locais (normas/<UF>/hidrantes.py: u"norma": u"NT 22/2021 - CBMMA").
-        # Extrai só o nome pra manter o mesmo formato.
+            hidrantes[u"hazen_c"] = hazen_c_remoto
+
+        # "norma" no payload vem como objeto ({desc, nome, estado}) — o
+        # resto do código (norm_profiles.py, os scripts de dimensionamento)
+        # espera uma string simples nessa chave.
         norma_remota = remoto_hid.get(u"norma")
         if isinstance(norma_remota, dict) and norma_remota.get(u"nome"):
             hidrantes[u"norma"] = norma_remota[u"nome"]
+
+        tipos_remotos = _tipos_da_base_central(remoto_hid.get(u"tipos_sistema"))
+        if tipos_remotos:
+            hidrantes[u"tipos"] = tipos_remotos
+
         if hidrantes:
             estado[u"hidrantes"] = hidrantes
 
@@ -269,24 +229,3 @@ def get_estado(sigla):
 
     estado.setdefault(u"sigla", sigla)
     return estado
-
-
-def lista_estados():
-    """Retorna lista de (sigla, label) para exibição em forms.
-
-    Só pra rótulo amigável (get_label()) — não é mais o que decide se uma
-    UF é aceita ou não (get_estado() já não depende disso, ver acima). Um
-    UF fora desta lista ainda funciona normalmente se tiver dados na base
-    central; só aparece com a própria sigla como rótulo (get_label())."""
-    return [
-        (u"MA", u"Maranhão — CBM-MA"),
-        (u"PE", u"Pernambuco — CBMPE"),
-        (u"PB", u"Paraíba — CBMPB"),
-    ]
-
-
-def get_label(sigla):
-    for s, label in lista_estados():
-        if s == sigla:
-            return label
-    return sigla

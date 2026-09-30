@@ -318,7 +318,7 @@ def diagnostico_conectores(elem):
 projeto_dir, sigla_estado, _ = exigir_projeto_e_estado(doc, forms, script)
 
 # --- Perfil normativo ativo (UF do projeto, default "MA") ---
-perfil = get_profile(sigla_estado)
+perfil = get_profile(sigla_estado, projeto_dir)
 
 # --- Etapa 1: tipo de sistema (classificação vinda do site — ver
 # hidrantes_classificacao_bridge.py) ---
@@ -352,11 +352,10 @@ if _tipo_perfil is None:
     script.exit()
 
 dados_sistema = dict(_tipo_perfil["variantes"][variante_idx])
-dados_sistema["esguicho_dn"] = _tipo_perfil["esguicho_dn"]
 
-# A Tabela 2 (hidrantes/db.py) guarda esses valores como int. O IronPython
-# 2.7 do Revit (diferente do CPython) lança ValueError em "{:.1f}".format(x)
-# quando x é int — então normalizamos tudo para float aqui.
+# A Tabela 2 pode vir da base central com esses valores como int. O
+# IronPython 2.7 do Revit (diferente do CPython) lança ValueError em
+# "{:.1f}".format(x) quando x é int — então normalizamos tudo para float aqui.
 for _chave in (u"q_min", u"p_min", u"mang_dn", u"mang_comp", u"esguicho_dn"):
     dados_sistema[_chave] = float(dados_sistema[_chave])
 

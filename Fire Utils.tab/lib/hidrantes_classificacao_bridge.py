@@ -89,7 +89,7 @@ def tratar_set_hidrantes_classificacao(uiapp, payload, postar_mensagem):
     sigla_estado = dados_projeto.get(u"uf") or u"MA"
 
     try:
-        perfil = get_profile(sigla_estado)
+        perfil = get_profile(sigla_estado, projeto_dir)
     except NormProfileError as ex:
         postar_mensagem(u"HIDRANTES_CLASSIFICACAO_SAVED", {u"ok": False, u"erro": texto_erro(ex)})
         return

@@ -60,7 +60,7 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
     dados_projeto = carregar_dados_projeto(projeto_dir) or {}
     sigla_estado = dados_projeto.get(u"uf") or u"MA"
     try:
-        perfil = get_profile(sigla_estado)
+        perfil = get_profile(sigla_estado, projeto_dir)
     except NormProfileError as ex:
         postar_mensagem(u"HIDRANTES_DIMENSIONAMENTO", {u"ok": False, u"erro": texto_erro(ex)})
         return

@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 norm_profiles.py - Fire Utils - lib/hidrantes/
-Adaptador fino sobre o centro normativo unificado (lib/normas/<UF>/hidrantes.py).
-
-Os dados normativos de hidrantes agora vivem em lib/normas/<UF>/hidrantes.py,
-ao lado dos dados de saidas de emergencia do mesmo estado (lib/normas/<UF>/saidas.py).
-Este modulo existe apenas para nao quebrar o import ja usado em
-"Dimensionar Hidrantes"/script.py (from hidrantes.norm_profiles import get_profile, req).
+Adaptador fino sobre o centro normativo unificado (lib/normas/__init__.py),
+que busca tudo na base normativa central (Supabase) — ver docstring lá.
 
 Uso:
     from hidrantes.norm_profiles import get_profile, req
 
-    perfil = get_profile(sigla_estado)   # default "MA" se a UF nao tiver dominio hidrantes
-    c_ref = req(perfil, u"hazen_c_ref")  # erro claro se a chave nao existir
+    perfil = get_profile(sigla_estado, projeto_dir)  # default "MA" se a UF nao tiver dominio hidrantes
+    c_ref = req(perfil, u"hazen_c_ref")               # erro claro se a chave nao existir
 """
 
 import copy
@@ -25,56 +21,36 @@ class NormProfileError(Exception):
     pass
 
 
-def get_profile(uf):
+def get_profile(uf, projeto_dir):
     """
-    Retorna uma copia do perfil normativo de hidrantes ativo para a UF informada
-    (lib/normas/<UF>/hidrantes.py, com constantes de calculo hidraulico
-    sobrepostas pela base normativa central quando cadastradas - ver
-    normas/__init__.py:get_estado()).
+    Retorna uma copia do perfil normativo de hidrantes ativo para a UF
+    informada, buscado na base normativa central (normas/__init__.py:
+    get_estado()).
 
-    Se a UF nao tiver dominio "hidrantes" NENHUM (nem local, nem na base
-    central), cai inteiro para "MA" (default explicito) - isso e sinalizado
-    nas chaves internas '_uf_solicitada' e '_uf_efetiva', para que o
-    memorial possa avisar quando os dois divergirem, em vez de silenciar a
-    substituicao.
-
-    "tipos"/"tipos_ref" (Tabela 2, derivada de hidrantes/db.py) e a unica
-    parte que NUNCA vem da base central (ver docstring de normas/__init__.py)
-    - so de um modulo local proprio. Uma UF que ja tem as demais constantes
-    cadastradas na base central mas ainda nao tem esse modulo local (ex.:
-    Paraiba, hidrantes cadastrado no Supabase sem normas/PB/hidrantes.py)
-    recebe so essas duas chaves do perfil "MA", sinalizado em '_uf_tipos' -
-    sem substituir o resto do perfil, que continua sendo os valores
-    hidraulicos reais da propria UF.
+    Se a UF nao tiver dominio "hidrantes" cadastrado na base central, cai
+    inteiro para "MA" (default explicito) - isso e sinalizado nas chaves
+    internas '_uf_solicitada' e '_uf_efetiva', para que o memorial possa
+    avisar quando os dois divergirem, em vez de silenciar a substituicao.
     """
     sigla_solicitada = (uf or u"MA").upper()
 
-    estado = get_estado(sigla_solicitada)
-    dados = dict(estado.get(u"hidrantes") or {}) if estado else {}
+    estado = get_estado(sigla_solicitada, projeto_dir)
+    dados = estado.get(u"hidrantes") if estado else None
     sigla_efetiva = sigla_solicitada
 
-    if not dados:
+    if dados is None:
         sigla_efetiva = u"MA"
-        estado_ma = get_estado(u"MA")
-        dados = dict(estado_ma.get(u"hidrantes") or {}) if estado_ma else {}
-        if not dados:
+        estado_ma = get_estado(u"MA", projeto_dir)
+        dados = estado_ma.get(u"hidrantes") if estado_ma else None
+        if dados is None:
             raise NormProfileError(
                 u"Nenhum perfil normativo de hidrantes disponivel (nem 'MA'). "
-                u"Verifique lib/normas/MA/hidrantes.py.")
-
-    sigla_tipos = sigla_efetiva
-    if not dados.get(u"tipos"):
-        estado_ma = get_estado(u"MA")
-        dados_ma = estado_ma.get(u"hidrantes") if estado_ma else None
-        if dados_ma and dados_ma.get(u"tipos"):
-            dados[u"tipos"] = dados_ma[u"tipos"]
-            dados[u"tipos_ref"] = dados_ma.get(u"tipos_ref")
-            sigla_tipos = u"MA"
+                u"Verifique se a tabela normas_dados do Supabase tem uma linha "
+                u"uf='MA', sistema='hidrantes'.")
 
     perfil = copy.deepcopy(dados)
     perfil[u"_uf_solicitada"] = sigla_solicitada
     perfil[u"_uf_efetiva"] = sigla_efetiva
-    perfil[u"_uf_tipos"] = sigla_tipos
     return perfil
 
 
@@ -88,10 +64,11 @@ def req(perfil, chave):
     if chave not in perfil:
         raise NormProfileError(
             u"O perfil normativo '{}' ({}) nao define o parametro obrigatorio "
-            u"'{}'. Adicione '{}' em lib/normas/{}/hidrantes.py.".format(
+            u"'{}'. Verifique a linha uf='{}', sistema='hidrantes' na tabela "
+            u"normas_dados do Supabase.".format(
                 perfil.get(u"_uf_efetiva", u"?"),
                 perfil.get(u"norma", u"?"),
-                chave, chave, perfil.get(u"_uf_efetiva", u"?")))
+                chave, perfil.get(u"_uf_efetiva", u"?")))
     return perfil[chave]
 
 
@@ -119,14 +96,3 @@ def ref(perfil, chave):
     valor = opt(perfil, chave, u"")
     valor = (valor or u"").strip()
     return u" ({})".format(valor) if valor else u""
-
-
-def lista_ufs_disponiveis():
-    """Retorna a lista de siglas de UF com domínio 'hidrantes' cadastrado."""
-    from normas import lista_estados
-    ufs = []
-    for sigla, _ in lista_estados():
-        estado = get_estado(sigla)
-        if estado and estado.get(u"hidrantes"):
-            ufs.append(sigla)
-    return ufs
