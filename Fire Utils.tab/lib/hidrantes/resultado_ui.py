@@ -643,10 +643,11 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas, ids_problema=Non
 def mostrar_trechos_mapeados(trechos, fila_acoes, ao_localizar):
     """
     Janela mostrando os trechos identificados ao final de "Mapear Trechos"
-    (sucção e as rotas completas — Bomba → Ponto A → hidrante — dos dois
-    hidrantes mais desfavoráveis) — chamada tanto no caminho direto (sem
-    inconsistências) quanto depois que o usuário confirma "Ignorar" numa
-    janela de inconsistências (ver _continuar_mapeamento, script.py).
+    (sucção e a rota completa — Bomba → hidrante — de TODOS os hidrantes
+    achados na rede, em ordem do mais ao menos desfavorável) — chamada
+    tanto no caminho direto (sem inconsistências) quanto depois que o
+    usuário confirma "Ignorar" numa janela de inconsistências (ver
+    _continuar_mapeamento, script.py).
 
     Cada linha tem um botão que seleciona/enquadra TODOS os elementos
     daquele trecho de uma vez no Revit — pro usuário conferir visualmente
@@ -657,9 +658,11 @@ def mostrar_trechos_mapeados(trechos, fila_acoes, ao_localizar):
     ExternalEvent (fila_acoes.py) quando o script termina de rodar, então
     a janela precisa não bloquear o script pra o clique funcionar ao vivo.
 
-    trechos: lista de dicts {"nome", "eids"} — um por linha, já montada
-        pelo chamador (Revit-dependente — este módulo não importa nada
-        do Revit).
+    trechos: lista de dicts {"nome", "eids", "perda"} — um por linha, já
+        montada pelo chamador (Revit-dependente — este módulo não importa
+        nada do Revit). "perda" é a perda de carga do trecho (mca, ver
+        calc_j_trecho) usada só pra essa conferência visual — não é o
+        cálculo hidráulico final (esse é "Dimensionar Hidrantes").
     fila_acoes/ao_localizar: mesmos parâmetros de mostrar_inconsistencias_
         mapeamento — fila de ExternalEvent e callback(uiapp, eids) que
         efetivamente seleciona os elementos (aceita tanto um ElementId
@@ -673,10 +676,9 @@ def mostrar_trechos_mapeados(trechos, fila_acoes, ao_localizar):
         fila_acoes=fila_acoes,
         ao_localizar=ao_localizar,
     )
-    linhas = [[t[u"nome"], u"{} elemento(s)".format(len(t[u"eids"])),
-               _botao_lista(t[u"eids"])] for t in trechos]
-    janela.tabela([u"Trecho", u"Elementos", u""], linhas,
-                  alinhas=[u"left", u"left", u"left"])
+    linhas = [[t[u"nome"], _mca(t[u"perda"]), _botao_lista(t[u"eids"])] for t in trechos]
+    janela.tabela([u"Trecho", u"Perda de Carga", u""], linhas,
+                  alinhas=[u"left", u"right", u"left"])
     janela.paragrafo(u"Clique em \"Mostrar no Revit\" para selecionar e enquadrar, na "
                      u"view ativa, todos os elementos daquele trecho.")
     janela.Show()
