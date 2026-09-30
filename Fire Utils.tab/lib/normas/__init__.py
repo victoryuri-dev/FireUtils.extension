@@ -198,25 +198,41 @@ def _buscar_hidrantes(uf):
     return dados
 
 
+def _importar_estado_local(sigla):
+    """Tenta importar o ESTADO local de normas/<sigla>/__init__.py.
+
+    Retorna {} (não None) quando não existe pacote local pra essa UF — a
+    ausência de um normas/<UF>/ não deve mais, por si só, bloquear o
+    estado: um UF sem pacote local ainda pode ter dados reais cadastrados
+    na base normativa central (Supabase), buscados logo depois em
+    get_estado(). O pacote local continua sendo o fallback de última
+    instância (offline, ou chaves que a base central não cobre, como
+    "tipos"/"tipos_ref" de hidrantes) — só deixa de ser pré-requisito.
+    """
+    try:
+        modulo = __import__(u"normas.{}".format(sigla), globals(), locals(), [u"ESTADO"])
+    except ImportError:
+        return {}
+    return dict(getattr(modulo, u"ESTADO", {}))
+
+
 def get_estado(sigla):
-    """Retorna o dict ESTADO para a sigla fornecida, ou None se não encontrado.
+    """Retorna o dict ESTADO para a sigla fornecida, ou None se não houver
+    nenhum dado (nem local, nem na base normativa central) pra essa UF.
 
     As chaves de saídas de emergência, e as constantes de cálculo
     hidráulico de hidrantes (_CHAVES_HIDRANTES + hazen_c), vêm
     preferencialmente da base normativa central (com cache em
     memória/disco); qualquer chave ausente na resposta central (incluindo
     "tipos"/"tipos_ref" de hidrantes, nunca migrados) continua vindo do
-    módulo local.
+    módulo local quando ele existir. Um UF sem pacote local (normas/<UF>/)
+    ainda é aceito normalmente se a base central já tiver dados reais
+    cadastrados pra ele — o pacote local nunca foi a fonte da verdade,
+    só o fallback offline (ver docstring do módulo).
     """
     sigla = sigla.upper()
-    if sigla == u"MA":
-        from normas.MA import ESTADO  # lib/normas/MA/__init__.py
-    elif sigla == u"PE":
-        from normas.PE import ESTADO  # lib/normas/PE/__init__.py
-    else:
-        return None
+    estado = _importar_estado_local(sigla)
 
-    estado = dict(ESTADO)
     remoto = _buscar_saidas(sigla)
     if remoto:
         for chave in _CHAVES_SAIDAS:
@@ -224,8 +240,8 @@ def get_estado(sigla):
                 estado[chave] = remoto[chave]
 
     remoto_hid = _buscar_hidrantes(sigla)
-    if remoto_hid and estado.get(u"hidrantes"):
-        hidrantes = dict(estado[u"hidrantes"])
+    if remoto_hid:
+        hidrantes = dict(estado.get(u"hidrantes") or {})
         for chave in _CHAVES_HIDRANTES:
             if chave in remoto_hid:
                 hidrantes[chave] = remoto_hid[chave]
@@ -233,16 +249,27 @@ def get_estado(sigla):
         if hazen_c_remoto:
             hidrantes[u"hazen_c"] = dict(hidrantes.get(u"hazen_c") or {})
             hidrantes[u"hazen_c"].update(hazen_c_remoto)
-        estado[u"hidrantes"] = hidrantes
+        if hidrantes:
+            estado[u"hidrantes"] = hidrantes
 
+    if not estado:
+        return None
+
+    estado.setdefault(u"sigla", sigla)
     return estado
 
 
 def lista_estados():
-    """Retorna lista de (sigla, label) para exibição em forms."""
+    """Retorna lista de (sigla, label) para exibição em forms.
+
+    Só pra rótulo amigável (get_label()) — não é mais o que decide se uma
+    UF é aceita ou não (get_estado() já não depende disso, ver acima). Um
+    UF fora desta lista ainda funciona normalmente se tiver dados na base
+    central; só aparece com a própria sigla como rótulo (get_label())."""
     return [
         (u"MA", u"Maranhão — CBM-MA"),
         (u"PE", u"Pernambuco — CBMPE"),
+        (u"PB", u"Paraíba — CBMPB"),
     ]
 
 
