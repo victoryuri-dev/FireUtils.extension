@@ -28,31 +28,53 @@ class NormProfileError(Exception):
 def get_profile(uf):
     """
     Retorna uma copia do perfil normativo de hidrantes ativo para a UF informada
-    (lib/normas/<UF>/hidrantes.py).
+    (lib/normas/<UF>/hidrantes.py, com constantes de calculo hidraulico
+    sobrepostas pela base normativa central quando cadastradas - ver
+    normas/__init__.py:get_estado()).
 
-    Se a UF nao tiver perfil proprio nem dominio "hidrantes" cadastrado ainda,
-    cai para "MA" (default explicito) - isso e sinalizado nas chaves internas
-    '_uf_solicitada' e '_uf_efetiva', para que o memorial possa avisar quando
-    os dois divergirem, em vez de silenciar a substituicao.
+    Se a UF nao tiver dominio "hidrantes" NENHUM (nem local, nem na base
+    central), cai inteiro para "MA" (default explicito) - isso e sinalizado
+    nas chaves internas '_uf_solicitada' e '_uf_efetiva', para que o
+    memorial possa avisar quando os dois divergirem, em vez de silenciar a
+    substituicao.
+
+    "tipos"/"tipos_ref" (Tabela 2, derivada de hidrantes/db.py) e a unica
+    parte que NUNCA vem da base central (ver docstring de normas/__init__.py)
+    - so de um modulo local proprio. Uma UF que ja tem as demais constantes
+    cadastradas na base central mas ainda nao tem esse modulo local (ex.:
+    Paraiba, hidrantes cadastrado no Supabase sem normas/PB/hidrantes.py)
+    recebe so essas duas chaves do perfil "MA", sinalizado em '_uf_tipos' -
+    sem substituir o resto do perfil, que continua sendo os valores
+    hidraulicos reais da propria UF.
     """
     sigla_solicitada = (uf or u"MA").upper()
 
     estado = get_estado(sigla_solicitada)
-    dados = estado.get(u"hidrantes") if estado else None
+    dados = dict(estado.get(u"hidrantes") or {}) if estado else {}
     sigla_efetiva = sigla_solicitada
 
-    if dados is None:
+    if not dados:
         sigla_efetiva = u"MA"
         estado_ma = get_estado(u"MA")
-        dados = estado_ma.get(u"hidrantes") if estado_ma else None
-        if dados is None:
+        dados = dict(estado_ma.get(u"hidrantes") or {}) if estado_ma else {}
+        if not dados:
             raise NormProfileError(
                 u"Nenhum perfil normativo de hidrantes disponivel (nem 'MA'). "
                 u"Verifique lib/normas/MA/hidrantes.py.")
 
+    sigla_tipos = sigla_efetiva
+    if not dados.get(u"tipos"):
+        estado_ma = get_estado(u"MA")
+        dados_ma = estado_ma.get(u"hidrantes") if estado_ma else None
+        if dados_ma and dados_ma.get(u"tipos"):
+            dados[u"tipos"] = dados_ma[u"tipos"]
+            dados[u"tipos_ref"] = dados_ma.get(u"tipos_ref")
+            sigla_tipos = u"MA"
+
     perfil = copy.deepcopy(dados)
     perfil[u"_uf_solicitada"] = sigla_solicitada
     perfil[u"_uf_efetiva"] = sigla_efetiva
+    perfil[u"_uf_tipos"] = sigla_tipos
     return perfil
 
 

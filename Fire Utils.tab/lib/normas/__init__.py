@@ -39,9 +39,12 @@ local (normas/<UF>/hidrantes.py) — não têm o mesmo formato do payload do
 site, então não é uma migração 1:1 como as demais chaves.
 """
 
+from __future__ import absolute_import
+
 import os
 import json
 import io
+import importlib
 
 
 _CACHE_ESTADO = os.path.join(
@@ -210,7 +213,7 @@ def _importar_estado_local(sigla):
     "tipos"/"tipos_ref" de hidrantes) — só deixa de ser pré-requisito.
     """
     try:
-        modulo = __import__(u"normas.{}".format(sigla), globals(), locals(), [u"ESTADO"])
+        modulo = importlib.import_module(u"normas.{}".format(sigla))
     except ImportError:
         return {}
     return dict(getattr(modulo, u"ESTADO", {}))
