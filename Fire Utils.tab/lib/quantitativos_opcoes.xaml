@@ -45,6 +45,7 @@
                      x:Name precisa bater com "Chk_" + a chave da medida. -->
                 <CheckBox x:Name="Chk_extintores"  Content="Extintores"               Style="{StaticResource OpcaoCheckStyle}"/>
                 <CheckBox x:Name="Chk_sinalizacao" Content="Sinalização de Emergência" Style="{StaticResource OpcaoCheckStyle}"/>
+                <CheckBox x:Name="Chk_iluminacao"  Content="Iluminação de Emergência" Style="{StaticResource OpcaoCheckStyle}"/>
             </StackPanel>
         </Border>
 
