@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { listarProjetosDoUsuario } from "../../lib/projectData";
 import { resumoProjeto } from "../../lib/projetoDados";
-import { formatarArea, formatarEditadoHa } from "../../lib/format";
 import { urlNovoProjeto } from "../../lib/site";
 import Icon from "../Icon";
+import ProjetoCard from "./ProjetoCard";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 import linkIconSvg from "../../assets/icons/link-icon.svg?raw";
 
@@ -71,31 +71,7 @@ export default function ConectarProjeto({ onSelecionar }) {
       {!erro && projetos && projetos.length > 0 && (
         <div className="grade-projetos">
           {projetos.map((projeto) => (
-            <button
-              key={projeto.id}
-              type="button"
-              className="cartao-projeto"
-              onClick={() => onSelecionar(projeto)}
-            >
-              <h3 className="cartao-projeto-nome">{projeto.nome}</h3>
-              <div className="cartao-projeto-grade">
-                <span>
-                  <span className="rotulo">UF</span> <strong>{projeto.uf || "—"}</strong>
-                </span>
-                <span>
-                  <span className="rotulo">Ocupação:</span> <strong>{projeto.ocupacao || "—"}</strong>
-                </span>
-                <span>
-                  <span className="rotulo">Área Construída:</span> <strong>{formatarArea(projeto.areaConstruida)}</strong>
-                </span>
-                <span>
-                  <span className="rotulo">Pavimentos:</span> <strong>{projeto.pavimentosLabel || "—"}</strong>
-                </span>
-              </div>
-              {projeto.updatedAt && (
-                <p className="cartao-projeto-rodape">{formatarEditadoHa(projeto.updatedAt)}</p>
-              )}
-            </button>
+            <ProjetoCard key={projeto.id} projeto={projeto} onClick={() => onSelecionar(projeto)} />
           ))}
         </div>
       )}

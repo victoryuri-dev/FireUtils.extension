@@ -739,45 +739,169 @@
   gap: 12px;
 }
 
-.cartao-projeto {
+/* Cartão de projeto — layout copiado do site (ETOS.FireUtils,
+   src/pages/ProjetosPage.jsx/ProjectCard), cores/tokens dele incluídos
+   (o cartão é propositalmente escuro, igual lá, mesmo com o resto da
+   dockpane em tema claro). */
+.card-projeto {
+  --cp-bg: #1d1e24;
+  --cp-bg-hover: #16171d;
+  --cp-border: rgba(255, 255, 255, 0.11);
+  --cp-border-hover: rgba(255, 255, 255, 0.13);
+  --cp-ink: #e6e9ed;
+  --cp-ink-faint: rgba(255, 255, 255, 0.5);
+  --cp-green: #1d9e75;
+  --cp-green-dim: rgba(29, 158, 117, 0.12);
+  --cp-green-border: rgba(29, 158, 117, 0.35);
+  --cp-amber: #c98a1a;
+  --cp-amber-dim: rgba(186, 117, 23, 0.12);
+  --cp-amber-border: rgba(186, 117, 23, 0.35);
+  --cp-red: #c0152a;
+  --cp-red-dim: rgba(192, 21, 42, 0.12);
+  --cp-red-border: rgba(192, 21, 42, 0.35);
+
   width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   text-align: left;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 14px 16px;
+  background: var(--cp-bg);
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--cp-ink);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.cartao-projeto:hover {
-  border-color: var(--sidebar-icon);
+.card-projeto:hover {
+  background: var(--cp-bg-hover);
+  border-color: var(--cp-border-hover);
 }
 
-.cartao-projeto-nome {
-  font-size: 14px;
-  font-weight: 700;
-  margin: 0 0 10px;
-  color: var(--text);
-}
-
-.cartao-projeto-grade {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 10px;
-  font-size: 11px;
-  color: var(--text);
-}
-
-.cartao-projeto .rotulo {
-  color: var(--text-3);
-}
-
-.cartao-projeto-rodape {
-  margin: 10px 0 0;
-  font-size: 10px;
-  color: var(--text-3);
+.card-projeto-topo {
   display: flex;
   align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.card-projeto-nome {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+  color: var(--cp-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-projeto-anel {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.card-projeto-anel svg {
+  transform: rotate(-90deg);
+}
+
+.card-projeto-anel .icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 9px;
+  height: 9px;
+}
+
+.card-projeto-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.card-projeto-chip {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+.card-projeto-chip .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.card-projeto-chip-green {
+  background: var(--cp-green-dim);
+  border-color: var(--cp-green-border);
+  color: var(--cp-green);
+}
+
+.card-projeto-chip-amber {
+  background: var(--cp-amber-dim);
+  border-color: var(--cp-amber-border);
+  color: var(--cp-amber);
+}
+
+.card-projeto-chip-red {
+  background: var(--cp-red-dim);
+  border-color: var(--cp-red-border);
+  color: var(--cp-red);
+}
+
+.card-projeto-chip-neutral {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--cp-border);
+  color: var(--cp-ink-faint);
+}
+
+.card-projeto-stats {
+  margin: 0;
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: start;
+  column-gap: 32px;
+}
+
+.card-projeto-stats dt {
+  font-size: 10px;
+  color: var(--cp-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin: 0 0 6px;
+}
+
+.card-projeto-stats dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cp-ink);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.card-projeto-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cp-border);
+  font-size: 11px;
+  color: var(--cp-ink-faint);
 }
 
 /* Selecionar estrutura ---------------------------------------------------- */
