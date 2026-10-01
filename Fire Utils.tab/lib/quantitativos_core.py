@@ -32,6 +32,8 @@ from pyrevit import forms
 import extintores.calc as extintores_calc
 import extintores.params as extintores_params
 import sinalizacao.calc as sinalizacao_calc
+import iluminacao.calc as iluminacao_calc
+import iluminacao.params as iluminacao_params
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"quantitativos_opcoes.xaml")
@@ -67,6 +69,16 @@ def _rotulo_placa(it):
     return u"**{}** — {}".format(it[u"tipoPlaca"], it[u"quantidade"])
 
 
+def _rotulo_iluminacao(it):
+    return u"**{}** | {} | {} {} — {}".format(
+        it[u"pavimento"] or u"(sem pavimento)",
+        it[u"tipoBase"],
+        it[u"tipoLampada"] or u"(sem tipo de lâmpada)",
+        u"({} lm)".format(it[u"fluxoLuminosoLm"]) if it.get(u"fluxoLuminosoLm") else u"",
+        it[u"quantidade"],
+    )
+
+
 MEDIDAS = [
     _Medida(
         chave=u"extintores",
@@ -94,6 +106,20 @@ MEDIDAS = [
             u"verifique se as instâncias estão na categoria 'Dispositivos "
             u"de Segurança' e se o parâmetro de tipo 'Código da Placa' "
             u"está preenchido."
+        ),
+    ),
+    _Medida(
+        chave=u"iluminacao",
+        rotulo=u"Iluminação de Emergência",
+        preparar=lambda doc: iluminacao_params.create_iluminacao_params(doc),
+        coletar=iluminacao_calc.coletar_itens,
+        agrupar=iluminacao_calc.agrupar_por_pavimento,
+        salvar=iluminacao_calc.salvar_cache,
+        rotulo_item=_rotulo_iluminacao,
+        mensagem_vazia=(
+            u"Nenhum equipamento de aclaramento encontrado — verifique se "
+            u"as instâncias estão na categoria 'Luminárias' e se o "
+            u"parâmetro de tipo 'Tipo Base Iluminação' está preenchido."
         ),
     ),
 ]
