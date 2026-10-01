@@ -7,6 +7,7 @@ import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
 import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
+import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
 function fmt(n, casas = 2) {
@@ -27,20 +28,6 @@ function Linha({ label, valor }) {
     <div>
       <dt>{label}:</dt>
       <dd>{valor}</dd>
-    </div>
-  );
-}
-
-// Pressão + Vazão (ou qualquer par relacionado) na mesma linha, em vez de
-// duas linhas dt/dd empilhadas — layout do card de ponto de operação.
-function LinhaInline({ itens }) {
-  return (
-    <div className="hid-linha-inline">
-      {itens.map((it, i) => (
-        <span key={i}>
-          <span className="hid-linha-inline-label">{it.label}:</span> <strong>{it.valor}</strong>
-        </span>
-      ))}
     </div>
   );
 }
@@ -204,7 +191,13 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const { tipo: tipoSalvo, tipoVariante: varianteSalva, rti: rtiSalvo, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
 
   const classificacao = resposta?.classificacao;
-  const ponto = resposta?.pontoOperacao;
+  const dimensionamento = resposta?.dimensionamento;
+  const limites = resposta?.limites;
+  // Pressão/vazão totais, pro card "Dimensionamento da Bomba de Incêndio" e
+  // pro cálculo de potência abaixo — mesmo "res" cru que
+  // HidrantesDimensionamento usa pras seções detalhadas acima.
+  const ht = dimensionamento?.res?.P_RTI;
+  const qt = dimensionamento?.res?.Qt;
 
   async function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
@@ -305,7 +298,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
   // Só cv é mostrado (pedido explícito) — calcPotenciaBomba ainda devolve
   // kW junto, mas fica sem uso aqui.
-  const { potCv } = ponto ? calcPotenciaBomba(ponto.qt, ponto.ht, eficiencia) : { potCv: null };
+  const { potCv } = dimensionamento ? calcPotenciaBomba(qt, ht, eficiencia) : { potCv: null };
 
   return (
     <div className="se-pagina hid-pagina">
@@ -387,49 +380,24 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
             </Cartao>
           </div>
 
-          <p className="dashboard-subtitulo">Ponto de Operação do Sistema</p>
-          {!ponto ? (
+          <p className="dashboard-subtitulo">Dimensionamento do Sistema</p>
+          {!dimensionamento ? (
             <p className="vazio">
               {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Execute "Dimensionar Hidrantes" primeiro.'}
             </p>
           ) : (
-            <div className="hid-lista-vertical">
-              <Cartao titulo="HD01 — 1º Hidrante Mais Desfavorável">
-                <LinhaInline
-                  itens={[
-                    { label: "Pressão", valor: `${fmt(ponto.pHd01)} mca` },
-                    { label: "Vazão", valor: `${fmt(ponto.qHd01)} L/min` },
-                  ]}
-                />
-              </Cartao>
-              <Cartao titulo="HD02 — 2º Hidrante Mais Desfavorável">
-                <LinhaInline
-                  itens={[
-                    { label: "Pressão", valor: `${fmt(ponto.pHd02)} mca` },
-                    { label: "Vazão", valor: `${fmt(ponto.qHd02)} L/min` },
-                  ]}
-                />
-              </Cartao>
-              <div className="hid-grid-2">
-                <Cartao titulo="Altura Manométrica Total">
-                  <ValorGrande valor={`${fmt(ponto.ht)} mca`} />
-                </Cartao>
-                <Cartao titulo="Vazão Total">
-                  <ValorGrande valor={`${fmt(ponto.qt)} L/min`} />
-                </Cartao>
-              </div>
-            </div>
+            <HidrantesDimensionamento d={dimensionamento} limites={limites} />
           )}
 
-          {ponto && (
+          {dimensionamento && (
             <div className="hid-secao">
               <p className="dashboard-subtitulo">Dimensionamento da Bomba de Incêndio</p>
               <div className="hid-grid-2" style={{ marginBottom: 12 }}>
                 <Cartao titulo="Pressão">
-                  <ValorGrande valor={`${fmt(ponto.ht)} mca`} />
+                  <ValorGrande valor={`${fmt(ht)} mca`} />
                 </Cartao>
                 <Cartao titulo="Vazão">
-                  <ValorGrande valor={`${fmt(ponto.qt)} L/min`} />
+                  <ValorGrande valor={`${fmt(qt)} L/min`} />
                 </Cartao>
               </div>
               <div className="hid-grid-3">

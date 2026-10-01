@@ -106,24 +106,30 @@
  *     que está de fato aplicado no Revit (Project Information, resolvido
  *     pelo perfil normativo — pode divergir do que está pendente no site
  *     se "Aplicar classificação no Revit" ainda não foi clicado depois de
- *     uma mudança), o ponto de operação do último "Dimensionar Hidrantes"
- *     (cache local) e a eficiência da bomba já salva, se houver.
+ *     uma mudança), o cache completo do último "Dimensionar Hidrantes" e os
+ *     limites normativos de velocidade.
  *
  *   { type: "HIDRANTES_DIMENSIONAMENTO", payload: { ok, erro?,
  *     classificacao?: { tipo, variante_idx, descricao, esguicho_dn, mang_dn,
  *       mang_comp, expedicoes, q_min, p_min, valorSistema },
- *     pontoOperacao?: { qt, ht, pHd01, pHd02, qHd01, qHd02, hidGoverna, timestamp } | null,
+ *     norma?: string,
+ *     limites?: { vMaxTubulacao, vMaxSuccaoPositiva, vMaxSuccaoNegativa },
+ *     dimensionamento?: object | null,
  *     erroDimensionamento?: string | null } }
  *     `classificacao` não inclui `rti` — quem quiser mostrar RTI lê direto
  *     do Supabase (dadosHidrantes(projeto).rti, ver lib/projetoDados.js),
  *     nunca do Project Information (ver comentário de
  *     SET_HIDRANTES_CLASSIFICACAO acima pra por quê).
- *     Python -> JS: resposta de GET_HIDRANTES_DIMENSIONAMENTO. `ht` é a
- *     altura manométrica total que a bomba precisa desenvolver (P_RTI do
- *     motor de cálculo — pressão que precisaria existir na RTI, referência
- *     atmosférica, pra alimentar o sistema por gravidade; já inclui sucção
- *     e recalque). `pontoOperacao` vem null quando "Dimensionar Hidrantes"
- *     ainda não rodou nesta sessão do projeto (ver erroDimensionamento).
+ *     Python -> JS: resposta de GET_HIDRANTES_DIMENSIONAMENTO. `dimensionamento`
+ *     é o cache cru de "Dimensionar Hidrantes" (res, dados_sistema,
+ *     valor_sistema, metodo, C_HW, succao, ranking_hidrantes, cotas... —
+ *     mesmo formato que o site lê de state.hidrantes.dimensionamento, ver
+ *     HidrantesPage.jsx lá), repassado sem reduzir — `res.P_RTI` é a altura
+ *     manométrica total que a bomba precisa desenvolver (pressão que
+ *     precisaria existir na RTI, referência atmosférica, pra alimentar o
+ *     sistema por gravidade; já inclui sucção e recalque) e `res.Qt` a
+ *     vazão total. Vem `null` quando "Dimensionar Hidrantes" ainda não
+ *     rodou nesta sessão do projeto (ver erroDimensionamento).
  *     A eficiência da bomba e a potência adotada NÃO vêm daqui — são lidas/
  *     gravadas direto no Supabase (dados.hidrantes.bombaEficiencia/
  *     bombaPotenciaAdotada, ver lib/projetoDados.js e

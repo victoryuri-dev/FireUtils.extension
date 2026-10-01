@@ -1,14 +1,17 @@
-/* Tema escuro (padrão da dockpane) — ver `:root[data-theme="light"]` abaixo
-   para a variante clara, alternada pelo botão da sidebar (ThemeToggle.jsx). */
+/* Tema escuro (padrão da dockpane) — paleta igual à do site (ETOS.FireUtils,
+   src/index.css:@theme), pra seções como "Dimensionamento do Sistema" dos
+   hidrantes ficarem visualmente idênticas às equivalentes lá. Ver
+   `:root[data-theme="light"]` abaixo para a variante clara, alternada pelo
+   botão da sidebar (hooks/useTema.js). */
 :root {
-  --bg: #0d0d0e;
-  --bg-2: #141414;
-  --bg-3: #1c1c1c;
-  --border: #2a2a2a;
-  --border-2: #3a3a3a;
-  --text: #f2f2f2;
-  --text-2: #b3b3b3;
-  --text-3: #808080;
+  --bg: #0e0f13;
+  --bg-2: #16171d;
+  --bg-3: #1d1e24;
+  --border: rgba(255, 255, 255, .11);
+  --border-2: rgba(255, 255, 255, .06);
+  --text: #e6e9ed;
+  --text-2: rgba(255, 255, 255, .70);
+  --text-3: rgba(255, 255, 255, .50);
   --accent: #EA1330;
   --white: #ffffff;
   --black: #0d0d0e;
@@ -20,15 +23,17 @@
   --sidebar-icon-neutro: #737373;
   --sidebar-avatar-bg: #ffffff;
   --sidebar-avatar-icon: #141414;
-  --green: #34c77b;
-  --green-dim: #15301f;
-  --green-border: #1f5c38;
-  --amber: #e8a33d;
-  --amber-dim: #332512;
-  --amber-border: #5c431f;
+  --red-dim: rgba(234, 19, 48, .12);
+  --red-border: rgba(234, 19, 48, .35);
+  --green: #1D9E75;
+  --green-dim: rgba(29, 158, 117, .12);
+  --green-border: rgba(29, 158, 117, .35);
+  --amber: #c98a1a;
+  --amber-dim: rgba(186, 117, 23, .12);
+  --amber-border: rgba(186, 117, 23, .35);
   --blue: #5b8def;
-  --blue-dim: #15233d;
-  --blue-border: #2a4575;
+  --blue-dim: rgba(80, 140, 220, .10);
+  --blue-border: rgba(80, 140, 220, .30);
 }
 
 /* Tema claro — paleta calibrada pelos mockups do redesign (Biblioteca de
@@ -54,6 +59,8 @@
   --sidebar-icon-neutro: #737373;
   --sidebar-avatar-bg: #ffffff;
   --sidebar-avatar-icon: #141414;
+  --red-dim: #fdeaec;
+  --red-border: #f6c3cb;
   --green: #1f9d55;
   --green-dim: #eafaf0;
   --green-border: #bfe8cf;
