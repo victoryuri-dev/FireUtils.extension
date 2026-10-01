@@ -610,15 +610,25 @@
 }
 
 /* Catálogo / grade de cartões --------------------------------------------- */
-/* Grade responsiva pura CSS: cada card fica entre 160px e 200px de
-   largura — o navegador decide sozinho quantas colunas cabem na largura
-   disponível (auto-fit) e tira/acrescenta coluna conforme o container
-   (a dockpane) encolhe/cresce, sem media query nem JS. */
+/* Grade responsiva — mesmo padrão do site (grid-cols-[repeat(auto-fill,
+   minmax(var(--grid-min-width),1fr))], ver Biblioteca de Famílias lá):
+   auto-fill (não auto-fit) reserva o número de colunas que cabe no
+   mínimo, sem esticar os cards existentes pra preencher o espaço
+   sobrando quando há poucos itens; 1fr deixa cada card crescer até
+   dividir igualmente o espaço de sua própria coluna. --grid-min-width
+   sobe de 160px pra 200px a partir de 1024px de largura do container
+   (mesmo breakpoint "lg" do Tailwind), igual lá. */
 .grade {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 200px));
-  gap: 12px;
-  justify-content: center;
+  --grid-min-width: 160px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--grid-min-width), 1fr));
+  gap: 16px;
+}
+
+@media (min-width: 1024px) {
+  .grade {
+    --grid-min-width: 200px;
+  }
 }
 
 .cartao {
