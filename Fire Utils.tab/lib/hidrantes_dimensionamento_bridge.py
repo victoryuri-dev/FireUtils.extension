@@ -6,11 +6,15 @@ dockpane (webapp) precisa de três coisas que não vêm do Supabase, só do
 documento Revit ativo:
 
   1. O sistema classificado que está de fato APLICADO no projeto — Tipo,
-     esguicho, mangueira, expedições, vazão/pressão mínima —, lido do
-     Project Information e resolvido pelo perfil normativo do estado
-     (mesma lógica de hidrantes/sistema.py, usada por "Dimensionar
-     Hidrantes"). Pode divergir do que está pendente no site se "Aplicar
-     classificação no Revit" ainda não foi clicado depois de uma mudança.
+     esguicho, mangueira, expedições, vazão/pressão mínima, método de
+     cálculo e coeficiente C —, lido do Project Information e resolvido
+     pelo perfil normativo do estado (mesma lógica de hidrantes/sistema.py,
+     usada por "Dimensionar Hidrantes"). Pode divergir do que está
+     pendente no site se "Aplicar classificação no Revit" ainda não foi
+     clicado depois de uma mudança. Método/coeficiente C vêm sempre
+     (Project Information + perfil, independente de "Dimensionar
+     Hidrantes" já ter rodado) — é o card único de classificação da
+     dockpane que precisa deles completos mesmo sem dimensionamento ainda.
      RTI NÃO vem daqui — o motor de cálculo nunca lê RTI do Project
      Information (dimensiona o reservatório, não a rede hidráulica), então
      a dockpane lê direto do Supabase (dadosHidrantes(projeto).rti) — ver
@@ -40,8 +44,10 @@ webapp/src/lib/hidrantesCalc.js aqui).
 
 import os
 
-from hidrantes.norm_profiles import get_profile, req, NormProfileError
+from hidrantes.norm_profiles import get_profile, req, opt, NormProfileError
 from hidrantes.sistema import resolver_dados_sistema_puro
+from hidrantes.calc import METODO_VALVULA, METODOS_CALCULO
+from hidrantes.params import PROJECT_INFO_METODO_PARAM
 import hidrantes.calc as hidrantes_calc
 from projeto import carregar_dados_projeto
 from family_error_utils import texto_erro
@@ -79,6 +85,19 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
 
     classificacao = dict(dados_sistema)
     classificacao[u"valorSistema"] = valor_sistema
+
+    # Método e coeficiente C lidos aqui direto (Project Information + perfil),
+    # independente do cache de "Dimensionar Hidrantes" — assim o card único
+    # de classificação na dockpane (Tipo/RTI/Esguicho/Mangueira/Expedições/
+    # Vazão/Pressão/Método/Coef. C) fica completo mesmo que o dimensionamento
+    # hidráulico ainda não tenha rodado nesta sessão. Mesma leitura/fallback
+    # que "Dimensionar Hidrantes"/script.py faz pro parâmetro de método.
+    _param_metodo = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
+    metodo = _param_metodo.AsString() if _param_metodo else None
+    if metodo not in METODOS_CALCULO:
+        metodo = METODO_VALVULA
+    classificacao[u"metodo"] = metodo
+    classificacao[u"chw"] = opt(perfil, u"hazen_c", {}).get(u"galvanizado")
 
     # Cache cru de "Dimensionar Hidrantes" (res, dados_sistema, valor_sistema,
     # metodo, C_HW, succao, ranking_hidrantes, cotas... — ver payload_hid em

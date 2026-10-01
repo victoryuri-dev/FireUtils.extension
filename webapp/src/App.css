@@ -2452,6 +2452,58 @@
   margin-bottom: 4px;
 }
 
+/* Variantes do grid/caixa de estatística, usadas por "Classificação do
+   Sistema" (SistemaHidrantesPage.jsx) — cópia da seção equivalente do site
+   (FormularioSistema.jsx lá): área/ocupação em destaque (2 colunas, texto
+   maior, alinhado à esquerda) e o resumo do Tipo aplicado em 3 colunas. */
+.hiddim-stat-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.hiddim-stat-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.hiddim-stat-box-left {
+  text-align: left;
+}
+
+.hiddim-stat-val-grande {
+  font-size: 15px;
+}
+
+.hiddim-stat-label-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.hiddim-stat-label-linha .hiddim-stat-label {
+  margin-bottom: 0;
+}
+
+.hiddim-stat-hint {
+  font-size: 9px;
+  color: var(--text-3);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  white-space: nowrap;
+}
+
+.hiddim-campo-label {
+  font-size: 11px;
+  color: var(--text-2);
+  margin: 0;
+}
+
+.hiddim-cartao-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  margin: -4px 0 14px;
+}
+
 .hiddim-stat-val {
   font-size: 12px;
   font-weight: 700;

@@ -111,7 +111,7 @@
  *
  *   { type: "HIDRANTES_DIMENSIONAMENTO", payload: { ok, erro?,
  *     classificacao?: { tipo, variante_idx, descricao, esguicho_dn, mang_dn,
- *       mang_comp, expedicoes, q_min, p_min, valorSistema },
+ *       mang_comp, expedicoes, q_min, p_min, valorSistema, metodo, chw },
  *     norma?: string,
  *     limites?: { vMaxTubulacao, vMaxSuccaoPositiva, vMaxSuccaoNegativa },
  *     dimensionamento?: object | null,

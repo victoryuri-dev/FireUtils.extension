@@ -8,6 +8,7 @@ import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
 import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
+import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
 function fmt(n, casas = 2) {
@@ -19,15 +20,6 @@ function Cartao({ titulo, children }) {
     <div className="cartao-info">
       <h3>{titulo}</h3>
       {children}
-    </div>
-  );
-}
-
-function Linha({ label, valor }) {
-  return (
-    <div>
-      <dt>{label}:</dt>
-      <dd>{valor}</dd>
     </div>
   );
 }
@@ -313,7 +305,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       </div>
 
       <div className="hid-secao">
-        <Cartao titulo="Escolha do Sistema">
+        <Cartao titulo="Classificação do Sistema">
+          <p className="hiddim-cartao-desc">
+            Cruzamento área construída × ocupação, conforme Tabela 3 {resposta?.norma ? `da ${resposta.norma}` : "da norma"}.
+          </p>
+
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
               Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
@@ -321,15 +317,44 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
             </p>
           ) : (
             <>
-              <div className="hid-pills-linha">
-                {sugestao.opcoes.map((op) => (
-                  <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
-                    Tipo {op.tipo} — RTI {op.rti} m³
-                  </Pill>
-                ))}
+              <div className="hiddim-stat-grid hiddim-stat-grid-2">
+                <div className="hiddim-stat-box hiddim-stat-box-left">
+                  <div className="hiddim-stat-label">Área Total Construída (estruturas selecionadas acima)</div>
+                  <div className="hiddim-stat-val hiddim-stat-val-grande">
+                    {estrutura?.areaConstruida != null ? `${fmtNum(estrutura.areaConstruida, 2, "0")} m²` : "—"}
+                  </div>
+                </div>
+                <div className="hiddim-stat-box hiddim-stat-box-left">
+                  <div className="hiddim-stat-label-linha">
+                    <span className="hiddim-stat-label">Ocupação usada na classificação</span>
+                    {sugestao.coluna != null && <span className="hiddim-stat-hint">coluna {sugestao.coluna} da Tabela 3</span>}
+                  </div>
+                  <div className="hiddim-stat-val hiddim-stat-val-grande">{sugestao.divisao || "—"}</div>
+                </div>
               </div>
+
+              {sugestao.opcoes.length > 1 && (
+                <div style={{ marginTop: 14, marginBottom: 14 }}>
+                  <p className="hiddim-campo-label">A norma permite dois sistemas para esta ocupação — escolha qual adotar</p>
+                  <div className="hid-pills-linha" style={{ marginTop: 6 }}>
+                    {sugestao.opcoes.map((op) => (
+                      <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
+                        Tipo {op.tipo} — RTI {op.rti} m³
+                      </Pill>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {sugestao.opcoes.length === 1 && (
+                <div className="hid-pills-linha" style={{ marginTop: 14, marginBottom: 14 }}>
+                  <Pill active disabled>
+                    Tipo {sugestao.opcoes[0].tipo} — RTI {sugestao.opcoes[0].rti} m³
+                  </Pill>
+                </div>
+              )}
+
               {variantesDoTipoEfetivo.length > 1 && (
-                <div className="hid-pills-linha" style={{ marginTop: 8 }}>
+                <div className="hid-pills-linha" style={{ marginBottom: 14 }}>
                   {variantesDoTipoEfetivo.map((v, i) => (
                     <Pill
                       key={i}
@@ -342,6 +367,38 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                   ))}
                 </div>
               )}
+
+              {classificacao && (
+                <div className="hiddim-stat-grid hiddim-stat-grid-3">
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Tipo</div>
+                    <div className="hiddim-stat-val">Tipo {classificacao.tipo}</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Esguicho</div>
+                    <div className="hiddim-stat-val">DN{fmt(classificacao.esguicho_dn, 0)}</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Mangueira</div>
+                    <div className="hiddim-stat-val">
+                      DN{fmt(classificacao.mang_dn, 0)} — {fmt(classificacao.mang_comp, 0)} m
+                    </div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Expedições</div>
+                    <div className="hiddim-stat-val" style={{ textTransform: "capitalize" }}>{classificacao.expedicoes || "—"}</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Vazão mín.</div>
+                    <div className="hiddim-stat-val">{fmt(classificacao.q_min, 0)} L/min</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Pressão mín.</div>
+                    <div className="hiddim-stat-val">{fmt(classificacao.p_min, 0)} mca</div>
+                  </div>
+                </div>
+              )}
+
               <p className="hid-nota-aviso">
                 Sempre que trocar o sistema, execute "Dimensionar Hidrantes" novamente no Revit.
               </p>
@@ -360,26 +417,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {resposta?.ok && classificacao && (
         <>
-          <div className="hid-secao">
-            <Cartao titulo="Sistema Classificado (aplicado no Revit)">
-              <dl>
-                <Linha
-                  label="Tipo"
-                  valor={`Tipo ${classificacao.tipo}${classificacao.descricao ? ` — ${classificacao.descricao}` : ""}`}
-                />
-                <Linha label="RTI" valor={rtiSalvo != null ? `${rtiSalvo} m³` : "—"} />
-                <Linha label="Esguicho" valor={`DN${fmt(classificacao.esguicho_dn, 0)}`} />
-                <Linha
-                  label="Mangueira"
-                  valor={`DN${fmt(classificacao.mang_dn, 0)} — ${fmt(classificacao.mang_comp, 0)} m`}
-                />
-                <Linha label="Expedições" valor={classificacao.expedicoes || "—"} />
-                <Linha label="Vazão mínima" valor={`${fmt(classificacao.q_min, 0)} L/min`} />
-                <Linha label="Pressão mínima" valor={`${fmt(classificacao.p_min, 0)} mca`} />
-              </dl>
-            </Cartao>
-          </div>
-
           <p className="dashboard-subtitulo">Dimensionamento do Sistema</p>
           {!dimensionamento ? (
             <p className="vazio">
