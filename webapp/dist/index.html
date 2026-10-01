@@ -10,10 +10,22 @@
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <script type="module" crossorigin src="./assets/index-Dz65Pbwk.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-j3HZomMm.css">
+    <script type="module" crossorigin src="./assets/index-QbndSZcZ.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CjnMWoKc.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script>
+      // Aplica o tema salvo antes do React montar — sem isso, a página
+      // nasce com o tema escuro padrão (ver src/index.css) e só troca pro
+      // claro (quando é essa a preferência salva) depois do primeiro
+      // efeito do Sidebar, piscando escuro por um instante.
+      (function () {
+        try {
+          var tema = localStorage.getItem("fireutils-tema");
+          if (tema === "light") document.documentElement.setAttribute("data-theme", "light");
+        } catch (e) {}
+      })();
+    </script>
   </body>
 </html>

@@ -197,11 +197,11 @@
 }
 
 .toast-sucesso {
-  border-left-color: #1f9d55;
+  border-left-color: var(--green);
 }
 
 .toast-sucesso .toast-icone {
-  background: #1f9d55;
+  background: var(--green);
 }
 
 .toast-erro {
@@ -526,7 +526,7 @@
   padding: 0 15px;
   border-radius: 4px;
   border: none;
-  background: #f1f1f1;
+  background: var(--pill-bg);
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -857,7 +857,7 @@
 }
 
 .projeto-status-salvo .icon {
-  color: #1f9d55;
+  color: var(--green);
 }
 
 .projeto-nome {
@@ -1073,7 +1073,7 @@
 }
 
 .status-ok {
-  color: #1f9d55;
+  color: var(--green);
 }
 
 .status-pendente {

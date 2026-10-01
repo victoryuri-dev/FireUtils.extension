@@ -13,6 +13,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Aplica o tema salvo antes do React montar — sem isso, a página
+      // nasce com o tema escuro padrão (ver src/index.css) e só troca pro
+      // claro (quando é essa a preferência salva) depois do primeiro
+      // efeito do Sidebar, piscando escuro por um instante.
+      (function () {
+        try {
+          var tema = localStorage.getItem("fireutils-tema");
+          if (tema === "light") document.documentElement.setAttribute("data-theme", "light");
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

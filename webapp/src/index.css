@@ -1,5 +1,40 @@
-/* Paleta calibrada pelos mockups do redesign (Biblioteca de Famílias). */
+/* Tema escuro (padrão da dockpane) — ver `:root[data-theme="light"]` abaixo
+   para a variante clara, alternada pelo botão da sidebar (ThemeToggle.jsx). */
 :root {
+  --bg: #0d0d0e;
+  --bg-2: #141414;
+  --bg-3: #1c1c1c;
+  --border: #2a2a2a;
+  --border-2: #3a3a3a;
+  --text: #f2f2f2;
+  --text-2: #b3b3b3;
+  --text-3: #808080;
+  --accent: #EA1330;
+  --white: #ffffff;
+  --black: #0d0d0e;
+  --pill-bg: #262626;
+  --sidebar-bg: #141414;
+  --sidebar-bg-hover: #2a2a2a;
+  --sidebar-icon: #ffffff;
+  --sidebar-icon-ativo: var(--accent);
+  --sidebar-icon-neutro: #737373;
+  --sidebar-avatar-bg: #ffffff;
+  --sidebar-avatar-icon: #141414;
+  --green: #34c77b;
+  --green-dim: #15301f;
+  --green-border: #1f5c38;
+  --amber: #e8a33d;
+  --amber-dim: #332512;
+  --amber-border: #5c431f;
+  --blue: #5b8def;
+  --blue-dim: #15233d;
+  --blue-border: #2a4575;
+}
+
+/* Tema claro — paleta calibrada pelos mockups do redesign (Biblioteca de
+   Famílias), preservada como está pra quem preferir claro. A sidebar
+   continua escura nos dois temas (--sidebar-*). */
+:root[data-theme="light"] {
   --bg: #ffffff;
   --bg-2: #ffffff;
   --bg-3: #f5f5f5;
@@ -46,6 +81,7 @@ body {
   color: var(--text);
   font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
+  transition: background .2s, color .2s;
 }
 
 button {
