@@ -33,7 +33,6 @@ import extintores.calc as extintores_calc
 import extintores.params as extintores_params
 import sinalizacao.calc as sinalizacao_calc
 import iluminacao.calc as iluminacao_calc
-import iluminacao.params as iluminacao_params
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"quantitativos_opcoes.xaml")
@@ -111,7 +110,6 @@ MEDIDAS = [
     _Medida(
         chave=u"iluminacao",
         rotulo=u"Iluminação de Emergência",
-        preparar=lambda doc: iluminacao_params.create_iluminacao_params(doc),
         coletar=iluminacao_calc.coletar_itens,
         agrupar=iluminacao_calc.agrupar_por_pavimento,
         salvar=iluminacao_calc.salvar_cache,
@@ -119,7 +117,8 @@ MEDIDAS = [
         mensagem_vazia=(
             u"Nenhum equipamento de aclaramento encontrado — verifique se "
             u"as instâncias estão na categoria 'Luminárias' e se o "
-            u"parâmetro de tipo 'Tipo Base Iluminação' está preenchido."
+            u"parâmetro de tipo 'Tipo de Luminaria' está preenchido com "
+            u"'SLIM' ou '2 FAROIS'."
         ),
     ),
 ]
