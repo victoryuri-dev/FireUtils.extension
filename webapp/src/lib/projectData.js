@@ -25,7 +25,7 @@ function exigirSupabase() {
   }
 }
 
-const CAMPOS_PROJETO = "id, nome, dados, updated_at, version";
+const CAMPOS_PROJETO = "id, nome, dados, created_at, updated_at, version";
 
 /** Lista os projetos do usuário logado (RLS), opcionalmente filtrados por
  * nome/id — usado pela tela "Conectar um projeto". */

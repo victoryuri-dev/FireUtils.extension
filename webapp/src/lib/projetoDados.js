@@ -61,17 +61,71 @@ function rotuloPavimentos(estruturas) {
   return `${total} pavimentos`;
 }
 
-/** Resumo de um projeto pra grade da tela "Conectar um projeto". */
+/** Maior carga de incêndio (MJ/m²) entre todas as estruturas/divisões do
+ * projeto — mesma leitura direta de cargaState que o cartão de projeto do
+ * site (ProjetosPage.jsx:maxCarga) usa. */
+function maiorCargaIncendio(cargaState) {
+  let maior = 0;
+  Object.values(cargaState || {}).forEach((porEstrutura) => {
+    Object.values(porEstrutura || {}).forEach((c) => {
+      const valor = c?.metodo === "levantamento" ? paraNumero(c?.valorManual) || 0 : c?.cargaIncendio || 0;
+      if (valor > maior) maior = valor;
+    });
+  });
+  return maior;
+}
+
+/** Mesmos limiares de risco (300/1200 MJ/m²) do cartão de projeto do site. */
+function rotuloRisco(cargaIncendio) {
+  if (!cargaIncendio) return { label: "—", tom: "neutral" };
+  if (cargaIncendio <= 300) return { label: "Baixo", tom: "green" };
+  if (cargaIncendio <= 1200) return { label: "Médio", tom: "amber" };
+  return { label: "Alto", tom: "red" };
+}
+
+/** Completude do cadastro (0-100%) — mesmos critérios do cartão de
+ * projeto do site (ProjetosPage.jsx:calcCompletude), exceto o item de
+ * CNAE por pavimento (depende da tabela normativa própria do site,
+ * data/normas — aqui só confere se a divisão foi preenchida). */
+function calcCompletude(dados) {
+  const areaEstruturas = (dados.estruturas || []).reduce((soma, e) => soma + (paraNumero(e.areaTotal) || 0), 0);
+  const area = paraNumero(dados.areaConstruidaTotal) || areaEstruturas;
+  const checks = [
+    !!(dados.nome && dados.endereco && dados.cidade),
+    !!(dados.estruturas?.length && dados.estruturas.every((e) => e.areaTotal && e.altura)),
+    !!dados.propNome,
+    !!(dados.rtNome && (!dados.usaArt || dados.artNumero)),
+    !!(dados.pavimentos?.length > 0 && dados.pavimentos.every((p) => !!p.divisao)),
+    !!(Object.keys(dados.cargaState || {}).length > 0),
+    true,
+    !!(dados.nome && area > 0 && dados.pavimentos?.length > 0),
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+function tomPorCompletude(pct) {
+  if (pct === 100) return "green";
+  if (pct >= 30) return "amber";
+  return "red";
+}
+
+/** Resumo de um projeto pra grade da tela "Conectar um projeto" — mesmos
+ * campos do cartão de projeto do site (ver components/dashboard/ProjetoCard.jsx). */
 export function resumoProjeto(linha) {
   const dados = linha.dados || {};
+  const pct = calcCompletude(dados);
   return {
     id: linha.id,
     nome: dados.nome || linha.nome,
     uf: dados.uf || null,
     areaConstruida: paraNumero(dados.areaConstruidaTotal),
-    ocupacao: rotuloOcupacao(dados.pavimentos),
+    ocupacao: rotuloOcupacao(dados.pavimentos) || "—",
+    risco: rotuloRisco(maiorCargaIncendio(dados.cargaState)),
     pavimentosLabel: rotuloPavimentos(dados.estruturas),
-    updatedAt: linha.updated_at,
+    tipoProjetoLabel: dados.tipoProjeto === "dimensionamento" ? "Dimensionamento" : "Técnico",
+    completude: { pct, tom: tomPorCompletude(pct) },
+    createdAt: dados.createdAt || linha.created_at || null,
+    updatedAt: dados.updatedAt || linha.updated_at,
   };
 }
 

@@ -258,6 +258,22 @@ não foi implementado; por enquanto `sync.py` (`enviar`/`buscar`) continua
 existindo mas não é mais alimentado por nada do vínculo projeto/estrutura
 feito aqui.
 
+### Cartão de projeto (copiado do site)
+
+O cartão da grade "Conectar um projeto" (`components/dashboard/ProjetoCard.jsx`)
+é uma cópia do cartão de projeto do site (`ETOS.FireUtils`,
+`src/pages/ProjetosPage.jsx` — função `ProjectCard`), copy-paste da lógica
+e das cores/tokens dele: anel de completude (0–100%, mesmos 8 critérios —
+exceto o item de CNAE por pavimento, que depende da tabela normativa do
+site e não foi portado; aqui só confere se a divisão foi preenchida),
+chips de ocupação/risco/pavimentos e o rodapé com "Criado em"/"Editado há"
+no mesmo formato. `lib/projetoDados.js` (`resumoProjeto`) ganhou os
+helpers equivalentes a `ocupacaoInfo`/`maxCarga`/`riscoInfo`/
+`calcCompletude` do site, e `lib/format.js` (`tempoDecorrido`/
+`formatarDataCurta`) replica `timeAgo`/`fmtDate`. O cartão usa as cores do
+tema escuro do site (`--color-*` em `src/index.css` de lá) direto, fixas
+— são os tokens `--cp-*` definidos em `.card-projeto` no `App.css`.
+
 ### Mensagens da bridge (vínculo de projeto)
 
 Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
@@ -324,6 +340,7 @@ src/
 │   ├── Dashboard.jsx       orquestra o fluxo de vínculo projeto/estrutura
 │   ├── dashboard/
 │   │   ├── ConectarProjeto.jsx
+│   │   ├── ProjetoCard.jsx     cartão de projeto (layout copiado do site, ver abaixo)
 │   │   ├── SelecionarEstrutura.jsx
 │   │   ├── DashboardEstrutura.jsx
 │   │   └── ProjetoCabecalho.jsx
