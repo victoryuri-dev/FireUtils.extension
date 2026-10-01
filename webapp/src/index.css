@@ -16,7 +16,7 @@
   --white: #ffffff;
   --black: #0d0d0e;
   --pill-bg: #262626;
-  --sidebar-bg: #141414;
+  --sidebar-bg: var(--bg);
   --sidebar-bg-hover: #2a2a2a;
   --sidebar-icon: #ffffff;
   --sidebar-icon-ativo: var(--accent);
