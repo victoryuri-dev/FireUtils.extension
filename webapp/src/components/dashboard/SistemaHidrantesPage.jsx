@@ -8,6 +8,7 @@ import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
 import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
+import HidrantesBomba from "./HidrantesBomba";
 import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
@@ -15,10 +16,11 @@ function fmt(n, casas = 2) {
   return typeof n === "number" && !Number.isNaN(n) ? n.toFixed(casas) : "—";
 }
 
-// Mesmas 3 etapas da página de Hidrantes do site (HidrantesPage.jsx,
-// ETAPAS_HIDRANTES), num menu horizontal abaixo do título em vez do menu
-// lateral de lá — não há espaço pra uma coluna fixa na largura da dockpane.
-const ETAPAS_HIDRANTES = ["Classificação", "Dimensionamento", "Bomba de Incêndio"];
+// Classificação e Dimensionamento (Etapas 1 e 2 do site) ficam juntas numa
+// única etapa aqui — a dockpane não tem espaço pra 3 abas horizontais tão
+// discriminadas, e as duas já aparecem em sequência numa mesma rolagem.
+// Bomba de Incêndio (Etapa 3 do site) continua separada.
+const ETAPAS_HIDRANTES = ["Classificação e Dimensionamento", "Bomba de Incêndio"];
 
 function Cartao({ titulo, children }) {
   return (
@@ -39,34 +41,6 @@ function Pill({ active, onClick, disabled, children }) {
     >
       {children}
     </button>
-  );
-}
-
-// Um valor só, em destaque — cada card de "Ponto de Operação"/"Dimensionamento
-// da Bomba" mostra uma única grandeza, com o título do card (Cartao) como
-// rótulo, em vez de repetir o rótulo dentro do corpo.
-function ValorGrande({ valor, destaque }) {
-  return <div className={`hid-valor-grande ${destaque ? "hid-valor-grande-destaque" : ""}`}>{valor}</div>;
-}
-
-// Mesmo lugar visual de ValorGrande, mas editável — eficiência e potência
-// adotada são digitadas aqui, no próprio card do resultado.
-function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
-  return (
-    <div className="hid-stat-input-linha">
-      <input
-        className="hid-stat-input"
-        type="number"
-        min="0"
-        step="1"
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        onBlur={onCommit}
-        onKeyDown={(e) => e.key === "Enter" && onCommit?.()}
-      />
-      {sufixo && <span className="hid-stat-input-sufixo">{sufixo}</span>}
-    </div>
   );
 }
 
@@ -139,9 +113,33 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
   // já está aplicado no Revit (classificacao.tipo) — ver tipoEfetivo abaixo.
   const [tipoSelecionado, setTipoSelecionado] = useState(null);
-  // Etapa atual do menu horizontal (1 Classificação, 2 Dimensionamento,
-  // 3 Bomba de Incêndio) — ver ETAPAS_HIDRANTES acima.
+  // Etapa atual do menu horizontal (1 Classificação e Dimensionamento,
+  // 2 Bomba de Incêndio) — ver ETAPAS_HIDRANTES acima.
   const [etapa, setEtapa] = useState(1);
+
+  // Bombas do Sistema (principal/reserva/jockey) — mesmos campos que o
+  // site edita na Etapa 3 (BombaESuccaoForm.jsx), ver dadosHidrantes()
+  // pra forma/valores default. Toggle/acionamento salvam imediato ao
+  // clicar (mesmo padrão de aplicar(), pro Tipo); os campos numéricos da
+  // jockey seguem o padrão de eficiência/potência acima (local + commit
+  // no blur).
+  const [bombaExiste, setBombaExiste] = useState(() => dadosHidrantes(projeto).bombaExiste);
+  const [bombaAcionamento, setBombaAcionamento] = useState(() => dadosHidrantes(projeto).bombaAcionamento);
+  const [bombaReserva, setBombaReserva] = useState(() => dadosHidrantes(projeto).bombaReserva);
+  const [bombaReservaAcionamento, setBombaReservaAcionamento] = useState(() => dadosHidrantes(projeto).bombaReservaAcionamento);
+  const [bombaJockey, setBombaJockey] = useState(() => dadosHidrantes(projeto).bombaJockey);
+  const [jockeyVazao, setJockeyVazao] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaJockeyVazao;
+    return v != null ? String(v) : "";
+  });
+  const [jockeyPressao, setJockeyPressao] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaJockeyPressao;
+    return v != null ? String(v) : "";
+  });
+  const [jockeyPotencia, setJockeyPotencia] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaJockeyPotencia;
+    return v != null ? String(v) : "";
+  });
 
   function recarregar() {
     setCarregando(true);
@@ -330,6 +328,70 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     }
   }
 
+  const [salvandoBomba, setSalvandoBomba] = useState(false);
+
+  // Toggle/acionamento da bomba — salva direto no Supabase ao clicar, sem
+  // esperar um blur (não são campos de texto): mesmo padrão de aplicar(),
+  // pro Tipo de classificação.
+  async function alterarBomba(changes) {
+    setSalvandoBomba(true);
+    try {
+      await salvarHidrantes(changes);
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível salvar",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    } finally {
+      setSalvandoBomba(false);
+    }
+  }
+
+  function alternarBombaExiste(v) {
+    setBombaExiste(v);
+    alterarBomba({ bombaExiste: v });
+  }
+  function alternarBombaReserva(v) {
+    setBombaReserva(v);
+    alterarBomba({ bombaReserva: v });
+  }
+  function alternarBombaJockey(v) {
+    setBombaJockey(v);
+    alterarBomba({ bombaJockey: v });
+  }
+  function mudarBombaAcionamento(v) {
+    setBombaAcionamento(v);
+    alterarBomba({ bombaAcionamento: v });
+  }
+  function mudarBombaReservaAcionamento(v) {
+    setBombaReservaAcionamento(v);
+    alterarBomba({ bombaReservaAcionamento: v });
+  }
+
+  // Campos numéricos da bomba jockey — mesmo esquema de eficiência/potência
+  // adotada acima (local + commit no blur), um campo genérico pra não
+  // repetir a mesma função 3 vezes.
+  async function salvarCampoBomba(campo, valorTexto) {
+    const texto = valorTexto.trim();
+    const valor = texto === "" ? null : parseFloat(texto);
+    if (valor != null && Number.isNaN(valor)) return;
+    setSalvandoBomba(true);
+    try {
+      await salvarHidrantes({ [campo]: valor });
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível salvar",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    } finally {
+      setSalvandoBomba(false);
+    }
+  }
+
   // Só cv é mostrado (pedido explícito) — calcPotenciaBomba ainda devolve
   // kW junto, mas fica sem uso aqui.
   const { potCv } = dimensionamento ? calcPotenciaBomba(qt, ht, eficiencia) : { potCv: null };
@@ -467,15 +529,15 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       </div>
       )}
 
-      {etapa !== 1 && carregando && !resposta && (
+      {carregando && !resposta && (
         <div className="tela-carregando">
           <Loader size={40} />
         </div>
       )}
 
-      {etapa !== 1 && resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
+      {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
 
-      {etapa === 2 && resposta?.ok && (
+      {etapa === 1 && resposta?.ok && (
         <>
           <div className="se-pagina-header" style={{ marginBottom: 14 }}>
             <p className="dashboard-subtitulo" style={{ margin: 0 }}>
@@ -500,49 +562,55 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         </>
       )}
 
-      {etapa === 3 && resposta?.ok && (
+      {etapa === 2 && resposta?.ok && (
         !dimensionamento ? (
           <div className="hid-aviso">
-            Calcule o dimensionamento na etapa "Dimensionamento" antes de dimensionar a bomba.
+            Calcule o dimensionamento na etapa "Classificação e Dimensionamento" antes de dimensionar a bomba.
           </div>
         ) : (
-          <div className="hid-secao">
-            <div className="hid-grid-2" style={{ marginBottom: 12 }}>
-              <Cartao titulo="Pressão">
-                <ValorGrande valor={`${fmt(ht)} mca`} />
-              </Cartao>
-              <Cartao titulo="Vazão">
-                <ValorGrande valor={`${fmt(qt)} L/min`} />
-              </Cartao>
-            </div>
-            <div className="hid-grid-3">
-              <Cartao titulo="Eficiência Global (η)">
-                <CampoNumero
-                  value={eficiencia}
-                  onChange={(e) => setEficiencia(e.target.value)}
-                  onCommit={salvarEficiencia}
-                  sufixo="%"
-                  placeholder="ex.: 65"
-                />
-              </Cartao>
-              <Cartao titulo="Potência Mínima">
-                <ValorGrande valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
-              </Cartao>
-              <Cartao titulo="Potência Adotada">
-                <CampoNumero
-                  value={potenciaAdotada}
-                  onChange={(e) => setPotenciaAdotada(e.target.value)}
-                  onCommit={salvarPotenciaAdotada}
-                  sufixo="cv"
-                  placeholder="ex.: 5"
-                />
-              </Cartao>
-            </div>
-            {(salvandoEficiencia || salvandoPotencia) && <div className="hid-salvando">Salvando...</div>}
-            {potCv == null && (
-              <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
-            )}
-          </div>
+          <>
+            <HidrantesBomba
+              qt={qt}
+              ht={ht}
+              potCv={potCv}
+              campoEficiencia={{
+                value: eficiencia,
+                onChange: (e) => setEficiencia(e.target.value),
+                onCommit: salvarEficiencia,
+              }}
+              campoPotenciaAdotada={{
+                value: potenciaAdotada,
+                onChange: (e) => setPotenciaAdotada(e.target.value),
+                onCommit: salvarPotenciaAdotada,
+              }}
+              bombaExiste={bombaExiste}
+              onToggleBombaExiste={alternarBombaExiste}
+              bombaAcionamento={bombaAcionamento}
+              onChangeBombaAcionamento={mudarBombaAcionamento}
+              bombaReserva={bombaReserva}
+              onToggleBombaReserva={alternarBombaReserva}
+              bombaReservaAcionamento={bombaReservaAcionamento}
+              onChangeBombaReservaAcionamento={mudarBombaReservaAcionamento}
+              bombaJockey={bombaJockey}
+              onToggleBombaJockey={alternarBombaJockey}
+              campoJockeyVazao={{
+                value: jockeyVazao,
+                onChange: (e) => setJockeyVazao(e.target.value),
+                onCommit: () => salvarCampoBomba("bombaJockeyVazao", jockeyVazao),
+              }}
+              campoJockeyPressao={{
+                value: jockeyPressao,
+                onChange: (e) => setJockeyPressao(e.target.value),
+                onCommit: () => salvarCampoBomba("bombaJockeyPressao", jockeyPressao),
+              }}
+              campoJockeyPotencia={{
+                value: jockeyPotencia,
+                onChange: (e) => setJockeyPotencia(e.target.value),
+                onCommit: () => salvarCampoBomba("bombaJockeyPotencia", jockeyPotencia),
+              }}
+            />
+            {(salvandoEficiencia || salvandoPotencia || salvandoBomba) && <div className="hid-salvando">Salvando...</div>}
+          </>
         )
       )}
     </div>

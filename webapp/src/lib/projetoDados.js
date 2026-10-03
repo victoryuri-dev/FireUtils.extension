@@ -226,6 +226,17 @@ export function dadosHidrantes(linha) {
     // lados lerem/escreverem.
     bombaEficiencia: paraNumero(h.bombaEficiencia),
     bombaPotenciaAdotada: paraNumero(h.bombaPotenciaAdotada),
+    // Bombas do Sistema (principal/reserva/jockey) — mesmos campos que o
+    // site edita na Etapa 3 (BombaESuccaoForm.jsx), espelhados aqui pra
+    // dockpane mostrar/editar a mesma seleção sem duplicar o dado.
+    bombaExiste: !!h.bombaExiste,
+    bombaAcionamento: h.bombaAcionamento || null,
+    bombaReserva: !!h.bombaReserva,
+    bombaReservaAcionamento: h.bombaReservaAcionamento || null,
+    bombaJockey: !!h.bombaJockey,
+    bombaJockeyVazao: paraNumero(h.bombaJockeyVazao),
+    bombaJockeyPressao: paraNumero(h.bombaJockeyPressao),
+    bombaJockeyPotencia: paraNumero(h.bombaJockeyPotencia),
   };
 }
 

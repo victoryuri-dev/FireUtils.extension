@@ -2355,66 +2355,247 @@
   margin-top: 10px;
 }
 
-/* Cards de valor único — "Dimensionamento da Bomba de Incêndio" (Altura
-   Manométrica/Vazão Total) e "Dimensionamento da Bomba de Incêndio"
-   (Pressão/Vazão/Eficiência/Potência): cada card mostra UMA grandeza,
-   grande, como um resultado de verdade — o título do próprio card
-   (Cartao h3) já serve de rótulo. */
-.hid-grid-2 {
+/* Bomba de Incêndio (HidrantesBomba.jsx) — réplica em CSS puro da Etapa 3
+   do site (HidrantesPage.jsx: `Bomba` + BombaESuccaoForm.jsx:
+   `SelecaoBombas`). */
+.hid-secao-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: -6px 0 12px;
+}
+
+.hid-ponto-operacao {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-.hid-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+.hid-ponto-operacao-col {
+  padding: 14px 16px;
 }
 
-.hid-valor-grande {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  white-space: nowrap;
+.hid-ponto-operacao-col + .hid-ponto-operacao-col {
+  border-left: 1px solid var(--border);
 }
 
-.hid-valor-grande-destaque {
+.hid-ponto-operacao-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.hid-ponto-operacao-linha {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hid-ponto-operacao-valor {
+  font-family: monospace;
+  font-size: 19px;
+  font-weight: 700;
   color: var(--accent);
 }
 
-/* Eficiência e potência adotada são os únicos valores editáveis no meio
-   dos resultados — mesmo lugar visual de ValorGrande, com um input no
-   lugar do texto, pra alterar tudo no próprio card do resultado em vez
-   de duplicar o valor num campo separado. */
-.hid-stat-input-linha {
+.hid-ponto-operacao-unidade {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.hid-bomba-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+@media (max-width: 480px) {
+  .hid-bomba-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hid-bomba-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hid-bomba-cartao {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  text-align: left;
+  cursor: pointer;
+  transition: 0.15s;
+  width: 100%;
+}
+
+.hid-bomba-cartao:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.hid-bomba-cartao-ativa,
+.hid-bomba-cartao-ativa:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--red-dim);
+}
+
+.hid-bomba-cartao:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hid-bomba-cartao-textos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hid-bomba-cartao-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hid-bomba-cartao-desc {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.hid-bomba-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+}
+
+.hid-bomba-check-ativo {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.hid-bomba-check .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.hid-espec {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-2);
+}
+
+.hid-espec-titulo {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+
+.hid-espec-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hid-espec-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+
+.hid-acionamento-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.hid-acionamento-pill {
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.hid-acionamento-pill:hover {
+  color: var(--text-2);
+}
+
+.hid-acionamento-pill-ativa,
+.hid-acionamento-pill-ativa:hover {
+  border-color: var(--accent);
+  background: var(--red-dim);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hid-dado-valor {
   display: flex;
   align-items: baseline;
-  justify-content: center;
-  gap: 2px;
-}
-
-.hid-stat-input {
-  width: 60px;
-  border: none;
-  border-bottom: 1.5px solid var(--border-2);
-  background: transparent;
-  text-align: center;
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text);
-  padding: 0 2px 2px;
-}
-
-.hid-stat-input:focus {
-  outline: none;
-  border-bottom-color: var(--accent);
-}
-
-.hid-stat-input-sufixo {
+  gap: 5px;
+  font-family: monospace;
   font-size: 14px;
   font-weight: 700;
-  color: var(--text-2);
+  color: var(--text);
+}
+
+.hid-dado-valor-amber {
+  color: var(--amber);
+}
+
+.hid-dado-unidade {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.hid-campo-input-wrap {
+  position: relative;
+}
+
+.hid-campo-input {
+  padding-right: 42px;
+}
+
+.hid-campo-input-sufixo {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-3);
+  pointer-events: none;
 }
 
 /* ===========================================================================
