@@ -334,21 +334,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // kW junto, mas fica sem uso aqui.
   const { potCv } = dimensionamento ? calcPotenciaBomba(qt, ht, eficiencia) : { potCv: null };
 
-  // Indicador "concluída"/"pendente" por etapa no menu — mesmo critério do
-  // getStatus() da página do site (HidrantesPage.jsx), adaptado: aqui
-  // "classificacao" só existe quando resposta.ok (sempre que já há um
-  // sistema aplicado no Revit), e dimensionamento/eficiência/potência vêm
-  // das mesmas fontes já lidas acima.
-  function statusEtapa(n) {
-    if (n === 1) return classificacao ? "concluida" : undefined;
-    if (n === 2) return dimensionamento ? "concluida" : undefined;
-    if (n === 3) {
-      if (parseFloat(eficiencia) > 0 && potenciaAdotada.trim() !== "") return "concluida";
-      return dimensionamento ? "pendente" : undefined;
-    }
-    return undefined;
-  }
-
   return (
     <div className="se-pagina hid-pagina">
       <div className="se-pagina-header">
@@ -364,16 +349,14 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       <div className="hid-etapas">
         {ETAPAS_HIDRANTES.map((label, i) => {
           const n = i + 1;
-          const status = statusEtapa(n);
           return (
             <button
               key={n}
               type="button"
-              className={`hid-etapa ${etapa === n ? "hid-etapa-ativa" : ""} ${status ? `hid-etapa-${status}` : ""}`}
+              className={`hid-etapa ${etapa === n ? "hid-etapa-ativa" : ""}`}
               onClick={() => setEtapa(n)}
             >
-              <span className="hid-etapa-num">{n}</span>
-              <span className="hid-etapa-label">{label}</span>
+              {label}
             </button>
           );
         })}
