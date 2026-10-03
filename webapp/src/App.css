@@ -2250,6 +2250,75 @@
   margin-bottom: 20px;
 }
 
+/* Menu de etapas (Classificação / Dimensionamento / Bomba de Incêndio),
+   abaixo do título — equivalente horizontal do StepsNav lateral da mesma
+   página no site, adaptado à largura estreita da dockpane. */
+.hid-etapas {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.hid-etapa {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-2);
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  transition: .15s;
+}
+
+.hid-etapa:hover {
+  border-color: var(--border);
+  color: var(--text-2);
+}
+
+.hid-etapa-ativa,
+.hid-etapa-ativa:hover {
+  border-color: var(--accent);
+  background: var(--red-dim);
+  color: var(--accent);
+}
+
+.hid-etapa-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--border-2);
+  color: var(--text-2);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.hid-etapa-concluida .hid-etapa-num {
+  background: var(--green);
+  color: #fff;
+}
+
+.hid-etapa-pendente .hid-etapa-num {
+  background: var(--amber);
+  color: #fff;
+}
+
+/* Depois das anteriores — a etapa ativa sempre mostra o número em
+   destaque (accent), mesmo quando também está concluída/pendente. */
+.hid-etapa-ativa .hid-etapa-num {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* Títulos de seção e de card nesta página em preto (var(--text)) — as
    classes compartilhadas (.dashboard-subtitulo, .cartao-info h3) usam um
    cinza mais claro (var(--text-2)) nas outras páginas do Dashboard;

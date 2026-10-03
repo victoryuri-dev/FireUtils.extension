@@ -15,6 +15,11 @@ function fmt(n, casas = 2) {
   return typeof n === "number" && !Number.isNaN(n) ? n.toFixed(casas) : "—";
 }
 
+// Mesmas 3 etapas da página de Hidrantes do site (HidrantesPage.jsx,
+// ETAPAS_HIDRANTES), num menu horizontal abaixo do título em vez do menu
+// lateral de lá — não há espaço pra uma coluna fixa na largura da dockpane.
+const ETAPAS_HIDRANTES = ["Classificação", "Dimensionamento", "Bomba de Incêndio"];
+
 function Cartao({ titulo, children }) {
   return (
     <div className="cartao-info">
@@ -134,6 +139,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
   // já está aplicado no Revit (classificacao.tipo) — ver tipoEfetivo abaixo.
   const [tipoSelecionado, setTipoSelecionado] = useState(null);
+  // Etapa atual do menu horizontal (1 Classificação, 2 Dimensionamento,
+  // 3 Bomba de Incêndio) — ver ETAPAS_HIDRANTES acima.
+  const [etapa, setEtapa] = useState(1);
 
   function recarregar() {
     setCarregando(true);
@@ -326,6 +334,21 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // kW junto, mas fica sem uso aqui.
   const { potCv } = dimensionamento ? calcPotenciaBomba(qt, ht, eficiencia) : { potCv: null };
 
+  // Indicador "concluída"/"pendente" por etapa no menu — mesmo critério do
+  // getStatus() da página do site (HidrantesPage.jsx), adaptado: aqui
+  // "classificacao" só existe quando resposta.ok (sempre que já há um
+  // sistema aplicado no Revit), e dimensionamento/eficiência/potência vêm
+  // das mesmas fontes já lidas acima.
+  function statusEtapa(n) {
+    if (n === 1) return classificacao ? "concluida" : undefined;
+    if (n === 2) return dimensionamento ? "concluida" : undefined;
+    if (n === 3) {
+      if (parseFloat(eficiencia) > 0 && potenciaAdotada.trim() !== "") return "concluida";
+      return dimensionamento ? "pendente" : undefined;
+    }
+    return undefined;
+  }
+
   return (
     <div className="se-pagina hid-pagina">
       <div className="se-pagina-header">
@@ -338,6 +361,25 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         </button>
       </div>
 
+      <div className="hid-etapas">
+        {ETAPAS_HIDRANTES.map((label, i) => {
+          const n = i + 1;
+          const status = statusEtapa(n);
+          return (
+            <button
+              key={n}
+              type="button"
+              className={`hid-etapa ${etapa === n ? "hid-etapa-ativa" : ""} ${status ? `hid-etapa-${status}` : ""}`}
+              onClick={() => setEtapa(n)}
+            >
+              <span className="hid-etapa-num">{n}</span>
+              <span className="hid-etapa-label">{label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {etapa === 1 && (
       <div className="hid-secao">
         <Cartao titulo="Classificação do Sistema">
           <p className="hiddim-cartao-desc">
@@ -440,19 +482,22 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           )}
         </Cartao>
       </div>
+      )}
 
-      {carregando && !resposta && (
+      {etapa !== 1 && carregando && !resposta && (
         <div className="tela-carregando">
           <Loader size={40} />
         </div>
       )}
 
-      {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
+      {etapa !== 1 && resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
 
-      {resposta?.ok && classificacao && (
+      {etapa === 2 && resposta?.ok && (
         <>
           <div className="se-pagina-header" style={{ marginBottom: 14 }}>
-            <p className="dashboard-subtitulo" style={{ margin: 0 }}>Dimensionamento do Sistema</p>
+            <p className="dashboard-subtitulo" style={{ margin: 0 }}>
+              Resultados calculados a partir da classificação do sistema.
+            </p>
             <button
               type="button"
               className="se-botao se-botao-accent se-pagina-header-botao"
@@ -469,48 +514,53 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           ) : (
             <HidrantesDimensionamento d={dimensionamento} limites={limites} />
           )}
-
-          {dimensionamento && (
-            <div className="hid-secao">
-              <p className="dashboard-subtitulo">Dimensionamento da Bomba de Incêndio</p>
-              <div className="hid-grid-2" style={{ marginBottom: 12 }}>
-                <Cartao titulo="Pressão">
-                  <ValorGrande valor={`${fmt(ht)} mca`} />
-                </Cartao>
-                <Cartao titulo="Vazão">
-                  <ValorGrande valor={`${fmt(qt)} L/min`} />
-                </Cartao>
-              </div>
-              <div className="hid-grid-3">
-                <Cartao titulo="Eficiência Global (η)">
-                  <CampoNumero
-                    value={eficiencia}
-                    onChange={(e) => setEficiencia(e.target.value)}
-                    onCommit={salvarEficiencia}
-                    sufixo="%"
-                    placeholder="ex.: 65"
-                  />
-                </Cartao>
-                <Cartao titulo="Potência Mínima">
-                  <ValorGrande valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
-                </Cartao>
-                <Cartao titulo="Potência Adotada">
-                  <CampoNumero
-                    value={potenciaAdotada}
-                    onChange={(e) => setPotenciaAdotada(e.target.value)}
-                    onCommit={salvarPotenciaAdotada}
-                    sufixo="cv"
-                    placeholder="ex.: 5"
-                  />
-                </Cartao>
-              </div>
-              {(salvandoEficiencia || salvandoPotencia) && <div className="hid-salvando">Salvando...</div>}
-              {potCv == null && (
-                <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
-              )}
-            </div>
-          )}
         </>
+      )}
+
+      {etapa === 3 && resposta?.ok && (
+        !dimensionamento ? (
+          <div className="hid-aviso">
+            Calcule o dimensionamento na etapa "Dimensionamento" antes de dimensionar a bomba.
+          </div>
+        ) : (
+          <div className="hid-secao">
+            <div className="hid-grid-2" style={{ marginBottom: 12 }}>
+              <Cartao titulo="Pressão">
+                <ValorGrande valor={`${fmt(ht)} mca`} />
+              </Cartao>
+              <Cartao titulo="Vazão">
+                <ValorGrande valor={`${fmt(qt)} L/min`} />
+              </Cartao>
+            </div>
+            <div className="hid-grid-3">
+              <Cartao titulo="Eficiência Global (η)">
+                <CampoNumero
+                  value={eficiencia}
+                  onChange={(e) => setEficiencia(e.target.value)}
+                  onCommit={salvarEficiencia}
+                  sufixo="%"
+                  placeholder="ex.: 65"
+                />
+              </Cartao>
+              <Cartao titulo="Potência Mínima">
+                <ValorGrande valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
+              </Cartao>
+              <Cartao titulo="Potência Adotada">
+                <CampoNumero
+                  value={potenciaAdotada}
+                  onChange={(e) => setPotenciaAdotada(e.target.value)}
+                  onCommit={salvarPotenciaAdotada}
+                  sufixo="cv"
+                  placeholder="ex.: 5"
+                />
+              </Cartao>
+            </div>
+            {(salvandoEficiencia || salvandoPotencia) && <div className="hid-salvando">Salvando...</div>}
+            {potCv == null && (
+              <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
+            )}
+          </div>
+        )
       )}
     </div>
   );
