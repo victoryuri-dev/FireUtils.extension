@@ -2946,7 +2946,7 @@
 /* Resultado Hidráulico (Ht/Qt/Ramal) */
 .hiddim-resultado-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-bottom: 24px;
 }
@@ -2971,11 +2971,6 @@
   font-weight: 700;
   color: var(--accent);
   font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
-}
-
-.hiddim-resultado-val-neutro {
-  font-size: 14px;
-  color: var(--text);
 }
 
 /* Perdas de Carga por Trecho */

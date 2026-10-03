@@ -71,31 +71,6 @@ function CartaoHeader({ children }) {
   return <div className="hiddim-cartao-header">{children}</div>;
 }
 
-// ── Dados do Sistema (resumo compacto) ───────────────────────────────────
-export function DadosDoSistema({ d }) {
-  const { dados_sistema, valor_sistema, metodo, C_HW, res } = d;
-  const stats = [
-    { label: "Classificação", val: valor_sistema },
-    { label: "Método", val: metodo },
-    { label: "Vazão mínima", val: `${f2(dados_sistema.q_min)} L/min` },
-    { label: "Pressão mín.–máx.", val: `${dados_sistema.p_min}–100 mca` },
-    { label: "Coef. C", val: String(C_HW) },
-  ];
-  if (res.esguicho) {
-    stats.push({ label: "Mangueira", val: `DN${dados_sistema.mang_dn} · ${f2(dados_sistema.mang_comp)} m` });
-  }
-  return (
-    <div className="hiddim-stat-grid">
-      {stats.map((s) => (
-        <div key={s.label} className="hiddim-stat-box">
-          <div className="hiddim-stat-label">{s.label}</div>
-          <div className="hiddim-stat-val">{s.val}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // Cabeçalho de coluna em sigla + InfoTip com o significado — equivalente ao
 // THSigla do site (HidrantesPage.jsx).
 function THSigla({ sigla, tip, align = "center" }) {
@@ -234,6 +209,9 @@ export function ResumoExecutivo({ d }) {
 }
 
 // ── Resultado Hidráulico ─────────────────────────────────────────────────
+// Só pressão e vazão do sistema — "Ramal Governante" saiu daqui (não mostrado
+// nesta página da dockpane; era só uma referência interna de qual ramal
+// originou Ht/Qt, não um dado de projeto).
 export function ResultadoHidraulico({ d }) {
   const { res } = d;
   return (
@@ -245,10 +223,6 @@ export function ResultadoHidraulico({ d }) {
       <div className="hiddim-resultado-box">
         <div className="hiddim-resultado-label">Vazão Total (Qt)</div>
         <div className="hiddim-resultado-val">{lmin(res.Qt)}</div>
-      </div>
-      <div className="hiddim-resultado-box">
-        <div className="hiddim-resultado-label">Ramal Governante</div>
-        <div className="hiddim-resultado-val hiddim-resultado-val-neutro">{res.hid_governa}</div>
       </div>
     </div>
   );
@@ -382,17 +356,21 @@ export function PerdasPorTrecho({ d }) {
   );
 }
 
-// ── Seção completa — composição das peças acima, na mesma ordem do site
-// (ver "etapa === 2" em HidrantesPage.jsx lá). `d` é o cache cru de
-// "Dimensionar Hidrantes" (payload.dimensionamento, ver bridge.js) e
-// `limites` os limites normativos de velocidade (payload.limites).
+// ── Seção completa — composição das peças acima. Difere da ordem do site
+// (HidrantesPage.jsx lá) logo no início: os cards dos hidrantes mais
+// desfavoráveis analisados (ResumoExecutivo) e de pressão/vazão do sistema
+// (ResultadoHidraulico) abrem a seção — ficam dentro de "Resultados
+// calculados a partir da classificação do sistema" (ver
+// SistemaHidrantesPage.jsx) — e só depois vem a tabela de ranking completa
+// (VerificacaoHidranteDesfavoravel). `d` é o cache cru de "Dimensionar
+// Hidrantes" (payload.dimensionamento, ver bridge.js) e `limites` os
+// limites normativos de velocidade (payload.limites).
 export default function HidrantesDimensionamento({ d, limites }) {
   return (
     <>
-      <DadosDoSistema d={d} />
-      <VerificacaoHidranteDesfavoravel ranking={d.ranking_hidrantes} />
       <ResumoExecutivo d={d} />
       <ResultadoHidraulico d={d} />
+      <VerificacaoHidranteDesfavoravel ranking={d.ranking_hidrantes} />
       <VerificacaoVelocidade d={d} limites={limites} />
       <PerdasPorTrecho d={d} />
     </>
