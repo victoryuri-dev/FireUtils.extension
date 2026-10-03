@@ -34,6 +34,8 @@
   --blue: #5b8def;
   --blue-dim: rgba(80, 140, 220, .10);
   --blue-border: rgba(80, 140, 220, .30);
+  --scrollbar-thumb: rgba(255, 255, 255, .22);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, .34);
 }
 
 /* Tema claro — paleta calibrada pelos mockups do redesign (Biblioteca de
@@ -70,6 +72,8 @@
   --blue: #2563eb;
   --blue-dim: #eaf1fe;
   --blue-border: #bdd4fa;
+  --scrollbar-thumb: rgba(0, 0, 0, .22);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, .34);
 }
 
 * {
@@ -109,4 +113,25 @@ button {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* Scrollbar: só a barra (thumb) numa cor média, sem trilho visível —
+   substitui a barra nativa larga/clara do WebView2, que destoa do tema
+   escuro. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
