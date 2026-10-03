@@ -37,6 +37,7 @@ from family_error_utils import texto_erro, print_seguro
 import project_link_bridge
 import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
+import hidrantes_dimensionar_bridge
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -220,6 +221,11 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     elif tipo == u"GET_HIDRANTES_DIMENSIONAMENTO":
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_dimensionamento_bridge.tratar_get_hidrantes_dimensionamento(
+                uiapp, postar_mensagem)
+        )
+    elif tipo == u"DIMENSIONAR_HIDRANTES":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_dimensionar_bridge.tratar_dimensionar_hidrantes(
                 uiapp, postar_mensagem)
         )
     else:

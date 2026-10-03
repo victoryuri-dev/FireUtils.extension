@@ -136,6 +136,26 @@
  *     SistemaHidrantesPage.jsx), o mesmo campo que o site edita na Etapa 3
  *     ("Dimensionamento da Bomba de Incêndio"), sem passar pelo Project
  *     Information do Revit.
+ *
+ *   { type: "DIMENSIONAR_HIDRANTES" }
+ *     JS -> Python: roda o mesmo motor de cálculo do pushbutton
+ *     "Dimensionar Hidrantes" (método da marcha HD01 → Ponto A → Descarga
+ *     da Bomba → RTI — ver hidrantes_dimensionar_bridge.py), sem precisar
+ *     voltar pro Revit pra clicar o botão. Precisa de classificação já
+ *     aplicada (Etapa 1, "Aplicar no Revit") e de "Mapear Trechos" já
+ *     executado alguma vez nesse projeto (cache de rotas).
+ *
+ *   { type: "HIDRANTES_DIMENSIONAR_RESULTADO", payload: { ok, erro? } }
+ *     Python -> JS: resultado de um DIMENSIONAR_HIDRANTES. `erro` é texto
+ *     pronto pra exibir (qual verificação normativa não atendeu, ou qual
+ *     pré-requisito falta — classificação, mapeamento, elevação de algum
+ *     ponto) — SEM o botão "Mostrar no Projeto" que o pushbutton mostra
+ *     nesses casos (só faz sentido com o Revit em primeiro plano; quem
+ *     precisar localizar o elemento ainda roda o pushbutton no Revit).
+ *     Em caso de sucesso (`ok: true`), o cache de dimensionamento já foi
+ *     gravado — quem recebe essa mensagem deve mandar
+ *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado
+ *     completo, em vez de esta mensagem carregar os dados duas vezes.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -151,6 +171,8 @@ export const BridgeMessageTypes = {
   HIDRANTES_CLASSIFICACAO_SAVED: "HIDRANTES_CLASSIFICACAO_SAVED",
   GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
+  DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",
+  HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
 };
 
 function obterWebView() {

@@ -176,6 +176,7 @@
   color: var(--text-2);
   margin: 2px 0 0;
   overflow-wrap: break-word;
+  white-space: pre-line;
 }
 
 .toast-fechar {

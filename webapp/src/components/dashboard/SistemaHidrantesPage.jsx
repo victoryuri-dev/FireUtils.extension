@@ -72,7 +72,15 @@ function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
  * ETOS.FireUtils/src/data/hidrantes_calc.js), e mostra o que está de fato
  * aplicado/calculado no Revit (Project Information + cache local do
  * último "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO).
- * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado.
+ * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado. O
+ * botão "Dimensionar Hidrantes"/"Dimensionar Novamente" roda o mesmo
+ * motor de cálculo do pushbutton homônimo do Revit (ver
+ * hidrantes_dimensionar_bridge.py), sem precisar voltar pro Revit — exige
+ * classificação já aplicada e "Mapear Trechos" já executado alguma vez
+ * nesse projeto (cache de rotas); se alguma verificação normativa não
+ * atender, mostra o motivo num toast (sem o botão "Mostrar no Projeto"
+ * que o pushbutton tem pra esse caso — quem precisar localizar o elemento
+ * ainda roda o pushbutton no Revit).
  *
  * Tipo/variante/RTI são a MESMA escolha que o site faz na Etapa 1
  * (Classificação do Sistema) — só editável nos dois lugares. Clicar aqui
@@ -120,6 +128,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   });
   const [salvandoPotencia, setSalvandoPotencia] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  const [dimensionando, setDimensionando] = useState(false);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
   // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
@@ -157,10 +166,35 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         // Sucesso muda o que está gravado no Project Information — recarrega
         // pra "Sistema Classificado" refletir a classificação recém-aplicada.
         recarregar();
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAR_RESULTADO) {
+        setDimensionando(false);
+        const { ok, erro } = mensagem.payload || {};
+        if (!ok) {
+          adicionarToast?.({
+            tipo: "erro",
+            titulo: "Dimensionamento não atendeu a norma",
+            mensagem: erro,
+            duracaoMs: 15000,
+          });
+          return;
+        }
+        adicionarToast?.({ tipo: "sucesso", titulo: "Dimensionamento concluído", duracaoMs: 5000 });
+        // O cálculo já foi gravado no cache do lado Python — busca de novo
+        // pra mostrar o resultado completo (HidrantesDimensionamento.jsx),
+        // em vez de esta mensagem carregar os dados duas vezes.
+        recarregar();
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function dimensionar() {
+    setDimensionando(true);
+    postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, {});
+  }
 
   // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site
   // usa (área da estrutura vinculada + ocupação/carga de incêndio dos
@@ -417,10 +451,20 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {resposta?.ok && classificacao && (
         <>
-          <p className="dashboard-subtitulo">Dimensionamento do Sistema</p>
+          <div className="se-pagina-header" style={{ marginBottom: 14 }}>
+            <p className="dashboard-subtitulo" style={{ margin: 0 }}>Dimensionamento do Sistema</p>
+            <button
+              type="button"
+              className="se-botao se-botao-accent se-pagina-header-botao"
+              onClick={dimensionar}
+              disabled={dimensionando}
+            >
+              {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
+            </button>
+          </div>
           {!dimensionamento ? (
             <p className="vazio">
-              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Execute "Dimensionar Hidrantes" primeiro.'}
+              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima (ou execute o pushbutton no Revit).'}
             </p>
           ) : (
             <HidrantesDimensionamento d={dimensionamento} limites={limites} />
