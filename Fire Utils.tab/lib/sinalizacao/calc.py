@@ -7,7 +7,7 @@ lado do .rvt).
 
 Uma instância é considerada placa de sinalização de emergência quando:
   - sua categoria é "Dispositivos de Segurança" (OST_SecurityDevices); e
-  - o parâmetro de TIPO "Código da Placa" está preenchido (ex.: "S1",
+  - o parâmetro de TIPO "Código da Placa" está preenchido (ex.: "S1-D",
     "E5", "A2"...).
 
 "Código da Placa" já vem embutido nas famílias de sinalização deste
