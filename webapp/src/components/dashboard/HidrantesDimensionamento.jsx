@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Icon from "../Icon";
+import InfoTip from "../InfoTip";
 import chevronDownSvg from "../../assets/icons/chevron-down-icon.svg?raw";
 import { fmtNum } from "../../lib/numero";
 
@@ -95,6 +96,17 @@ export function DadosDoSistema({ d }) {
   );
 }
 
+// Cabeçalho de coluna em sigla + InfoTip com o significado — equivalente ao
+// THSigla do site (HidrantesPage.jsx).
+function THSigla({ sigla, tip, align = "center" }) {
+  return (
+    <span className={`hiddim-th-sigla hiddim-th-sigla-${align}`}>
+      {sigla}
+      <InfoTip text={tip} align={align} />
+    </span>
+  );
+}
+
 // ── Verificação do Hidrante Mais Desfavorável ────────────────────────────
 function situacaoHidrante(indice, total) {
   if (indice === 0) return { texto: "1º Hidrante Mais Desfavorável", classe: "hiddim-situacao-red" };
@@ -120,9 +132,15 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
         <thead>
           <tr>
             <TH>Hidrante</TH>
-            <TH right>Perda de Carga (vazão simples)</TH>
-            <TH right>Desnível (∆Z)</TH>
-            <TH right>Perda de Carga Total</TH>
+            <TH right>
+              <THSigla sigla="J" align="end" tip="Perda de carga do trecho Bomba → Hidrante, por Hazen-Williams, com a vazão nominal de um único hidrante — sem equilíbrio hidráulico. Usada só para ranquear." />
+            </TH>
+            <TH right>
+              <THSigla sigla="∆Z" align="end" tip="Desnível geométrico entre a bomba e o hidrante." />
+            </TH>
+            <TH right>
+              <THSigla sigla="J + ∆Z" align="end" tip="Perda de Carga Total = perda de carga (J) + desnível (∆Z) — usada só para ranquear os hidrantes. O 1º e o 2º mais desfavoráveis recebem a marcha de cálculo completa, com equilíbrio hidráulico, no restante desta etapa." />
+            </TH>
             <TH center>Situação</TH>
           </tr>
         </thead>

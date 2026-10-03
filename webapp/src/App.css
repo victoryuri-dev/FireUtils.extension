@@ -2475,6 +2475,22 @@
 .hiddim-align-right { text-align: right; }
 .hiddim-align-center { text-align: center; }
 
+/* Cabeçalho em sigla + InfoTip (THSigla, acima) — texto e ícone juntos,
+   alinhados conforme o lado da coluna (ver .hiddim-align-* no <th>). */
+.hiddim-th-sigla {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hiddim-th-sigla-end {
+  justify-content: flex-end;
+}
+
+.hiddim-th-sigla-center {
+  justify-content: center;
+}
+
 .hiddim-cor-red { color: var(--accent); }
 .hiddim-cor-green { color: var(--green); }
 .hiddim-cor-muted { color: var(--text-3); }
