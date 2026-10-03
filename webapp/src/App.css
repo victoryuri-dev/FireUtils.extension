@@ -2623,13 +2623,25 @@
 .hiddim-tabela-wrap {
   border: 1px solid var(--border);
   border-radius: 6px;
-  overflow: hidden;
   margin-bottom: 4px;
 }
 
 .hiddim-tabela {
   width: 100%;
   border-collapse: collapse;
+}
+
+/* overflow:hidden no wrap (acima) cortava o balão do InfoTip nos
+   cabeçalhos em sigla (THSigla) — ele abre pra cima, fora dos limites do
+   wrap. Em vez disso, arredonda só os cantos que de fato precisam (o
+   fundo do <thead>, única célula com cor própria — as <td> do corpo são
+   transparentes, então um canto quadrado nelas não aparece). */
+.hiddim-tabela thead tr:first-child th:first-child {
+  border-top-left-radius: 6px;
+}
+
+.hiddim-tabela thead tr:first-child th:last-child {
+  border-top-right-radius: 6px;
 }
 
 .hiddim-th {
