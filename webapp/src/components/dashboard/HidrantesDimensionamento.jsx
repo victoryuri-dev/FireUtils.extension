@@ -1,7 +1,9 @@
 import { useState } from "react";
 import Icon from "../Icon";
 import InfoTip from "../InfoTip";
+import { postToHost, BridgeMessageTypes } from "../../lib/bridge";
 import chevronDownSvg from "../../assets/icons/chevron-down-icon.svg?raw";
+import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 import { fmtNum } from "../../lib/numero";
 
 // Mesmos formatadores da seção equivalente do site (ETOS.FireUtils,
@@ -90,6 +92,14 @@ function situacaoHidrante(indice, total) {
   return null;
 }
 
+// Seleciona e enquadra, na view ativa do Revit, todo o trecho (Bomba ->
+// válvula) do hidrante da linha — `rota` só existe em rankings salvos
+// depois que o campo foi adicionado (ver Mapear trechos.pushbutton/
+// script.py); num ranking antigo o botão nem aparece (ver uso abaixo).
+function localizarTrecho(h) {
+  postToHost(BridgeMessageTypes.SELECIONAR_TRECHO_HIDRANTE, { rota: h.rota });
+}
+
 export function VerificacaoHidranteDesfavoravel({ ranking }) {
   const [expandido, setExpandido] = useState(false);
   if (!ranking || ranking.length === 0) return null;
@@ -106,6 +116,7 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
       <Tabela>
         <thead>
           <tr>
+            <TH w={32}></TH>
             <TH>Hidrante</TH>
             <TH right>
               <THSigla sigla="J" align="end" tip="Perda de carga do trecho Bomba → Hidrante, por Hazen-Williams, com a vazão nominal de um único hidrante — sem equilíbrio hidráulico. Usada só para ranquear." />
@@ -124,6 +135,15 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
             const situacao = situacaoHidrante(i, total);
             return (
               <tr key={h.id}>
+                <td className="hiddim-td hiddim-align-center">
+                  {h.rota?.length > 0 ? (
+                    <button type="button" className="hiddim-localizar-btn" onClick={() => localizarTrecho(h)} title="Selecionar trecho no Revit">
+                      <Icon svg={searchIconSvg} />
+                    </button>
+                  ) : (
+                    <span className="hiddim-td-vazio">—</span>
+                  )}
+                </td>
                 <TD bold>{h.id}</TD>
                 <TD right mono muted>{fmca(h.J)}</TD>
                 <TD right mono muted>{f4(h.dZ)} m</TD>

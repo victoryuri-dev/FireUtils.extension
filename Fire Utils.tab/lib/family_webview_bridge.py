@@ -228,5 +228,10 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             lambda uiapp: hidrantes_dimensionar_bridge.tratar_dimensionar_hidrantes(
                 uiapp, postar_mensagem)
         )
+    elif tipo == u"SELECIONAR_TRECHO_HIDRANTE":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_dimensionamento_bridge.tratar_selecionar_trecho_hidrante(
+                uiapp, payload)
+        )
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

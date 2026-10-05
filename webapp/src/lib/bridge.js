@@ -156,6 +156,18 @@
  *     gravado — quem recebe essa mensagem deve mandar
  *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado
  *     completo, em vez de esta mensagem carregar os dados duas vezes.
+ *
+ *   { type: "SELECIONAR_TRECHO_HIDRANTE", payload: { rota: number[] } }
+ *     JS -> Python: seleciona e enquadra, na view ativa do Revit, todo o
+ *     trecho (Bomba -> válvula) de um hidrante — botão "Localizar" da
+ *     tabela "Verificação do Hidrante Mais Desfavorável"
+ *     (HidrantesDimensionamento.jsx). `rota` é o campo de mesmo nome de um
+ *     item de `ranking_hidrantes` (dentro de `dimensionamento`, ver
+ *     HIDRANTES_DIMENSIONAMENTO acima) — ausente/vazio num ranking salvo
+ *     antes dessa rota existir (reexecute "Mapear Trechos" pra preencher).
+ *     Fire-and-forget: não há resposta — sucesso já aparece no Revit, e uma
+ *     falha mostra um alerta nativo por lá (mesmo botão "Localizar"/
+ *     "Mostrar no Projeto" das janelas do pushbutton "Mapear Trechos").
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -173,6 +185,7 @@ export const BridgeMessageTypes = {
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
   DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",
   HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
+  SELECIONAR_TRECHO_HIDRANTE: "SELECIONAR_TRECHO_HIDRANTE",
 };
 
 function obterWebView() {

@@ -327,6 +327,11 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
         {
             u"id":           u"H-{:02d}".format(i + 1),
             u"elementId":    get_id(c[u"valvula"]),
+            # Rota completa (Bomba -> valvula), pro botao "Localizar" da
+            # tabela de ranking na dockpane (SET_HIDRANTES_CLASSIFICACAO nao
+            # mexe aqui - e so pra selecionar/enquadrar no Revit, ver
+            # hidrantes_dimensionamento_bridge.py:tratar_selecionar_trecho_hidrante).
+            u"rota":         list(c[u"rota"]),
             u"J":            c[u"J"],
             u"dZ":           c[u"dZ"],
             u"score":        c[u"score"],

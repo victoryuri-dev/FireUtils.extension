@@ -2684,6 +2684,34 @@
   justify-content: center;
 }
 
+/* Botão "Localizar" da tabela de ranking (VerificacaoHidranteDesfavoravel)
+   — seleciona o trecho do hidrante da linha no Revit (ver
+   HidrantesDimensionamento.jsx:localizarTrecho). */
+.hiddim-localizar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.hiddim-localizar-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hiddim-localizar-btn .icon {
+  width: 10px;
+  height: 10px;
+}
+
 .hiddim-cor-red { color: var(--accent); }
 .hiddim-cor-green { color: var(--green); }
 .hiddim-cor-muted { color: var(--text-3); }
