@@ -337,12 +337,35 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
     return rotas, pontas_abertas
 
 
+def _algum_visivel_na_view(doc, eids, view):
+    """True se pelo menos um elemento de `eids` tem bounding box na `view`
+    dada — get_BoundingBox(view) volta None quando o elemento não é
+    desenhado ali (categoria oculta, fora do crop/section box, fase
+    diferente etc.). Usado por mostrar_no_revit pra decidir se dá pra
+    manter a view ativa em vez de trocar."""
+    for eid in eids:
+        elem = doc.GetElement(eid)
+        if elem is not None and elem.get_BoundingBox(view) is not None:
+            return True
+    return False
+
+
 def mostrar_no_revit(uidoc, ids):
-    """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
-    ElementId (int) está em `ids` — callback do botão "Mostrar no Projeto"
-    das janelas de resultado/bloqueio (resultado_ui.py). Chamar só depois
-    que a janela WPF (ShowDialog) já fechou: a API do Revit não é
-    reentrante, não dá pra chamar de dentro do Click de uma janela modal.
+    """Seleciona os elementos cujo ElementId (int) está em `ids` —
+    callback do botão "Mostrar no Projeto" das janelas de resultado/
+    bloqueio (resultado_ui.py) e do botão "Localizar" da dockpane
+    (hidrantes_dimensionamento_bridge.py). Chamar só depois que a janela
+    WPF (ShowDialog) já fechou: a API do Revit não é reentrante, não dá
+    pra chamar de dentro do Click de uma janela modal.
+
+    Mantém a view ativa sempre que os elementos já aparecem nela (ex.: um
+    3D isométrico onde a rede inteira é visível) — só troca de view
+    (ShowElements, que pode abrir uma planta baixa ou outra view à
+    escolha do próprio Revit) quando NENHUM elemento está visível na
+    view atual. Sem essa checagem, ShowElements troca de view mesmo com
+    os elementos já visíveis ali, pulando pra uma view que o usuário não
+    pediu.
+
     Ao final o foco volta pro Revit — depois que a janela fecha, o foco
     costuma ficar com o console do pyRevit, então a seleção acontece mas
     ninguém vê."""
@@ -353,7 +376,19 @@ def mostrar_no_revit(uidoc, ids):
     try:
         eids = List[ElementId]([to_element_id(i) for i in ids])
         uidoc.Selection.SetElementIds(eids)
-        uidoc.ShowElements(eids)
+
+        view_ativa = uidoc.ActiveView
+        if _algum_visivel_na_view(uidoc.Document, eids, view_ativa):
+            for uiview in uidoc.GetOpenUIViews():
+                if uiview.ViewId == view_ativa.Id:
+                    try:
+                        uiview.ZoomToFit()
+                    except Exception:
+                        pass
+                    break
+        else:
+            uidoc.ShowElements(eids)
+
         uidoc.RefreshActiveView()
     except Exception as _e:
         forms.alert(u"Não foi possível selecionar os elementos no Revit:\n{}".format(_e),
