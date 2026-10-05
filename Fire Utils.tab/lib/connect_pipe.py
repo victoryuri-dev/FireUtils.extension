@@ -706,10 +706,21 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         if clicou_ponta_exata:
             self.SecaoRef.Visibility = SW.Visibility.Collapsed
 
-        if clicou_ponta_exata:
-            self.RbRefPonta.IsChecked = True
-        else:
-            self.RbRefCorpo.IsChecked = True
+        # Marcado com _sincronizando=True: IsChecked dispara o evento
+        # Checked já aqui, de forma síncrona (mesmo com a janela ainda não
+        # exibida), e on_opcao_changed enfileiraria uma rodada extra de
+        # _ciclo_preview via ExternalEvent — redundante (a prévia real já
+        # roda logo abaixo, direto) e é a causa do aviso "ExternalEvent ...
+        # retornou 'Pending'" (um 2º Raise() emendado no 1º antes do Revit
+        # sequer ter devolvido o contexto de API pro fim do __init__).
+        self._sincronizando = True
+        try:
+            if clicou_ponta_exata:
+                self.RbRefPonta.IsChecked = True
+            else:
+                self.RbRefCorpo.IsChecked = True
+        finally:
+            self._sincronizando = False
 
         try:
             self._ciclo_preview()
