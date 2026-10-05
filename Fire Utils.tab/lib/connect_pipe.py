@@ -12,9 +12,9 @@ Fluxo:
              _JanelaOpcoesRota) — fica aberta sem travar o Revit, então dá
              pra continuar orbitando/aproximando/afastando a câmera no
              modelo com ela aberta. Reúne as preferências de rota E mostra
-             PRÉVIA AO VIVO no modelo a cada mudança de opção (dentro de
-             uma transação aberta, revertida/refeita a cada troca — só
-             grava de fato no OK):
+             PRÉVIA AO VIVO no modelo a cada mudança de opção (cada troca
+             roda sua própria transação, aberta e já comitada no mesmo
+             ciclo — ver docstring de _JanelaOpcoesRota):
              • onde conectar em pipe_ref: ponto clicado no corpo (Tê,
                padrão) ou ponta livre — se houver (ver modo_conexao_ref em
                _construir_conexao)
@@ -90,7 +90,7 @@ import System.Windows as SW
 from Autodesk.Revit.DB import (
     Transaction, XYZ, Line, LocationCurve,
     BuiltInParameter, FilteredElementCollector,
-    ElementId, UnitUtils,
+    ElementId, UnitUtils, FamilyInstance,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
@@ -606,6 +606,29 @@ class _FiltroPipe(ISelectionFilter):
             return True
 
 
+def _snapshot_ids(doc):
+    """
+    IDs de todos os Pipe e FamilyInstance do documento — usado pra
+    descobrir que elementos uma rodada de prévia criou (diff antes/depois
+    de construir a conexão). Necessário porque, numa janela modeless, cada
+    ciclo de prévia precisa abrir E FECHAR (Commit) sua própria transação —
+    o Revit reclama de "transação aberta mas não fechada" assim que o
+    comando externo (ou o ExternalEvent) que a abriu retorna, então não dá
+    mais pra manter uma transação só "pendurada" entre uma troca de opção
+    e a próxima, esperando o usuário decidir. Sem esse diff não teria como
+    saber o que desfazer (apagar) no próximo ciclo.
+
+    Restrito a Pipe/FamilyInstance (tubos, joelhos, tês, válvulas) — os
+    únicos tipos que esse módulo cria — em vez do documento inteiro, pra
+    não pesar em projetos grandes.
+    """
+    ids = set()
+    for cls in (Pipe, FamilyInstance):
+        for eid in FilteredElementCollector(doc).OfClass(cls).ToElementIds():
+            ids.add(eid)
+    return ids
+
+
 # ============================================================================
 # FORM — preferências de roteamento (altura + ordem dos eixos X/Y)
 # ============================================================================
@@ -613,11 +636,22 @@ class _FiltroPipe(ISelectionFilter):
 class _JanelaOpcoesRota(forms.WPFWindow):
     """Janela WPF MODELESS (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a
     cada troca de opção (onde conectar / ordem dos eixos), o tubo é
-    reconstruído no modelo dentro de uma transação já aberta — revertida e
-    refeita a cada mudança — para o usuário ver o resultado antes de
-    confirmar. Só é gravado de fato (Commit) quando o usuário clica OK;
-    Cancelar ou fechar a janela reverte (RollBack) tudo o que foi mostrado
-    na prévia.
+    reconstruído no modelo para o usuário ver o resultado antes de
+    confirmar.
+
+    Cada troca roda um ciclo completo (_ciclo_preview) que abre E FECHA
+    (Commit) sua PRÓPRIA transação — o Revit não permite deixar uma
+    transação "pendurada" entre uma troca de opção e a próxima (reclama de
+    "transação aberta mas não fechada" assim que o comando externo que a
+    abriu retorna), diferente de uma janela modal onde a mesma transação
+    podia ficar aberta do início ao fim. Por isso não existe mais
+    RollBack/Commit de uma transação única: cada ciclo primeiro DESFAZ
+    manualmente o que o ciclo anterior criou/mudou (_elementos_criados +
+    curvas originais de pipe_desc/pipe_ref, guardadas no __init__) e só
+    depois constrói e já comita a prévia nova. "Cancelar" ou fechar sem
+    confirmar roda esse mesmo desfazer uma última vez; "OK" não precisa
+    fazer nada no documento — o que já está comitado da última prévia bem
+    sucedida já É o resultado final.
 
     Por ser modeless (Show(), não ShowDialog() — ver run()), o Revit
     continua respondendo normalmente: dá pra orbitar, aproximar/afastar e
@@ -650,10 +684,21 @@ class _JanelaOpcoesRota(forms.WPFWindow):
 
         self.confirmado        = False
         self._preview_ok       = False
-        self._transacao_ativa  = False
+        self._finalizado       = False
         self._sincronizando    = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
+        self._elementos_criados = set()
         self.fila_acoes        = criar_fila_acoes()
+
+        # Estado original de pipe_desc/pipe_ref (antes de qualquer prévia) —
+        # cada ciclo restaura isso antes de construir a prévia nova, já que
+        # _construir_conexao pode estender/quebrar essas curvas.
+        loc_desc = pipe_desc.Location.Curve
+        self._p0_desc_orig = loc_desc.GetEndPoint(0)
+        self._p1_desc_orig = loc_desc.GetEndPoint(1)
+        loc_ref = pipe_ref.Location.Curve
+        self._p0_ref_orig = loc_ref.GetEndPoint(0)
+        self._p1_ref_orig = loc_ref.GetEndPoint(1)
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -661,46 +706,65 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         if clicou_ponta_exata:
             self.SecaoRef.Visibility = SW.Visibility.Collapsed
 
-        # Dispara on_opcao_changed (via evento Checked), mas nesse momento
-        # _transacao_ativa ainda é False, então _atualizar_preview só sai
-        # sem fazer nada — a prévia real só começa abaixo, após abrir a
-        # transação.
         if clicou_ponta_exata:
             self.RbRefPonta.IsChecked = True
         else:
             self.RbRefCorpo.IsChecked = True
-        self._sincronizar_ordem()
 
-        self._t = Transaction(doc, u"FireUtils - Conectar Tubo")
-        self._t.Start()
-        self._transacao_ativa = True
         try:
-            self._atualizar_preview()
+            self._ciclo_preview()
         except Exception:
-            # _atualizar_preview já trata os erros esperados internamente;
-            # isto é só uma rede de segurança pra nunca deixar a transação
-            # presa (sem RollBack) se algo inesperado escapar daqui, o que
-            # travaria o fallback (uma transação por vez no documento).
-            self._descartar()
+            # _ciclo_preview já trata os erros esperados internamente (e
+            # sempre fecha a própria transação, mesmo em erro); isto é só
+            # uma rede de segurança pra desfazer qualquer coisa que tenha
+            # escapado antes de propagar, o que travaria o fallback (uma
+            # transação por vez no documento).
+            self._finalizar(False)
             raise
 
-    def _descartar(self):
-        if self._transacao_ativa:
+    def _desfazer_elementos_criados(self):
+        for eid in self._elementos_criados:
             try:
-                self._t.RollBack()
+                self.doc.Delete(eid)
             except Exception:
                 pass
-            self._transacao_ativa = False
+        self._elementos_criados = set()
 
-    def _restaurar_pristino(self):
-        """Desfaz a prévia do ciclo anterior sem construir uma nova ainda —
-        chamado antes de _sincronizar_ordem, que lê a geometria atual de
-        pipe_desc/pipe_ref pra decidir quais eixos precisam de ajuste; sem
-        isso, ela leria o tubo ainda modificado pela prévia anterior (só
-        desfeita dentro de _atualizar_preview, chamado depois)."""
-        if self._transacao_ativa:
-            self._t.RollBack()
-            self._t.Start()
+    def _restaurar_curvas_originais(self):
+        try:
+            self.pipe_desc.Location.Curve = Line.CreateBound(self._p0_desc_orig, self._p1_desc_orig)
+        except Exception:
+            pass
+        try:
+            self.pipe_ref.Location.Curve = Line.CreateBound(self._p0_ref_orig, self._p1_ref_orig)
+        except Exception:
+            pass
+
+    def _finalizar(self, confirmado):
+        """Fecha a prévia de vez: se confirmado, não mexe em nada — o que
+        já está comitado no documento (da última prévia bem sucedida) já É
+        o resultado final. Senão, desfaz tudo numa transação própria,
+        aberta e fechada aqui mesmo. Chamado tanto de dentro da fila de
+        ações (fechar a janela modeless) quanto direto, já num contexto de
+        API válido (ex.: __init__/run(), se algo falhar antes da janela
+        aparecer de verdade)."""
+        if confirmado:
+            return
+        t = Transaction(self.doc, u"FireUtils - Conectar Tubo (descartar prévia)")
+        t.Start()
+        try:
+            self._desfazer_elementos_criados()
+            self._restaurar_curvas_originais()
+        finally:
+            # Sempre fecha a transação antes de sair daqui — nunca pode
+            # ficar aberta, nem em erro inesperado (ver _snapshot_ids).
+            try:
+                t.Commit()
+            except Exception:
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
 
     def _modo_conexao_ref_atual(self):
         return u"ponta" if self.RbRefPonta.IsChecked else u"corpo"
@@ -767,48 +831,69 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         finally:
             self._sincronizando = False
 
-    def _atualizar_preview(self):
-        """Descarta a prévia anterior e reconstrói a conexão com as opções
-        atuais, dentro da mesma transação (ainda não confirmada)."""
-        if not self._transacao_ativa:
-            return
-        self._t.RollBack()
-        self._t.Start()
+    def _ciclo_preview(self):
+        """Um ciclo completo de prévia, numa transação própria aberta E
+        fechada aqui mesmo (nunca deixada pendurada — ver docstring da
+        classe): desfaz o que o ciclo anterior criou/mudou, sincroniza as
+        opções de ordem disponíveis e reconstrói a conexão com as opções
+        atuais. Em erro de validação/inesperado, desfaz de novo (deixa o
+        modelo em branco, sem a prévia) e mostra o aviso em TxtStatus."""
+        t = Transaction(self.doc, u"FireUtils - Conectar Tubo")
+        t.Start()
         try:
-            _construir_conexao(
-                self.doc, self.pipe_desc, self.pipe_ref,
-                self.pt_click_desc, self.pt_click_ref, self.output,
-                ordem_eixos=self._ordem_pref,
-                modo_conexao_ref=self._modo_conexao_ref_atual(),
-            )
+            self._desfazer_elementos_criados()
+            self._restaurar_curvas_originais()
             self.doc.Regenerate()
-            self._preview_ok = True
-            self.TxtStatus.Text       = u""
-            self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
-        except _ConexaoError as ex:
-            self.doc.Regenerate()
-            self._preview_ok = False
-            self.TxtStatus.Text       = u"{}".format(ex)
-            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
-        except Exception as ex:
-            self.doc.Regenerate()
-            self._preview_ok = False
-            self.TxtStatus.Text       = u"Erro na prévia: {}".format(ex)
-            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+            self._sincronizar_ordem()
+
+            ids_antes = _snapshot_ids(self.doc)
+            erro = None
+            try:
+                _construir_conexao(
+                    self.doc, self.pipe_desc, self.pipe_ref,
+                    self.pt_click_desc, self.pt_click_ref, self.output,
+                    ordem_eixos=self._ordem_pref,
+                    modo_conexao_ref=self._modo_conexao_ref_atual(),
+                )
+                self.doc.Regenerate()
+            except _ConexaoError as ex:
+                erro = u"{}".format(ex)
+            except Exception as ex:
+                erro = u"Erro na prévia: {}".format(ex)
+            self._elementos_criados = _snapshot_ids(self.doc) - ids_antes
+
+            if erro is not None:
+                self._desfazer_elementos_criados()
+                self._restaurar_curvas_originais()
+                self.doc.Regenerate()
+                self._preview_ok = False
+                self.TxtStatus.Text       = erro
+                self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+            else:
+                self._preview_ok = True
+                self.TxtStatus.Text       = u""
+                self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
+        finally:
+            # Sempre fecha a transação antes de sair daqui — nunca pode
+            # ficar aberta, nem em erro inesperado (ver _snapshot_ids).
+            try:
+                t.Commit()
+            except Exception:
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
         try:
             self.uidoc.RefreshActiveView()
         except Exception:
             pass
 
     def _agendar_atualizacao(self):
-        """Pede pro Revit rodar _restaurar_pristino + _sincronizar_ordem +
-        _atualizar_preview assim que liberar o contexto de API — essas três
-        tocam o documento (transação), então não podem rodar direto do
-        evento de clique numa janela modeless."""
+        """Pede pro Revit rodar _ciclo_preview assim que liberar o contexto
+        de API — toca o documento (transação), então não pode rodar direto
+        do evento de clique numa janela modeless."""
         def _acao(uiapp):
-            self._restaurar_pristino()
-            self._sincronizar_ordem()
-            self._atualizar_preview()
+            self._ciclo_preview()
         self.fila_acoes.enfileirar(_acao)
 
     def on_opcao_changed(self, sender, args):
@@ -847,29 +932,19 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self.Close()
 
     def on_closing(self, sender, args):
-        """Sempre finaliza a transação da prévia ao fechar — confirma (Commit)
-        só se o usuário clicou OK; qualquer outro fechamento reverte tudo.
+        """Sempre finaliza a prévia ao fechar — mantém o resultado comitado
+        só se o usuário clicou OK; qualquer outro fechamento desfaz tudo.
         Fechar a janela em si (Close/Hide) é só WPF, não precisa de contexto
-        de API — mas Commit/RollBack tocam o documento, então vão pra fila
-        de ações em vez de rodar direto aqui."""
-        if not self._transacao_ativa:
+        de API — mas desfazer toca o documento, então vai pra fila de ações
+        em vez de rodar direto aqui."""
+        if self._finalizado:
             return
-        self._transacao_ativa = False
+        self._finalizado = True
         pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
-        t, confirmado = self._t, self.confirmado
+        confirmado = self.confirmado
 
         def _acao(uiapp):
-            try:
-                if confirmado:
-                    t.Commit()
-                else:
-                    t.RollBack()
-            except Exception as ex:
-                print(u"[AVISO] Falha ao finalizar Conectar Tubo: {}".format(ex))
-                try:
-                    t.RollBack()
-                except Exception:
-                    pass
+            self._finalizar(confirmado)
         self.fila_acoes.enfileirar(_acao)
 
 
@@ -1001,7 +1076,7 @@ def run(doc, uidoc, output):
         # garante que a transação da prévia não fique presa — senão o
         # fallback abaixo não conseguiria abrir a dele (só uma por vez).
         if janela is not None:
-            janela._descartar()
+            janela._finalizar(False)
         pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
         print(u"[AVISO] Formulário WPF com prévia de Conectar Tubo falhou ({}), "
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
