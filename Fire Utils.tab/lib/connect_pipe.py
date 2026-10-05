@@ -8,10 +8,13 @@ Fluxo:
   Clique 2 — PIPE_REF (tubo referência): o CLIQUE só marca a posição no
              corpo (usada se o modo "corpo" for escolhido); corpo vs ponta
              não é mais adivinhado pela distância do clique — ver form abaixo.
-  Form     — janela WPF (connect_pipe_opcoes.xaml, classe _JanelaOpcoesRota)
-             reúne as preferências de rota E mostra PRÉVIA AO VIVO no
-             modelo a cada mudança de opção (dentro de uma transação aberta,
-             revertida/refeita a cada troca — só grava de fato no OK):
+  Form     — janela WPF MODELESS (connect_pipe_opcoes.xaml, classe
+             _JanelaOpcoesRota) — fica aberta sem travar o Revit, então dá
+             pra continuar orbitando/aproximando/afastando a câmera no
+             modelo com ela aberta. Reúne as preferências de rota E mostra
+             PRÉVIA AO VIVO no modelo a cada mudança de opção (dentro de
+             uma transação aberta, revertida/refeita a cada troca — só
+             grava de fato no OK):
              • onde conectar em pipe_ref: ponto clicado no corpo (Tê,
                padrão) ou ponta livre — se houver (ver modo_conexao_ref em
                _construir_conexao)
@@ -19,9 +22,15 @@ Fluxo:
                e Perpendicular ao eixo de pipe_ref) — livre, escolhida pelo
                usuário; só os eixos que realmente precisam de ajuste
                aparecem como opção (ver ordem_eixos/_eixos_disponiveis)
-             Se essa janela falhar por qualquer motivo, cai para diálogos
-             forms.SelectFromList em sequência + fluxo sem prévia
-             (_escolher_opcoes_rota_fallback + _conectar).
+             Por ser modeless, qualquer clique na janela acontece fora do
+             contexto de API válido do Revit — toda ação que toca o
+             documento (atualizar a prévia, confirmar, descartar) é
+             despachada através de uma fila de ExternalEvent
+             (family_loader_events.criar_fila_acoes), nunca chamada direto
+             do clique. Se essa janela falhar por qualquer motivo, cai para
+             diálogos forms.SelectFromList em sequência + fluxo sem prévia
+             (_escolher_opcoes_rota_fallback + _conectar) — esse fallback
+             continua modal (sem prévia, sem navegação no modelo).
 
 Etapa 1 — Extensão direta:
   Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref
@@ -86,6 +95,8 @@ from Autodesk.Revit.DB import (
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
+
+from family_loader_events import criar_fila_acoes
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"connect_pipe_opcoes.xaml")
@@ -600,12 +611,22 @@ class _FiltroPipe(ISelectionFilter):
 # ============================================================================
 
 class _JanelaOpcoesRota(forms.WPFWindow):
-    """Janela WPF (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a cada troca
-    de opção (onde conectar / ordem dos eixos), o tubo é reconstruído no
-    modelo dentro de uma transação já aberta — revertida e refeita a cada
-    mudança — para o usuário ver o resultado antes de confirmar. Só é
-    gravado de fato (Commit) quando o usuário clica OK; Cancelar ou fechar
-    a janela reverte (RollBack) tudo o que foi mostrado na prévia.
+    """Janela WPF MODELESS (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a
+    cada troca de opção (onde conectar / ordem dos eixos), o tubo é
+    reconstruído no modelo dentro de uma transação já aberta — revertida e
+    refeita a cada mudança — para o usuário ver o resultado antes de
+    confirmar. Só é gravado de fato (Commit) quando o usuário clica OK;
+    Cancelar ou fechar a janela reverte (RollBack) tudo o que foi mostrado
+    na prévia.
+
+    Por ser modeless (Show(), não ShowDialog() — ver run()), o Revit
+    continua respondendo normalmente: dá pra orbitar, aproximar/afastar e
+    girar a câmera no modelo com a janela aberta. Em compensação, qualquer
+    clique nela (mudar opção, OK, Cancelar) acontece FORA do contexto de
+    API válido do Revit — toda ação que toca o documento (self.fila_acoes,
+    de family_loader_events.criar_fila_acoes) é enfileirada e executada
+    assim que o Revit libera o contexto via ExternalEvent, nunca chamada
+    direto do evento de clique.
 
     Ordem dos eixos: até 3 trechos retos (z = vertical, par = paralelo ao
     eixo de pipe_ref, perp = perpendicular a ele) — só os que realmente
@@ -632,6 +653,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self._transacao_ativa  = False
         self._sincronizando    = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
+        self.fila_acoes        = criar_fila_acoes()
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -778,34 +800,39 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         except Exception:
             pass
 
+    def _agendar_atualizacao(self):
+        """Pede pro Revit rodar _restaurar_pristino + _sincronizar_ordem +
+        _atualizar_preview assim que liberar o contexto de API — essas três
+        tocam o documento (transação), então não podem rodar direto do
+        evento de clique numa janela modeless."""
+        def _acao(uiapp):
+            self._restaurar_pristino()
+            self._sincronizar_ordem()
+            self._atualizar_preview()
+        self.fila_acoes.enfileirar(_acao)
+
     def on_opcao_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_ordem1_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
         novo = self._ordem1_atual()
         if novo is not None:
             self._ordem_pref = [novo] + [e for e in self._ordem_pref if e != novo]
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_ordem2_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
         novo2 = self._ordem2_atual()
         if novo2 is not None and self._ordem_pref:
             primeiro = self._ordem_pref[0]
             self._ordem_pref = ([primeiro, novo2] +
                                  [e for e in self._ordem_pref if e not in (primeiro, novo2)])
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_cancel(self, sender, args):
         self.Close()
@@ -821,17 +848,29 @@ class _JanelaOpcoesRota(forms.WPFWindow):
 
     def on_closing(self, sender, args):
         """Sempre finaliza a transação da prévia ao fechar — confirma (Commit)
-        só se o usuário clicou OK; qualquer outro fechamento reverte tudo."""
+        só se o usuário clicou OK; qualquer outro fechamento reverte tudo.
+        Fechar a janela em si (Close/Hide) é só WPF, não precisa de contexto
+        de API — mas Commit/RollBack tocam o documento, então vão pra fila
+        de ações em vez de rodar direto aqui."""
         if not self._transacao_ativa:
             return
-        if self.confirmado:
+        self._transacao_ativa = False
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
+        t, confirmado = self._t, self.confirmado
+
+        def _acao(uiapp):
             try:
-                self._t.Commit()
-            except Exception:
-                pass
-            self._transacao_ativa = False
-        else:
-            self._descartar()
+                if confirmado:
+                    t.Commit()
+                else:
+                    t.RollBack()
+            except Exception as ex:
+                print(u"[AVISO] Falha ao finalizar Conectar Tubo: {}".format(ex))
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
+        self.fila_acoes.enfileirar(_acao)
 
 
 def _escolher_opcoes_rota_fallback(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
@@ -891,7 +930,23 @@ def _escolher_opcoes_rota_fallback(pipe_desc, pipe_ref, pt_click_desc, pt_click_
 # PONTO DE ENTRADA
 # ============================================================================
 
+_CHAVE_JANELA_ATIVA = u"FireUtils_ConectarTubo_JanelaAtiva"
+
+
 def run(doc, uidoc, output):
+    # Janela de prévia é modeless (Show, não ShowDialog) — nada impede o
+    # usuário de chamar o comando de novo com a anterior ainda aberta; como
+    # o Revit só permite uma transação aberta por documento, uma segunda
+    # instância pisaria na transação da primeira. Só traz a existente pra
+    # frente em vez de abrir outra.
+    janela_ativa = pyscript.get_envvar(_CHAVE_JANELA_ATIVA)
+    if janela_ativa is not None:
+        try:
+            janela_ativa.Activate()
+            return
+        except Exception:
+            pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
+
     # ── Clique 1: ponta do PIPE_DESC ────────────────────────────────────────
     try:
         ref1         = uidoc.Selection.PickObject(
@@ -930,12 +985,16 @@ def run(doc, uidoc, output):
                                pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
 
     # ── Preferências de roteamento, com prévia ao vivo no modelo ────────────
+    # Show() (modeless), não ShowDialog() — deixa o Revit responder
+    # normalmente (orbitar/zoom/pan) com a janela aberta. Ver docstring de
+    # _JanelaOpcoesRota sobre como isso afeta o toque no documento.
     janela = None
     try:
         janela = _JanelaOpcoesRota(doc, uidoc, pipe_desc, pipe_ref,
                                     pt_click_desc, pt_click_ref, output,
                                     clicou_ponta_exata=clicou_ponta_exata)
-        janela.ShowDialog()
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, janela)
+        janela.Show()
         return
     except Exception as ex:
         # Se falhar depois da janela já ter aberto (ex.: erro ao exibir),
@@ -943,6 +1002,7 @@ def run(doc, uidoc, output):
         # fallback abaixo não conseguiria abrir a dele (só uma por vez).
         if janela is not None:
             janela._descartar()
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
         print(u"[AVISO] Formulário WPF com prévia de Conectar Tubo falhou ({}), "
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
