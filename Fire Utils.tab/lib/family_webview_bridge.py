@@ -38,6 +38,7 @@ import project_link_bridge
 import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
+import niveis_bridge
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -232,6 +233,14 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_dimensionamento_bridge.tratar_selecionar_trecho_hidrante(
                 uiapp, payload)
+        )
+    elif tipo == u"GET_REVIT_LEVELS":
+        fila_acoes.enfileirar(
+            lambda uiapp: niveis_bridge.tratar_get_revit_levels(uiapp, payload, postar_mensagem)
+        )
+    elif tipo == u"SET_NIVEIS_CORRELACAO":
+        fila_acoes.enfileirar(
+            lambda uiapp: niveis_bridge.tratar_set_niveis_correlacao(uiapp, payload, postar_mensagem)
         )
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

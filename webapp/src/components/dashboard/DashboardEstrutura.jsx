@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import ProjetoCabecalho from "./ProjetoCabecalho";
 import SaidaEmergenciaPage from "./SaidaEmergenciaPage";
 import SistemaHidrantesPage from "./SistemaHidrantesPage";
+import CorrelacaoNiveisModal from "./CorrelacaoNiveisModal";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
 import { dadosHidrantes, pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
@@ -9,6 +10,7 @@ import { getSeNorma, getExtintoresNorma } from "../../lib/normasCentral";
 import { contarSaidasPavimento, getDistanciaPavimento, tipoEscadaEstrutura } from "../../data/se_calc";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
+import stairIconSvg from "../../assets/icons/stair-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 
 // A ação de aplicar a classificação no Revit mora na página "Sistema de
@@ -156,7 +158,7 @@ function CartaoSaidaEmergenciaResumo({ norma, projeto, estrutura }) {
   );
 }
 
-function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick }) {
+function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotuloConcluido = "Dimensionado" }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag type={onClick ? "button" : undefined} className={`cartao-dimensionamento ${onClick ? "cartao-dimensionamento-clicavel" : ""}`} onClick={onClick}>
@@ -169,7 +171,7 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick }) {
       ) : dimensionado ? (
         <span className="status-dimensionamento status-ok">
           <Icon svg={checkIconSvg} />
-          Dimensionado
+          {rotuloConcluido}
         </span>
       ) : (
         <span className="status-dimensionamento status-pendente">Pendente</span>
@@ -195,6 +197,7 @@ export default function DashboardEstrutura({
   // logo abaixo (regra dos hooks: sempre chamados, nunca atrás de um if).
   const [seNorma, setSeNorma] = useState(null);
   const [extintoresNorma, setExtintoresNorma] = useState(null);
+  const [mostrarCorrelacaoNiveis, setMostrarCorrelacaoNiveis] = useState(false);
 
   useEffect(() => {
     if (modo !== "dashboard" || !estrutura?.uf) return;
@@ -310,7 +313,23 @@ export default function DashboardEstrutura({
           dimensionado={dimensionamentos?.saidaEmergencia}
           onClick={onAbrirSaidaEmergencia}
         />
+        <CartaoDimensionamento
+          titulo="Correlacionar Níveis"
+          iconeSvg={stairIconSvg}
+          dimensionado={dimensionamentos?.niveis}
+          rotuloConcluido="Correlacionado"
+          onClick={() => setMostrarCorrelacaoNiveis(true)}
+        />
       </div>
+
+      {mostrarCorrelacaoNiveis && (
+        <CorrelacaoNiveisModal
+          projeto={projeto}
+          estrutura={estrutura}
+          adicionarToast={adicionarToast}
+          onFechar={() => setMostrarCorrelacaoNiveis(false)}
+        />
+      )}
     </div>
   );
 }
