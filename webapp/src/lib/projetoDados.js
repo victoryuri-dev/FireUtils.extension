@@ -268,5 +268,11 @@ export function dashboardEstrutura(linha, estruturaId) {
     ocupacao: rotuloOcupacao(pavimentosEstrutura),
     divisoes: divisoesDe(pavimentosEstrutura),
     cargaIncendio,
+    risco: rotuloRisco(cargaIncendio),
+    // Crus (não derivados) — precisos pro tipo de escada de emergência
+    // (data/se_calc.js:tipoEscadaEstrutura), que precisa da contagem de
+    // pavimentos/subsolos da estrutura, não só da altura já resolvida.
+    nPavimentos: paraNumero(estrutura.nPavimentos),
+    nSubsolos: paraNumero(estrutura.nSubsolos),
   };
 }

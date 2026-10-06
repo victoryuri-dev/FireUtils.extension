@@ -63,5 +63,19 @@ export async function getSeNorma(uf) {
     NOTAS_NORMATIVAS: remoto.notas,
     LARGURAS_MINIMAS: remoto.larguras_minimas,
     DISTANCIAS_MAXIMAS: remoto.distancias_maximas,
+    TIPOS_ESCADA: remoto.tipos_escada,
+  };
+}
+
+/** Mesmo adaptador snake_case -> UPPER_SNAKE, pra norma de Extintores (NT 21
+ * CBMMA) — usado pelo box "Extintores" do Dashboard (distância máxima a
+ * percorrer + regra mínima por pavimento, ver data/normas/MA/extintores.js
+ * no site, agora só no Supabase). */
+export async function getExtintoresNorma(uf) {
+  const remoto = await getNormaCentral(uf, "extintores");
+  return {
+    ...remoto,
+    LIMIARES_RISCO: remoto.limiares_risco,
+    DISTANCIA_MAXIMA: remoto.distancia_maxima,
   };
 }
