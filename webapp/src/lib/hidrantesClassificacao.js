@@ -28,10 +28,13 @@ export function faixaAreaIndex(areaTotal, norma) {
   return norma.FAIXAS_AREA.findIndex((f) => (f.min == null || a > f.min) && (f.max == null || a <= f.max));
 }
 
-/** Opções de classificação (Tipo + RTI) para uma coluna/faixa, já
- * aplicando o rebaixamento automático por chuveiros automáticos (Notas 1
- * e 2 da Tabela 3) quando `possuiSprinklers` é true. Normalmente 1 opção,
- * 2 quando a coluna 1 permite escolher entre Tipo 1 e Tipo 2. */
+/** Opções de classificação (Tipo + RTI) para uma coluna/faixa, considerando
+ * chuveiros automáticos (`possuiSprinklers`). Normalmente 1 opção, 2 quando
+ * o RT tem uma escolha a fazer: coluna 1 (Tipo 1 ou 2, sempre) ou coluna 4
+ * Tipo 5 com sprinklers (Tipo 5 ou, por opção do RT via Nota 1 da Tabela 3,
+ * Tipo 4 — rebaixamento PERMITIDO, nunca imposto automaticamente; mesma
+ * lógica do site, ver hidrantes_calc.js:opcoesClassificacao). Nota 2
+ * (Tipo 4 → Tipo 3) continua aplicada direto, sem escolha, como antes. */
 export function opcoesClassificacao(coluna, faixaIndex, possuiSprinklers, norma) {
   if (coluna == null || faixaIndex < 0 || faixaIndex >= norma.TABELA3.length) return [];
   const linha = norma.TABELA3[faixaIndex];
@@ -51,7 +54,12 @@ export function opcoesClassificacao(coluna, faixaIndex, possuiSprinklers, norma)
   }
   if (coluna === 4) {
     if (!possuiSprinklers) return [{ tipo: linha.col4.tipo, rti: linha.col4.rti }];
-    if (linha.col4.tipo === 5) return [{ tipo: 4, rti: linha.col3.rti }];
+    if (linha.col4.tipo === 5) {
+      return [
+        { tipo: 5, rti: linha.col4.rti },
+        { tipo: 4, rti: linha.col3.rti },
+      ];
+    }
     return [{ tipo: 3, rti: linha.col2.rti }];
   }
   return [];
