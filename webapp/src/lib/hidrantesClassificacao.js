@@ -30,11 +30,12 @@ export function faixaAreaIndex(areaTotal, norma) {
 
 /** Opções de classificação (Tipo + RTI) para uma coluna/faixa, considerando
  * chuveiros automáticos (`possuiSprinklers`). Normalmente 1 opção, 2 quando
- * o RT tem uma escolha a fazer: coluna 1 (Tipo 1 ou 2, sempre) ou coluna 4
- * Tipo 5 com sprinklers (Tipo 5 ou, por opção do RT via Nota 1 da Tabela 3,
- * Tipo 4 — rebaixamento PERMITIDO, nunca imposto automaticamente; mesma
- * lógica do site, ver hidrantes_calc.js:opcoesClassificacao). Nota 2
- * (Tipo 4 → Tipo 3) continua aplicada direto, sem escolha, como antes. */
+ * o RT tem uma escolha a fazer: coluna 1 (Tipo 1 ou 2, sempre), coluna 3 ou
+ * coluna 4 Tipo 4 com sprinklers (Tipo 4 ou, por opção do RT via Nota 2 da
+ * Tabela 3, Tipo 3), ou coluna 4 Tipo 5 com sprinklers (Tipo 5 ou, por
+ * opção do RT via Nota 1, Tipo 4) — rebaixamento sempre PERMITIDO, nunca
+ * imposto automaticamente (mesma lógica do site, ver
+ * hidrantes_calc.js:opcoesClassificacao). */
 export function opcoesClassificacao(coluna, faixaIndex, possuiSprinklers, norma) {
   if (coluna == null || faixaIndex < 0 || faixaIndex >= norma.TABELA3.length) return [];
   const linha = norma.TABELA3[faixaIndex];
@@ -49,18 +50,17 @@ export function opcoesClassificacao(coluna, faixaIndex, possuiSprinklers, norma)
     return [{ tipo: linha.col2.tipo, rti: linha.col2.rti }];
   }
   if (coluna === 3) {
-    if (possuiSprinklers) return [{ tipo: 3, rti: linha.col2.rti }];
-    return [{ tipo: linha.col3.tipo, rti: linha.col3.rti }];
+    const base = { tipo: linha.col3.tipo, rti: linha.col3.rti };
+    if (possuiSprinklers) return [base, { tipo: 3, rti: linha.col2.rti }];
+    return [base];
   }
   if (coluna === 4) {
-    if (!possuiSprinklers) return [{ tipo: linha.col4.tipo, rti: linha.col4.rti }];
+    const base = { tipo: linha.col4.tipo, rti: linha.col4.rti };
+    if (!possuiSprinklers) return [base];
     if (linha.col4.tipo === 5) {
-      return [
-        { tipo: 5, rti: linha.col4.rti },
-        { tipo: 4, rti: linha.col3.rti },
-      ];
+      return [base, { tipo: 4, rti: linha.col3.rti }];
     }
-    return [{ tipo: 3, rti: linha.col2.rti }];
+    return [base, { tipo: 3, rti: linha.col2.rti }];
   }
   return [];
 }
