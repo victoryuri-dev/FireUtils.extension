@@ -77,5 +77,6 @@ export async function getExtintoresNorma(uf) {
     ...remoto,
     LIMIARES_RISCO: remoto.limiares_risco,
     DISTANCIA_MAXIMA: remoto.distancia_maxima,
+    TIPOS_PORTATIL: remoto.tipos_portatil,
   };
 }

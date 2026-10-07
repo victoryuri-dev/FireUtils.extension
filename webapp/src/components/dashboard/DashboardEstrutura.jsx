@@ -5,9 +5,11 @@ import SistemaHidrantesPage from "./SistemaHidrantesPage";
 import CorrelacaoNiveisModal from "./CorrelacaoNiveisModal";
 import Icon from "../Icon";
 import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/format";
+import { fmtNum } from "../../lib/numero";
 import { dadosHidrantes, pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
 import { getSeNorma, getExtintoresNorma } from "../../lib/normasCentral";
 import { contarSaidasPavimento, getDistanciaPavimento, tipoEscadaEstrutura } from "../../data/se_calc";
+import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 import stairIconSvg from "../../assets/icons/stair-icon.svg?raw";
@@ -15,8 +17,13 @@ import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 
 // A ação de aplicar a classificação no Revit mora na página "Sistema de
 // Hidrantes" (SistemaHidrantesPage.jsx, mesmo destino deste cartão) — aqui
-// fica só o resumo do que está pendente no site, sem botão.
-function CartaoClassificacaoHidrantes({ hidrantes }) {
+// fica só o resumo do que está pendente no site, sem botão. Pressão/vazão
+// mínima vêm do Project Information do Revit (classificação já aplicada
+// lá — GET_HIDRANTES_DIMENSIONAMENTO, mesmo dado que
+// SistemaHidrantesPage.jsx mostra em "Vazão mín."/"Pressão mín."), não do
+// Supabase — por isso chegam null até a classificação ser aplicada no
+// Revit, mesmo que Tipo/RTI (Supabase) já estejam definidos.
+function CartaoClassificacaoHidrantes({ hidrantes, classificacao }) {
   if (hidrantes.tipo == null) {
     return (
       <div className="cartao-info">
@@ -38,6 +45,14 @@ function CartaoClassificacaoHidrantes({ hidrantes }) {
           <dt>RTI:</dt>
           <dd>{hidrantes.rti != null ? `${hidrantes.rti} m³` : "—"}</dd>
         </div>
+        <div>
+          <dt>Vazão mínima:</dt>
+          <dd>{classificacao?.q_min != null ? `${fmtNum(classificacao.q_min, 0)} L/min` : "—"}</dd>
+        </div>
+        <div>
+          <dt>Pressão mínima:</dt>
+          <dd>{classificacao?.p_min != null ? `${fmtNum(classificacao.p_min, 0)} mca` : "—"}</dd>
+        </div>
       </dl>
     </div>
   );
@@ -52,6 +67,17 @@ function classificarRiscoChave(cargaIncendio, limiares) {
   if (cargaIncendio <= limiares.baixo) return "baixo";
   if (cargaIncendio <= limiares.medio) return "medio";
   return "alto";
+}
+
+/** Capacidade extintora mínima pra uma só unidade atender sozinha os dois
+ * requisitos do item 5.2.1.4 (classe A + classes B/C) — o tipo do
+ * catálogo (TIPOS_PORTATIL, normalmente o pó químico ABC) cujas classes
+ * cobrem A e B/C ao mesmo tempo, ex.: "2-A:20-B:C". */
+function capacidadeExtintoraExigida(norma) {
+  const tipo = (norma.TIPOS_PORTATIL || []).find(
+    (t) => t.classes?.includes("A") && (t.classes?.includes("B") || t.classes?.includes("C"))
+  );
+  return tipo?.capacidadeMinima || null;
 }
 
 function CartaoExtintores({ norma, cargaIncendio }) {
@@ -83,7 +109,7 @@ function CartaoExtintores({ norma, cargaIncendio }) {
       <dl>
         <div>
           <dt>Capacidade extintora exigida:</dt>
-          <dd>2 unidades/pavimento (A + B/C)</dd>
+          <dd>{capacidadeExtintoraExigida(norma) || "—"}</dd>
         </div>
         <div>
           <dt>Caminhamento máximo:</dt>
@@ -133,9 +159,8 @@ function CartaoSaidaEmergenciaResumo({ norma, projeto, estrutura }) {
     estrutura.divisoes,
     norma.TIPOS_ESCADA
   );
-  let escadaLabel = "—";
-  if (escada?.status === "nao_aplica") escadaLabel = "Não se aplica (térrea)";
-  else if (escada?.status === "ok") {
+  let escadaLabel = "N/A";
+  if (escada?.status === "ok") {
     const t = norma.TIPOS_ESCADA?.tipos?.[escada.exigido];
     const simbolo = escada.exigido === "+" || escada.exigido === "-";
     escadaLabel = t ? (simbolo ? t.nome : `${escada.exigido} — ${t.nome}`) : escada.exigido;
@@ -156,6 +181,14 @@ function CartaoSaidaEmergenciaResumo({ norma, projeto, estrutura }) {
       </dl>
     </div>
   );
+}
+
+/** "4 pav." ou "4 pav. + 1 subsolo"/"+ 2 subsolos" — mesmo formato do site
+ * (Step7.jsx, tabela de revisão das estruturas). */
+function rotuloPavimentosEstrutura(estrutura) {
+  const nPav = estrutura.nPavimentos || 1;
+  const nSub = estrutura.nSubsolos || 0;
+  return `${nPav} pav.${nSub ? ` + ${nSub} subsolo${nSub !== 1 ? "s" : ""}` : ""}`;
 }
 
 function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotuloConcluido = "Dimensionado" }) {
@@ -198,6 +231,7 @@ export default function DashboardEstrutura({
   const [seNorma, setSeNorma] = useState(null);
   const [extintoresNorma, setExtintoresNorma] = useState(null);
   const [mostrarCorrelacaoNiveis, setMostrarCorrelacaoNiveis] = useState(false);
+  const [classificacaoHidrantes, setClassificacaoHidrantes] = useState(null);
 
   useEffect(() => {
     if (modo !== "dashboard" || !estrutura?.uf) return;
@@ -216,6 +250,20 @@ export default function DashboardEstrutura({
         setExtintoresNorma(undefined);
       });
   }, [modo, estrutura?.uf]);
+
+  // Pressão/vazão mínima do cartão "Sistema de Hidrantes" vêm do Project
+  // Information do Revit (classificação já aplicada lá), via a mesma
+  // mensagem que SistemaHidrantesPage.jsx usa — fica null quando ainda
+  // não foi aplicada (`ok: false`), sem bloquear o resto do cartão.
+  useEffect(() => {
+    if (modo !== "dashboard") return;
+    postToHost(BridgeMessageTypes.GET_HIDRANTES_DIMENSIONAMENTO, {});
+    return escutarMensagensDoHost((mensagem) => {
+      if (!mensagem || mensagem.type !== BridgeMessageTypes.HIDRANTES_DIMENSIONAMENTO) return;
+      const { ok, classificacao } = mensagem.payload || {};
+      setClassificacaoHidrantes(ok ? classificacao : null);
+    });
+  }, [modo, estrutura?.id]);
 
   // Saída de Emergência e Sistema de Hidrantes viraram páginas próprias
   // (mesmo destino do atalho da sidebar e do respectivo cartão) — ver
@@ -264,8 +312,8 @@ export default function DashboardEstrutura({
               <dd>{formatarArea(estrutura.areaTerreno)}</dd>
             </div>
             <div>
-              <dt>Altura piso a piso:</dt>
-              <dd>{formatarMetros(estrutura.alturaPisoAPiso)}{estrutura.edificacaoTerrea ? " (Edificação Térrea)" : ""}</dd>
+              <dt>Pavimentos:</dt>
+              <dd>{rotuloPavimentosEstrutura(estrutura)}</dd>
             </div>
           </dl>
         </div>
@@ -286,13 +334,13 @@ export default function DashboardEstrutura({
               <dd>{formatarCargaIncendio(estrutura.cargaIncendio)}</dd>
             </div>
             <div>
-              <dt>Altura da edificação:</dt>
-              <dd>{formatarMetros(estrutura.alturaEdificacao)}{estrutura.edificacaoTerrea ? " (Edificação Térrea)" : ""}</dd>
+              <dt>Altura piso a piso:</dt>
+              <dd>{formatarMetros(estrutura.alturaPisoAPiso)}</dd>
             </div>
           </dl>
         </div>
 
-        <CartaoClassificacaoHidrantes hidrantes={dadosHidrantes(projeto)}/>
+        <CartaoClassificacaoHidrantes hidrantes={dadosHidrantes(projeto)} classificacao={classificacaoHidrantes} />
 
         <CartaoExtintores norma={extintoresNorma} cargaIncendio={estrutura.cargaIncendio} />
 
