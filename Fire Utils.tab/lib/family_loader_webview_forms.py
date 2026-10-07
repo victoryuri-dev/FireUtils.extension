@@ -27,45 +27,35 @@ Dependências externas que NÃO vêm com o pyRevit/Revit:
   3. WebView2 Runtime instalado na máquina (Windows 10/11 atualizado já
      vem com ele via Edge; senão, instalar o "Evergreen Bootstrapper" da
      Microsoft).
+
+IMPORTS PESADOS SÃO TODOS LAZY (dentro de método, não no topo do módulo):
+os AddReferenceToFileAndPath dos assemblies do WebView2 e o import de
+family_webview_bridge (que puxa toda a cascata de módulos do bridge —
+family_loader, family_cache, project_link_bridge, hidrantes_*_bridge,
+niveis_bridge -> sync, projeto, normas, hidrantes.*, saidas.calc) só
+rodam dentro de __init__/_ao_inicializar_core/_ao_receber_mensagem, não
+no topo do módulo. __init__ roda uma ÚNICA VEZ por sessão do Revit (o
+painel é criado uma vez no registro, em startup.py — cliques
+subsequentes no botão da faixa de opções só mostram/escondem a MESMA
+instância via forms.get_dockable_panel, ver alternar_painel). Como cada
+engine IronPython reimporta este módulo do zero a cada clique (ver
+_valor_enum_allow), import no topo do módulo pagaria esse custo pesado
+de novo TODA VEZ que o botão fosse clicado, mesmo quando o clique é só
+pra esconder o painel — daí esses imports serem lazy.
 """
 
 import os
-
-import clr
-
-_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
-_WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
-
-# Precisa rodar ANTES de qualquer AddReference/uso do WebView2: o
-# Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
-# WebView2Loader.dll (nativo) sem caminho absoluto — carregar só o
-# assembly gerenciado via AddReferenceToFileAndPath não é suficiente pro
-# Windows achar a DLL nativa correspondente.
-os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
-
-clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Core.dll"))
-clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Wpf.dll"))
-
-clr.AddReference(u"System")
-clr.AddReference(u"PresentationFramework")
-clr.AddReference(u"PresentationCore")
-clr.AddReference(u"WindowsBase")
-
-import System
-import System.Threading
-import System.Windows.Threading
-from System import Uri, Environment as DotNetEnvironment
-
-from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
 
 from pyrevit import forms
 from pyrevit.coreutils.logger import get_logger
 
 from family_loader_events import criar_fila_acoes
-from family_webview_bridge import processar_mensagem_webview
 from family_error_utils import texto_erro, print_seguro
 
 _mlogger = get_logger(__name__)
+
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
 
 _XAML_PATH = os.path.join(_LIB_DIR, u"family_loader_webview.xaml")
 
@@ -75,14 +65,6 @@ _EXT_ROOT = os.path.dirname(os.path.dirname(_LIB_DIR))
 _WEBAPP_DIST_DIR = os.path.join(_EXT_ROOT, u"webapp", u"dist")
 
 _VIRTUAL_HOST = u"appassets"
-
-# Pasta gravável onde o WebView2 guarda seu profile (cache, cookies) — sem
-# isso, ele tenta criar essa pasta ao lado do Revit.exe (dentro de
-# "Program Files") e falha por falta de permissão de escrita.
-_USER_DATA_FOLDER = os.path.join(
-    DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
-    u"FireUtils", u"WebView2UserData",
-)
 
 
 def _valor_enum_allow(core):
@@ -105,6 +87,7 @@ def _valor_enum_allow(core):
     do método do objeto que já temos em mãos garante que é sempre a
     cópia certa.
     """
+    import System
     metodo = core.GetType().GetMethod(u"SetVirtualHostNameToFolderMapping")
     tipo_enum = metodo.GetParameters()[2].ParameterType
     return System.Enum.Parse(tipo_enum, u"Allow")
@@ -267,11 +250,43 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             )
             return  # painel abre em branco — sem WebView configurado
 
-        if not os.path.isdir(_USER_DATA_FOLDER):
-            os.makedirs(_USER_DATA_FOLDER)
+        # Carregado aqui (lazy, não no topo do módulo) — __init__ roda uma
+        # ÚNICA VEZ por sessão do Revit (ver docstring do módulo), então
+        # não há custo repetido em cliques subsequentes no botão.
+        import clr
+        os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
+        # Precisa rodar ANTES de qualquer AddReference/uso do WebView2: o
+        # Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
+        # WebView2Loader.dll (nativo) sem caminho absoluto — carregar só o
+        # assembly gerenciado via AddReferenceToFileAndPath não é
+        # suficiente pro Windows achar a DLL nativa correspondente (daí o
+        # PATH acima, antes destas duas linhas).
+        clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Core.dll"))
+        clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Wpf.dll"))
+        clr.AddReference(u"System")
+        clr.AddReference(u"PresentationFramework")
+        clr.AddReference(u"PresentationCore")
+        clr.AddReference(u"WindowsBase")
+
+        import System
+        import System.Threading
+        import System.Windows.Threading
+        from System import Environment as DotNetEnvironment
+        from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+
+        # Pasta gravável onde o WebView2 guarda seu profile (cache,
+        # cookies) — sem isso, ele tenta criar essa pasta ao lado do
+        # Revit.exe (dentro de "Program Files") e falha por falta de
+        # permissão de escrita.
+        user_data_folder = os.path.join(
+            DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
+            u"FireUtils", u"WebView2UserData",
+        )
+        if not os.path.isdir(user_data_folder):
+            os.makedirs(user_data_folder)
 
         propriedades = CoreWebView2CreationProperties()
-        propriedades.UserDataFolder = _USER_DATA_FOLDER
+        propriedades.UserDataFolder = user_data_folder
         self.WebView.CreationProperties = propriedades
 
         # A thread de UI do Revit nunca instala um
@@ -333,11 +348,20 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.NavigationCompleted += self._ao_navegar
             core.NewWindowRequested += self._ao_pedir_nova_janela
 
+            from System import Uri
             self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
         except Exception as ex:
             self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(texto_erro(ex)))
 
     def _ao_receber_mensagem(self, sender, args):
+        # Import lazy (não no topo do módulo): puxa toda a cascata de
+        # módulos do bridge (family_loader, family_cache,
+        # project_link_bridge, hidrantes_*_bridge, niveis_bridge -> sync,
+        # projeto, normas, hidrantes.*, saidas.calc) — só precisa disso
+        # quando o React manda uma mensagem de verdade, não em todo clique
+        # no botão que só mostra/esconde o painel (ver docstring do
+        # módulo). sys.modules já cacheia depois da primeira mensagem.
+        from family_webview_bridge import processar_mensagem_webview
         processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes, self._postar_mensagem)
 
     def _postar_mensagem(self, tipo, payload):
@@ -395,6 +419,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         sistema em vez disso."""
         args.Handled = True
         try:
+            import System
             info = System.Diagnostics.ProcessStartInfo(args.Uri)
             info.UseShellExecute = True
             System.Diagnostics.Process.Start(info)
