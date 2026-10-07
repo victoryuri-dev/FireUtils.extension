@@ -2963,13 +2963,6 @@
   transform: rotate(180deg);
 }
 
-.hiddim-nota {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 8px;
-  line-height: 1.6;
-}
-
 /* Cartão genérico (Card/CardHeader) */
 .hiddim-cartao {
   background: var(--bg-2);

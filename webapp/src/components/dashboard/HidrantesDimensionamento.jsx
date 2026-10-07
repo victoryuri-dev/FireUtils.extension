@@ -162,11 +162,6 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
           <Icon svg={chevronDownSvg} className={`hiddim-expand-icon ${expandido ? "hiddim-expand-icon-aberto" : ""}`} />
         </button>
       )}
-      <div className="hiddim-nota">
-        Perda de Carga Total = perda de carga (vazão nominal de um hidrante, sem equilíbrio hidráulico) + desnível
-        geométrico até a bomba — usado só pra ranquear. O 1º e o 2º hidrante mais desfavorável recebem a marcha de
-        cálculo completa, com equilíbrio hidráulico, no restante desta etapa.
-      </div>
     </div>
   );
 }
