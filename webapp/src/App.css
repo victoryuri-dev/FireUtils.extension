@@ -36,7 +36,8 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: var(--white);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 16px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
@@ -133,7 +134,8 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: var(--white);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px 12px 12px 14px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
@@ -934,33 +936,37 @@
 }
 
 /* Conectar um projeto — grade de cartões --------------------------------- */
+/* Uma coluna só: a dockpane é estreita (painel lateral do Revit) — duas
+   colunas espremiam demais cada cartão (chips/título/rodapé cortando nas
+   bordas, ver captura reportada), então cada cartão usa a largura toda
+   disponível. */
 .grade-projetos {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  flex-wrap: wrap;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
 /* Cartão de projeto — layout copiado do site (ETOS.FireUtils,
-   src/pages/ProjetosPage.jsx/ProjectCard), cores/tokens dele incluídos
-   (o cartão é propositalmente escuro, igual lá, independente do tema
-   claro/escuro escolhido pro resto da dockpane). */
+   src/pages/ProjetosPage.jsx/ProjectCard). As cores (--cp-*) agora
+   resolvem pros mesmos tokens do tema da dockpane (index.css), em vez de
+   hexadecimais fixos — o cartão ficava sempre escuro mesmo com o resto
+   da dockpane no tema claro, destoando (ver captura reportada). */
 .card-projeto {
-  --cp-bg: #1d1e24;
-  --cp-bg-hover: #16171d;
-  --cp-border: rgba(255, 255, 255, 0.11);
-  --cp-border-hover: rgba(255, 255, 255, 0.13);
-  --cp-ink: #e6e9ed;
-  --cp-ink-faint: rgba(255, 255, 255, 0.5);
-  --cp-green: #1d9e75;
-  --cp-green-dim: rgba(29, 158, 117, 0.12);
-  --cp-green-border: rgba(29, 158, 117, 0.35);
-  --cp-amber: #c98a1a;
-  --cp-amber-dim: rgba(186, 117, 23, 0.12);
-  --cp-amber-border: rgba(186, 117, 23, 0.35);
-  --cp-red: #c0152a;
-  --cp-red-dim: rgba(192, 21, 42, 0.12);
-  --cp-red-border: rgba(192, 21, 42, 0.35);
+  --cp-bg: var(--bg-3);
+  --cp-bg-hover: var(--bg-2);
+  --cp-border: var(--border);
+  --cp-border-hover: var(--border);
+  --cp-ink: var(--text);
+  --cp-ink-faint: var(--text-3);
+  --cp-green: var(--green);
+  --cp-green-dim: var(--green-dim);
+  --cp-green-border: var(--green-border);
+  --cp-amber: var(--amber);
+  --cp-amber-dim: var(--amber-dim);
+  --cp-amber-border: var(--amber-border);
+  --cp-red: var(--accent);
+  --cp-red-dim: var(--red-dim);
+  --cp-red-border: var(--red-border);
 
   display: flex;
   flex-direction: column;
@@ -1063,7 +1069,7 @@
 }
 
 .card-projeto-chip-neutral {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--pill-bg);
   border-color: var(--cp-border);
   color: var(--cp-ink-faint);
 }
