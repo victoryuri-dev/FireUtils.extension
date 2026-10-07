@@ -422,15 +422,15 @@ class _JanelaResultado(forms.WPFWindow):
 def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                           v_max_tubo, v_max_succao, p_ref_desc,
                           p_hd01_ref, p_hd02_ref, Pmin, Qs_lmin,
-                          comprimento_min_velocidade=None):
+                          comprimento_min_velocidade=None,
+                          houve_falha_velocidade=False):
     """
     Resumo final mostrado ao término de "Dimensionar Hidrantes": só
     verificações e resultados finais (velocidade nos quatro trechos —
     sucção, recalque e os dois ramais até os hidrantes —,
     pressão/vazão nos hidrantes mais desfavoráveis e no Ponto A, diferença
     de pressão entre os ramais após o equilíbrio e demanda do sistema) —
-    não o passo a passo completo, que é o botão "Memorial de Cálculo". Só
-    é chamada depois que todas as verificações normativas passaram.
+    não o passo a passo completo, que é o botão "Memorial de Cálculo".
     Eficiência e potência da bomba não entram mais aqui — o site
     (ETOS.FireUtils) faz esse dimensionamento a partir de Qt/Ht.
 
@@ -438,12 +438,24 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
     sucção/recalque mais curtos que isso (ex.: redução na entrada/saída
     da bomba) ficam de fora da tabela — não foram verificados, não é que
     passaram. Não vale para os ramais até os hidrantes.
+
+    houve_falha_velocidade: a verificação de velocidade não interrompe
+    mais o dimensionamento (ver "Dimensionar Hidrantes" script.py) — o RT
+    já viu o aviso por trecho na hora; aqui só reflete o resultado de fato
+    na tabela (pill vermelho onde couber) e no banner, em vez de mostrar
+    tudo como aprovado quando não foi.
     """
     janela = _JanelaResultado(
         titulo=u"Dimensionamento de Hidrantes",
         subtitulo=u"Sistema: {}  ·  Método: {}  ·  Norma: {}".format(
             valor_sistema, metodo_calculo, norma),
-        status=u"ok",
+        status=u"ok" if not houve_falha_velocidade else u"erro",
+        banner_texto=(
+            u"{} Dimensionamento concluído com ressalva — velocidade acima do "
+            u"limite normativo em um ou mais trechos (ver seção 1 abaixo). Os "
+            u"dados foram salvos mesmo assim; revise os diâmetros indicados.".format(SIM_X)
+            if houve_falha_velocidade else None
+        ),
     )
 
     janela.secao(u"1. Velocidade nos Trechos")
@@ -461,7 +473,7 @@ def mostrar_resultado_ok(res, valor_sistema, metodo_calculo, norma,
                               u"{:.2f}".format(j["Q_lmin"]),
                               u"{:.3f}".format(s["V"]),
                               u"{:.1f}".format(limite),
-                              _pill(True)])
+                              _pill(s["V"] <= limite + 1e-9)])
     janela.tabela([u"Trecho", u"DN (mm)", u"Q (L/min)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
                   linhas_v,
                   alinhas=[u"left", u"right", u"right", u"right", u"right", u"left"])
@@ -618,9 +630,12 @@ def mostrar_bloqueio_equilibrio(equilibrio, norma, ids_problema=None):
 
 
 def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas, ids_problema=None):
-    """Janela mostrando quais diâmetros do trecho passaram do limite de
-    velocidade — chamada por "Dimensionar Hidrantes" quando o
-    dimensionamento é interrompido nessa verificação.
+    """Janela de aviso mostrando quais diâmetros do trecho passaram do
+    limite de velocidade — chamada por "Dimensionar Hidrantes" quando essa
+    verificação não é atendida. Não interrompe o dimensionamento (ao
+    contrário das demais verificações normativas): o RT é avisado aqui, e
+    o cálculo segue até o fim — o resumo final mostra a mesma reprovação,
+    e os dados são salvos/sincronizados mesmo assim.
 
     Retorna a lista de ElementId a selecionar no Revit se o usuário
     clicou "Mostrar no Projeto", ou None — ver habilitar_botao_mostrar()."""
@@ -628,6 +643,8 @@ def mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas, ids_problema=Non
         titulo=u"Verificação não atendida",
         subtitulo=u"Velocidade acima do limite — {}".format(nome_trecho),
         status=u"erro",
+        banner_texto=u"{} Velocidade acima do limite normativo — o dimensionamento "
+                     u"continua mesmo assim; revise o diâmetro indicado abaixo.".format(SIM_X),
     )
     janela.tabela([u"DN (mm)", u"V (m/s)", u"Limite (m/s)", u"Verificação"],
                   [[u"{:.1f}".format(s["d_mm"]), u"**{:.3f}**".format(s["V"]),
