@@ -1995,6 +1995,139 @@
   color: var(--text);
 }
 
+/* Painel "Correlacionar Níveis" (CorrelacaoNiveisModal.jsx) ------------- */
+.niveis-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 300;
+  animation: surgir 0.15s;
+}
+
+.niveis-modal-caixa {
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  width: 560px;
+  max-width: 95vw;
+  max-height: 85vh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.niveis-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.niveis-modal-titulo {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.niveis-modal-ajuda {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.niveis-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.niveis-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.niveis-coluna-titulo {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.niveis-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.niveis-linha-fixa {
+  background: var(--bg);
+}
+
+.niveis-linha-vazia .niveis-linha-nome {
+  color: var(--text-3);
+}
+
+.niveis-linha-sobre {
+  border-color: var(--accent);
+  background: rgba(234, 19, 48, 0.04);
+}
+
+.niveis-linha-arrastando {
+  opacity: 0.4;
+}
+
+.niveis-linha-nome {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.niveis-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  padding: 2px;
+  cursor: grab;
+}
+
+.niveis-grip:active {
+  cursor: grabbing;
+}
+
+.niveis-grip .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.niveis-modal-rodape {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
 /* Formulário de ambiente (seShared.jsx) --------------------------------------- */
 .se-form {
   display: flex;
