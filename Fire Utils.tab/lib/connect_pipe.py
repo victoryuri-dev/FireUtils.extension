@@ -72,6 +72,14 @@ Etapa 2 — Roteamento genérico em até 3 trechos retos:
 Casos PIPE_REF (modo_conexao_ref):
   corpo  → Tê no ponto final da rota (BreakCurve)
   ponta  → joelho na ponta livre de pipe_ref
+
+PIPE_REF nem sempre é outro Pipe: o clique 2 também aceita um FITTING de
+MEP (joelho, tê, válvula etc.) que tenha algum conector LIVRE — ex.: um
+joelho com uma ponta solta. Nesse caso só o modo "ponta" existe (um
+fitting não tem corpo pra abrir Tê) e a conexão é feita direto nesse
+conector livre, como se fosse a ponta de um Pipe (ver _FiltroPipeRef,
+_conector_livre_mais_proximo e o branch "não é Pipe" em
+_preparar_alvo_nominal/_construir_conexao).
 """
 
 import os
@@ -225,8 +233,21 @@ def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref):
     por sobreposição (que só é decidido depois, já com a ordem escolhida —
     ver o bloco de _ajustar_alvo_corpo_invertido em _construir_conexao).
     Retorna (P_final, d_ref). Propaga _ConexaoError se modo "ponta" e
-    nenhuma ponta de pipe_ref estiver livre.
+    nenhuma ponta de pipe_ref estiver livre, ou se pipe_ref for um
+    FITTING (joelho/tê/válvula) sem nenhum conector livre.
+
+    Se pipe_ref não for um Pipe (ex.: joelho com uma ponta solta), só
+    "ponta" faz sentido — não há corpo pra abrir Tê — e o alvo é o
+    conector livre mais próximo do clique, com d_ref = direção desse
+    conector (a direção que um tubo conectado ali seguiria).
     """
+    if not isinstance(pipe_ref, Pipe):
+        conn = _conector_livre_mais_proximo(pipe_ref, pt_click_ref)
+        if conn is None:
+            raise _ConexaoError(
+                u"O elemento de referência não tem nenhum conector livre para conectar.")
+        return conn.Origin, _conn_dir(conn)
+
     loc_ref = pipe_ref.Location.Curve
     pt_A    = loc_ref.GetEndPoint(0)
     pt_B    = loc_ref.GetEndPoint(1)
@@ -376,6 +397,33 @@ def _conn_nearest(pipe, pt):
     return best
 
 
+def _free_connectors(element):
+    """Conectores LIVRES (sem conexão) de element — Pipe ou FamilyInstance
+    de MEP (joelho, tê, válvula etc., via MEPModel.ConnectorManager)."""
+    try:
+        mgr = element.ConnectorManager
+    except AttributeError:
+        try:
+            mgr = element.MEPModel.ConnectorManager
+        except Exception:
+            return []
+    return [c for c in mgr.Connectors if not c.IsConnected]
+
+
+def _conector_livre_mais_proximo(element, pt_click):
+    """Conector livre de element mais próximo de pt_click (ou qualquer um,
+    se pt_click for None ou só houver um). None se não houver conector
+    livre — usado pra permitir conectar pipe_desc direto num conector
+    livre de um FITTING (ex.: joelho com uma ponta solta), não só na
+    ponta/corpo de outro Pipe."""
+    livres = _free_connectors(element)
+    if not livres:
+        return None
+    if pt_click is None:
+        return livres[0]
+    return min(livres, key=lambda c: c.Origin.DistanceTo(pt_click))
+
+
 def _pipe_params(doc, pipe):
     """Retorna (pipe_type_id, sys_type_id, level_id, diam_ft) herdados de pipe."""
     pipe_type_id = pipe.GetTypeId()
@@ -407,6 +455,14 @@ def _pipe_params(doc, pipe):
         level_id = pipe.ReferenceLevel.Id
     except Exception:
         level_id = ElementId.InvalidElementId
+    if level_id == ElementId.InvalidElementId:
+        # Fallback pra elementos sem ReferenceLevel (ex.: FamilyInstance de
+        # fitting, quando pipe_ref é um conector livre de joelho/tê em vez
+        # de outro Pipe) — LevelId existe em FamilyInstance normalmente.
+        try:
+            level_id = pipe.LevelId
+        except Exception:
+            pass
 
     diam_ft = _to_ft(0.065)
     for bip in [BuiltInParameter.RBS_PIPE_DIAMETER_PARAM,
@@ -504,6 +560,10 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
     joelho/ConnectTo — já está tudo resolvido aqui). False se não são
     colineares (ou é pipe_desc/pipe_ref) — segue o fluxo normal (joelho/Tê).
     """
+    if not isinstance(pipe_ref, Pipe):
+        # Fitting (joelho/tê/válvula) não é "esticável" — não tem
+        # Location.Curve pra estender. Segue pro joelho normal.
+        return False
     d1, d2 = _conn_dir(c_ref_end), _conn_dir(conn_final)
     if d1 is None or d2 is None or d1.DotProduct(d2) >= -0.999:
         return False
@@ -606,6 +666,34 @@ class _FiltroPipe(ISelectionFilter):
             return True
 
 
+class _FiltroPipeRef(ISelectionFilter):
+    """Filtro do clique de referência (2º clique): tudo que _FiltroPipe já
+    aceita (Pipe, só perto da linha central) MAIS qualquer FamilyInstance
+    de MEP com pelo menos um conector LIVRE — um joelho, tê ou válvula com
+    uma ponta solta, por exemplo. Permite conectar o tubo desconectado
+    direto nesse conector, sem precisar que a referência seja
+    necessariamente outro Pipe. doc é obrigatório (precisa consultar o
+    elemento pra checar conectores livres)."""
+    def __init__(self, doc):
+        self.doc = doc
+
+    def AllowElement(self, e):
+        if isinstance(e, Pipe):
+            return True
+        if isinstance(e, FamilyInstance):
+            return bool(_free_connectors(e))
+        return False
+
+    def AllowReference(self, r, p):
+        el = self.doc.GetElement(r.ElementId)
+        if isinstance(el, Pipe):
+            try:
+                return el.Location.Curve.Project(p).Distance <= _TOL_LINHA_CENTRAL
+            except Exception:
+                return True
+        return True  # fitting: qualquer clique nele vale (sem linha central)
+
+
 def _snapshot_ids(doc):
     """
     IDs de todos os Pipe e FamilyInstance do documento — usado pra
@@ -696,9 +784,17 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         loc_desc = pipe_desc.Location.Curve
         self._p0_desc_orig = loc_desc.GetEndPoint(0)
         self._p1_desc_orig = loc_desc.GetEndPoint(1)
-        loc_ref = pipe_ref.Location.Curve
-        self._p0_ref_orig = loc_ref.GetEndPoint(0)
-        self._p1_ref_orig = loc_ref.GetEndPoint(1)
+        # pipe_ref pode ser um FITTING (joelho/tê/válvula com conector
+        # livre) em vez de outro Pipe — sem Location.Curve pra guardar; a
+        # prévia nunca mexe na geometria dele nesse caso (só cria
+        # elementos novos em volta), então não há nada pra restaurar.
+        if isinstance(pipe_ref, Pipe):
+            loc_ref = pipe_ref.Location.Curve
+            self._p0_ref_orig = loc_ref.GetEndPoint(0)
+            self._p1_ref_orig = loc_ref.GetEndPoint(1)
+        else:
+            self._p0_ref_orig = None
+            self._p1_ref_orig = None
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -746,10 +842,11 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self.pipe_desc.Location.Curve = Line.CreateBound(self._p0_desc_orig, self._p1_desc_orig)
         except Exception:
             pass
-        try:
-            self.pipe_ref.Location.Curve = Line.CreateBound(self._p0_ref_orig, self._p1_ref_orig)
-        except Exception:
-            pass
+        if self._p0_ref_orig is not None:
+            try:
+                self.pipe_ref.Location.Curve = Line.CreateBound(self._p0_ref_orig, self._p1_ref_orig)
+            except Exception:
+                pass
 
     def _finalizar(self, confirmado):
         """Fecha a prévia de vez: se confirmado, não mexe em nada — o que
@@ -1044,11 +1141,12 @@ def run(doc, uidoc, output):
     except Exception:
         pyscript.exit()
 
-    # ── Clique 2: PIPE_REF (corpo ou ponta) ─────────────────────────────────
+    # ── Clique 2: PIPE_REF (corpo, ponta, ou conector livre de um fitting) ──
     try:
         ref2         = uidoc.Selection.PickObject(
-            ObjectType.PointOnElement, _FiltroPipe(doc),
-            u"[2/2] Clique no tubo referência — corpo para Tê, ponta para joelho"
+            ObjectType.PointOnElement, _FiltroPipeRef(doc),
+            u"[2/2] Clique no tubo referência (corpo para Tê, ponta para "
+            u"joelho) ou no conector livre de um joelho/tê/válvula"
         )
         pipe_ref     = doc.GetElement(ref2.ElementId)
         pt_click_ref = _global_pt(ref2)
@@ -1060,15 +1158,20 @@ def run(doc, uidoc, output):
                     title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
-    # Clique caiu exatamente numa ponta de pipe_ref? Se sim, a resposta pra
-    # "onde conectar no tubo de referência?" já é óbvia — pula a pergunta.
-    clicou_ponta_exata = False
-    if pt_click_ref is not None:
-        loc_ref_click = pipe_ref.Location.Curve
-        pt_a_click = loc_ref_click.GetEndPoint(0)
-        pt_b_click = loc_ref_click.GetEndPoint(1)
-        clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
-                               pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
+    # Clique caiu exatamente numa ponta de pipe_ref (ou pipe_ref é um
+    # FITTING, que só tem o modo "ponta" — conector livre, sem corpo pra
+    # Tê)? Se sim, a resposta pra "onde conectar no tubo de referência?"
+    # já é óbvia — pula a pergunta.
+    if not isinstance(pipe_ref, Pipe):
+        clicou_ponta_exata = True
+    else:
+        clicou_ponta_exata = False
+        if pt_click_ref is not None:
+            loc_ref_click = pipe_ref.Location.Curve
+            pt_a_click = loc_ref_click.GetEndPoint(0)
+            pt_b_click = loc_ref_click.GetEndPoint(1)
+            clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
+                                   pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
 
     # ── Preferências de roteamento, com prévia ao vivo no modelo ────────────
     # Show() (modeless), não ShowDialog() — deixa o Revit responder
@@ -1198,9 +1301,16 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                               antiga por proximidade do clique.
     """
 
+    eh_fitting_ref = not isinstance(pipe_ref, Pipe)
+
     # ── Endpoint de PIPE_DESC selecionado pelo clique ────────────────────────
     if pt_click_desc is not None:
         conn_desc = _conn_nearest(pipe_desc, pt_click_desc)
+    elif eh_fitting_ref:
+        conn_ref_fb = _conector_livre_mais_proximo(pipe_ref, None)
+        mid_fb = (conn_ref_fb.Origin if conn_ref_fb is not None
+                  else pipe_desc.Location.Curve.GetEndPoint(0))
+        conn_desc = _conn_nearest(pipe_desc, mid_fb)
     else:
         loc_fb = pipe_ref.Location.Curve
         mid_fb = XYZ((loc_fb.GetEndPoint(0).X + loc_fb.GetEndPoint(1).X) / 2,
@@ -1219,46 +1329,62 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     P_start = conn_desc.Origin
 
     # ── Geometria de PIPE_REF ────────────────────────────────────────────────
-    loc_ref = pipe_ref.Location.Curve
-    pt_A    = loc_ref.GetEndPoint(0)
-    pt_B    = loc_ref.GetEndPoint(1)
-    d_ref   = (pt_B - pt_A).Normalize()
-
-    # ── Modo de conexão: ponta ou corpo? ────────────────────────────────────
-    # Decisão explícita do usuário via diálogo, por padrão — não é mais
-    # adivinhada por um raio de tolerância (dava falso positivo em pipe_ref
-    # curto: corpo inteiro "parecia" ponta).
-    if modo_conexao_ref == u"ponta":
+    # pipe_ref pode ser um FITTING (joelho/tê/válvula) com conector livre em
+    # vez de outro Pipe — nesse caso só "ponta" faz sentido (sem corpo pra
+    # abrir Tê) e o alvo já é o próprio conector livre, não uma projeção
+    # num segmento (ver _preparar_alvo_nominal).
+    if eh_fitting_ref:
+        modo_conexao_ref = u"ponta"
+        conn_ref_livre = _conector_livre_mais_proximo(pipe_ref, pt_click_ref)
+        if conn_ref_livre is None:
+            raise _ConexaoError(
+                u"O elemento de referência não tem nenhum conector livre para conectar.")
+        pt_A = pt_B = conn_ref_livre.Origin
+        d_ref        = _conn_dir(conn_ref_livre)
         clicou_ponta = True
-        pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
-    elif modo_conexao_ref == u"corpo":
-        clicou_ponta = False
-        pt_endpoint  = None
-    elif pt_click_ref is not None:
-        # "auto" (compatibilidade, sem diálogo) — heurística antiga por
-        # proximidade do clique, com raio proporcional ao comprimento de
-        # pipe_ref (até o teto de TOL_PONTA_REF).
-        L_ref          = pt_A.DistanceTo(pt_B)
-        tol_ponta_ref  = min(TOL_PONTA_REF, L_ref * 0.25)
-        da = pt_click_ref.DistanceTo(pt_A)
-        db = pt_click_ref.DistanceTo(pt_B)
-        clicou_ponta = da < tol_ponta_ref or db < tol_ponta_ref
-        pt_endpoint  = pt_A if da < db else pt_B
+        pt_endpoint  = pt_A
     else:
-        clicou_ponta = False
-        pt_endpoint  = None
+        loc_ref = pipe_ref.Location.Curve
+        pt_A    = loc_ref.GetEndPoint(0)
+        pt_B    = loc_ref.GetEndPoint(1)
+        d_ref   = (pt_B - pt_A).Normalize()
+
+        # ── Modo de conexão: ponta ou corpo? ────────────────────────────────
+        # Decisão explícita do usuário via diálogo, por padrão — não é mais
+        # adivinhada por um raio de tolerância (dava falso positivo em
+        # pipe_ref curto: corpo inteiro "parecia" ponta).
+        if modo_conexao_ref == u"ponta":
+            clicou_ponta = True
+            pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+        elif modo_conexao_ref == u"corpo":
+            clicou_ponta = False
+            pt_endpoint  = None
+        elif pt_click_ref is not None:
+            # "auto" (compatibilidade, sem diálogo) — heurística antiga por
+            # proximidade do clique, com raio proporcional ao comprimento de
+            # pipe_ref (até o teto de TOL_PONTA_REF).
+            L_ref          = pt_A.DistanceTo(pt_B)
+            tol_ponta_ref  = min(TOL_PONTA_REF, L_ref * 0.25)
+            da = pt_click_ref.DistanceTo(pt_A)
+            db = pt_click_ref.DistanceTo(pt_B)
+            clicou_ponta = da < tol_ponta_ref or db < tol_ponta_ref
+            pt_endpoint  = pt_A if da < db else pt_B
+        else:
+            clicou_ponta = False
+            pt_endpoint  = None
 
     # ── Etapa 1: extensão direta ─────────────────────────────────────────────
     # Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref,
     # apenas estende e conecta sem criar tubos extras. Só roda no modo "auto"
     # (compatibilidade, sem diálogo) — com ponta/corpo escolhidos
     # explicitamente pelo usuário, pular esse atalho evita que o resultado
-    # saia "silenciosamente" diferente do que foi pedido no diálogo.
+    # saia "silenciosamente" diferente do que foi pedido no diálogo. Nunca
+    # roda pra pipe_ref fitting (sempre "ponta", nunca "auto").
     loc_desc = pipe_desc.Location.Curve
     p_desc_0 = loc_desc.GetEndPoint(0)
     p_desc_1 = loc_desc.GetEndPoint(1)
     L_desc   = p_desc_0.DistanceTo(p_desc_1)
-    if modo_conexao_ref == u"auto" and L_desc > TOL:
+    if not eh_fitting_ref and modo_conexao_ref == u"auto" and L_desc > TOL:
         P_other = (p_desc_1 if p_desc_0.DistanceTo(P_start) < p_desc_1.DistanceTo(P_start)
                    else p_desc_0)
         d_ext = XYZ(

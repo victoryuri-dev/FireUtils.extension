@@ -10,6 +10,8 @@ Fluxo de cliques
 ----------------
   1. Selecionar o abrigo de referência
   2. Clicar no tubo de referência — corpo → Tê  |  ponta → joelhos em L
+     (ou no conector LIVRE de um fitting — joelho/tê/válvula — pra
+     conectar direto nele; ver connect_pipe._FiltroPipeRef)
   3. Janela WPF (connect_shelter_opcoes.xaml, classe _JanelaOpcoesAbrigo)
      pergunta:
        • lado do ramal (esquerda/direita da face do abrigo)
@@ -74,7 +76,7 @@ from hydrant_insert_core import (
     _angulo_entre, _conector_mais_proximo, _setar_diametro_ft,
 )
 from connect_pipe import (
-    _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params, TOL_SEG,
+    _construir_conexao, _ConexaoError, _FiltroPipeRef, _pipe_params, TOL_SEG,
     _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO, _snapshot_ids,
 )
 from family_loader_events import criar_fila_acoes
@@ -301,10 +303,17 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
 
         # Estado original de pipe_ref (antes de qualquer prévia) — cada
         # ciclo restaura isso antes de construir a prévia nova, já que o
-        # modo "corpo" quebra essa curva num Tê.
-        loc_ref = pipe_ref.Location.Curve
-        self._p0_ref_orig = loc_ref.GetEndPoint(0)
-        self._p1_ref_orig = loc_ref.GetEndPoint(1)
+        # modo "corpo" quebra essa curva num Tê. pipe_ref pode ser um
+        # FITTING (joelho/tê/válvula com conector livre) em vez de outro
+        # Pipe — sem Location.Curve, e a prévia nunca mexe na geometria
+        # dele nesse caso, então não há nada pra guardar/restaurar.
+        if isinstance(pipe_ref, Pipe):
+            loc_ref = pipe_ref.Location.Curve
+            self._p0_ref_orig = loc_ref.GetEndPoint(0)
+            self._p1_ref_orig = loc_ref.GetEndPoint(1)
+        else:
+            self._p0_ref_orig = None
+            self._p1_ref_orig = None
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -350,6 +359,8 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self._elementos_criados = set()
 
     def _restaurar_curva_original(self):
+        if self._p0_ref_orig is None:
+            return
         try:
             self.pipe_ref.Location.Curve = Line.CreateBound(self._p0_ref_orig, self._p1_ref_orig)
         except Exception:
@@ -688,11 +699,12 @@ def conectar_abrigo_preview(doc, uidoc, output):
     except Exception:
         dir_face = XYZ(0.0, 1.0, 0.0)
 
-    # ── Clique 2: tubo de referência ─────────────────────────────────────
+    # ── Clique 2: tubo de referência (ou conector livre de um fitting) ────
     try:
         ref_p        = uidoc.Selection.PickObject(
-            ObjectType.PointOnElement, _FiltroPipe(doc),
-            u"[2/2] Clique no tubo de referência — corpo para Tê, ponta para joelho"
+            ObjectType.PointOnElement, _FiltroPipeRef(doc),
+            u"[2/2] Clique no tubo de referência (corpo para Tê, ponta "
+            u"para joelho) ou no conector livre de um joelho/tê/válvula"
         )
         pipe_ref     = doc.GetElement(ref_p.ElementId)
         pt_click_ref = ref_p.GlobalPoint
@@ -702,15 +714,19 @@ def conectar_abrigo_preview(doc, uidoc, output):
     # Tipo e sistema de tubulação SEMPRE herdados do tubo de referência
     pipe_type_id, sys_type_id, _, _ = _pipe_params(doc, pipe_ref)
 
-    # Clique caiu exatamente numa ponta de pipe_ref? Se sim, a resposta pra
-    # "onde conectar no tubo de referência?" já é óbvia — pula a pergunta.
-    clicou_ponta_exata = False
-    if pt_click_ref is not None:
-        loc_ref_click = pipe_ref.Location.Curve
-        pt_a_click = loc_ref_click.GetEndPoint(0)
-        pt_b_click = loc_ref_click.GetEndPoint(1)
-        clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
-                               pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
+    # Clique caiu exatamente numa ponta de pipe_ref (ou pipe_ref é um
+    # FITTING, que só tem o modo "ponta")? Se sim, a resposta pra "onde
+    # conectar no tubo de referência?" já é óbvia — pula a pergunta.
+    if not isinstance(pipe_ref, Pipe):
+        clicou_ponta_exata = True
+    else:
+        clicou_ponta_exata = False
+        if pt_click_ref is not None:
+            loc_ref_click = pipe_ref.Location.Curve
+            pt_a_click = loc_ref_click.GetEndPoint(0)
+            pt_b_click = loc_ref_click.GetEndPoint(1)
+            clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
+                                   pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
 
     # ── Preferências (lado + altura), com prévia ao vivo no modelo ─────────
     # Show() (modeless), não ShowDialog() — deixa o Revit responder
