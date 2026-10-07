@@ -8,6 +8,7 @@ import { formatarArea, formatarMetros, formatarCargaIncendio } from "../../lib/f
 import { fmtNum } from "../../lib/numero";
 import { dadosHidrantes, pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
 import { getSeNorma, getExtintoresNorma } from "../../lib/normasCentral";
+import { capacidadeMinimaPorRisco } from "../../lib/extintoresCapacidadeMinima";
 import { contarSaidasPavimento, getDistanciaPavimento, tipoEscadaEstrutura } from "../../data/se_calc";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
@@ -80,6 +81,14 @@ function capacidadeExtintoraExigida(norma) {
   return tipo?.capacidadeMinima || null;
 }
 
+/** Texto das opções de capacidade mínima (Tabelas 4/5) pro risco atual —
+ * nível alto devolve duas opções equivalentes, unidas por "ou". */
+function formatarCapacidadePorRisco(riscoChave, classeIncendio) {
+  const opcoes = capacidadeMinimaPorRisco(riscoChave, classeIncendio);
+  if (opcoes.length === 0) return "—";
+  return opcoes.map((o) => `${o.capacidade} (máx. ${o.distanciaMaxima} m)`).join(" ou ");
+}
+
 function CartaoExtintores({ norma, cargaIncendio }) {
   if (norma === undefined) {
     return (
@@ -114,6 +123,14 @@ function CartaoExtintores({ norma, cargaIncendio }) {
         <div>
           <dt>Caminhamento máximo:</dt>
           <dd>{caminhamento}</dd>
+        </div>
+        <div>
+          <dt>Capacidade mínima (classe A):</dt>
+          <dd>{formatarCapacidadePorRisco(riscoChave, "A")}</dd>
+        </div>
+        <div>
+          <dt>Capacidade mínima (classe B):</dt>
+          <dd>{formatarCapacidadePorRisco(riscoChave, "B")}</dd>
         </div>
       </dl>
     </div>
