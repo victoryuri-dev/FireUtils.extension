@@ -239,20 +239,28 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
     panel_title = u"FireUtils"
 
     def __init__(self):
-        forms.WPFPanel.__init__(self)
-
-        self.fila_acoes = criar_fila_acoes()
-
-        if not os.path.isdir(_WEBAPP_DIST_DIR):
-            self._erro_fatal(
-                u"Build do frontend não encontrado em:\n{}\n\n"
-                u"Rode `npm install && npm run build` dentro de webapp/.".format(_WEBAPP_DIST_DIR)
-            )
-            return  # painel abre em branco — sem WebView configurado
-
         # Carregado aqui (lazy, não no topo do módulo) — __init__ roda uma
         # ÚNICA VEZ por sessão do Revit (ver docstring do módulo), então
         # não há custo repetido em cliques subsequentes no botão.
+        #
+        # CRÍTICO: isto precisa rodar ANTES de forms.WPFPanel.__init__(self)
+        # logo abaixo — é esse __init__ da classe-base que carrega o XAML
+        # (family_loader_webview.xaml), e o XAML referencia
+        # Microsoft.Web.WebView2.Wpf por conta própria
+        # (`assembly=Microsoft.Web.WebView2.Wpf`), resolvido pelo binder
+        # padrão do .NET assim que o elemento <wv2:WebView2> é parseado.
+        # Se os assemblies do WebView2 ainda não tiverem sido carregados
+        # explicitamente a partir daqui (webview2_runtime/) nesse momento,
+        # o binder resolve esse nome por conta própria — e o
+        # clr.AddReferenceToFileAndPath logo abaixo acaba carregando uma
+        # SEGUNDA cópia/identidade do mesmo assembly pro lado do Python.
+        # Resultado: self.WebView (construído pelo XAML, 1ª cópia) e
+        # CoreWebView2CreationProperties (Python, 2ª cópia) são tipos
+        # .NET diferentes com o mesmo nome — e
+        # `self.WebView.CreationProperties = propriedades` mais abaixo
+        # falha com "TypeError: expected CoreWebView2CreationProperties,
+        # got CoreWebView2CreationProperties" (mesmo texto dos dois
+        # lados, tipos diferentes por baixo).
         import clr
         os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
         # Precisa rodar ANTES de qualquer AddReference/uso do WebView2: o
@@ -273,6 +281,17 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         import System.Windows.Threading
         from System import Environment as DotNetEnvironment
         from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+
+        forms.WPFPanel.__init__(self)
+
+        self.fila_acoes = criar_fila_acoes()
+
+        if not os.path.isdir(_WEBAPP_DIST_DIR):
+            self._erro_fatal(
+                u"Build do frontend não encontrado em:\n{}\n\n"
+                u"Rode `npm install && npm run build` dentro de webapp/.".format(_WEBAPP_DIST_DIR)
+            )
+            return  # painel abre em branco — sem WebView configurado
 
         # Pasta gravável onde o WebView2 guarda seu profile (cache,
         # cookies) — sem isso, ele tenta criar essa pasta ao lado do
