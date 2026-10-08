@@ -65,6 +65,51 @@ _EXT_ROOT = os.path.dirname(os.path.dirname(_LIB_DIR))
 _WEBAPP_DIST_DIR = os.path.join(_EXT_ROOT, u"webapp", u"dist")
 
 _VIRTUAL_HOST = u"appassets"
+_URL_LOCAL = u"https://{}/index.html".format(_VIRTUAL_HOST)
+
+# Variável de ambiente opcional com a URL de um frontend publicado na web.
+# Sem ela, o painel carrega de webapp/dist/ exatamente como sempre fez —
+# definir a variável é a única forma de mudar esse comportamento.
+#
+# Serve para publicar correções da interface sem gerar instalador novo: o
+# .rfa, o Python e as DLLs continuam vindo da instalação local, só o HTML/JS
+# passa a vir do servidor. Se a navegação remota falhar por qualquer motivo,
+# _ao_navegar volta para o build local sozinho.
+_VAR_URL_REMOTA = u"FIREUTILS_WEBAPP_URL"
+
+
+def _url_remota_configurada():
+    """URL do frontend publicado, ou None para usar o build local."""
+    url = os.environ.get(_VAR_URL_REMOTA)
+    if not url:
+        return None
+
+    url = url.strip()
+    if not url:
+        return None
+
+    # http:// sem TLS deixaria o bridge (que carrega família e grava
+    # arquivo no projeto) exposto a qualquer um na mesma rede.
+    if not url.lower().startswith(u"https://"):
+        _mlogger.warning(
+            u"{} ignorada: só https é aceito (valor: {}).".format(_VAR_URL_REMOTA, url)
+        )
+        return None
+
+    return url
+
+
+def _origem_de(url):
+    """
+    scheme://host:porta de uma URL, para comparar origens. Devolve None se
+    a URL for inválida.
+    """
+    try:
+        from System import Uri
+        uri = Uri(url)
+        return u"{}://{}:{}".format(uri.Scheme.lower(), uri.Host.lower(), uri.Port)
+    except Exception:
+        return None
 
 
 def _valor_enum_allow(core):
@@ -286,6 +331,25 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
         self.fila_acoes = criar_fila_acoes()
 
+        # Definidos antes do _erro_fatal abaixo: se o build local faltar, o
+        # __init__ retorna cedo e estes atributos precisam existir mesmo
+        # assim, senão qualquer evento que chegue depois quebra com
+        # AttributeError em vez da mensagem de erro de verdade.
+        self._url_remota = _url_remota_configurada()
+        self._caiu_para_local = False
+
+        # O bridge só aceita mensagem vinda de uma destas origens. O build
+        # local é sempre confiável; a remota entra apenas quando
+        # configurada.
+        self._origens_confiaveis = set()
+        origem_local = _origem_de(_URL_LOCAL)
+        if origem_local:
+            self._origens_confiaveis.add(origem_local)
+        if self._url_remota:
+            origem_remota = _origem_de(self._url_remota)
+            if origem_remota:
+                self._origens_confiaveis.add(origem_remota)
+
         if not os.path.isdir(_WEBAPP_DIST_DIR):
             self._erro_fatal(
                 u"Build do frontend não encontrado em:\n{}\n\n"
@@ -360,6 +424,9 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.Settings.AreDefaultContextMenusEnabled = True
             core.Settings.AreDevToolsEnabled = True
 
+            # Mapeado mesmo quando a navegação vai para a URL remota: é o
+            # que permite o fallback de _ao_navegar funcionar sem precisar
+            # reconfigurar o core no meio de uma falha.
             core.SetVirtualHostNameToFolderMapping(
                 _VIRTUAL_HOST, _WEBAPP_DIST_DIR, _valor_enum_allow(core)
             )
@@ -368,11 +435,51 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.NewWindowRequested += self._ao_pedir_nova_janela
 
             from System import Uri
-            self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
+            if self._url_remota:
+                _mlogger.info(u"Carregando o frontend de {}".format(self._url_remota))
+                self.WebView.Source = Uri(self._url_remota)
+            else:
+                self.WebView.Source = Uri(_URL_LOCAL)
         except Exception as ex:
             self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(texto_erro(ex)))
 
+    def _origem_confiavel(self, args):
+        """
+        Só processa mensagem vinda do build local ou da URL remota
+        configurada.
+
+        Esse canal manda o Python carregar família e gravar o firedata.json
+        do projeto, e o WebView2 o expõe a qualquer página que venha a
+        carregar — não só à nossa. Enquanto a página vinha de uma pasta do
+        disco isso era inofensivo; apontando para a web, uma navegação
+        inesperada passaria a conversar com o Revit.
+        """
+        try:
+            origem = _origem_de(args.Source)
+        except Exception:
+            origem = None
+
+        if origem is None:
+            # Origem ilegível: no modo local a página só pode ter vindo do
+            # disco, então seguir é seguro e preserva o comportamento atual.
+            # Com frontend remoto, recusar é a escolha conservadora.
+            if self._url_remota:
+                _mlogger.warning(u"Mensagem do WebView2 recusada: origem não identificada.")
+                return False
+            return True
+
+        if origem in self._origens_confiaveis:
+            return True
+
+        _mlogger.warning(
+            u"Mensagem do WebView2 recusada, origem não confiável: {}".format(origem)
+        )
+        return False
+
     def _ao_receber_mensagem(self, sender, args):
+        if not self._origem_confiavel(args):
+            return
+
         # Import lazy (não no topo do módulo): puxa toda a cascata de
         # módulos do bridge (family_loader, family_cache,
         # project_link_bridge, hidrantes_*_bridge, niveis_bridge -> sync,
@@ -449,11 +556,37 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho
         errado no SetVirtualHostNameToFolderMapping, dist/ incompleto),
         args.IsSuccess vem False com o motivo em WebErrorStatus — sem isso,
-        o painel só ficaria em branco, sem nenhuma pista do porquê."""
-        if not args.IsSuccess:
-            self._erro_fatal(
-                u"Falha ao carregar a página do Carregador de Famílias: {}".format(args.WebErrorStatus)
+        o painel só ficaria em branco, sem nenhuma pista do porquê.
+
+        Quando a falha é da URL remota (máquina sem internet, servidor fora
+        do ar, deploy quebrado), cai para o build local em vez de reclamar:
+        o usuário fica com a versão que veio na instalação, que é melhor do
+        que um painel inútil. Só vira erro de verdade se o local também
+        falhar."""
+        if args.IsSuccess:
+            return
+
+        if self._url_remota and not self._caiu_para_local:
+            self._caiu_para_local = True
+            _mlogger.warning(
+                u"Falha ao carregar {} ({}). Usando o build local.".format(
+                    self._url_remota, args.WebErrorStatus
+                )
             )
+            print(u"[AVISO] Frontend remoto indisponível ({}); "
+                  u"carregando a versão instalada.".format(args.WebErrorStatus))
+            try:
+                from System import Uri
+                self.WebView.Source = Uri(_URL_LOCAL)
+            except Exception as ex:
+                self._erro_fatal(
+                    u"Falha ao voltar para o build local: {}".format(texto_erro(ex))
+                )
+            return
+
+        self._erro_fatal(
+            u"Falha ao carregar a página do Carregador de Famílias: {}".format(args.WebErrorStatus)
+        )
 
 
 # ---------------------------------------------------------------------------

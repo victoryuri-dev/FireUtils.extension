@@ -69,13 +69,44 @@ em vez de abrir o `index.html` direto com `file://` (evita restrições de
 CORS/módulos ES do Chromium com `file://`).
 
 **`dist/` é commitado no git** (não está no `.gitignore`), de propósito:
-este plugin é distribuído via `git clone`/`git pull` direto pra cada
-computador, sem CI/CD nem instalador — se `dist/` não fosse versionado,
-cada máquina nova precisaria de Node/npm instalados só pra rodar o
-Carregador de Famílias, o que não faz sentido pro usuário final do plugin.
-Sempre que mudar algo em `src/`, rode `npm run build` de novo e **comite o
-`dist/` atualizado junto** — sem isso, o plugin instalado continua rodando
-a versão antiga da interface.
+sem CI/CD, é o repositório que alimenta o instalador (`installer/build.ps1`
+copia `dist/` para o payload) — se não fosse versionado, cada máquina que
+gera o instalador precisaria de Node/npm só pra isso. Sempre que mudar algo
+em `src/`, rode `npm run build` de novo e **comite o `dist/` atualizado
+junto** — sem isso, o plugin instalado continua rodando a versão antiga da
+interface.
+
+## Carregando o frontend de um servidor (opcional)
+
+Por padrão a dockpane carrega o `dist/` local, pelo
+`SetVirtualHostNameToFolderMapping`. Definindo a variável de ambiente
+`FIREUTILS_WEBAPP_URL`, ela passa a carregar da URL indicada:
+
+```powershell
+# Só nesta sessão do PowerShell (abra o Revit a partir dela)
+$env:FIREUTILS_WEBAPP_URL = "https://meu-preview.vercel.app/index.html"
+
+# Permanente para o usuário
+[Environment]::SetEnvironmentVariable("FIREUTILS_WEBAPP_URL", "https://...", "User")
+```
+
+Serve para publicar correções da interface sem gerar instalador novo: o
+`.rfa`, o Python e as DLLs continuam vindo da instalação local; só o HTML/JS
+vem do servidor.
+
+Regras de funcionamento:
+
+- **Sem a variável, nada muda** — o comportamento é exatamente o de sempre.
+- **Só `https://`** é aceito. Uma URL `http://` é ignorada com aviso no log:
+  o bridge carrega família e grava no `firedata.json`, e em texto puro
+  ficaria exposto a qualquer um na mesma rede.
+- **Queda volta para o local.** Se a navegação remota falhar (sem internet,
+  servidor fora do ar, 404), a dockpane carrega o `dist/` instalado e avisa
+  no log. Por isso o build local continua obrigatório: ele é o fallback.
+- **O bridge valida a origem.** Mensagens que não venham do `dist/` local ou
+  da URL configurada são descartadas.
+
+Para desligar, apague a variável e reinicie o Revit.
 
 ## Contrato da ponte JS ↔ Python (Fase 3/4)
 
