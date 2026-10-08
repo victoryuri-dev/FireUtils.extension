@@ -10,26 +10,30 @@ Node ou Python na máquina dele.
 | Autodesk Revit | Pré-requisito. O instalador avisa se não encontrar. |
 | pyRevit | Instalado automaticamente se faltar (winget, com download do GitHub como alternativa). |
 | WebView2 Runtime | Instalado automaticamente se faltar. Já vem no Windows 10/11 com Edge atualizado. |
-| Node / npm | **Não precisa.** `webapp/dist/` já vai pronto no instalador. |
+| Node / npm | **Não precisa.** A interface da dockpane vem do servidor. |
 | Python / pip | **Não precisa.** O pyRevit traz o IronPython, e o código usa apenas a biblioteca padrão e o .NET. |
 | Git | **Não precisa.** Os arquivos vão embutidos no `.exe`. |
+| Internet | **Precisa**, para a dockpane. As demais ferramentas funcionam offline. |
 
 A instalação é por usuário, em `%APPDATA%\pyRevit\Extensions\FireUtils.extension`,
 e por isso não pede privilégio de administrador. O Windows pode pedir
 elevação ao instalar o pyRevit ou o WebView2, que são de terceiros.
+
+## O que o instalador não carrega
+
+A interface da dockpane **não vai no instalador**. Ela é carregada da URL em
+`fireutils.config.json` toda vez que o painel abre — o instalador leva
+apenas essa configuração.
+
+Por isso, publicar interface nova é um deploy, não um instalador novo. O
+instalador só precisa ser regerado quando muda o Python, as DLLs ou as
+famílias `.rfa`.
 
 ## Gerando o instalador
 
 Precisa de Windows com [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
 ```powershell
-# Se mexeu em webapp/src desde o último build:
-cd webapp
-npm install
-npm run build
-cd ..
-
-# Gera installer\output\FireUtils-Setup-<versão>.exe
 cd installer
 .\build.ps1 -Version 1.0.0
 ```
@@ -37,16 +41,15 @@ cd installer
 Sem `-Version`, o script usa o conteúdo de `installer/VERSION`.
 
 O `build.ps1` recria `installer/payload/` do zero a cada execução — nunca
-edite nada lá dentro. Ele copia apenas `Fire Utils.tab/`, `webapp/dist/` e
-`startup.py`; `installer/`, `migration/`, `webapp/src/` e `node_modules/`
-ficam de fora.
+edite nada lá dentro. Ele copia apenas `Fire Utils.tab/`, `startup.py` e
+`fireutils.config.json`; `installer/`, `migration/` e `webapp/` ficam de
+fora.
 
 ### Proteções do build
 
-- **Aborta** se `webapp/dist/index.html` não existir.
-- **Pergunta antes de continuar** se `webapp/dist/` estiver mais antigo que
-  `webapp/src/`. Esse é o erro silencioso mais provável aqui: o instalador
-  é gerado, instala sem erro e o cliente roda a interface antiga.
+- **Aborta** se `fireutils.config.json` não existir, não for JSON válido,
+  não tiver `webappUrl` ou a URL não for `https://`. Sem ela o plugin
+  instala e o painel abre num erro, já que não há interface embutida.
 - **Avisa** quando aparece algo novo na raiz do repositório que não está na
   lista do payload, para nenhum arquivo novo ficar de fora sem querer.
 

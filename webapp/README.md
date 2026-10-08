@@ -94,27 +94,32 @@ vem do servidor. O ciclo vira `npm run build` + push, e a Vercel publica.
 Regras de funcionamento:
 
 - **Sem o arquivo (ou sem a chave), carrega o `dist/` local** pelo
-  `SetVirtualHostNameToFolderMapping`, como sempre foi.
+  `SetVirtualHostNameToFolderMapping`. Esse é o modo de desenvolvimento
+  (`npm run build` e abrir o Revit, sem depender de deploy); na instalação
+  de verdade a URL está sempre presente.
 - **Só `https://`** é aceito. Uma URL `http://` é ignorada com aviso no log:
   o bridge carrega família e grava no `firedata.json`, e em texto puro
   ficaria exposto a qualquer um na mesma rede.
-- **Queda volta para o local.** Se a navegação remota falhar (sem internet,
-  servidor fora do ar, 404), a dockpane carrega o `dist/` instalado e avisa
-  no log. Por isso o build local continua obrigatório e versionado: ele é o
-  fallback.
-- **O bridge valida a origem.** Mensagens que não venham do `dist/` local ou
-  da URL configurada são descartadas — o WebView2 expõe esse canal a
-  qualquer página que carregue, e ele manda o Python mexer no documento.
+- **Sem internet, o painel não abre.** A dockpane é online por definição —
+  a interface vem do servidor e o acervo vive no Supabase. A falha vira uma
+  mensagem explicando isso, não um painel em branco. Não há cópia local de
+  reserva: o `dist/` não vai no instalador.
+- **O bridge valida a origem.** Mensagens que não venham da origem carregada
+  são descartadas — o WebView2 expõe esse canal a qualquer página que
+  carregue, e ele manda o Python mexer no documento do Revit.
 
-O arquivo vai junto no instalador (`installer/build.ps1` o inclui no
-payload), então a URL chega configurada na máquina instalada.
+O arquivo de configuração vai junto no instalador (`installer/build.ps1` o
+inclui no payload e recusa gerar o instalador se a URL faltar), então a URL
+chega configurada na máquina instalada.
 
-### Qual versão o cliente vê
+### Qual versão o usuário vê
 
-Com a URL configurada, a dockpane serve sempre o último deploy — o `dist/`
-embutido na instalação só aparece quando a rede falha. Então todo push que
-chega na Vercel vale para quem estiver com o Revit aberto na próxima vez que
-abrir o painel.
+Sempre o último deploy. Todo push que chega na Vercel vale para todo mundo
+na próxima vez que abrirem o painel — não existe versão instalada da
+interface para ficar para trás.
+
+As demais ferramentas (hidrantes, saídas, tubos) são Python local e
+continuam funcionando sem internet; só a dockpane depende de conexão.
 
 ## Contrato da ponte JS ↔ Python (Fase 3/4)
 

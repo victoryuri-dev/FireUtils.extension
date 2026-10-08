@@ -6,27 +6,25 @@
 .DESCRIPTION
     Rode no Windows, com o Inno Setup 6 instalado. O script:
 
-      1. Valida que webapp\dist esta presente e atualizado;
+      1. Valida a URL da interface em fireutils.config.json;
       2. Copia para installer\payload apenas o que o cliente precisa;
       3. Chama o ISCC.exe, gerando installer\output\FireUtils-Setup-<versao>.exe
 
     A pasta payload\ e recriada do zero a cada execucao -- nunca edite nada
     dentro dela, as mudancas sao perdidas.
 
+    O frontend nao entra no instalador: a dockpane carrega a interface do
+    servidor configurado. Publicar interface nova e deploy, nao instalador.
+
 .PARAMETER Version
     Versao do instalador (ex: 1.0.0). Padrao: conteudo de installer\VERSION.
-
-.PARAMETER SkipFrontendCheck
-    Ignora o aviso de webapp\dist desatualizado. Use apenas quando souber
-    que o build do frontend esta correto.
 
 .EXAMPLE
     .\build.ps1 -Version 1.0.0
 #>
 [CmdletBinding()]
 param(
-    [string] $Version,
-    [switch] $SkipFrontendCheck
+    [string] $Version
 )
 
 Set-StrictMode -Version Latest
@@ -42,9 +40,10 @@ $IssFile      = Join-Path $InstallerDir 'FireUtils.iss'
 # inclusao, nao de exclusao: algo novo na raiz do repositorio fica de fora
 # ate ser adicionado aqui de proposito -- e o script avisa quando isso
 # acontece, para a omissao nunca passar despercebida.
+# webapp\dist não entra: a dockpane carrega a interface do servidor, e sem
+# build local embutido o cliente também não fica com uma cópia offline dela.
 $ItensDoPayload = @(
     @{ Origem = 'Fire Utils.tab';         Tipo = 'Pasta'   },
-    @{ Origem = 'webapp\dist';            Tipo = 'Pasta'   },
     @{ Origem = 'startup.py';             Tipo = 'Arquivo' },
     @{ Origem = 'fireutils.config.json';  Tipo = 'Arquivo' }
 )
@@ -97,55 +96,36 @@ function Find-Iscc {
            "ou adicione o ISCC.exe ao PATH.")
 }
 
-function Get-DataUltimoCommit {
-    param([Parameter(Mandatory)] [string] $CaminhoRelativo)
+function Test-ConfigDaDockpane {
+    <#
+        A dockpane carrega a interface da URL em fireutils.config.json. Sem
+        ela, o plugin instala e o painel abre num erro -- nao ha mais build
+        local embutido para servir de alternativa. Melhor falhar aqui do que
+        descobrir na maquina do cliente.
+    #>
+    $config = Join-Path $RepoRoot 'fireutils.config.json'
+
+    if (-not (Test-Path -LiteralPath $config)) {
+        throw "fireutils.config.json nao existe na raiz do repositorio."
+    }
 
     try {
-        $saida = & git -C $RepoRoot log -1 --format=%ct -- $CaminhoRelativo 2>$null
-        if ($LASTEXITCODE -ne 0 -or -not $saida) { return $null }
-        return [long]$saida
+        $dados = Get-Content -LiteralPath $config -Raw -Encoding UTF8 | ConvertFrom-Json
     } catch {
-        # Sem git instalado ou fora de um repositorio: a verificacao
-        # simplesmente nao se aplica.
-        return $null
-    }
-}
-
-function Test-FrontendAtualizado {
-    <#
-        webapp\dist e versionado de proposito, para o cliente nao precisar
-        de Node. O risco disso e empacotar um dist antigo depois de mexer
-        em webapp\src: o plugin instala sem erro nenhum e roda a interface
-        velha.
-
-        A comparacao e feita pela data do ultimo commit de cada pasta, nao
-        pela data de modificacao dos arquivos. Um clone do git carimba todo
-        arquivo com a hora do checkout, entao comparar mtime acusaria
-        desatualizacao em qualquer maquina recem-clonada.
-    #>
-    $commitSrc  = Get-DataUltimoCommit 'webapp/src'
-    $commitDist = Get-DataUltimoCommit 'webapp/dist'
-
-    if ($null -eq $commitSrc -or $null -eq $commitDist) {
-        Write-Aviso 'Nao deu para comparar src e dist pelo historico do git; verificacao pulada.'
-        return
+        throw "fireutils.config.json nao e um JSON valido: $($_.Exception.Message)"
     }
 
-    if ($commitSrc -le $commitDist) { return }
+    $url = $dados.webappUrl
 
-    $dataSrc  = [DateTimeOffset]::FromUnixTimeSeconds($commitSrc).LocalDateTime
-    $dataDist = [DateTimeOffset]::FromUnixTimeSeconds($commitDist).LocalDateTime
-
-    Write-Aviso 'webapp\dist esta desatualizado em relacao a webapp\src.'
-    Write-Aviso "  ultimo commit em src:  $dataSrc"
-    Write-Aviso "  ultimo commit em dist: $dataDist"
-    Write-Aviso "Rode 'npm run build' dentro de webapp\ e comite o dist atualizado,"
-    Write-Aviso 'senao o cliente recebe a interface antiga.'
-
-    $resposta = Read-Host 'Continuar mesmo assim? (s/N)'
-    if ($resposta -notmatch '^[sS]') {
-        throw 'Build cancelado. Atualize webapp\dist e rode de novo.'
+    if (-not $url) {
+        throw "fireutils.config.json nao tem a chave 'webappUrl'."
     }
+
+    if ($url -notmatch '^https://') {
+        throw "webappUrl precisa comecar com https:// (valor: $url)."
+    }
+
+    Write-Host "    Interface: $url"
 }
 
 function Test-ItensNovosNaRaiz {
@@ -166,19 +146,8 @@ $versaoFinal = Resolve-Versao
 Write-Host ''
 Write-Host "Fire Utils - build do instalador $versaoFinal" -ForegroundColor Green
 
-Write-Passo 'Validando o frontend'
-if ($SkipFrontendCheck) {
-    Write-Aviso 'Verificacao do frontend pulada (-SkipFrontendCheck).'
-} else {
-    Test-FrontendAtualizado
-}
-
-$distDir = Join-Path $RepoRoot 'webapp\dist'
-if (-not (Test-Path -LiteralPath (Join-Path $distDir 'index.html'))) {
-    throw ("webapp\dist\index.html nao existe. Rode 'npm install && npm run build' " +
-           "dentro de webapp\ antes de gerar o instalador.")
-}
-Write-Host '    OK'
+Write-Passo 'Validando a configuracao da dockpane'
+Test-ConfigDaDockpane
 
 Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz

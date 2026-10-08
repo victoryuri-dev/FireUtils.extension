@@ -346,29 +346,27 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
         self.fila_acoes = criar_fila_acoes()
 
-        # Definidos antes do _erro_fatal abaixo: se o build local faltar, o
-        # __init__ retorna cedo e estes atributos precisam existir mesmo
-        # assim, senão qualquer evento que chegue depois quebra com
+        # Definido antes do _erro_fatal abaixo: se não houver de onde
+        # carregar, o __init__ retorna cedo e este atributo precisa existir
+        # mesmo assim, senão qualquer evento que chegue depois quebra com
         # AttributeError em vez da mensagem de erro de verdade.
         self._url_remota = _url_remota_configurada()
-        self._caiu_para_local = False
 
-        # O bridge só aceita mensagem vinda de uma destas origens. O build
-        # local é sempre confiável; a remota entra apenas quando
-        # configurada.
+        # O bridge só aceita mensagem vinda da origem que está carregada.
         self._origens_confiaveis = set()
-        origem_local = _origem_de(_URL_LOCAL)
-        if origem_local:
-            self._origens_confiaveis.add(origem_local)
-        if self._url_remota:
-            origem_remota = _origem_de(self._url_remota)
-            if origem_remota:
-                self._origens_confiaveis.add(origem_remota)
+        origem = _origem_de(self._url_remota or _URL_LOCAL)
+        if origem:
+            self._origens_confiaveis.add(origem)
 
-        if not os.path.isdir(_WEBAPP_DIST_DIR):
+        # Sem URL configurada o painel cai no build local, que é o modo de
+        # desenvolvimento (npm run build + Revit, sem depender de deploy).
+        # Na instalação de verdade a URL está sempre presente.
+        if not self._url_remota and not os.path.isdir(_WEBAPP_DIST_DIR):
             self._erro_fatal(
-                u"Build do frontend não encontrado em:\n{}\n\n"
-                u"Rode `npm install && npm run build` dentro de webapp/.".format(_WEBAPP_DIST_DIR)
+                u"Nenhuma origem para o Carregador de Famílias.\n\n"
+                u"Configure webappUrl em fireutils.config.json, ou rode "
+                u"`npm install && npm run build` dentro de webapp/ para usar "
+                u"o build local."
             )
             return  # painel abre em branco — sem WebView configurado
 
@@ -439,12 +437,13 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.Settings.AreDefaultContextMenusEnabled = True
             core.Settings.AreDevToolsEnabled = True
 
-            # Mapeado mesmo quando a navegação vai para a URL remota: é o
-            # que permite o fallback de _ao_navegar funcionar sem precisar
-            # reconfigurar o core no meio de uma falha.
-            core.SetVirtualHostNameToFolderMapping(
-                _VIRTUAL_HOST, _WEBAPP_DIST_DIR, _valor_enum_allow(core)
-            )
+            # Só no modo de desenvolvimento: com URL configurada, o build
+            # local não é usado para nada e pode nem estar no disco.
+            if not self._url_remota:
+                core.SetVirtualHostNameToFolderMapping(
+                    _VIRTUAL_HOST, _WEBAPP_DIST_DIR, _valor_enum_allow(core)
+                )
+
             core.WebMessageReceived += self._ao_receber_mensagem
             core.NavigationCompleted += self._ao_navegar
             core.NewWindowRequested += self._ao_pedir_nova_janela
@@ -573,30 +572,22 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         args.IsSuccess vem False com o motivo em WebErrorStatus — sem isso,
         o painel só ficaria em branco, sem nenhuma pista do porquê.
 
-        Quando a falha é da URL remota (máquina sem internet, servidor fora
-        do ar, deploy quebrado), cai para o build local em vez de reclamar:
-        o usuário fica com a versão que veio na instalação, que é melhor do
-        que um painel inútil. Só vira erro de verdade se o local também
-        falhar."""
+        O Carregador de Famílias é online por definição: a interface vem do
+        servidor e o acervo de famílias vive no Supabase. Sem conexão não há
+        o que mostrar, então a falha vira uma mensagem explicando isso, em
+        vez de um painel em branco."""
         if args.IsSuccess:
             return
 
-        if self._url_remota and not self._caiu_para_local:
-            self._caiu_para_local = True
+        if self._url_remota:
             _mlogger.warning(
-                u"Falha ao carregar {} ({}). Usando o build local.".format(
-                    self._url_remota, args.WebErrorStatus
-                )
+                u"Falha ao carregar {}: {}".format(self._url_remota, args.WebErrorStatus)
             )
-            print(u"[AVISO] Frontend remoto indisponível ({}); "
-                  u"carregando a versão instalada.".format(args.WebErrorStatus))
-            try:
-                from System import Uri
-                self.WebView.Source = Uri(_URL_LOCAL)
-            except Exception as ex:
-                self._erro_fatal(
-                    u"Falha ao voltar para o build local: {}".format(texto_erro(ex))
-                )
+            self._erro_fatal(
+                u"O Carregador de Famílias precisa de conexão com a internet.\n\n"
+                u"Verifique sua conexão e abra o painel novamente.\n\n"
+                u"(detalhe técnico: {})".format(args.WebErrorStatus)
+            )
             return
 
         self._erro_fatal(
