@@ -7,40 +7,26 @@ import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
 import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
+import HidrantesDimensionamento from "./HidrantesDimensionamento";
+import HidrantesBomba from "./HidrantesBomba";
+import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
 function fmt(n, casas = 2) {
   return typeof n === "number" && !Number.isNaN(n) ? n.toFixed(casas) : "—";
 }
 
+// Classificação e Dimensionamento (Etapas 1 e 2 do site) ficam juntas numa
+// única etapa aqui — a dockpane não tem espaço pra 3 abas horizontais tão
+// discriminadas, e as duas já aparecem em sequência numa mesma rolagem.
+// Bomba de Incêndio (Etapa 3 do site) continua separada.
+const ETAPAS_HIDRANTES = ["Classificação e Dimensionamento", "Bomba de Incêndio"];
+
 function Cartao({ titulo, children }) {
   return (
     <div className="cartao-info">
       <h3>{titulo}</h3>
       {children}
-    </div>
-  );
-}
-
-function Linha({ label, valor }) {
-  return (
-    <div>
-      <dt>{label}:</dt>
-      <dd>{valor}</dd>
-    </div>
-  );
-}
-
-// Pressão + Vazão (ou qualquer par relacionado) na mesma linha, em vez de
-// duas linhas dt/dd empilhadas — layout do card de ponto de operação.
-function LinhaInline({ itens }) {
-  return (
-    <div className="hid-linha-inline">
-      {itens.map((it, i) => (
-        <span key={i}>
-          <span className="hid-linha-inline-label">{it.label}:</span> <strong>{it.valor}</strong>
-        </span>
-      ))}
     </div>
   );
 }
@@ -58,34 +44,6 @@ function Pill({ active, onClick, disabled, children }) {
   );
 }
 
-// Um valor só, em destaque — cada card de "Ponto de Operação"/"Dimensionamento
-// da Bomba" mostra uma única grandeza, com o título do card (Cartao) como
-// rótulo, em vez de repetir o rótulo dentro do corpo.
-function ValorGrande({ valor, destaque }) {
-  return <div className={`hid-valor-grande ${destaque ? "hid-valor-grande-destaque" : ""}`}>{valor}</div>;
-}
-
-// Mesmo lugar visual de ValorGrande, mas editável — eficiência e potência
-// adotada são digitadas aqui, no próprio card do resultado.
-function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
-  return (
-    <div className="hid-stat-input-linha">
-      <input
-        className="hid-stat-input"
-        type="number"
-        min="0"
-        step="1"
-        placeholder={placeholder}
-        value={value}
-        onChange={onChange}
-        onBlur={onCommit}
-        onKeyDown={(e) => e.key === "Enter" && onCommit?.()}
-      />
-      {sufixo && <span className="hid-stat-input-sufixo">{sufixo}</span>}
-    </div>
-  );
-}
-
 /**
  * Página "Sistema de Hidrantes" da dockpane — permite classificar o
  * sistema (Tabela 3, NT 22 CBMMA) direto aqui, com o MESMO método do site
@@ -93,7 +51,15 @@ function CampoNumero({ value, onChange, onCommit, sufixo, placeholder }) {
  * ETOS.FireUtils/src/data/hidrantes_calc.js), e mostra o que está de fato
  * aplicado/calculado no Revit (Project Information + cache local do
  * último "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO).
- * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado.
+ * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado. O
+ * botão "Dimensionar Hidrantes"/"Dimensionar Novamente" roda o mesmo
+ * motor de cálculo do pushbutton homônimo do Revit (ver
+ * hidrantes_dimensionar_bridge.py), sem precisar voltar pro Revit — exige
+ * classificação já aplicada e "Mapear Trechos" já executado alguma vez
+ * nesse projeto (cache de rotas); se alguma verificação normativa não
+ * atender, mostra o motivo num toast (sem o botão "Mostrar no Projeto"
+ * que o pushbutton tem pra esse caso — quem precisar localizar o elemento
+ * ainda roda o pushbutton no Revit).
  *
  * Tipo/variante/RTI são a MESMA escolha que o site faz na Etapa 1
  * (Classificação do Sistema) — só editável nos dois lugares. Clicar aqui
@@ -141,11 +107,39 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   });
   const [salvandoPotencia, setSalvandoPotencia] = useState(false);
   const [aplicando, setAplicando] = useState(false);
+  const [dimensionando, setDimensionando] = useState(false);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
   // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
   // já está aplicado no Revit (classificacao.tipo) — ver tipoEfetivo abaixo.
   const [tipoSelecionado, setTipoSelecionado] = useState(null);
+  // Etapa atual do menu horizontal (1 Classificação e Dimensionamento,
+  // 2 Bomba de Incêndio) — ver ETAPAS_HIDRANTES acima.
+  const [etapa, setEtapa] = useState(1);
+
+  // Bombas do Sistema (principal/reserva/jockey) — mesmos campos que o
+  // site edita na Etapa 3 (BombaESuccaoForm.jsx), ver dadosHidrantes()
+  // pra forma/valores default. Toggle/acionamento salvam imediato ao
+  // clicar (mesmo padrão de aplicar(), pro Tipo); os campos numéricos da
+  // jockey seguem o padrão de eficiência/potência acima (local + commit
+  // no blur).
+  const [bombaExiste, setBombaExiste] = useState(() => dadosHidrantes(projeto).bombaExiste);
+  const [bombaAcionamento, setBombaAcionamento] = useState(() => dadosHidrantes(projeto).bombaAcionamento);
+  const [bombaReserva, setBombaReserva] = useState(() => dadosHidrantes(projeto).bombaReserva);
+  const [bombaReservaAcionamento, setBombaReservaAcionamento] = useState(() => dadosHidrantes(projeto).bombaReservaAcionamento);
+  const [bombaJockey, setBombaJockey] = useState(() => dadosHidrantes(projeto).bombaJockey);
+  const [jockeyVazao, setJockeyVazao] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaJockeyVazao;
+    return v != null ? String(v) : "";
+  });
+  const [jockeyPressao, setJockeyPressao] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaJockeyPressao;
+    return v != null ? String(v) : "";
+  });
+  const [jockeyPotencia, setJockeyPotencia] = useState(() => {
+    const v = dadosHidrantes(projeto).bombaJockeyPotencia;
+    return v != null ? String(v) : "";
+  });
 
   function recarregar() {
     setCarregando(true);
@@ -178,10 +172,35 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         // Sucesso muda o que está gravado no Project Information — recarrega
         // pra "Sistema Classificado" refletir a classificação recém-aplicada.
         recarregar();
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAR_RESULTADO) {
+        setDimensionando(false);
+        const { ok, erro } = mensagem.payload || {};
+        if (!ok) {
+          adicionarToast?.({
+            tipo: "erro",
+            titulo: "Dimensionamento não atendeu a norma",
+            mensagem: erro,
+            duracaoMs: 15000,
+          });
+          return;
+        }
+        adicionarToast?.({ tipo: "sucesso", titulo: "Dimensionamento concluído", duracaoMs: 5000 });
+        // O cálculo já foi gravado no cache do lado Python — busca de novo
+        // pra mostrar o resultado completo (HidrantesDimensionamento.jsx),
+        // em vez de esta mensagem carregar os dados duas vezes.
+        recarregar();
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function dimensionar() {
+    setDimensionando(true);
+    postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, {});
+  }
 
   // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site
   // usa (área da estrutura vinculada + ocupação/carga de incêndio dos
@@ -204,7 +223,13 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const { tipo: tipoSalvo, tipoVariante: varianteSalva, rti: rtiSalvo, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
 
   const classificacao = resposta?.classificacao;
-  const ponto = resposta?.pontoOperacao;
+  const dimensionamento = resposta?.dimensionamento;
+  const limites = resposta?.limites;
+  // Pressão/vazão totais, pro card "Dimensionamento da Bomba de Incêndio" e
+  // pro cálculo de potência abaixo — mesmo "res" cru que
+  // HidrantesDimensionamento usa pras seções detalhadas acima.
+  const ht = dimensionamento?.res?.P_RTI;
+  const qt = dimensionamento?.res?.Qt;
 
   async function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
@@ -303,9 +328,73 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     }
   }
 
+  const [salvandoBomba, setSalvandoBomba] = useState(false);
+
+  // Toggle/acionamento da bomba — salva direto no Supabase ao clicar, sem
+  // esperar um blur (não são campos de texto): mesmo padrão de aplicar(),
+  // pro Tipo de classificação.
+  async function alterarBomba(changes) {
+    setSalvandoBomba(true);
+    try {
+      await salvarHidrantes(changes);
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível salvar",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    } finally {
+      setSalvandoBomba(false);
+    }
+  }
+
+  function alternarBombaExiste(v) {
+    setBombaExiste(v);
+    alterarBomba({ bombaExiste: v });
+  }
+  function alternarBombaReserva(v) {
+    setBombaReserva(v);
+    alterarBomba({ bombaReserva: v });
+  }
+  function alternarBombaJockey(v) {
+    setBombaJockey(v);
+    alterarBomba({ bombaJockey: v });
+  }
+  function mudarBombaAcionamento(v) {
+    setBombaAcionamento(v);
+    alterarBomba({ bombaAcionamento: v });
+  }
+  function mudarBombaReservaAcionamento(v) {
+    setBombaReservaAcionamento(v);
+    alterarBomba({ bombaReservaAcionamento: v });
+  }
+
+  // Campos numéricos da bomba jockey — mesmo esquema de eficiência/potência
+  // adotada acima (local + commit no blur), um campo genérico pra não
+  // repetir a mesma função 3 vezes.
+  async function salvarCampoBomba(campo, valorTexto) {
+    const texto = valorTexto.trim();
+    const valor = texto === "" ? null : parseFloat(texto);
+    if (valor != null && Number.isNaN(valor)) return;
+    setSalvandoBomba(true);
+    try {
+      await salvarHidrantes({ [campo]: valor });
+    } catch (ex) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível salvar",
+        mensagem: ex.message,
+        duracaoMs: 9000,
+      });
+    } finally {
+      setSalvandoBomba(false);
+    }
+  }
+
   // Só cv é mostrado (pedido explícito) — calcPotenciaBomba ainda devolve
   // kW junto, mas fica sem uso aqui.
-  const { potCv } = ponto ? calcPotenciaBomba(ponto.qt, ponto.ht, eficiencia) : { potCv: null };
+  const { potCv } = dimensionamento ? calcPotenciaBomba(qt, ht, eficiencia) : { potCv: null };
 
   return (
     <div className="se-pagina hid-pagina">
@@ -319,8 +408,29 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         </button>
       </div>
 
+      <div className="hid-etapas">
+        {ETAPAS_HIDRANTES.map((label, i) => {
+          const n = i + 1;
+          return (
+            <button
+              key={n}
+              type="button"
+              className={`hid-etapa ${etapa === n ? "hid-etapa-ativa" : ""}`}
+              onClick={() => setEtapa(n)}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {etapa === 1 && (
       <div className="hid-secao">
-        <Cartao titulo="Escolha do Sistema">
+        <Cartao titulo="Classificação do Sistema">
+          <p className="hiddim-cartao-desc">
+            Cruzamento área construída × ocupação, conforme Tabela 3 {resposta?.norma ? `da ${resposta.norma}` : "da norma"}.
+          </p>
+
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
               Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
@@ -328,15 +438,44 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
             </p>
           ) : (
             <>
-              <div className="hid-pills-linha">
-                {sugestao.opcoes.map((op) => (
-                  <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
-                    Tipo {op.tipo} — RTI {op.rti} m³
-                  </Pill>
-                ))}
+              <div className="hiddim-stat-grid hiddim-stat-grid-2">
+                <div className="hiddim-stat-box hiddim-stat-box-left">
+                  <div className="hiddim-stat-label">Área Total Construída (estruturas selecionadas acima)</div>
+                  <div className="hiddim-stat-val hiddim-stat-val-grande">
+                    {estrutura?.areaConstruida != null ? `${fmtNum(estrutura.areaConstruida, 2, "0")} m²` : "—"}
+                  </div>
+                </div>
+                <div className="hiddim-stat-box hiddim-stat-box-left">
+                  <div className="hiddim-stat-label-linha">
+                    <span className="hiddim-stat-label">Ocupação usada na classificação</span>
+                    {sugestao.coluna != null && <span className="hiddim-stat-hint">coluna {sugestao.coluna} da Tabela 3</span>}
+                  </div>
+                  <div className="hiddim-stat-val hiddim-stat-val-grande">{sugestao.divisao || "—"}</div>
+                </div>
               </div>
+
+              {sugestao.opcoes.length > 1 && (
+                <div style={{ marginTop: 14, marginBottom: 14 }}>
+                  <p className="hiddim-campo-label">A norma permite dois sistemas para esta ocupação — escolha qual adotar</p>
+                  <div className="hid-pills-linha" style={{ marginTop: 6 }}>
+                    {sugestao.opcoes.map((op) => (
+                      <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
+                        Tipo {op.tipo} — RTI {op.rti} m³
+                      </Pill>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {sugestao.opcoes.length === 1 && (
+                <div className="hid-pills-linha" style={{ marginTop: 14, marginBottom: 14 }}>
+                  <Pill active disabled>
+                    Tipo {sugestao.opcoes[0].tipo} — RTI {sugestao.opcoes[0].rti} m³
+                  </Pill>
+                </div>
+              )}
+
               {variantesDoTipoEfetivo.length > 1 && (
-                <div className="hid-pills-linha" style={{ marginTop: 8 }}>
+                <div className="hid-pills-linha" style={{ marginBottom: 14 }}>
                   {variantesDoTipoEfetivo.map((v, i) => (
                     <Pill
                       key={i}
@@ -349,6 +488,38 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                   ))}
                 </div>
               )}
+
+              {classificacao && (
+                <div className="hiddim-stat-grid hiddim-stat-grid-3">
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Tipo</div>
+                    <div className="hiddim-stat-val">Tipo {classificacao.tipo}</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Esguicho</div>
+                    <div className="hiddim-stat-val">DN{fmt(classificacao.esguicho_dn, 0)}</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Mangueira</div>
+                    <div className="hiddim-stat-val">
+                      DN{fmt(classificacao.mang_dn, 0)} — {fmt(classificacao.mang_comp, 0)} m
+                    </div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Expedições</div>
+                    <div className="hiddim-stat-val" style={{ textTransform: "capitalize" }}>{classificacao.expedicoes || "—"}</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Vazão mín.</div>
+                    <div className="hiddim-stat-val">{fmt(classificacao.q_min, 0)} L/min</div>
+                  </div>
+                  <div className="hiddim-stat-box">
+                    <div className="hiddim-stat-label">Pressão mín.</div>
+                    <div className="hiddim-stat-val">{fmt(classificacao.p_min, 0)} mca</div>
+                  </div>
+                </div>
+              )}
+
               <p className="hid-nota-aviso">
                 Sempre que trocar o sistema, execute "Dimensionar Hidrantes" novamente no Revit.
               </p>
@@ -356,6 +527,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           )}
         </Cartao>
       </div>
+      )}
 
       {carregando && !resposta && (
         <div className="tela-carregando">
@@ -365,103 +537,81 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
 
-      {resposta?.ok && classificacao && (
+      {etapa === 1 && resposta?.ok && (
         <>
-          <div className="hid-secao">
-            <Cartao titulo="Sistema Classificado (aplicado no Revit)">
-              <dl>
-                <Linha
-                  label="Tipo"
-                  valor={`Tipo ${classificacao.tipo}${classificacao.descricao ? ` — ${classificacao.descricao}` : ""}`}
-                />
-                <Linha label="RTI" valor={rtiSalvo != null ? `${rtiSalvo} m³` : "—"} />
-                <Linha label="Esguicho" valor={`DN${fmt(classificacao.esguicho_dn, 0)}`} />
-                <Linha
-                  label="Mangueira"
-                  valor={`DN${fmt(classificacao.mang_dn, 0)} — ${fmt(classificacao.mang_comp, 0)} m`}
-                />
-                <Linha label="Expedições" valor={classificacao.expedicoes || "—"} />
-                <Linha label="Vazão mínima" valor={`${fmt(classificacao.q_min, 0)} L/min`} />
-                <Linha label="Pressão mínima" valor={`${fmt(classificacao.p_min, 0)} mca`} />
-              </dl>
-            </Cartao>
+          <div className="se-pagina-header" style={{ marginBottom: 14 }}>
+            <p className="dashboard-subtitulo" style={{ margin: 0 }}>
+              Resultados calculados a partir da classificação do sistema.
+            </p>
+            <button
+              type="button"
+              className="se-botao se-botao-accent se-pagina-header-botao"
+              onClick={dimensionar}
+              disabled={dimensionando}
+            >
+              {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
+            </button>
           </div>
-
-          <p className="dashboard-subtitulo">Ponto de Operação do Sistema</p>
-          {!ponto ? (
+          {!dimensionamento ? (
             <p className="vazio">
-              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Execute "Dimensionar Hidrantes" primeiro.'}
+              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima (ou execute o pushbutton no Revit).'}
             </p>
           ) : (
-            <div className="hid-lista-vertical">
-              <Cartao titulo="HD01 — 1º Hidrante Mais Desfavorável">
-                <LinhaInline
-                  itens={[
-                    { label: "Pressão", valor: `${fmt(ponto.pHd01)} mca` },
-                    { label: "Vazão", valor: `${fmt(ponto.qHd01)} L/min` },
-                  ]}
-                />
-              </Cartao>
-              <Cartao titulo="HD02 — 2º Hidrante Mais Desfavorável">
-                <LinhaInline
-                  itens={[
-                    { label: "Pressão", valor: `${fmt(ponto.pHd02)} mca` },
-                    { label: "Vazão", valor: `${fmt(ponto.qHd02)} L/min` },
-                  ]}
-                />
-              </Cartao>
-              <div className="hid-grid-2">
-                <Cartao titulo="Altura Manométrica Total">
-                  <ValorGrande valor={`${fmt(ponto.ht)} mca`} />
-                </Cartao>
-                <Cartao titulo="Vazão Total">
-                  <ValorGrande valor={`${fmt(ponto.qt)} L/min`} />
-                </Cartao>
-              </div>
-            </div>
-          )}
-
-          {ponto && (
-            <div className="hid-secao">
-              <p className="dashboard-subtitulo">Dimensionamento da Bomba de Incêndio</p>
-              <div className="hid-grid-2" style={{ marginBottom: 12 }}>
-                <Cartao titulo="Pressão">
-                  <ValorGrande valor={`${fmt(ponto.ht)} mca`} />
-                </Cartao>
-                <Cartao titulo="Vazão">
-                  <ValorGrande valor={`${fmt(ponto.qt)} L/min`} />
-                </Cartao>
-              </div>
-              <div className="hid-grid-3">
-                <Cartao titulo="Eficiência Global (η)">
-                  <CampoNumero
-                    value={eficiencia}
-                    onChange={(e) => setEficiencia(e.target.value)}
-                    onCommit={salvarEficiencia}
-                    sufixo="%"
-                    placeholder="ex.: 65"
-                  />
-                </Cartao>
-                <Cartao titulo="Potência Mínima">
-                  <ValorGrande valor={potCv != null ? `${fmt(potCv)} cv` : "—"} destaque />
-                </Cartao>
-                <Cartao titulo="Potência Adotada">
-                  <CampoNumero
-                    value={potenciaAdotada}
-                    onChange={(e) => setPotenciaAdotada(e.target.value)}
-                    onCommit={salvarPotenciaAdotada}
-                    sufixo="cv"
-                    placeholder="ex.: 5"
-                  />
-                </Cartao>
-              </div>
-              {(salvandoEficiencia || salvandoPotencia) && <div className="hid-salvando">Salvando...</div>}
-              {potCv == null && (
-                <div className="hid-aviso">Informe a eficiência da bomba pra calcular a potência mínima.</div>
-              )}
-            </div>
+            <HidrantesDimensionamento d={dimensionamento} limites={limites} />
           )}
         </>
+      )}
+
+      {etapa === 2 && resposta?.ok && (
+        !dimensionamento ? (
+          <div className="hid-aviso">
+            Calcule o dimensionamento na etapa "Classificação e Dimensionamento" antes de dimensionar a bomba.
+          </div>
+        ) : (
+          <>
+            <HidrantesBomba
+              qt={qt}
+              ht={ht}
+              potCv={potCv}
+              campoEficiencia={{
+                value: eficiencia,
+                onChange: (e) => setEficiencia(e.target.value),
+                onCommit: salvarEficiencia,
+              }}
+              campoPotenciaAdotada={{
+                value: potenciaAdotada,
+                onChange: (e) => setPotenciaAdotada(e.target.value),
+                onCommit: salvarPotenciaAdotada,
+              }}
+              bombaExiste={bombaExiste}
+              onToggleBombaExiste={alternarBombaExiste}
+              bombaAcionamento={bombaAcionamento}
+              onChangeBombaAcionamento={mudarBombaAcionamento}
+              bombaReserva={bombaReserva}
+              onToggleBombaReserva={alternarBombaReserva}
+              bombaReservaAcionamento={bombaReservaAcionamento}
+              onChangeBombaReservaAcionamento={mudarBombaReservaAcionamento}
+              bombaJockey={bombaJockey}
+              onToggleBombaJockey={alternarBombaJockey}
+              campoJockeyVazao={{
+                value: jockeyVazao,
+                onChange: (e) => setJockeyVazao(e.target.value),
+                onCommit: () => salvarCampoBomba("bombaJockeyVazao", jockeyVazao),
+              }}
+              campoJockeyPressao={{
+                value: jockeyPressao,
+                onChange: (e) => setJockeyPressao(e.target.value),
+                onCommit: () => salvarCampoBomba("bombaJockeyPressao", jockeyPressao),
+              }}
+              campoJockeyPotencia={{
+                value: jockeyPotencia,
+                onChange: (e) => setJockeyPotencia(e.target.value),
+                onCommit: () => salvarCampoBomba("bombaJockeyPotencia", jockeyPotencia),
+              }}
+            />
+            {(salvandoEficiencia || salvandoPotencia || salvandoBomba) && <div className="hid-salvando">Salvando...</div>}
+          </>
+        )
       )}
     </div>
   );

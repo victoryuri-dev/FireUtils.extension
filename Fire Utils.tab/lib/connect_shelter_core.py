@@ -142,7 +142,7 @@ def conectar_abrigo(doc, uidoc, output):
     # ── Clique 3: tubo de referência ────────────────────────────────────
     try:
         ref_p        = uidoc.Selection.PickObject(
-            ObjectType.PointOnElement, _FiltroPipe(),
+            ObjectType.PointOnElement, _FiltroPipe(doc),
             u"Clique no tubo de referência — corpo para Tê, ponta para joelho"
         )
         pipe_ref     = doc.GetElement(ref_p.ElementId)

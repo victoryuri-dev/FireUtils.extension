@@ -258,6 +258,22 @@ não foi implementado; por enquanto `sync.py` (`enviar`/`buscar`) continua
 existindo mas não é mais alimentado por nada do vínculo projeto/estrutura
 feito aqui.
 
+### Cartão de projeto (copiado do site)
+
+O cartão da grade "Conectar um projeto" (`components/dashboard/ProjetoCard.jsx`)
+é uma cópia do cartão de projeto do site (`ETOS.FireUtils`,
+`src/pages/ProjetosPage.jsx` — função `ProjectCard`), copy-paste da lógica
+e das cores/tokens dele: anel de completude (0–100%, mesmos 8 critérios —
+exceto o item de CNAE por pavimento, que depende da tabela normativa do
+site e não foi portado; aqui só confere se a divisão foi preenchida),
+chips de ocupação/risco/pavimentos e o rodapé com "Criado em"/"Editado há"
+no mesmo formato. `lib/projetoDados.js` (`resumoProjeto`) ganhou os
+helpers equivalentes a `ocupacaoInfo`/`maxCarga`/`riscoInfo`/
+`calcCompletude` do site, e `lib/format.js` (`tempoDecorrido`/
+`formatarDataCurta`) replica `timeAgo`/`fmtDate`. O cartão usa as cores do
+tema escuro do site (`--color-*` em `src/index.css` de lá) direto, fixas
+— são os tokens `--cp-*` definidos em `.card-projeto` no `App.css`.
+
 ### Mensagens da bridge (vínculo de projeto)
 
 Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
@@ -270,10 +286,15 @@ Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
 | `PROJECT_LINK_SAVED` | Python → JS | `{ ok, erro? }` |
 | `DISCONNECT_PROJECT` | JS → Python | — |
 | `GET_DIMENSIONAMENTOS_STATUS` | JS → Python | — |
-| `DIMENSIONAMENTOS_STATUS` | Python → JS | `{ hidrantes: boolean, saidaEmergencia: boolean }` |
+| `DIMENSIONAMENTOS_STATUS` | Python → JS | `{ hidrantes: boolean, saidaEmergencia: boolean, niveis: boolean }` |
+| `GET_REVIT_LEVELS` | JS → Python | `{ estruturaId }` |
+| `REVIT_LEVELS` | Python → JS | `{ levels: [{ uniqueId, nome, elevacao }], correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }], erro? }` |
+| `SET_NIVEIS_CORRELACAO` | JS → Python | `{ estruturaId, correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }] }` |
+| `NIVEIS_CORRELACAO_SAVED` | Python → JS | `{ ok, erro? }` |
 
 Do lado Python, tratadas em `Fire Utils.tab/lib/project_link_bridge.py`
-(despachado a partir de `family_webview_bridge.py`).
+(despachado a partir de `family_webview_bridge.py`); `GET_REVIT_LEVELS`/
+`SET_NIVEIS_CORRELACAO` em `Fire Utils.tab/lib/niveis_bridge.py`.
 
 ## Saída de Emergência — árvore de Acessos e Descargas
 
@@ -283,8 +304,26 @@ Clicar no card "Saída de Emergência" do Dashboard abre a mesma árvore
 drag-and-drop (`@dnd-kit/core`). Ao contrário do resto do Dashboard (só
 leitura), esta tela **escreve** direto na coluna `dados` do Supabase —
 sem passar pela bridge Python: não há nada aqui que dependa da API do
-Revit (os níveis do Revit não entram nessa tela; a expectativa é que o
-usuário já os tenha renomeado pra bater com os pavimentos do site).
+Revit (os níveis do Revit não entram nessa tela).
+
+## Correlacionar Níveis (Nível do Revit <-> Pavimento do FireUtils)
+
+Card "Correlacionar Níveis" do Dashboard abre `CorrelacaoNiveisModal.jsx`:
+duas colunas lado a lado — Pavimentos do FireUtils (esquerda, ordem fixa,
+já cadastrada no site) e Níveis do Revit (direita, arrastável via
+`@dnd-kit/core`, mesmo padrão de `AcessosDescargasView.jsx`, sem usar
+`@dnd-kit/sortable`). A linha *i* de cada coluna vira um par
+pavimento/nível ao salvar — substitui qualquer tentativa de casar por
+nome (nem sempre o nível no Revit se chama "Térreo").
+
+Ao contrário da árvore de Acessos e Descargas, esta correlação **fica só
+local** (firedata.json do documento Revit ativo, chave
+`niveis_pavimentos`, por `estruturaId`) — nunca vai pro Supabase: um
+`Level` é um elemento deste documento Revit específico, sem sentido
+compartilhar entre documentos diferentes vinculados à mesma estrutura.
+Chave persistida por nível é o `Level.UniqueId` (sobrevive a um rename do
+nível no Revit, ao contrário do `ElementId`). Ver
+`Fire Utils.tab/lib/niveis_bridge.py`.
 
 - `lib/seReducer.js` — mesmas ações do reducer do site (CRIAR_SAIDA,
   MOVER_ACESSO, SET_PISO_DESCARGA, ...), mas puras: recebem `dados` (a
@@ -324,6 +363,7 @@ src/
 │   ├── Dashboard.jsx       orquestra o fluxo de vínculo projeto/estrutura
 │   ├── dashboard/
 │   │   ├── ConectarProjeto.jsx
+│   │   ├── ProjetoCard.jsx     cartão de projeto (layout copiado do site, ver abaixo)
 │   │   ├── SelecionarEstrutura.jsx
 │   │   ├── DashboardEstrutura.jsx
 │   │   └── ProjetoCabecalho.jsx

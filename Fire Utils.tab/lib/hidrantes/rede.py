@@ -338,11 +338,27 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
 
 
 def mostrar_no_revit(uidoc, ids):
-    """Seleciona e enquadra, na view ativa do Revit, os elementos cujo
-    ElementId (int) está em `ids` — callback do botão "Mostrar no Projeto"
-    das janelas de resultado/bloqueio (resultado_ui.py). Chamar só depois
-    que a janela WPF (ShowDialog) já fechou: a API do Revit não é
-    reentrante, não dá pra chamar de dentro do Click de uma janela modal.
+    """Seleciona os elementos cujo ElementId (int) está em `ids`, SEM
+    trocar a view ativa — callback do botão "Mostrar no Projeto" das
+    janelas de resultado/bloqueio (resultado_ui.py) e do botão
+    "Localizar" da dockpane (hidrantes_dimensionamento_bridge.py). Chamar
+    só depois que a janela WPF (ShowDialog) já fechou: a API do Revit não
+    é reentrante, não dá pra chamar de dentro do Click de uma janela
+    modal.
+
+    Fica sempre na view que o usuário tem ativa de fato — mesmo com
+    outras views abertas ao mesmo tempo (ex.: planta baixa + 3D
+    isométrico, com o isométrico ativo). NUNCA chama uidoc.ShowElements():
+    esse método deixa o próprio Revit escolher pra qual view pular quando
+    "acha melhor" (na prática, tende a preferir uma planta baixa mesmo
+    com os elementos já visíveis na view ativa) — uma 1ª tentativa de só
+    evitar isso quando os elementos já tinham bounding box na view ativa
+    ainda assim via o Revit pular de view em certos layouts com múltiplas
+    views abertas, então a troca de view foi removida de vez. Só dá um
+    ZoomElement() de melhor esforço na própria view ativa (sem trocar) —
+    se os elementos não aparecerem ali (ex.: categoria oculta nessa
+    view), a seleção acontece mesmo assim, só sem o zoom.
+
     Ao final o foco volta pro Revit — depois que a janela fecha, o foco
     costuma ficar com o console do pyRevit, então a seleção acontece mas
     ninguém vê."""
@@ -353,7 +369,16 @@ def mostrar_no_revit(uidoc, ids):
     try:
         eids = List[ElementId]([to_element_id(i) for i in ids])
         uidoc.Selection.SetElementIds(eids)
-        uidoc.ShowElements(eids)
+
+        view_ativa_id = uidoc.ActiveView.Id
+        for uiview in uidoc.GetOpenUIViews():
+            if uiview.ViewId == view_ativa_id:
+                try:
+                    uiview.ZoomElement(eids)
+                except Exception:
+                    pass
+                break
+
         uidoc.RefreshActiveView()
     except Exception as _e:
         forms.alert(u"Não foi possível selecionar os elementos no Revit:\n{}".format(_e),

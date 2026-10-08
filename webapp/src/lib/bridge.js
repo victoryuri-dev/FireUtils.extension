@@ -106,30 +106,96 @@
  *     que está de fato aplicado no Revit (Project Information, resolvido
  *     pelo perfil normativo — pode divergir do que está pendente no site
  *     se "Aplicar classificação no Revit" ainda não foi clicado depois de
- *     uma mudança), o ponto de operação do último "Dimensionar Hidrantes"
- *     (cache local) e a eficiência da bomba já salva, se houver.
+ *     uma mudança), o cache completo do último "Dimensionar Hidrantes" e os
+ *     limites normativos de velocidade.
  *
  *   { type: "HIDRANTES_DIMENSIONAMENTO", payload: { ok, erro?,
  *     classificacao?: { tipo, variante_idx, descricao, esguicho_dn, mang_dn,
- *       mang_comp, expedicoes, q_min, p_min, valorSistema },
- *     pontoOperacao?: { qt, ht, pHd01, pHd02, qHd01, qHd02, hidGoverna, timestamp } | null,
+ *       mang_comp, expedicoes, q_min, p_min, valorSistema, metodo, chw },
+ *     norma?: string,
+ *     limites?: { vMaxTubulacao, vMaxSuccaoPositiva, vMaxSuccaoNegativa },
+ *     dimensionamento?: object | null,
  *     erroDimensionamento?: string | null } }
  *     `classificacao` não inclui `rti` — quem quiser mostrar RTI lê direto
  *     do Supabase (dadosHidrantes(projeto).rti, ver lib/projetoDados.js),
  *     nunca do Project Information (ver comentário de
  *     SET_HIDRANTES_CLASSIFICACAO acima pra por quê).
- *     Python -> JS: resposta de GET_HIDRANTES_DIMENSIONAMENTO. `ht` é a
- *     altura manométrica total que a bomba precisa desenvolver (P_RTI do
- *     motor de cálculo — pressão que precisaria existir na RTI, referência
- *     atmosférica, pra alimentar o sistema por gravidade; já inclui sucção
- *     e recalque). `pontoOperacao` vem null quando "Dimensionar Hidrantes"
- *     ainda não rodou nesta sessão do projeto (ver erroDimensionamento).
+ *     Python -> JS: resposta de GET_HIDRANTES_DIMENSIONAMENTO. `dimensionamento`
+ *     é o cache cru de "Dimensionar Hidrantes" (res, dados_sistema,
+ *     valor_sistema, metodo, C_HW, succao, ranking_hidrantes, cotas... —
+ *     mesmo formato que o site lê de state.hidrantes.dimensionamento, ver
+ *     HidrantesPage.jsx lá), repassado sem reduzir — `res.P_RTI` é a altura
+ *     manométrica total que a bomba precisa desenvolver (pressão que
+ *     precisaria existir na RTI, referência atmosférica, pra alimentar o
+ *     sistema por gravidade; já inclui sucção e recalque) e `res.Qt` a
+ *     vazão total. Vem `null` quando "Dimensionar Hidrantes" ainda não
+ *     rodou nesta sessão do projeto (ver erroDimensionamento).
  *     A eficiência da bomba e a potência adotada NÃO vêm daqui — são lidas/
  *     gravadas direto no Supabase (dados.hidrantes.bombaEficiencia/
  *     bombaPotenciaAdotada, ver lib/projetoDados.js e
  *     SistemaHidrantesPage.jsx), o mesmo campo que o site edita na Etapa 3
  *     ("Dimensionamento da Bomba de Incêndio"), sem passar pelo Project
  *     Information do Revit.
+ *
+ *   { type: "DIMENSIONAR_HIDRANTES" }
+ *     JS -> Python: roda o mesmo motor de cálculo do pushbutton
+ *     "Dimensionar Hidrantes" (método da marcha HD01 → Ponto A → Descarga
+ *     da Bomba → RTI — ver hidrantes_dimensionar_bridge.py), sem precisar
+ *     voltar pro Revit pra clicar o botão. Precisa de classificação já
+ *     aplicada (Etapa 1, "Aplicar no Revit") e de "Mapear Trechos" já
+ *     executado alguma vez nesse projeto (cache de rotas).
+ *
+ *   { type: "HIDRANTES_DIMENSIONAR_RESULTADO", payload: { ok, erro? } }
+ *     Python -> JS: resultado de um DIMENSIONAR_HIDRANTES. `erro` é texto
+ *     pronto pra exibir (qual verificação normativa não atendeu, ou qual
+ *     pré-requisito falta — classificação, mapeamento, elevação de algum
+ *     ponto) — SEM o botão "Mostrar no Projeto" que o pushbutton mostra
+ *     nesses casos (só faz sentido com o Revit em primeiro plano; quem
+ *     precisar localizar o elemento ainda roda o pushbutton no Revit).
+ *     Em caso de sucesso (`ok: true`), o cache de dimensionamento já foi
+ *     gravado — quem recebe essa mensagem deve mandar
+ *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado
+ *     completo, em vez de esta mensagem carregar os dados duas vezes.
+ *
+ *   { type: "SELECIONAR_TRECHO_HIDRANTE", payload: { rota: number[] } }
+ *     JS -> Python: seleciona e enquadra, na view ativa do Revit, todo o
+ *     trecho (Bomba -> válvula) de um hidrante — botão "Localizar" da
+ *     tabela "Verificação do Hidrante Mais Desfavorável"
+ *     (HidrantesDimensionamento.jsx). `rota` é o campo de mesmo nome de um
+ *     item de `ranking_hidrantes` (dentro de `dimensionamento`, ver
+ *     HIDRANTES_DIMENSIONAMENTO acima) — ausente/vazio num ranking salvo
+ *     antes dessa rota existir (reexecute "Mapear Trechos" pra preencher).
+ *     Fire-and-forget: não há resposta — sucesso já aparece no Revit, e uma
+ *     falha mostra um alerta nativo por lá (mesmo botão "Localizar"/
+ *     "Mostrar no Projeto" das janelas do pushbutton "Mapear Trechos").
+ *
+ *   { type: "GET_REVIT_LEVELS", payload: { estruturaId } }
+ *     JS -> Python: pede os níveis (Level) do documento Revit ativo,
+ *     ordenados por elevação, pro painel "Correlacionar Níveis"
+ *     (CorrelacaoNiveisModal.jsx) — nem sempre o nome do nível no Revit
+ *     bate com o pavimento cadastrado no site (ex.: "Nível 1" em vez de
+ *     "Térreo"), então o usuário alinha as duas listas manualmente
+ *     arrastando, em vez do plugin tentar adivinhar por nome.
+ *     `estruturaId` também traz de volta a correlação já salva (se houver)
+ *     pra essa estrutura, pronta pra reabrir o painel já no estado salvo.
+ *
+ *   { type: "REVIT_LEVELS", payload: { levels: [{ uniqueId, nome, elevacao }],
+ *     correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }], erro? } }
+ *     Python -> JS: resposta de GET_REVIT_LEVELS. `correlacao` é a
+ *     correlação salva por último (ver SET_NIVEIS_CORRELACAO) — vazia se
+ *     a estrutura nunca foi correlacionada ainda.
+ *
+ *   { type: "SET_NIVEIS_CORRELACAO", payload: { estruturaId,
+ *     correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }] } }
+ *     JS -> Python: grava a correlação Nível do Revit <-> Pavimento do
+ *     FireUtils no firedata.json do documento ativo, por estrutura — fica
+ *     só local (não vai pro Supabase): um `Level` é um elemento deste
+ *     documento Revit, não faz sentido compartilhar entre documentos
+ *     diferentes vinculados à mesma estrutura. Chave persistida é o
+ *     `Level.UniqueId` (sobrevive a um rename do nível no Revit).
+ *
+ *   { type: "NIVEIS_CORRELACAO_SAVED", payload: { ok, erro? } }
+ *     Python -> JS: resultado de um SET_NIVEIS_CORRELACAO.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -145,6 +211,13 @@ export const BridgeMessageTypes = {
   HIDRANTES_CLASSIFICACAO_SAVED: "HIDRANTES_CLASSIFICACAO_SAVED",
   GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
+  DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",
+  HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
+  SELECIONAR_TRECHO_HIDRANTE: "SELECIONAR_TRECHO_HIDRANTE",
+  GET_REVIT_LEVELS: "GET_REVIT_LEVELS",
+  REVIT_LEVELS: "REVIT_LEVELS",
+  SET_NIVEIS_CORRELACAO: "SET_NIVEIS_CORRELACAO",
+  NIVEIS_CORRELACAO_SAVED: "NIVEIS_CORRELACAO_SAVED",
 };
 
 function obterWebView() {

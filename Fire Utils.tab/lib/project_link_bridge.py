@@ -24,8 +24,8 @@ doc.PathName.
 import os
 
 from sync import config_sync, salvar_config_sync
-from projeto import salvar_dados_projeto, limpar_vinculo_projeto
-from normas import get_label
+from projeto import salvar_dados_projeto, limpar_vinculo_projeto, carregar_cache
+from normas import get_estado
 from family_error_utils import texto_erro
 import hidrantes.calc as hidrantes_calc
 import saidas.calc as saidas_calc
@@ -91,7 +91,8 @@ def tratar_set_project_link(uiapp, payload, postar_mensagem):
 
     try:
         uf = payload.get(u"uf") or u""
-        estado_nome = get_label(uf).split(u" — ")[0] if uf else u""
+        estado = get_estado(uf, projeto_dir) if uf else None
+        estado_nome = (estado.get(u"nome") if estado else None) or uf
         salvar_dados_projeto(
             projeto_dir,
             identificador=payload.get(u"projetoNome") or u"",
@@ -128,17 +129,25 @@ def tratar_disconnect_project(uiapp, postar_mensagem):
 def tratar_get_dimensionamentos_status(uiapp, postar_mensagem):
     projeto_dir = _projeto_dir(uiapp)
     if projeto_dir is None:
-        postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {u"hidrantes": False, u"saidaEmergencia": False})
+        postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {u"hidrantes": False, u"saidaEmergencia": False, u"niveis": False})
         return
 
     try:
         hidrantes_ok = hidrantes_calc.cache_existe(projeto_dir)
         saida_ok = saidas_calc.carregar_cache_se_import(projeto_dir) is not None
+        # "Correlacionado" quando já existe uma correlação Nível Revit <->
+        # Pavimento salva pra estrutura atualmente vinculada (ver
+        # niveis_bridge.py) — reaproveita esta mesma consulta de status em
+        # vez de um round-trip de bridge próprio só pra isso.
+        estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
+        niveis_ok = bool(estrutura_id and (carregar_cache(projeto_dir).get(u"niveis_pavimentos") or {}).get(estrutura_id))
     except Exception as ex:
         print(u"[AVISO] GET_DIMENSIONAMENTOS_STATUS falhou: {}".format(texto_erro(ex)))
         hidrantes_ok = False
         saida_ok = False
+        niveis_ok = False
     postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {
         u"hidrantes": hidrantes_ok,
         u"saidaEmergencia": saida_ok,
+        u"niveis": niveis_ok,
     })

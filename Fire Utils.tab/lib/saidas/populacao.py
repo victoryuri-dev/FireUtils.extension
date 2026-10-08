@@ -30,6 +30,11 @@ def population_calc(area, rate):
 # reiniciando a contagem por nível (mesmo Level do Revit) + uso.
 _NUMERO_NOME_RE = re.compile(u"^(\\d+) - ")
 
+# Nomes padrão que o Revit atribui a um ambiente recém-criado — só nesse
+# caso o nome é substituído pelo uso da ocupação; um ambiente já renomeado
+# pelo usuário mantém o nome dele.
+_NOMES_PADRAO_REVIT = (u"Ambiente", u"ambiente")
+
 
 def _proximo_numero(doc, nivel_id, ocupacao):
     """Maior número já usado no prefixo "NN - <ocupacao>" entre os ambientes
@@ -165,7 +170,10 @@ def set_occupancy(rooms, occupancy_value, estado):
 
             # Nome do ambiente → uso da ocupação, numerado ("00 - Loja") pra
             # não duplicar nome entre ambientes do mesmo uso no mesmo nível.
-            if ocupacao:
+            # Só altera quando o ambiente ainda está com o nome padrão do
+            # Revit ("Ambiente"/"ambiente"); se o usuário já renomeou, o
+            # nome é preservado.
+            if ocupacao and nome_room.strip() in _NOMES_PADRAO_REVIT:
                 param_nome = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
                 if param_nome:
                     nivel_id = room.Level.Id if room.Level else None

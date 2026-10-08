@@ -36,7 +36,8 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  background: var(--white);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 16px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
@@ -133,7 +134,8 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  background: var(--white);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px 12px 12px 14px;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
@@ -176,6 +178,7 @@
   color: var(--text-2);
   margin: 2px 0 0;
   overflow-wrap: break-word;
+  white-space: pre-line;
 }
 
 .toast-fechar {
@@ -197,11 +200,11 @@
 }
 
 .toast-sucesso {
-  border-left-color: #1f9d55;
+  border-left-color: var(--green);
 }
 
 .toast-sucesso .toast-icone {
-  background: #1f9d55;
+  background: var(--green);
 }
 
 .toast-erro {
@@ -236,6 +239,7 @@
   width: 58px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -420,6 +424,9 @@
 
 /* Cabeçalho ------------------------------------------------------------ */
 .header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
 }
 
@@ -526,7 +533,7 @@
   padding: 0 15px;
   border-radius: 4px;
   border: none;
-  background: #f1f1f1;
+  background: var(--pill-bg);
   color: var(--text);
   font-size: 13px;
   font-weight: 600;
@@ -606,17 +613,20 @@
 }
 
 /* Catálogo / grade de cartões --------------------------------------------- */
+/* 4 colunas fixas, independente da largura da dockpane — a grade
+   responsiva anterior (auto-fill/minmax, igual ao site) reduzia pra 2-3
+   colunas em larguras menores de painel (dockpane ancorada, não
+   flutuante), que é o caso mais comum; cada cartão (.cartao, largura
+   livre dentro da coluna) encolhe pra caber, em vez de a grade perder
+   coluna. */
 .grade {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: auto;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
 }
 
 .cartao {
   position: relative;
-  width: 138px;
   height: 190px;
   background: var(--bg-2);
   border: 1px solid var(--border);
@@ -857,7 +867,7 @@
 }
 
 .projeto-status-salvo .icon {
-  color: #1f9d55;
+  color: var(--green);
 }
 
 .projeto-nome {
@@ -868,6 +878,20 @@
   font-weight: 700;
   margin: 0;
   color: var(--text);
+}
+
+.projeto-estrutura-tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
 }
 
 .projeto-link-externo {
@@ -903,53 +927,179 @@
 }
 
 /* Conectar um projeto — grade de cartões --------------------------------- */
+/* Uma coluna só: a dockpane é estreita (painel lateral do Revit) — duas
+   colunas espremiam demais cada cartão (chips/título/rodapé cortando nas
+   bordas, ver captura reportada), então cada cartão usa a largura toda
+   disponível. */
 .grade-projetos {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  flex-wrap: wrap;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 
-.cartao-projeto {
-  flex-grow: 0;
+/* Cartão de projeto — layout copiado do site (ETOS.FireUtils,
+   src/pages/ProjetosPage.jsx/ProjectCard). As cores (--cp-*) agora
+   resolvem pros mesmos tokens do tema da dockpane (index.css), em vez de
+   hexadecimais fixos — o cartão ficava sempre escuro mesmo com o resto
+   da dockpane no tema claro, destoando (ver captura reportada). */
+.card-projeto {
+  --cp-bg: var(--bg-3);
+  --cp-bg-hover: var(--bg-2);
+  --cp-border: var(--border);
+  --cp-border-hover: var(--border);
+  --cp-ink: var(--text);
+  --cp-ink-faint: var(--text-3);
+  --cp-green: var(--green);
+  --cp-green-dim: var(--green-dim);
+  --cp-green-border: var(--green-border);
+  --cp-amber: var(--amber);
+  --cp-amber-dim: var(--amber-dim);
+  --cp-amber-border: var(--amber-border);
+  --cp-red: var(--accent);
+  --cp-red-dim: var(--red-dim);
+  --cp-red-border: var(--red-border);
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   text-align: left;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 14px 16px;
-  transition: .2s;
+  background: var(--cp-bg);
+  border: 1px solid var(--cp-border);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--cp-ink);
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.cartao-projeto:hover {
-  border-color: var(--border-3);
+.card-projeto:hover {
+  background: var(--cp-bg-hover);
+  border-color: var(--cp-border-hover);
 }
 
-.cartao-projeto-nome {
-  font-size: 14px;
-  font-weight: 700;
-  margin: 0 0 10px;
-  color: var(--text);
-}
-
-.cartao-projeto-grade {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 10px;
-  font-size: 11px;
-  color: var(--text);
-}
-
-.cartao-projeto .rotulo {
-  color: var(--text-3);
-}
-
-.cartao-projeto-rodape {
-  margin: 10px 0 0;
-  font-size: 10px;
-  color: var(--text-3);
+.card-projeto-topo {
   display: flex;
   align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.card-projeto-nome {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0;
+  color: var(--cp-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-projeto-anel {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.card-projeto-anel svg {
+  transform: rotate(-90deg);
+}
+
+.card-projeto-anel .icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 9px;
+  height: 9px;
+}
+
+.card-projeto-chips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.card-projeto-chip {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+.card-projeto-chip .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.card-projeto-chip-green {
+  background: var(--cp-green-dim);
+  border-color: var(--cp-green-border);
+  color: var(--cp-green);
+}
+
+.card-projeto-chip-amber {
+  background: var(--cp-amber-dim);
+  border-color: var(--cp-amber-border);
+  color: var(--cp-amber);
+}
+
+.card-projeto-chip-red {
+  background: var(--cp-red-dim);
+  border-color: var(--cp-red-border);
+  color: var(--cp-red);
+}
+
+.card-projeto-chip-neutral {
+  background: var(--pill-bg);
+  border-color: var(--cp-border);
+  color: var(--cp-ink-faint);
+}
+
+.card-projeto-stats {
+  margin: 0;
+  display: grid;
+  grid-auto-flow: column;
+  justify-content: start;
+  column-gap: 32px;
+}
+
+.card-projeto-stats dt {
+  font-size: 10px;
+  color: var(--cp-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  margin: 0 0 6px;
+}
+
+.card-projeto-stats dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cp-ink);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.card-projeto-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cp-border);
+  font-size: 11px;
+  color: var(--cp-ink-faint);
 }
 
 /* Selecionar estrutura ---------------------------------------------------- */
@@ -1073,7 +1223,7 @@
 }
 
 .status-ok {
-  color: #1f9d55;
+  color: var(--green);
 }
 
 .status-pendente {
@@ -1842,6 +1992,139 @@
   color: var(--text);
 }
 
+/* Painel "Correlacionar Níveis" (CorrelacaoNiveisModal.jsx) ------------- */
+.niveis-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 300;
+  animation: surgir 0.15s;
+}
+
+.niveis-modal-caixa {
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  width: 560px;
+  max-width: 95vw;
+  max-height: 85vh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.niveis-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.niveis-modal-titulo {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.niveis-modal-ajuda {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.niveis-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.niveis-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.niveis-coluna-titulo {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+
+.niveis-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.niveis-linha-fixa {
+  background: var(--bg);
+}
+
+.niveis-linha-vazia .niveis-linha-nome {
+  color: var(--text-3);
+}
+
+.niveis-linha-sobre {
+  border-color: var(--accent);
+  background: rgba(234, 19, 48, 0.04);
+}
+
+.niveis-linha-arrastando {
+  opacity: 0.4;
+}
+
+.niveis-linha-nome {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.niveis-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  padding: 2px;
+  cursor: grab;
+}
+
+.niveis-grip:active {
+  cursor: grabbing;
+}
+
+.niveis-grip .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.niveis-modal-rodape {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
 /* Formulário de ambiente (seShared.jsx) --------------------------------------- */
 .se-form {
   display: flex;
@@ -2038,7 +2321,7 @@
 .se-pagina-icone {
   flex-shrink: 0;
   border-radius: 8px;
-  color: black;
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2111,6 +2394,43 @@
   margin-bottom: 20px;
 }
 
+/* Menu de etapas (Classificação / Dimensionamento / Bomba de Incêndio),
+   abaixo do título — equivalente horizontal do StepsNav lateral da mesma
+   página no site, adaptado à largura estreita da dockpane: abas neutras
+   (texto cinza, sem ícone/cor), linha inferior e fundo cinza na ativa. */
+.hid-etapas {
+  display: flex;
+  border-bottom: 1px solid var(--border-2);
+  margin-bottom: 18px;
+  flex-shrink: 0;
+}
+
+.hid-etapa {
+  flex: 1;
+  padding: 10px 10px;
+  border: none;
+  background: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+  cursor: pointer;
+  transition: .15s;
+}
+
+.hid-etapa:hover {
+  color: var(--text-2);
+}
+
+.hid-etapa-ativa,
+.hid-etapa-ativa:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+
 /* Títulos de seção e de card nesta página em preto (var(--text)) — as
    classes compartilhadas (.dashboard-subtitulo, .cartao-info h3) usam um
    cinza mais claro (var(--text-2)) nas outras páginas do Dashboard;
@@ -2118,15 +2438,6 @@
 .hid-pagina .dashboard-subtitulo,
 .hid-pagina .cartao-info h3 {
   color: var(--text);
-}
-
-/* Um card por linha, ocupando toda a largura — "Ponto de Operação do
-   Sistema" (HD01/HD02/Bomba). */
-.hid-lista-vertical {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 20px;
 }
 
 .hid-salvando {
@@ -2188,78 +2499,781 @@
   margin-top: 10px;
 }
 
-/* Pressão + Vazão (ou par equivalente) numa linha só, em vez de duas
-   linhas dt/dd empilhadas — cards de "Ponto de Operação do Sistema". */
-.hid-linha-inline {
+/* Bomba de Incêndio (HidrantesBomba.jsx) — réplica em CSS puro da Etapa 3
+   do site (HidrantesPage.jsx: `Bomba` + BombaESuccaoForm.jsx:
+   `SelecaoBombas`). */
+.hid-secao-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: -6px 0 12px;
+}
+
+.hid-ponto-operacao {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hid-ponto-operacao-col {
+  padding: 14px 16px;
+}
+
+.hid-ponto-operacao-col + .hid-ponto-operacao-col {
+  border-left: 1px solid var(--border);
+}
+
+.hid-ponto-operacao-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+
+.hid-ponto-operacao-linha {
   display: flex;
+  align-items: baseline;
+  gap: 6px;
   flex-wrap: wrap;
-  gap: 6px 14px;
-  font-size: 12px;
-  color: var(--text);
 }
 
-.hid-linha-inline-label {
-  color: var(--text-2);
-}
-
-/* Cards de valor único — "Ponto de Operação do Sistema" (Altura
-   Manométrica/Vazão Total) e "Dimensionamento da Bomba de Incêndio"
-   (Pressão/Vazão/Eficiência/Potência): cada card mostra UMA grandeza,
-   grande, como um resultado de verdade — o título do próprio card
-   (Cartao h3) já serve de rótulo. */
-.hid-grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.hid-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.hid-valor-grande {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.hid-valor-grande-destaque {
+.hid-ponto-operacao-valor {
+  font-family: monospace;
+  font-size: 19px;
+  font-weight: 700;
   color: var(--accent);
 }
 
-/* Eficiência e potência adotada são os únicos valores editáveis no meio
-   dos resultados — mesmo lugar visual de ValorGrande, com um input no
-   lugar do texto, pra alterar tudo no próprio card do resultado em vez
-   de duplicar o valor num campo separado. */
-.hid-stat-input-linha {
+.hid-ponto-operacao-unidade {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.hid-bomba-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+@media (max-width: 480px) {
+  .hid-bomba-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hid-bomba-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hid-bomba-cartao {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  text-align: left;
+  cursor: pointer;
+  transition: 0.15s;
+  width: 100%;
+}
+
+.hid-bomba-cartao:hover:not(:disabled) {
+  border-color: var(--border);
+}
+
+.hid-bomba-cartao-ativa,
+.hid-bomba-cartao-ativa:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--red-dim);
+}
+
+.hid-bomba-cartao:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.hid-bomba-cartao-textos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hid-bomba-cartao-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hid-bomba-cartao-desc {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.hid-bomba-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--text-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+}
+
+.hid-bomba-check-ativo {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.hid-bomba-check .icon {
+  width: 11px;
+  height: 11px;
+}
+
+.hid-espec {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-2);
+}
+
+.hid-espec-titulo {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+
+.hid-espec-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hid-espec-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+
+.hid-acionamento-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.hid-acionamento-pill {
+  text-align: left;
+  padding: 7px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-3);
+  font-size: 11px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.hid-acionamento-pill:hover {
+  color: var(--text-2);
+}
+
+.hid-acionamento-pill-ativa,
+.hid-acionamento-pill-ativa:hover {
+  border-color: var(--accent);
+  background: var(--red-dim);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hid-dado-valor {
   display: flex;
   align-items: baseline;
-  justify-content: center;
-  gap: 2px;
-}
-
-.hid-stat-input {
-  width: 60px;
-  border: none;
-  border-bottom: 1.5px solid var(--border-2);
-  background: transparent;
-  text-align: center;
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text);
-  padding: 0 2px 2px;
-}
-
-.hid-stat-input:focus {
-  outline: none;
-  border-bottom-color: var(--accent);
-}
-
-.hid-stat-input-sufixo {
+  gap: 5px;
+  font-family: monospace;
   font-size: 14px;
   font-weight: 700;
+  color: var(--text);
+}
+
+.hid-dado-valor-amber {
+  color: var(--amber);
+}
+
+.hid-dado-unidade {
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+.hid-campo-input-wrap {
+  position: relative;
+}
+
+.hid-campo-input {
+  padding-right: 42px;
+}
+
+.hid-campo-input-sufixo {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+/* ===========================================================================
+   Dimensionamento do Sistema (hidrantes) — espelha a Etapa 2 de
+   src/pages/medidas/HidrantesPage.jsx no site (ETOS.FireUtils): mesmas
+   seções, mesma hierarquia visual, cores equivalentes (ver tokens
+   --red-dim/--green-dim/--amber-dim em index.css, calibrados a partir da
+   paleta @theme de lá). Ver components/dashboard/HidrantesDimensionamento.jsx.
+   =========================================================================== */
+
+.hiddim-secao {
+  margin-bottom: 28px;
+}
+
+.hiddim-secao-titulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin: 0 0 10px;
+}
+
+/* Tabela */
+.hiddim-tabela-wrap {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.hiddim-tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/* overflow:hidden no wrap (acima) cortava o balão do InfoTip nos
+   cabeçalhos em sigla (THSigla) — ele abre pra cima, fora dos limites do
+   wrap. Em vez disso, arredonda só os cantos que de fato precisam (o
+   fundo do <thead>, única célula com cor própria — as <td> do corpo são
+   transparentes, então um canto quadrado nelas não aparece). */
+.hiddim-tabela thead tr:first-child th:first-child {
+  border-top-left-radius: 6px;
+}
+
+.hiddim-tabela thead tr:first-child th:last-child {
+  border-top-right-radius: 6px;
+}
+
+.hiddim-th {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-3);
+  white-space: nowrap;
+}
+
+.hiddim-td {
+  padding: 8px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border-2);
+  vertical-align: middle;
+  color: var(--text);
+}
+
+.hiddim-align-left { text-align: left; }
+.hiddim-align-right { text-align: right; }
+.hiddim-align-center { text-align: center; }
+
+/* Cabeçalho em sigla + InfoTip (THSigla, acima) — texto e ícone juntos,
+   alinhados conforme o lado da coluna (ver .hiddim-align-* no <th>). */
+.hiddim-th-sigla {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hiddim-th-sigla-end {
+  justify-content: flex-end;
+}
+
+.hiddim-th-sigla-center {
+  justify-content: center;
+}
+
+/* Botão "Localizar" da tabela de ranking (VerificacaoHidranteDesfavoravel)
+   — seleciona o trecho do hidrante da linha no Revit (ver
+   HidrantesDimensionamento.jsx:localizarTrecho). */
+.hiddim-localizar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid var(--border-2);
+  background: var(--bg);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.hiddim-localizar-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hiddim-localizar-btn .icon {
+  width: 10px;
+  height: 10px;
+}
+
+.hiddim-cor-red { color: var(--accent); }
+.hiddim-cor-green { color: var(--green); }
+.hiddim-cor-muted { color: var(--text-3); }
+.hiddim-cor-normal { color: var(--text); }
+
+.hiddim-bold { font-weight: 700; }
+.hiddim-mono { font-family: "SF Mono", "Consolas", "Liberation Mono", monospace; }
+
+.hiddim-td-vazio {
+  color: var(--text-3);
+}
+
+/* Chips (velocidade / atende) */
+.hiddim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-weight: 700;
+  font-size: 11px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.hiddim-chip-grande {
+  padding: 3px 10px;
+  font-size: 10px;
+}
+
+.hiddim-chip-ok {
+  background: var(--green-dim);
+  border-color: var(--green-border);
+  color: var(--green);
+}
+
+.hiddim-chip-bad {
+  background: var(--red-dim);
+  border-color: var(--red-border);
+  color: var(--accent);
+}
+
+/* Situação (ranking de hidrantes) */
+.hiddim-situacao {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 10px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.hiddim-situacao-red {
+  background: var(--red-dim);
+  border-color: var(--red-border);
+  color: var(--accent);
+}
+
+.hiddim-situacao-amber {
+  background: var(--amber-dim);
+  border-color: var(--amber-border);
+  color: var(--amber);
+}
+
+.hiddim-situacao-neutro {
+  background: var(--bg-3);
+  border-color: var(--border);
+  color: var(--text-3);
+}
+
+.hiddim-expand-btn {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: color .15s, border-color .15s;
+}
+
+.hiddim-expand-btn:hover {
+  color: var(--text);
+  border-color: var(--border-2);
+}
+
+.hiddim-expand-icon {
+  width: 12px;
+  height: 12px;
+  transition: transform .15s;
+}
+
+.hiddim-expand-icon-aberto {
+  transform: rotate(180deg);
+}
+
+/* Cartão genérico (Card/CardHeader) */
+.hiddim-cartao {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.hiddim-cartao-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Dados do Sistema — grade de estatísticas */
+.hiddim-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.hiddim-stat-box {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.hiddim-stat-label {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 4px;
+}
+
+/* Variantes do grid/caixa de estatística, usadas por "Classificação do
+   Sistema" (SistemaHidrantesPage.jsx) — cópia da seção equivalente do site
+   (FormularioSistema.jsx lá): área/ocupação em destaque (2 colunas, texto
+   maior, alinhado à esquerda) e o resumo do Tipo aplicado em 3 colunas. */
+.hiddim-stat-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.hiddim-stat-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.hiddim-stat-box-left {
+  text-align: left;
+}
+
+.hiddim-stat-val-grande {
+  font-size: 15px;
+}
+
+.hiddim-stat-label-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.hiddim-stat-label-linha .hiddim-stat-label {
+  margin-bottom: 0;
+}
+
+.hiddim-stat-hint {
+  font-size: 9px;
+  color: var(--text-3);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  white-space: nowrap;
+}
+
+.hiddim-campo-label {
+  font-size: 11px;
   color: var(--text-2);
+  margin: 0;
+}
+
+.hiddim-cartao-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.6;
+  margin: -4px 0 14px;
+}
+
+.hiddim-stat-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Resumo Executivo (HID-01/HID-02) */
+.hiddim-resumo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.hiddim-id-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+}
+
+.hiddim-id-badge-red { color: var(--accent); }
+.hiddim-id-badge-amber { color: var(--amber); }
+
+.hiddim-label-fraco {
+  font-size: 9px;
+  color: var(--text-3);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.hiddim-resumo-corpo {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hiddim-resumo-linha {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.hiddim-resumo-linha-label {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.hiddim-resumo-linha-val {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  white-space: nowrap;
+}
+
+.hiddim-resumo-chip {
+  margin-top: 2px;
+}
+
+/* Resultado Hidráulico (Ht/Qt/Ramal) */
+.hiddim-resultado-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.hiddim-resultado-box {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.hiddim-resultado-label {
+  font-size: 10px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 4px;
+}
+
+.hiddim-resultado-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+}
+
+/* Perdas de Carga por Trecho */
+.hiddim-trecho-cartao {
+  margin-bottom: 12px;
+}
+
+.hiddim-trecho-id {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+}
+
+.hiddim-trecho-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hiddim-trecho-info {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.hiddim-trecho-corpo {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.hiddim-segmento {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.hiddim-segmento-topo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.hiddim-dn-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+
+.hiddim-segmento-tubo {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.hiddim-segmento-tubo strong {
+  color: var(--text);
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+}
+
+.hiddim-segmento-acessorios {
+  margin-bottom: 10px;
+}
+
+.hiddim-segmento-acessorios-titulo {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 5px;
+}
+
+.hiddim-ministat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.hiddim-ministat {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 9px;
+}
+
+.hiddim-ministat-label {
+  font-size: 9px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+
+.hiddim-ministat-val {
+  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+}
+
+.hiddim-ministat-primario {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.hiddim-ministat-secundario {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hiddim-ministat-terciario {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-3);
 }

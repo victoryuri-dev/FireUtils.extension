@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
 import Loader from "./Loader";
 import { supabase } from "../lib/supabaseClient";
+import { useTema } from "../hooks/useTema";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
@@ -10,6 +11,8 @@ import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import configuracoesIconSvg from "../assets/icons/config-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
+import temaClaroIconSvg from "../assets/icons/theme-light-icon.svg?raw";
+import temaEscuroIconSvg from "../assets/icons/theme-dark-icon.svg?raw";
 
 // Sistema de Hidrantes e Saídas de Emergência são páginas próprias (ver
 // App.jsx/SistemaHidrantesPage.jsx/SaidaEmergenciaPage.jsx) — mesmo atalho
@@ -31,6 +34,7 @@ const DURACAO_LOGO_HOVER_MS = 1380;
 export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar, email }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
+  const { tema, alternar: alternarTema } = useTema();
   const menuRef = useRef(null);
   const logoTimeoutRef = useRef(null);
 
@@ -82,6 +86,17 @@ export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, o
       </div>
 
       <div className="sidebar-rodape">
+        <button
+          type="button"
+          className="sidebar-item"
+          onClick={alternarTema}
+          title={tema === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro"}
+        >
+          <Icon
+            svg={tema === "dark" ? temaClaroIconSvg : temaEscuroIconSvg}
+            title={tema === "dark" ? "Tema claro" : "Tema escuro"}
+          />
+        </button>
         <button type="button" className="sidebar-item sidebar-item-neutro" disabled title="Configurações (em breve)">
           <Icon svg={configuracoesIconSvg} title="Configurações" />
         </button>

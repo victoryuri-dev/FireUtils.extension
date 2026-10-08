@@ -15,6 +15,7 @@ import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
 import checkIconSvg from "./assets/icons/check-icon.svg?raw";
 import xIconSvg from "./assets/icons/x-icon.svg?raw";
 import searchIconSvg from "./assets/icons/search-icon.svg?raw";
+import libraryIconSvg from "./assets/icons/library-icon.svg?raw";
 
 // Tempo máximo esperando o LOAD_RESULT antes de desistir do indicador de
 // carregamento — rede de segurança pra não deixar o spinner girando pra
@@ -330,6 +331,9 @@ export default function App() {
           <>
             <div className="biblioteca-scroll">
               <header className="header">
+                <span className="se-pagina-icone">
+                  <Icon svg={libraryIconSvg} />
+                </span>
                 <h1>Biblioteca de Famílias</h1>
               </header>
 

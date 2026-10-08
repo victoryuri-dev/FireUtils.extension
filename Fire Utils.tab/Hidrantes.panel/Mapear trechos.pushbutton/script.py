@@ -126,7 +126,7 @@ def seleciona(msg_alert, msg_pick, filtro):
 # 0 — Projeto/estado, sistema classificado e parâmetros
 # ===========================================================================
 projeto_dir, sigla_estado, _ = exigir_projeto_e_estado(doc, forms, script)
-perfil = get_profile(sigla_estado)
+perfil = get_profile(sigla_estado, projeto_dir)
 
 # Precisa do sistema já classificado ("Classificar Sistema de Hidrante")
 # para saber a vazão nominal de um hidrante (Qs) - usada abaixo para
@@ -327,6 +327,11 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
         {
             u"id":           u"H-{:02d}".format(i + 1),
             u"elementId":    get_id(c[u"valvula"]),
+            # Rota completa (Bomba -> valvula), pro botao "Localizar" da
+            # tabela de ranking na dockpane (SET_HIDRANTES_CLASSIFICACAO nao
+            # mexe aqui - e so pra selecionar/enquadrar no Revit, ver
+            # hidrantes_dimensionamento_bridge.py:tratar_selecionar_trecho_hidrante).
+            u"rota":         list(c[u"rota"]),
             u"J":            c[u"J"],
             u"dZ":           c[u"dZ"],
             u"score":        c[u"score"],
@@ -417,18 +422,36 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
         u"ranking":    ranking_hidrantes,
     }, _projeto_dir, chave=u"rotas")
 
+    # Perda de carga da sucção (RTI -> Bomba) — mesmo método usado pro
+    # "score" de cada hidrante acima (calc_j_trecho com Qs/C_HW), só pra
+    # essa conferência visual: não é o cálculo hidráulico final da sucção
+    # (esse, com a vazão majorada do NPSH quando aplicável, é feito em
+    # "Dimensionar Hidrantes").
+    elems_succao = [_doc.GetElement(to_element_id(eid)) for eid in _ids_succao]
+    ids_succao_set = set(_ids_succao)
+    trecho_succao = extrair_trecho(
+        elems_succao, get_comprimento,
+        lambda e, _ids=ids_succao_set: get_diametro_no_trecho(e, _ids),
+        get_leq, get_nome)
+    j_succao = calc_j_trecho(trecho_succao, _qs, _c_hw, u"RTI > Bomba (score)")
+
     # Janela final: trechos identificados, com botão por linha pra
-    # selecionar/enquadrar no Revit a rota completa (Bomba -> Ponto A ->
-    # hidrante) de cada um dos dois hidrantes mais desfavoraveis, e a
-    # succao (RTI -> Bomba). Modeless (Show(), nao ShowDialog()) - ver
-    # docstring de mostrar_trechos_mapeados.
-    mostrar_trechos_mapeados([
-        {u"nome": u"Sucção (RTI → Bomba)", u"eids": list(_ids_succao)},
-        {u"nome": u"1º Hidrante Mais Desfavorável (H-01)",
-         u"eids": list(ids_rec_comum) + list(ids_ramal_h1)},
-        {u"nome": u"2º Hidrante Mais Desfavorável (H-02)",
-         u"eids": list(ids_rec_comum) + list(ids_ramal_h2)},
-    ], fila_acoes=_fila_acoes, ao_localizar=_ao_localizar)
+    # selecionar/enquadrar no Revit a succao (RTI -> Bomba) e a rota
+    # completa (Bomba -> hidrante) de TODOS os hidrantes achados na rede,
+    # em ordem do mais ao menos desfavoravel (mesma ordem de `candidatas`,
+    # ja usada pra numerar "FireUtils - ID Hidrante" acima). Modeless
+    # (Show(), nao ShowDialog()) - ver docstring de mostrar_trechos_mapeados.
+    linhas_trechos = [
+        {u"nome": u"Sucção (RTI → Bomba)", u"eids": list(_ids_succao), u"perda": j_succao[u"J"]},
+    ]
+    n_candidatas = len(candidatas)
+    for i, c in enumerate(candidatas):
+        if i == n_candidatas - 1 and n_candidatas > 1:
+            nome = u"Hidrante Mais Favorável (H-{:02d})".format(i + 1)
+        else:
+            nome = u"{}º Hidrante Mais Desfavorável (H-{:02d})".format(i + 1, i + 1)
+        linhas_trechos.append({u"nome": nome, u"eids": list(c[u"rota"]), u"perda": c[u"J"]})
+    mostrar_trechos_mapeados(linhas_trechos, fila_acoes=_fila_acoes, ao_localizar=_ao_localizar)
 
 
 if itens_recalque:

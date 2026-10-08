@@ -131,7 +131,7 @@ def exigir_projeto_e_estado(doc, forms, script):
 
     # 3 — carregar dados normativos
     from normas import get_estado
-    estado = get_estado(uf)
+    estado = get_estado(uf, projeto_dir)
     if not estado:
         forms.alert(
             u"Estado '{}' não encontrado na extensão.\n"

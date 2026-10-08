@@ -8,8 +8,11 @@ import { urlProjeto as montarUrlProjeto } from "../../lib/site";
  * id do projeto + status "Salvo" + nome com link pro site. `projeto` é a
  * linha crua da tabela `projetos` (id/nome/dados/updated_at, ver
  * lib/projectData.js) — não há uma coluna separada de "código público",
- * o `id` (text) já cumpre esse papel. */
-export default function ProjetoCabecalho({ projeto }) {
+ * o `id` (text) já cumpre esse papel. `estrutura` (opcional) é o painel já
+ * derivado (lib/projetoDados.js:dashboardEstrutura) — só pra mostrar qual
+ * estrutura está conectada, alinhado ao título; a tela "Selecione uma
+ * estrutura" não passa esse prop, já que ainda não há nenhuma escolhida. */
+export default function ProjetoCabecalho({ projeto, estrutura }) {
   if (!projeto) return null;
   const link = montarUrlProjeto(projeto.id);
 
@@ -29,6 +32,7 @@ export default function ProjetoCabecalho({ projeto }) {
       </div>
       <h2 className="projeto-nome">
         {projeto.nome}
+        {estrutura?.nome && <span className="projeto-estrutura-tag">{estrutura.nome}</span>}
         {link && (
           <a href={link} target="_blank" rel="noreferrer" className="projeto-link-externo" title="Abrir no site">
             <Icon svg={externalLinkIconSvg} />
