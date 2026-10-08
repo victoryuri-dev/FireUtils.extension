@@ -48,6 +48,17 @@ $ItensDoPayload = @(
     @{ Origem = 'fireutils.config.json';  Tipo = 'Arquivo' }
 )
 
+# A family_library tem ~53 MB, mas o acervo vive no Supabase: a dockpane
+# baixa sob demanda, e garantir_familia_no_projeto() apenas verifica se a
+# família já está no documento -- não carrega do disco. A pasta continua no
+# repositório porque alimenta migration/generate_catalog.py, mas no
+# instalador só precisam ir as famílias que o Python abre com LoadFamily.
+#
+# Caminhos relativos a "Fire Utils.tab\lib\family_library".
+$FamiliasNecessarias = @(
+    'Hidrantes\Valvula para Hidrante.rfa'   # hydrant_family.garantir_valvula
+)
+
 # Itens da raiz que sao intencionalmente de desenvolvimento e nao devem
 # disparar o aviso de "item novo nao contemplado".
 $IgnoradosNaRaiz = @(
@@ -191,6 +202,48 @@ foreach ($item in $ItensDoPayload) {
     }
 
     Write-Host "    + $($item.Origem)"
+}
+
+# Poda a biblioteca de familias: entra apenas o que o Python abre do disco.
+$libPayload = Join-Path $PayloadDir 'Fire Utils.tab\lib\family_library'
+
+if (Test-Path -LiteralPath $libPayload) {
+    $guardadas = @()
+
+    foreach ($relativo in $FamiliasNecessarias) {
+        $origem = Join-Path $RepoRoot (Join-Path 'Fire Utils.tab\lib\family_library' $relativo)
+
+        if (-not (Test-Path -LiteralPath $origem)) {
+            throw ("Familia necessaria nao encontrada: $relativo`n" +
+                   "Se ela foi renomeada ou removida, atualize `$FamiliasNecessarias " +
+                   "-- e confira o codigo que a carrega, que vai quebrar junto.")
+        }
+
+        $destinoTemp = Join-Path $env:TEMP ('fireutils-fam-{0}' -f ([guid]::NewGuid().ToString('N')))
+        New-Item -ItemType Directory -Path $destinoTemp -Force | Out-Null
+        Copy-Item -LiteralPath $origem -Destination $destinoTemp -Force
+
+        $guardadas += @{
+            Relativo = $relativo
+            Temp     = (Join-Path $destinoTemp (Split-Path -Leaf $relativo))
+        }
+    }
+
+    Remove-Item -LiteralPath $libPayload -Recurse -Force
+
+    foreach ($familia in $guardadas) {
+        $destino = Join-Path $libPayload $familia.Relativo
+        $pasta   = Split-Path -Parent $destino
+
+        if (-not (Test-Path -LiteralPath $pasta)) {
+            New-Item -ItemType Directory -Path $pasta -Force | Out-Null
+        }
+
+        Move-Item -LiteralPath $familia.Temp -Destination $destino -Force
+        Remove-Item -LiteralPath (Split-Path -Parent $familia.Temp) -Recurse -Force -ErrorAction SilentlyContinue
+
+        Write-Host "    familia mantida: $($familia.Relativo)"
+    }
 }
 
 # Caches do Python nunca devem ir junto: sao especificos da maquina e da

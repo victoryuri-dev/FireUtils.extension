@@ -73,6 +73,15 @@ Source: "scripts\ensure-deps.ps1"; Flags: dontcopy
 Source: "payload\*"; DestDir: "{app}"; \
     Flags: recursesubdirs createallsubdirs ignoreversion
 
+[InstallDelete]
+; Roda ANTES de copiar os arquivos novos. Sem isto, o Inno sobrescreve o que
+; existe mas nunca remove o que saiu entre versões — e numa extensão pyRevit
+; uma pasta .pushbutton órfã continua virando botão na faixa de opções,
+; chamando um script que talvez nem exista mais.
+Type: filesandordirs; Name: "{app}\Fire Utils.tab"
+; Resíduo de versões que ainda embutiam o build do frontend.
+Type: filesandordirs; Name: "{app}\webapp"
+
 [UninstallDelete]
 ; Remove o que o plugin gera em tempo de execucao (.pyc, caches) e que
 ; portanto nao esta na lista de arquivos instalados.
@@ -166,6 +175,27 @@ begin
   end;
 end;
 
+{ As DLLs do WebView2 ficam carregadas dentro do processo do Revit (o
+  family_loader_webview_forms faz clr.AddReferenceToFileAndPath no startup
+  do pyRevit), e o Windows não deixa sobrescrever DLL em uso. Com o Revit
+  aberto a cópia falharia no meio, deixando a instalação pela metade. }
+function RevitEstaRodando(): Boolean;
+var
+  Localizador, Servico, Processos: Variant;
+begin
+  Result := False;
+  try
+    Localizador := CreateOleObject('WbemScripting.SWbemLocator');
+    Servico := Localizador.ConnectServer('.', 'root\CIMV2');
+    Processos := Servico.ExecQuery('SELECT * FROM Win32_Process WHERE Name = "Revit.exe"');
+    Result := Processos.Count > 0;
+  except
+    { Falha ao consultar o WMI não é motivo para barrar a instalação:
+      segue em frente e deixa o próprio Inno reportar arquivo em uso. }
+    Result := False;
+  end;
+end;
+
 { Roda ensure-deps.ps1 antes de copiar qualquer arquivo. Retornar string
   vazia libera a instalação; qualquer outro texto aborta e é exibido ao
   usuário. }
@@ -175,6 +205,19 @@ var
   CodigoSaida: Integer;
 begin
   Result := '';
+
+  while RevitEstaRodando() do
+  begin
+    if MsgBox('O Autodesk Revit está aberto.' + #13#10#13#10 +
+              'Feche o Revit para continuar — alguns arquivos do plugin ficam ' +
+              'em uso enquanto ele está rodando, e a instalação falharia pela metade.' + #13#10#13#10 +
+              'Depois de fechar, clique em Repetir.',
+              mbError, MB_RETRYCANCEL) = IDCANCEL then
+    begin
+      Result := 'Instalação cancelada. Feche o Revit e execute o instalador novamente.';
+      Exit;
+    end;
+  end;
 
   WizardForm.PreparingLabel.Caption :=
     'Verificando o pyRevit e o WebView2. Se algum estiver faltando, ' +

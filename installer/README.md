@@ -21,13 +21,22 @@ elevação ao instalar o pyRevit ou o WebView2, que são de terceiros.
 
 ## O que o instalador não carrega
 
-A interface da dockpane **não vai no instalador**. Ela é carregada da URL em
+**A interface da dockpane.** Ela é carregada da URL em
 `fireutils.config.json` toda vez que o painel abre — o instalador leva
-apenas essa configuração.
+apenas essa configuração. Publicar interface nova é um deploy, não um
+instalador novo.
 
-Por isso, publicar interface nova é um deploy, não um instalador novo. O
-instalador só precisa ser regerado quando muda o Python, as DLLs ou as
-famílias `.rfa`.
+**Quase toda a biblioteca de famílias.** O acervo vive no Supabase e a
+dockpane baixa sob demanda; `garantir_familia_no_projeto()` só verifica se a
+família já está no documento, sem carregar do disco. Vão no payload apenas
+as famílias listadas em `$FamiliasNecessarias` no `build.ps1` — hoje só a
+`Valvula para Hidrante.rfa`, a única que o Python abre com `LoadFamily`.
+
+Isso leva o instalador de ~45 MB para poucos MB. A pasta continua no
+repositório porque alimenta o `migration/generate_catalog.py`.
+
+Se o build parar com "familia necessaria nao encontrada", alguém renomeou ou
+removeu um `.rfa` que o código ainda carrega — corrija nos dois lugares.
 
 ## Gerando o instalador
 
@@ -48,10 +57,23 @@ fora.
 ### Proteções do build
 
 - **Aborta** se `fireutils.config.json` não existir, não for JSON válido,
-  não tiver `webappUrl` ou a URL não for `https://`. Sem ela o plugin
-  instala e o painel abre num erro, já que não há interface embutida.
+  não tiver `webappUrl`, a URL não for `https://` ou apontar para
+  `localhost` (configuração de desenvolvimento esquecida).
+- **Aborta** se alguma família de `$FamiliasNecessarias` não existir no
+  repositório.
 - **Avisa** quando aparece algo novo na raiz do repositório que não está na
   lista do payload, para nenhum arquivo novo ficar de fora sem querer.
+
+### Proteções na instalação
+
+- **Exige o Revit fechado.** As DLLs do WebView2 ficam carregadas dentro do
+  processo do Revit (`clr.AddReferenceToFileAndPath` no startup do pyRevit)
+  e o Windows não deixa sobrescrever DLL em uso — a cópia falharia no meio.
+  O instalador detecta por WMI e oferece repetir depois de fechar.
+- **Apaga a versão anterior antes de copiar** (`[InstallDelete]`). O Inno
+  sobrescreve o que existe mas nunca remove o que saiu entre versões, e numa
+  extensão pyRevit uma pasta `.pushbutton` órfã continua virando botão na
+  faixa de opções, chamando um script que talvez nem exista mais.
 
 ## Antes de distribuir: assine o executável
 
