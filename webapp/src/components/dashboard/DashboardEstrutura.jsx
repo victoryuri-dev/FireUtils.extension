@@ -70,30 +70,21 @@ function classificarRiscoChave(cargaIncendio, limiares) {
   return "alto";
 }
 
-/** Capacidade extintora mínima pra uma só unidade atender sozinha os dois
- * requisitos do item 5.2.1.4 (classe A + classes B/C) — o tipo do
- * catálogo (TIPOS_PORTATIL, normalmente o pó químico ABC) cujas classes
- * cobrem A e B/C ao mesmo tempo, ex.: "2-A:20-B:C". */
-function capacidadeExtintoraExigida(norma) {
-  const tipo = (norma.TIPOS_PORTATIL || []).find(
-    (t) => t.classes?.includes("A") && (t.classes?.includes("B") || t.classes?.includes("C"))
-  );
-  return tipo?.capacidadeMinima || null;
-}
-
-/** Texto das opções de capacidade mínima (Tabelas 4/5) pro risco atual —
- * nível alto devolve duas opções equivalentes, unidas por "ou". */
-function formatarCapacidadePorRisco(riscoChave, classeIncendio) {
-  const opcoes = capacidadeMinimaPorRisco(riscoChave, classeIncendio);
-  if (opcoes.length === 0) return "—";
-  return opcoes.map((o) => `${o.capacidade} (máx. ${o.distanciaMaxima} m)`).join(" ou ");
+/** "X-A:X-B" — capacidade extintora mínima combinada (classes A e B) pro
+ * risco atual, extintores portáteis (ver CAPACIDADE_MINIMA_POR_RISCO em
+ * lib/extintoresCapacidadeMinima.js). */
+function capacidadePortatilCombinada(riscoChave) {
+  const a = capacidadeMinimaPorRisco(riscoChave, "A");
+  const b = capacidadeMinimaPorRisco(riscoChave, "B");
+  if (!a || !b) return "—";
+  return `${a.capacidade}:${b.capacidade}`;
 }
 
 function CartaoExtintores({ norma, cargaIncendio }) {
   if (norma === undefined) {
     return (
       <div className="cartao-info">
-        <h3>Extintores</h3>
+        <h3>Extintores Portáteis</h3>
         <p className="vazio">Não foi possível carregar a norma de extintores.</p>
       </div>
     );
@@ -101,36 +92,31 @@ function CartaoExtintores({ norma, cargaIncendio }) {
   if (!norma) {
     return (
       <div className="cartao-info">
-        <h3>Extintores</h3>
+        <h3>Extintores Portáteis</h3>
         <p className="vazio">Carregando norma...</p>
       </div>
     );
   }
 
   const riscoChave = classificarRiscoChave(cargaIncendio, norma.LIMIARES_RISCO);
-  const caminhamento = riscoChave
-    ? `${norma.DISTANCIA_MAXIMA.portatil[riscoChave]} m (portátil) / ${norma.DISTANCIA_MAXIMA.sobreRodas[riscoChave]} m (sobre rodas)`
-    : "—";
+  const distanciaA = capacidadeMinimaPorRisco(riscoChave, "A");
+  const distanciaB = capacidadeMinimaPorRisco(riscoChave, "B");
 
   return (
     <div className="cartao-info">
-      <h3>Extintores</h3>
+      <h3>Extintores Portáteis</h3>
       <dl>
         <div>
-          <dt>Capacidade extintora exigida:</dt>
-          <dd>{capacidadeExtintoraExigida(norma) || "—"}</dd>
+          <dt>Capacidade Extintora Mínima:</dt>
+          <dd>{capacidadePortatilCombinada(riscoChave)}</dd>
         </div>
         <div>
-          <dt>Caminhamento máximo:</dt>
-          <dd>{caminhamento}</dd>
+          <dt>Caminhamento máx. (classe A):</dt>
+          <dd>{distanciaA ? `${distanciaA.distanciaMaxima} m` : "—"}</dd>
         </div>
         <div>
-          <dt>Capacidade mínima (classe A):</dt>
-          <dd>{formatarCapacidadePorRisco(riscoChave, "A")}</dd>
-        </div>
-        <div>
-          <dt>Capacidade mínima (classe B):</dt>
-          <dd>{formatarCapacidadePorRisco(riscoChave, "B")}</dd>
+          <dt>Caminhamento máx. (classe B):</dt>
+          <dd>{distanciaB ? `${distanciaB.distanciaMaxima} m` : "—"}</dd>
         </div>
       </dl>
     </div>
