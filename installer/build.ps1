@@ -171,10 +171,12 @@ Test-ItensNovosNaRaiz
 Write-Host '    OK'
 
 Write-Passo 'Preparando icone e imagens do assistente'
+# Sem checar $LASTEXITCODE: ele so e definido por programa externo, e um
+# script PowerShell que termina normalmente o deixa indefinido -- o que sob
+# Set-StrictMode vira erro ao ler. O script auxiliar tambem roda com
+# $ErrorActionPreference = 'Stop', entao qualquer falha la ja chega aqui
+# como excecao e aborta o build.
 & (Join-Path $PSScriptRoot 'scripts\gerar-imagens.ps1')
-if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) {
-    throw 'Falha ao gerar as imagens do instalador.'
-}
 
 Write-Passo 'Montando o payload'
 if (Test-Path -LiteralPath $PayloadDir) {
