@@ -613,15 +613,14 @@
 }
 
 /* Catálogo / grade de cartões --------------------------------------------- */
-/* 4 colunas fixas, independente da largura da dockpane — a grade
-   responsiva anterior (auto-fill/minmax, igual ao site) reduzia pra 2-3
-   colunas em larguras menores de painel (dockpane ancorada, não
-   flutuante), que é o caso mais comum; cada cartão (.cartao, largura
-   livre dentro da coluna) encolhe pra caber, em vez de a grade perder
-   coluna. */
+/* Responsiva com piso de 95px por cartão: auto-fill (não auto-fit)
+   reserva o número de colunas que cabe nesse mínimo, sem esticar os
+   cards existentes pra preencher o espaço sobrando quando há poucos
+   itens — abaixo de 95px de largura disponível por coluna, a grade
+   perde uma coluna em vez de encolher os cartões além disso. */
 .grade {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
   gap: 16px;
 }
 
