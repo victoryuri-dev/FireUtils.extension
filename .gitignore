@@ -27,13 +27,15 @@ desktop.ini
 migration/.env
 migration/output/
 
-# WebView2 SDK (Fire Utils.tab/lib/webview2_runtime/*.dll) e o build do
-# frontend (webapp/dist/) SÃO commitados de propósito, apesar de serem
-# binário/artefato gerado — sem CI/CD, é o repositório que alimenta o
-# instalador (installer/build.ps1 copia webapp/dist/ para o payload). Se
-# não estivessem versionados, gerar o instalador exigiria refazer o
-# download do NuGet e o `npm run build` toda vez.
+# As DLLs do WebView2 SDK (Fire Utils.tab/lib/webview2_runtime/*.dll) SÃO
+# commitadas de propósito, apesar de serem binário de terceiro: sem CI/CD, é
+# o repositório que alimenta o instalador, e sem elas instalar numa máquina
+# nova exigiria baixar o pacote do NuGet toda vez.
 
+# O build do frontend, ao contrário, não é versionado: a dockpane carrega a
+# interface do servidor (ver webapp/README.md), então o dist/ só existe como
+# artefato local de quem roda `npm run build` ou `npm run dev`.
+webapp/dist/
 webapp/node_modules/
 
 # Instalador: payload/ é remontado a cada build, output/ guarda o .exe

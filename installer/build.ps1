@@ -121,6 +121,12 @@ function Test-ConfigDaDockpane {
         throw "fireutils.config.json nao tem a chave 'webappUrl'."
     }
 
+    if ($url -match '^https?://(localhost|127\.0\.0\.1)') {
+        throw ("webappUrl aponta para localhost ($url). Isso e a configuracao " +
+               "de desenvolvimento -- devolva a URL de producao antes de gerar " +
+               "o instalador.")
+    }
+
     if ($url -notmatch '^https://') {
         throw "webappUrl precisa comecar com https:// (valor: $url)."
     }

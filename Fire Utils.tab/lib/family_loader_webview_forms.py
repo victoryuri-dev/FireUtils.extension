@@ -38,8 +38,8 @@ no topo do módulo. __init__ roda uma ÚNICA VEZ por sessão do Revit (o
 painel é criado uma vez no registro, em startup.py — cliques
 subsequentes no botão da faixa de opções só mostram/escondem a MESMA
 instância via forms.get_dockable_panel, ver alternar_painel). Como cada
-engine IronPython reimporta este módulo do zero a cada clique (ver
-_valor_enum_allow), import no topo do módulo pagaria esse custo pesado
+engine IronPython reimporta este módulo do zero a cada clique, import no
+topo do módulo pagaria esse custo pesado
 de novo TODA VEZ que o botão fosse clicado, mesmo quando o clique é só
 pra esconder o painel — daí esses imports serem lazy.
 """
@@ -59,55 +59,59 @@ _WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
 
 _XAML_PATH = os.path.join(_LIB_DIR, u"family_loader_webview.xaml")
 
-# Fire Utils.tab/lib/ -> Fire Utils.tab/ -> raiz da extensão -> webapp/dist/
-# (webapp/ fica fora de "Fire Utils.tab", na raiz do repositório).
+# Fire Utils.tab/lib/ -> Fire Utils.tab/ -> raiz da extensão.
 _EXT_ROOT = os.path.dirname(os.path.dirname(_LIB_DIR))
-_WEBAPP_DIST_DIR = os.path.join(_EXT_ROOT, u"webapp", u"dist")
 
-_VIRTUAL_HOST = u"appassets"
-_URL_LOCAL = u"https://{}/index.html".format(_VIRTUAL_HOST)
-
-# URL opcional de um frontend publicado na web. Sem configuração nenhuma, o
-# painel carrega de webapp/dist/ exatamente como sempre fez.
-#
-# Serve para publicar correções da interface sem gerar instalador novo: o
-# .rfa, o Python e as DLLs continuam vindo da instalação local, só o HTML/JS
-# passa a vir do servidor. Se a navegação remota falhar por qualquer motivo,
-# _ao_navegar volta para o build local sozinho.
-#
-# Configurada em fireutils.config.json, na raiz da extensão. Apagar a chave
-# (ou o arquivo) volta tudo para o build local.
+# A interface da dockpane é servida pela web, não empacotada com a extensão:
+# publicar uma correção é um deploy, sem instalador novo, e todo mundo roda a
+# mesma versão. Sem conexão o painel não abre — o acervo de famílias também
+# vive no Supabase, então não haveria o que mostrar de qualquer forma.
 _ARQUIVO_CONFIG = os.path.join(_EXT_ROOT, u"fireutils.config.json")
-_CHAVE_URL_REMOTA = u"webappUrl"
+_CHAVE_URL = u"webappUrl"
 
 
-def _url_remota_configurada():
-    """URL do frontend publicado, ou None para usar o build local."""
+def _url_aceita(url):
+    """
+    Exige https, com exceção de localhost.
+
+    Sem TLS, o bridge (que carrega família e grava no documento do Revit)
+    ficaria exposto a quem estivesse na mesma rede. localhost não trafega
+    em rede nenhuma — só a própria máquina serve nesse endereço —, e é o
+    que permite apontar o Revit para o `npm run dev` do Vite. É a mesma
+    exceção que os navegadores fazem ao tratar localhost como origem
+    segura em HTTP.
+    """
+    baixa = url.lower()
+    return (
+        baixa.startswith(u"https://")
+        or baixa.startswith(u"http://localhost")
+        or baixa.startswith(u"http://127.0.0.1")
+    )
+
+
+def _url_do_frontend():
+    """URL da interface, ou None se não houver uma utilizável."""
     if not os.path.isfile(_ARQUIVO_CONFIG):
+        _mlogger.error(u"Arquivo de configuração não encontrado: {}".format(_ARQUIVO_CONFIG))
         return None
 
     try:
         import json
         with open(_ARQUIVO_CONFIG, u"rb") as arquivo:
             dados = json.loads(arquivo.read().decode(u"utf-8"))
-        url = dados.get(_CHAVE_URL_REMOTA)
+        url = dados.get(_CHAVE_URL)
     except Exception as ex:
-        # Config quebrada não pode derrubar o painel: segue no build local.
-        _mlogger.warning(u"Ignorando {}: {}".format(_ARQUIVO_CONFIG, texto_erro(ex)))
+        _mlogger.error(u"Falha ao ler {}: {}".format(_ARQUIVO_CONFIG, texto_erro(ex)))
         return None
 
+    url = (url or u"").strip()
     if not url:
+        _mlogger.error(u"'{}' ausente ou vazio em {}".format(_CHAVE_URL, _ARQUIVO_CONFIG))
         return None
 
-    url = url.strip()
-    if not url:
-        return None
-
-    # http:// sem TLS deixaria o bridge (que carrega família e grava
-    # arquivo no projeto) exposto a qualquer um na mesma rede.
-    if not url.lower().startswith(u"https://"):
-        _mlogger.warning(
-            u"URL do frontend ignorada, só https é aceito: {}".format(url)
+    if not _url_aceita(url):
+        _mlogger.error(
+            u"URL recusada (só https, ou http em localhost): {}".format(url)
         )
         return None
 
@@ -125,32 +129,6 @@ def _origem_de(url):
         return u"{}://{}:{}".format(uri.Scheme.lower(), uri.Host.lower(), uri.Port)
     except Exception:
         return None
-
-
-def _valor_enum_allow(core):
-    """
-    Resolve o valor "Allow" do enum CoreWebView2HostResourceAccessKind a
-    partir do tipo que o próprio método SetVirtualHostNameToFolderMapping
-    de `core` espera (via reflection), em vez de um import estático de
-    nível de módulo.
-
-    O pyRevit roda o startup.py (que registra/instancia o painel) e o
-    script.py do botão (que só localiza essa instância já existente) em
-    engines IronPython separados; cada engine reimporta este módulo do
-    zero e refaz os clr.AddReferenceToFileAndPath, o que pode carregar
-    duas cópias distintas do assembly Microsoft.Web.WebView2.Core.dll no
-    mesmo processo. Um import estático do enum aqui pode acabar vindo de
-    uma cópia diferente da que o `core` em mãos realmente espera — mesmo
-    nome de tipo, mas identidades .NET diferentes — causando
-    "expected CoreWebView2HostResourceAccessKind, got
-    CoreWebView2HostResourceAccessKind". Resolver via reflection a partir
-    do método do objeto que já temos em mãos garante que é sempre a
-    cópia certa.
-    """
-    import System
-    metodo = core.GetType().GetMethod(u"SetVirtualHostNameToFolderMapping")
-    tipo_enum = metodo.GetParameters()[2].ParameterType
-    return System.Enum.Parse(tipo_enum, u"Allow")
 
 
 def _string_para_unicode_seguro(valor):
@@ -346,27 +324,23 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 
         self.fila_acoes = criar_fila_acoes()
 
-        # Definido antes do _erro_fatal abaixo: se não houver de onde
-        # carregar, o __init__ retorna cedo e este atributo precisa existir
-        # mesmo assim, senão qualquer evento que chegue depois quebra com
+        # Definidos antes do _erro_fatal abaixo: se não houver URL, o
+        # __init__ retorna cedo e estes atributos precisam existir mesmo
+        # assim, senão qualquer evento que chegue depois quebra com
         # AttributeError em vez da mensagem de erro de verdade.
-        self._url_remota = _url_remota_configurada()
+        self._url_frontend = _url_do_frontend()
 
         # O bridge só aceita mensagem vinda da origem que está carregada.
         self._origens_confiaveis = set()
-        origem = _origem_de(self._url_remota or _URL_LOCAL)
-        if origem:
-            self._origens_confiaveis.add(origem)
+        if self._url_frontend:
+            origem = _origem_de(self._url_frontend)
+            if origem:
+                self._origens_confiaveis.add(origem)
 
-        # Sem URL configurada o painel cai no build local, que é o modo de
-        # desenvolvimento (npm run build + Revit, sem depender de deploy).
-        # Na instalação de verdade a URL está sempre presente.
-        if not self._url_remota and not os.path.isdir(_WEBAPP_DIST_DIR):
+        if not self._url_frontend:
             self._erro_fatal(
-                u"Nenhuma origem para o Carregador de Famílias.\n\n"
-                u"Configure webappUrl em fireutils.config.json, ou rode "
-                u"`npm install && npm run build` dentro de webapp/ para usar "
-                u"o build local."
+                u"Configuração da interface ausente ou inválida.\n\n"
+                u"Verifique a chave '{}' em:\n{}".format(_CHAVE_URL, _ARQUIVO_CONFIG)
             )
             return  # painel abre em branco — sem WebView configurado
 
@@ -437,23 +411,13 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.Settings.AreDefaultContextMenusEnabled = True
             core.Settings.AreDevToolsEnabled = True
 
-            # Só no modo de desenvolvimento: com URL configurada, o build
-            # local não é usado para nada e pode nem estar no disco.
-            if not self._url_remota:
-                core.SetVirtualHostNameToFolderMapping(
-                    _VIRTUAL_HOST, _WEBAPP_DIST_DIR, _valor_enum_allow(core)
-                )
-
             core.WebMessageReceived += self._ao_receber_mensagem
             core.NavigationCompleted += self._ao_navegar
             core.NewWindowRequested += self._ao_pedir_nova_janela
 
             from System import Uri
-            if self._url_remota:
-                _mlogger.info(u"Carregando o frontend de {}".format(self._url_remota))
-                self.WebView.Source = Uri(self._url_remota)
-            else:
-                self.WebView.Source = Uri(_URL_LOCAL)
+            _mlogger.info(u"Carregando a interface de {}".format(self._url_frontend))
+            self.WebView.Source = Uri(self._url_frontend)
         except Exception as ex:
             self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(texto_erro(ex)))
 
@@ -474,13 +438,10 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             origem = None
 
         if origem is None:
-            # Origem ilegível: no modo local a página só pode ter vindo do
-            # disco, então seguir é seguro e preserva o comportamento atual.
-            # Com frontend remoto, recusar é a escolha conservadora.
-            if self._url_remota:
-                _mlogger.warning(u"Mensagem do WebView2 recusada: origem não identificada.")
-                return False
-            return True
+            # Sem conseguir identificar de onde veio, recusar é a única
+            # escolha defensável: a página chega pela rede.
+            _mlogger.warning(u"Mensagem do WebView2 recusada: origem não identificada.")
+            return False
 
         if origem in self._origens_confiaveis:
             return True
@@ -567,10 +528,9 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             _mlogger.warning(u"Falha ao abrir link externo ({}): {}".format(args.Uri, texto_erro(ex)))
 
     def _ao_navegar(self, sender, args):
-        """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho
-        errado no SetVirtualHostNameToFolderMapping, dist/ incompleto),
-        args.IsSuccess vem False com o motivo em WebErrorStatus — sem isso,
-        o painel só ficaria em branco, sem nenhuma pista do porquê.
+        """Se a navegação falhar (sem rede, DNS, servidor fora do ar, URL
+        errada), args.IsSuccess vem False com o motivo em WebErrorStatus —
+        sem isso, o painel só ficaria em branco, sem nenhuma pista do porquê.
 
         O Carregador de Famílias é online por definição: a interface vem do
         servidor e o acervo de famílias vive no Supabase. Sem conexão não há
@@ -579,19 +539,13 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         if args.IsSuccess:
             return
 
-        if self._url_remota:
-            _mlogger.warning(
-                u"Falha ao carregar {}: {}".format(self._url_remota, args.WebErrorStatus)
-            )
-            self._erro_fatal(
-                u"O Carregador de Famílias precisa de conexão com a internet.\n\n"
-                u"Verifique sua conexão e abra o painel novamente.\n\n"
-                u"(detalhe técnico: {})".format(args.WebErrorStatus)
-            )
-            return
-
+        _mlogger.warning(
+            u"Falha ao carregar {}: {}".format(self._url_frontend, args.WebErrorStatus)
+        )
         self._erro_fatal(
-            u"Falha ao carregar a página do Carregador de Famílias: {}".format(args.WebErrorStatus)
+            u"O Carregador de Famílias precisa de conexão com a internet.\n\n"
+            u"Verifique sua conexão e abra o painel novamente.\n\n"
+            u"(detalhe técnico: {})".format(args.WebErrorStatus)
         )
 
 

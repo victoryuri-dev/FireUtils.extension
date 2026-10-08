@@ -55,62 +55,62 @@ npm run dev
 controle de acesso de verdade é a política de RLS do bucket privado no
 Supabase.
 
-## Build de produção (o que a Fase 3 consome)
+## De onde a dockpane carrega a interface
 
-```bash
-npm run build
-```
-
-Gera `dist/` — um `index.html` + assets estáticos, sem servidor Node
-nenhum por trás. É essa pasta que o pyRevit aponta o WebView2 pra carregar
-(Fase 3), via
-[`SetVirtualHostNameToFolderMapping`](https://learn.microsoft.com/microsoft-edge/webview2/how-to/hostnametofoldermapping)
-em vez de abrir o `index.html` direto com `file://` (evita restrições de
-CORS/módulos ES do Chromium com `file://`).
-
-**`dist/` é commitado no git** (não está no `.gitignore`), de propósito:
-sem CI/CD, é o repositório que alimenta o instalador (`installer/build.ps1`
-copia `dist/` para o payload) — se não fosse versionado, cada máquina que
-gera o instalador precisaria de Node/npm só pra isso. Sempre que mudar algo
-em `src/`, rode `npm run build` de novo e **comite o `dist/` atualizado
-junto** — sem isso, o plugin instalado continua rodando a versão antiga da
-interface.
-
-## Carregando o frontend de um servidor
-
-A dockpane carrega a interface da URL configurada em
-`fireutils.config.json`, na raiz da extensão:
+Da URL configurada em `fireutils.config.json`, na raiz da extensão:
 
 ```json
 {
-  "webappUrl": "https://fireutils-extension.vercel.app"
+  "webappUrl": "https://fire-utils-extension.vercel.app"
 }
 ```
 
-Assim dá para publicar correção de interface sem gerar instalador novo: o
-`.rfa`, o Python e as DLLs continuam vindo da instalação local; só o HTML/JS
-vem do servidor. O ciclo vira `npm run build` + push, e a Vercel publica.
+A interface **não é empacotada com a extensão**. Publicar uma correção é um
+deploy (`git push` → a Vercel publica), sem gerar instalador novo e sem
+ninguém reinstalar nada. O `.rfa`, o Python e as DLLs continuam vindo da
+instalação local; só o HTML/JS vem do servidor.
+
+Por isso `dist/` **não é versionado** — ele é artefato local de quem roda
+`npm run build` ou `npm run dev`, e não entra no instalador.
 
 Regras de funcionamento:
 
-- **Sem o arquivo (ou sem a chave), carrega o `dist/` local** pelo
-  `SetVirtualHostNameToFolderMapping`. Esse é o modo de desenvolvimento
-  (`npm run build` e abrir o Revit, sem depender de deploy); na instalação
-  de verdade a URL está sempre presente.
-- **Só `https://`** é aceito. Uma URL `http://` é ignorada com aviso no log:
-  o bridge carrega família e grava no `firedata.json`, e em texto puro
-  ficaria exposto a qualquer um na mesma rede.
-- **Sem internet, o painel não abre.** A dockpane é online por definição —
-  a interface vem do servidor e o acervo vive no Supabase. A falha vira uma
-  mensagem explicando isso, não um painel em branco. Não há cópia local de
-  reserva: o `dist/` não vai no instalador.
+- **Só `https://`**, com exceção de `http://localhost` e `http://127.0.0.1`
+  (ver desenvolvimento abaixo). Sem TLS, o bridge — que carrega família e
+  grava no `firedata.json` — ficaria exposto a quem estivesse na mesma rede;
+  localhost não trafega em rede nenhuma.
+- **Sem internet, o painel não abre.** A dockpane é online por definição: a
+  interface vem do servidor e o acervo de famílias vive no Supabase. A falha
+  vira uma mensagem explicando isso, não um painel em branco.
 - **O bridge valida a origem.** Mensagens que não venham da origem carregada
   são descartadas — o WebView2 expõe esse canal a qualquer página que
   carregue, e ele manda o Python mexer no documento do Revit.
 
 O arquivo de configuração vai junto no instalador (`installer/build.ps1` o
-inclui no payload e recusa gerar o instalador se a URL faltar), então a URL
-chega configurada na máquina instalada.
+inclui no payload e recusa gerar o instalador se a URL faltar ou não for
+válida), então a URL chega configurada na máquina instalada.
+
+## Desenvolvendo com o Revit aberto
+
+Para editar o React e ver o resultado na dockpane sem publicar nada, aponte
+a configuração para o servidor do Vite:
+
+```bash
+npm run dev     # sobe em http://localhost:5173
+```
+
+```json
+{
+  "webappUrl": "http://localhost:5173"
+}
+```
+
+Reabra o painel no Revit e você tem hot reload lá dentro: salvar o arquivo
+atualiza a dockpane sozinha, sem build e sem reabrir.
+
+Lembre de devolver a URL de produção antes de commitar — e o build do
+instalador, de qualquer forma, recusa gerar um `.exe` apontando para
+localhost.
 
 ### Qual versão o usuário vê
 
