@@ -76,37 +76,45 @@ em `src/`, rode `npm run build` de novo e **comite o `dist/` atualizado
 junto** — sem isso, o plugin instalado continua rodando a versão antiga da
 interface.
 
-## Carregando o frontend de um servidor (opcional)
+## Carregando o frontend de um servidor
 
-Por padrão a dockpane carrega o `dist/` local, pelo
-`SetVirtualHostNameToFolderMapping`. Definindo a variável de ambiente
-`FIREUTILS_WEBAPP_URL`, ela passa a carregar da URL indicada:
+A dockpane carrega a interface da URL configurada em
+`fireutils.config.json`, na raiz da extensão:
 
-```powershell
-# Só nesta sessão do PowerShell (abra o Revit a partir dela)
-$env:FIREUTILS_WEBAPP_URL = "https://meu-preview.vercel.app/index.html"
-
-# Permanente para o usuário
-[Environment]::SetEnvironmentVariable("FIREUTILS_WEBAPP_URL", "https://...", "User")
+```json
+{
+  "webappUrl": "https://fireutils-extension.vercel.app"
+}
 ```
 
-Serve para publicar correções da interface sem gerar instalador novo: o
+Assim dá para publicar correção de interface sem gerar instalador novo: o
 `.rfa`, o Python e as DLLs continuam vindo da instalação local; só o HTML/JS
-vem do servidor.
+vem do servidor. O ciclo vira `npm run build` + push, e a Vercel publica.
 
 Regras de funcionamento:
 
-- **Sem a variável, nada muda** — o comportamento é exatamente o de sempre.
+- **Sem o arquivo (ou sem a chave), carrega o `dist/` local** pelo
+  `SetVirtualHostNameToFolderMapping`, como sempre foi.
 - **Só `https://`** é aceito. Uma URL `http://` é ignorada com aviso no log:
   o bridge carrega família e grava no `firedata.json`, e em texto puro
   ficaria exposto a qualquer um na mesma rede.
 - **Queda volta para o local.** Se a navegação remota falhar (sem internet,
   servidor fora do ar, 404), a dockpane carrega o `dist/` instalado e avisa
-  no log. Por isso o build local continua obrigatório: ele é o fallback.
+  no log. Por isso o build local continua obrigatório e versionado: ele é o
+  fallback.
 - **O bridge valida a origem.** Mensagens que não venham do `dist/` local ou
-  da URL configurada são descartadas.
+  da URL configurada são descartadas — o WebView2 expõe esse canal a
+  qualquer página que carregue, e ele manda o Python mexer no documento.
 
-Para desligar, apague a variável e reinicie o Revit.
+O arquivo vai junto no instalador (`installer/build.ps1` o inclui no
+payload), então a URL chega configurada na máquina instalada.
+
+### Qual versão o cliente vê
+
+Com a URL configurada, a dockpane serve sempre o último deploy — o `dist/`
+embutido na instalação só aparece quando a rede falha. Então todo push que
+chega na Vercel vale para quem estiver com o Revit aberto na próxima vez que
+abrir o painel.
 
 ## Contrato da ponte JS ↔ Python (Fase 3/4)
 

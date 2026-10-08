@@ -67,20 +67,35 @@ _WEBAPP_DIST_DIR = os.path.join(_EXT_ROOT, u"webapp", u"dist")
 _VIRTUAL_HOST = u"appassets"
 _URL_LOCAL = u"https://{}/index.html".format(_VIRTUAL_HOST)
 
-# Variável de ambiente opcional com a URL de um frontend publicado na web.
-# Sem ela, o painel carrega de webapp/dist/ exatamente como sempre fez —
-# definir a variável é a única forma de mudar esse comportamento.
+# URL opcional de um frontend publicado na web. Sem configuração nenhuma, o
+# painel carrega de webapp/dist/ exatamente como sempre fez.
 #
 # Serve para publicar correções da interface sem gerar instalador novo: o
 # .rfa, o Python e as DLLs continuam vindo da instalação local, só o HTML/JS
 # passa a vir do servidor. Se a navegação remota falhar por qualquer motivo,
 # _ao_navegar volta para o build local sozinho.
-_VAR_URL_REMOTA = u"FIREUTILS_WEBAPP_URL"
+#
+# Configurada em fireutils.config.json, na raiz da extensão. Apagar a chave
+# (ou o arquivo) volta tudo para o build local.
+_ARQUIVO_CONFIG = os.path.join(_EXT_ROOT, u"fireutils.config.json")
+_CHAVE_URL_REMOTA = u"webappUrl"
 
 
 def _url_remota_configurada():
     """URL do frontend publicado, ou None para usar o build local."""
-    url = os.environ.get(_VAR_URL_REMOTA)
+    if not os.path.isfile(_ARQUIVO_CONFIG):
+        return None
+
+    try:
+        import json
+        with open(_ARQUIVO_CONFIG, u"rb") as arquivo:
+            dados = json.loads(arquivo.read().decode(u"utf-8"))
+        url = dados.get(_CHAVE_URL_REMOTA)
+    except Exception as ex:
+        # Config quebrada não pode derrubar o painel: segue no build local.
+        _mlogger.warning(u"Ignorando {}: {}".format(_ARQUIVO_CONFIG, texto_erro(ex)))
+        return None
+
     if not url:
         return None
 
@@ -92,7 +107,7 @@ def _url_remota_configurada():
     # arquivo no projeto) exposto a qualquer um na mesma rede.
     if not url.lower().startswith(u"https://"):
         _mlogger.warning(
-            u"{} ignorada: só https é aceito (valor: {}).".format(_VAR_URL_REMOTA, url)
+            u"URL do frontend ignorada, só https é aceito: {}".format(url)
         )
         return None
 

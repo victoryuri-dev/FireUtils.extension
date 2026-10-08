@@ -43,9 +43,10 @@ $IssFile      = Join-Path $InstallerDir 'FireUtils.iss'
 # ate ser adicionado aqui de proposito -- e o script avisa quando isso
 # acontece, para a omissao nunca passar despercebida.
 $ItensDoPayload = @(
-    @{ Origem = 'Fire Utils.tab'; Tipo = 'Pasta'   },
-    @{ Origem = 'webapp\dist';    Tipo = 'Pasta'   },
-    @{ Origem = 'startup.py';     Tipo = 'Arquivo' }
+    @{ Origem = 'Fire Utils.tab';         Tipo = 'Pasta'   },
+    @{ Origem = 'webapp\dist';            Tipo = 'Pasta'   },
+    @{ Origem = 'startup.py';             Tipo = 'Arquivo' },
+    @{ Origem = 'fireutils.config.json';  Tipo = 'Arquivo' }
 )
 
 # Itens da raiz que sao intencionalmente de desenvolvimento e nao devem
