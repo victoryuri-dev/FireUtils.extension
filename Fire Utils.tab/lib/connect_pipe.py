@@ -440,7 +440,12 @@ def _achar_pipe_conectado(elemento, max_profundidade=6):
     acessível dentro de max_profundidade saltos (ex.: fitting
     completamente isolado, sem nada conectado).
     """
-    visitados = set([elemento.Id.IntegerValue])
+    # ElementId em si (não .IntegerValue/.Value) como chave de set/dict —
+    # funciona em qualquer versão do Revit (.IntegerValue foi removido no
+    # Revit 2024+, substituído por .Value; ElementId já implementa
+    # Equals/GetHashCode corretamente, então comparar o objeto direto
+    # evita depender de qual das duas propriedades existe nesta versão).
+    visitados = set([elemento.Id])
     fila = [(elemento, 0)]
     while fila:
         atual, profundidade = fila.pop(0)
@@ -462,12 +467,9 @@ def _achar_pipe_conectado(elemento, max_profundidade=6):
                 continue
             for c_outro in refs:
                 vizinho = c_outro.Owner
-                if vizinho is None:
+                if vizinho is None or vizinho.Id in visitados:
                     continue
-                vid = vizinho.Id.IntegerValue
-                if vid in visitados:
-                    continue
-                visitados.add(vid)
+                visitados.add(vizinho.Id)
                 if isinstance(vizinho, Pipe):
                     return vizinho
                 fila.append((vizinho, profundidade + 1))
