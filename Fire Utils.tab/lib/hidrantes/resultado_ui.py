@@ -26,7 +26,7 @@ from System.Windows import (
     Visibility,
 )
 from System.Windows.Controls import (
-    Grid, TextBlock, Border, Button, CheckBox, ColumnDefinition, RowDefinition,
+    Grid, TextBlock, Border, Button, ColumnDefinition, RowDefinition,
 )
 
 from pyrevit import forms
@@ -76,18 +76,6 @@ def _botao_lista(eids, rotulo=u"Mostrar no Revit"):
     return u"{}{}\x00{}".format(_BOTAO_LISTA_MARK, ids_txt, rotulo)
 
 
-# Marcador de célula "checkbox" (coluna "Ignorar" de mostrar_inconsistencias_
-# mapeamento, quando permitir_continuar=True) — mesma convenção acima.
-_CHECKBOX_MARK = u"\x00CHECK\x00"
-
-
-def _checkbox(eid):
-    """Marca um valor de tabela para renderizar como checkbox "Ignorar" —
-    o usuário marca os itens que não afetam o cálculo antes de clicar em
-    "Confirmar e Continuar" (ver _JanelaResultado.on_confirmar)."""
-    return u"{}{}".format(_CHECKBOX_MARK, eid)
-
-
 def _mca(valor):
     """Pressão em mca, 2 casas decimais, separador decimal vírgula (ex.: 21,00 mca)."""
     return u"{:.2f}".format(valor).replace(u".", u",") + u" mca"
@@ -126,11 +114,10 @@ class _JanelaResultado(forms.WPFWindow):
         # SEM fechar a janela, ao contrário de habilitar_botao_mostrar.
         self._fila_acoes  = fila_acoes
         self._ao_localizar = ao_localizar
-        # ao_confirmar/_checkboxes: botão "Confirmar e Continuar" (ver
-        # habilitar_confirmacao/on_confirmar) - só libera o prosseguimento
-        # se todo checkbox "Ignorar" da tabela estiver marcado.
+        # ao_confirmar: botão "Ignorar e Continuar" (ver
+        # habilitar_confirmacao/on_confirmar) - prossegue o mapeamento
+        # ignorando todos os itens da tabela, sem exigir confirmação por item.
         self._ao_confirmar = ao_confirmar
-        self._checkboxes   = []
         self._aplicar_status(status, banner_texto)
 
     def _aplicar_status(self, status, banner_texto=None):
@@ -150,27 +137,18 @@ class _JanelaResultado(forms.WPFWindow):
         self.Close()
 
     def habilitar_confirmacao(self):
-        """Mostra o botão "Confirmar e Continuar" no rodapé — usado pela
+        """Mostra o botão "Ignorar e Continuar" no rodapé — usado pela
         janela de inconsistências de mapeamento quando o mapeamento pode
         prosseguir (permitir_continuar=True). Ver on_confirmar."""
         self.BtnConfirmar.Visibility = Visibility.Visible
 
     def on_confirmar(self, sender, args):
-        """Clique em "Confirmar e Continuar" - só prossegue o mapeamento se
-        TODOS os checkboxes "Ignorar" da tabela estiverem marcados (o
-        usuário confirmando que nenhum daqueles pontos afeta o cálculo).
-        Caso contrário, avisa e mantém a janela aberta pra revisão. Assim
-        como o "Localizar", a decisão só é tomada aqui, no clique - a
-        janela abre sem travar nada, então o usuário pode conferir os
-        elementos primeiro (com "Localizar") antes de marcar e confirmar."""
-        if not self._checkboxes or not all(bool(c.IsChecked) for c in self._checkboxes):
-            forms.alert(
-                u"Marque \"Ignorar\" em todos os itens da lista antes de continuar — "
-                u"eles precisam ser confirmados como sem efeito no cálculo. Se algum "
-                u"for um problema real, feche esta janela, corrija a tubulação e "
-                u"execute \"Mapear Trechos\" novamente.",
-                title=u"Fire Utils", warn_icon=True)
-            return
+        """Clique em "Ignorar e Continuar" - prossegue o mapeamento direto,
+        ignorando todos os itens da tabela (sem exigir marcar cada um antes).
+        O usuário já teve a chance de conferir cada elemento com "Localizar"
+        antes de clicar aqui; se algum for um problema real, a janela
+        continua aberta pra isso — ele só precisa fechar sem clicar neste
+        botão, corrigir a tubulação e executar "Mapear Trechos" de novo."""
         if self._fila_acoes is not None and self._ao_confirmar is not None:
             self._fila_acoes.enfileirar(self._ao_confirmar)
         self.Close()
@@ -346,15 +324,6 @@ class _JanelaResultado(forms.WPFWindow):
             badge = self._badge(rotulo, ok_flag == u"1")
             badge.HorizontalAlignment = _alinh_wpf
             cel.Child = badge
-            grid.Children.Add(cel)
-            return
-
-        if texto.startswith(_CHECKBOX_MARK):
-            chk = CheckBox()
-            chk.IsChecked = False
-            chk.HorizontalAlignment = HorizontalAlignment.Center
-            self._checkboxes.append(chk)
-            cel.Child = chk
             grid.Children.Add(cel)
             return
 
@@ -542,7 +511,7 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
         "eid": ElementId (int) do elemento daquela linha.
     bloqueante: True se alguma válvula de hidrante ficou sem rota — só
         afeta o texto mostrado (a decisão de prosseguir ou não é sempre
-        do usuário, via o botão "Confirmar e Continuar" quando
+        do usuário, via o botão "Ignorar e Continuar" quando
         permitir_continuar=True; ver abaixo).
     fila_acoes: fila de ExternalEvent (hidrantes/fila_acoes.py), criada
         pelo chamador num contexto de API válido.
@@ -550,20 +519,18 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
         o elemento no Revit — chamado pela fila, não direto pelo clique.
     permitir_continuar: True quando o mapeamento pode prosseguir mesmo com
         esses itens (ex.: rede de recalque — ainda sobraram rotas válidas
-        suficientes até outras válvulas). Nesse caso a tabela ganha uma
-        coluna "Ignorar" (checkbox por linha) e aparece o botão "Confirmar
-        e Continuar": o mapeamento só é retomado quando TODOS os itens da
-        lista estiverem marcados (ver on_confirmar) — o usuário decide
-        isso com calma, depois de conferir cada ponto com "Localizar", não
-        mais assim que a janela abre. False (ex.: sucção sem rota até a
-        bomba) — não há como prosseguir de jeito nenhum, a janela é só
-        informativa.
+        suficientes até outras válvulas). Nesse caso aparece o botão
+        "Ignorar e Continuar", que ignora TODOS os itens da lista de uma
+        vez e retoma o mapeamento com as rotas já encontradas (ver
+        on_confirmar) — o usuário confere cada ponto com "Localizar" antes
+        de decidir clicar ou não. False (ex.: sucção sem rota até a bomba)
+        — não há como prosseguir de jeito nenhum, a janela é só informativa.
     ao_confirmar: callable(uiapp), chamado pela fila (como ao_localizar)
-        quando o usuário confirma com todos os itens marcados — deve
-        terminar o mapeamento (gravar parâmetros/cache). Obrigatório se
+        quando o usuário clica em "Ignorar e Continuar" — deve terminar o
+        mapeamento (gravar parâmetros/cache). Obrigatório se
         permitir_continuar=True.
 
-    Não retorna nada — tanto "Localizar" quanto "Confirmar e Continuar"
+    Não retorna nada — tanto "Localizar" quanto "Ignorar e Continuar"
     agem ao vivo, via fila_acoes, enquanto a janela está aberta.
     """
     janela = _JanelaResultado(
@@ -574,25 +541,19 @@ def mostrar_inconsistencias_mapeamento(itens, bloqueante, fila_acoes, ao_localiz
         ao_localizar=ao_localizar,
         ao_confirmar=ao_confirmar,
     )
-    if permitir_continuar:
-        linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"]),
-                   _checkbox(item[u"eid"])] for item in itens]
-        janela.tabela([u"Trecho", u"Elemento", u"", u"Ignorar"], linhas,
-                      alinhas=[u"left", u"left", u"left", u"center"])
-    else:
-        linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"])] for item in itens]
-        janela.tabela([u"Trecho", u"Elemento", u""], linhas,
-                      alinhas=[u"left", u"left", u"left"])
+    linhas = [[item[u"trecho"], item[u"elemento"], _botao(item[u"eid"])] for item in itens]
+    janela.tabela([u"Trecho", u"Elemento", u""], linhas,
+                  alinhas=[u"left", u"left", u"left"])
     if bloqueante:
         janela.paragrafo(u"Pelo menos uma válvula de hidrante ficou sem rota até a bomba.")
     else:
         janela.paragrafo(u"Hidrantes suficientes já foram encontrados, mas os pontos "
                          u"acima não levam a nenhuma válvula e vale revisar.")
     if permitir_continuar:
-        janela.dica(u"Marque \"Ignorar\" nos itens que não afetam o cálculo (ex.: dreno, "
-                    u"ramal morto de verdade) e clique em \"Confirmar e Continuar\" para "
-                    u"prosseguir o mapeamento com as rotas já encontradas. Se algum for "
-                    u"um problema real, feche esta janela, corrija a tubulação e execute "
+        janela.dica(u"Confira cada ponto com \"Localizar\" e clique em \"Ignorar e "
+                    u"Continuar\" para prosseguir o mapeamento com as rotas já "
+                    u"encontradas, ignorando todos os itens acima. Se algum for um "
+                    u"problema real, feche esta janela, corrija a tubulação e execute "
                     u"\"Mapear Trechos\" novamente.")
         janela.habilitar_confirmacao()
     else:

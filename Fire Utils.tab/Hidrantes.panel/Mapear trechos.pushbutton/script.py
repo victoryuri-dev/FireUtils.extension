@@ -470,8 +470,8 @@ def _continuar_mapeamento(rotas_validas, _doc=doc, _bomba=bomba, _rti=rti,
 if itens_recalque:
     # Nao bloqueia (nem decide) nada aqui na hora - so mostra a janela e
     # encerra o script; a decisao de prosseguir e do usuario, tomada no
-    # clique de "Confirmar e Continuar" (so libera se TODOS os itens da
-    # lista estiverem marcados como "Ignorar").
+    # clique de "Ignorar e Continuar" (ignora todos os itens da lista de
+    # uma vez - sem precisar marcar cada um antes).
     def _ao_confirmar(uiapp, _continuar=_continuar_mapeamento, _rotas=rotas):
         _continuar(_rotas)
 
