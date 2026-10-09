@@ -28,11 +28,17 @@ Em vez disso, todo elemento criado com um estilo diferente do escolhido
 na etapa 1 entra numa lista de pendências e é reestilizado pra bater
 (_aplicar_estilo_pendentes), numa transação própria despachada por
 ExternalEvent — o DocumentChanged em si NUNCA abre transação (é proibido
-nesse contexto); só leitura/soma acontece direto no handler. Qualquer
-ação que precise ESCREVER no documento (Cancelar/Finalizar e Limitar/
-reestilizar) é despachada por ExternalEvent (mesmo padrão de
-hidrantes/fila_acoes.py e family_loader_events.py: cada feature cria sua
-própria fila, pra não acoplar uma à outra).
+nesse contexto); só leitura/soma de comprimento acontece direto no
+handler (_ao_documento_mudar). A atualização visual do painel (texto do
+comprimento atual) NÃO é feita direto dali — mexer na janela de dentro do
+callback bruto do DocumentChanged não se mostrou confiável (o texto não
+atualizava, mesmo com os elementos sendo contados corretamente) — por
+isso também é despachada pela fila de ExternalEvent (_atualizar_total_ui),
+mesmo sem escrever no documento. Qualquer ação que precise ESCREVER no
+documento (Cancelar/Finalizar e Limitar/reestilizar) segue o mesmo
+caminho (mesmo padrão de hidrantes/fila_acoes.py e
+family_loader_events.py: cada feature cria sua própria fila, pra não
+acoplar uma à outra).
 
 Por ser MODELESS, qualquer clique nos botões do painel acontece FORA do
 contexto de API válido do Revit — toda ação que toca o documento
@@ -272,12 +278,20 @@ class _JanelaLimite(forms.WPFWindow):
                 self._pendentes_restilo.append(chave)
                 precisa_reestilizar = True
 
+        # NÃO mexe na janela (self.Txt...) direto daqui: _ao_documento_mudar
+        # roda dentro do callback bruto do DocumentChanged do Revit, fora do
+        # ciclo normal de Execute() do ExternalEvent — mexer na UI direto
+        # daqui já se mostrou não confiável (o painel ficava preso em
+        # "0,00 m" mesmo com elementos sendo contados em self._itens).
+        # Só a leitura/soma do comprimento (acima) acontece aqui; a
+        # atualização visual é despachada pela mesma fila usada pras ações
+        # que tocam o documento, mesmo não escrevendo nada no modelo.
         if mudou:
-            self._atualizar_total()
+            self.fila_acoes.enfileirar(self._atualizar_total_ui)
         if precisa_reestilizar:
             self.fila_acoes.enfileirar(self._aplicar_estilo_pendentes)
 
-    def _atualizar_total(self):
+    def _atualizar_total_ui(self, uiapp):
         total_interno = sum(c for _, c in self._itens)
         self.TxtComprimentoAtual.Text = _fmt_m(_interno_para_metros(total_interno))
         if total_interno > self._limite_interno + 1e-6:
