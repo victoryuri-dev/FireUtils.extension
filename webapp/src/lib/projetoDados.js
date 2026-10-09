@@ -55,6 +55,29 @@ function edificacaoEhTerrea(estrutura) {
   return (Number(estrutura.nPavimentos) || 1) === 1 && alturaEdificacaoBase(estrutura) === 0;
 }
 
+/** "Rua X, 123, Bairro, Cidade — UF" — mesmo formato combinado do site
+ * (DashboardPage.jsx:address), a partir dos campos separados salvos no
+ * Step1 (endereco/numero/bairro/cidade/uf). */
+function enderecoCompleto(dados) {
+  const partes = [
+    dados.endereco,
+    dados.numero,
+    dados.bairro,
+    dados.cidade && (dados.uf ? `${dados.cidade} — ${dados.uf}` : dados.cidade),
+  ].filter(Boolean);
+  return partes.length ? partes.join(", ") : null;
+}
+
+/** CNAE/descrição representativos da estrutura — lidos do pavimento de
+ * piso de descarga (térreo), mesmo critério de "qual pavimento manda"
+ * usado em SaidaEmergenciaPage.jsx:resolverPavimentoSite. CNAE é um
+ * campo por pavimento no site (ProjetoContext.jsx), não por estrutura —
+ * aqui só mostra um valor representativo, não a lista inteira. */
+function cnaeDaEstrutura(pavimentos) {
+  const pav = (pavimentos || []).find((p) => p.pisoDescarga) || pavimentos?.[0];
+  return { cnae: pav?.cnae || null, cnaeDesc: pav?.cnaeDesc || null };
+}
+
 function rotuloPavimentos(estruturas) {
   const total = (estruturas || []).reduce((soma, e) => soma + (Number(e.nPavimentos) || 0), 0);
   if (total <= 1) return "Térrea";
@@ -256,10 +279,15 @@ export function dashboardEstrutura(linha, estruturaId) {
     }
   });
 
+  const { cnae, cnaeDesc } = cnaeDaEstrutura(pavimentosEstrutura);
+
   return {
     id: estrutura.id,
     nome: estrutura.nome,
     uf: dados.uf || null,
+    endereco: enderecoCompleto(dados),
+    cnae,
+    cnaeDesc,
     areaConstruida: paraNumero(estrutura.areaTotal),
     areaTerreno: paraNumero(dados.areaTerreno),
     alturaPisoAPiso: paraNumero(estrutura.alturaPisoPiso),

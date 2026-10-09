@@ -107,18 +107,21 @@ function CartaoExtintores({ norma, cargaIncendio }) {
       <h3>Extintores Portáteis</h3>
       <dl>
         <div>
-          <dt>Capacidade Extintora Mínima:</dt>
+          <dt>Capacidade Mínima:</dt>
           <dd>{capacidadePortatilCombinada(riscoChave)}</dd>
         </div>
-        <div>
-          <dt>Caminhamento máx. (classe A):</dt>
-          <dd>{distanciaA ? `${distanciaA.distanciaMaxima} m` : "—"}</dd>
-        </div>
-        <div>
-          <dt>Caminhamento máx. (classe B):</dt>
-          <dd>{distanciaB ? `${distanciaB.distanciaMaxima} m` : "—"}</dd>
-        </div>
       </dl>
+      <div className="cartao-info-grupo">
+        <p className="cartao-info-grupo-titulo">Caminhamento máx.:</p>
+        <div className="cartao-info-subitem">
+          <span>Classe A</span>
+          <span>{distanciaA ? `${distanciaA.distanciaMaxima} m` : "—"}</span>
+        </div>
+        <div className="cartao-info-subitem">
+          <span>Classe B</span>
+          <span>{distanciaB ? `${distanciaB.distanciaMaxima} m` : "—"}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -303,8 +306,16 @@ export default function DashboardEstrutura({
           <h3>Edificação</h3>
           <dl>
             <div>
-              <dt>UF:</dt>
-              <dd>{estrutura.uf || "—"}</dd>
+              <dt>Endereço:</dt>
+              <dd>{estrutura.endereco || "—"}</dd>
+            </div>
+            <div>
+              <dt>CNAE:</dt>
+              <dd>{estrutura.cnae || "—"}</dd>
+            </div>
+            <div>
+              <dt>Descrição do CNAE:</dt>
+              <dd>{estrutura.cnaeDesc || "—"}</dd>
             </div>
             <div>
               <dt>Área construída:</dt>

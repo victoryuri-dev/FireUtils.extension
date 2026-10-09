@@ -1128,6 +1128,12 @@
 .grade-cartoes-info {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  /* align-items: start (em vez do stretch padrão do grid) — cada cartão
+     fica com a própria altura de conteúdo, em vez de esticar pra bater
+     com o mais alto da mesma linha (ex.: Edificação, com 6 campos desde
+     que ganhou Endereço/CNAE, não deve mais ditar a altura do cartão de
+     Classificação ao lado, mais curto). */
+  align-items: start;
   gap: 12px;
   margin-bottom: 22px;
 }
@@ -1170,6 +1176,37 @@
   font-weight: 700;
   color: var(--text);
   text-align: right;
+}
+
+/* Grupo com sub-itens (ex.: "Caminhamento máx." com Classe A/B embaixo,
+   ver CartaoExtintores em DashboardEstrutura.jsx) — mesma estética da
+   dl acima, mas com um título de seção em vez de um valor alinhado à
+   direita, e as linhas filhas indentadas por baixo dele. */
+.cartao-info-grupo {
+  padding-top: 4px;
+}
+
+.cartao-info-grupo-titulo {
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.cartao-info-subitem {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 0 2px 10px;
+  font-size: 11px;
+}
+
+.cartao-info-subitem span:first-child {
+  color: var(--text-2);
+}
+
+.cartao-info-subitem span:last-child {
+  font-weight: 700;
+  color: var(--text);
 }
 
 .grade-dimensionamentos {
