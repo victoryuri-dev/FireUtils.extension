@@ -6,15 +6,16 @@ ShowDialog()) com duas etapas:
 
   1. Configuração: usuário escolhe o estilo de linha e o comprimento
      máximo do trecho (em metros).
-  2. Acompanhamento: o painel fica aberto, SEM bloquear a view do Revit,
-     enquanto o usuário desenha as linhas normalmente com a ferramenta
-     padrão do Revit (Linha de Detalhe) — o painel acompanha o
-     comprimento total do trecho em tempo real, comparado ao limite
-     configurado. Três botões: "Cancelar" (desfaz tudo o que foi
-     desenhado desde o OK), "Finalizar" (só para de acompanhar, mantém o
-     que foi desenhado) e "Finalizar e Limitar" (se o total passou do
-     limite, encurta/remove o(s) último(s) trecho(s) até fechar
-     exatamente no valor configurado).
+  2. Acompanhamento: ao confirmar, a ferramenta nativa "Linha de Detalhe"
+     do Revit já é ativada automaticamente (via PostCommand — ver
+     _iniciar_ferramenta_linha), então o usuário só precisa clicar os
+     pontos, sem ir até a faixa de opções. O painel fica aberto, SEM
+     bloquear a view do Revit, acompanhando o comprimento total do
+     trecho em tempo real, comparado ao limite configurado. Três botões:
+     "Cancelar" (desfaz tudo o que foi desenhado desde o OK), "Finalizar"
+     (só para de acompanhar, mantém o que foi desenhado) e "Finalizar e
+     Limitar" (se o total passou do limite, encurta/remove o(s)
+     último(s) trecho(s) até fechar exatamente no valor configurado).
 
 Acompanhamento ao vivo via Application.DocumentChanged — o painel nunca
 roda seu próprio loop de cliques (PickPoint): ele só OBSERVA o que o
@@ -48,7 +49,9 @@ from Autodesk.Revit.DB import (
     Line, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType,
     CurveElement, ElementId,
 )
-from Autodesk.Revit.UI import IExternalEventHandler, ExternalEvent
+from Autodesk.Revit.UI import (
+    IExternalEventHandler, ExternalEvent, PostableCommand, RevitCommandId,
+)
 
 from pyrevit import forms, script as pyscript
 
@@ -194,6 +197,23 @@ class _JanelaLimite(forms.WPFWindow):
     def _assinar_mudancas(self, uiapp):
         self._app = uiapp.Application
         self._app.DocumentChanged += self._ao_documento_mudar
+        self._iniciar_ferramenta_linha(uiapp)
+
+    def _iniciar_ferramenta_linha(self, uiapp):
+        """Ativa a ferramenta nativa "Linha de Detalhe" do Revit assim que
+        o usuário confirma a configuração — ele não precisa ir até a faixa
+        de opções manualmente, só clicar os pontos. PostCommand é o jeito
+        correto de disparar um comando nativo a partir de um complemento
+        (não dá pra chamar o comando direto); funciona bem de dentro do
+        Execute() do ExternalEvent, mesmo padrão usado pras demais ações
+        que tocam a UI/documento neste módulo."""
+        try:
+            cmd_id = RevitCommandId.LookupPostableCommandId(PostableCommand.DetailLine)
+            if uiapp.CanPostCommand(cmd_id):
+                uiapp.PostCommand(cmd_id)
+        except Exception as ex:
+            print(u"[AVISO] Não foi possível iniciar a ferramenta Linha de "
+                  u"Detalhe automaticamente: {}".format(ex))
 
     def _ao_documento_mudar(self, sender, args):
         try:

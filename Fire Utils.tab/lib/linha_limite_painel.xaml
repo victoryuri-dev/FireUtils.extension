@@ -65,7 +65,7 @@
 
         <!-- ===================== ETAPA 2 — acompanhamento ao vivo ===================== -->
         <StackPanel x:Name="PainelRastreio" Visibility="Collapsed">
-            <TextBlock Text="Desenhe as linhas no projeto normalmente, com a ferramenta padrão do Revit (Linha de Detalhe), no estilo escolhido. Este painel acompanha o comprimento total em tempo real."
+            <TextBlock Text="A ferramenta Linha de Detalhe do Revit já foi ativada — é só clicar os pontos no estilo escolhido. Este painel acompanha o comprimento total em tempo real."
                        FontSize="11" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
             <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
