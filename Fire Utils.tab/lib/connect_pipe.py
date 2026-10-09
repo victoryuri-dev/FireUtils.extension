@@ -424,9 +424,72 @@ def _conector_livre_mais_proximo(element, pt_click):
     return min(livres, key=lambda c: c.Origin.DistanceTo(pt_click))
 
 
+def _achar_pipe_conectado(elemento, max_profundidade=6):
+    """
+    Busca em largura, pela rede de CONEXÕES (conectores já conectados) de
+    `elemento`, o Pipe de verdade mais próximo — atravessando outros
+    fittings (joelhos, tês, válvulas) no caminho, se precisar (ex.:
+    joelho -> joelho -> Pipe). Usado quando pipe_ref é um FITTING sem
+    Pipe próprio (conectado por um conector livre, não outro Pipe): sem
+    isso, o tubo/roteamento criado herdaria um PipeType/PipingSystemType
+    arbitrário (o 1º do projeto, sem relação nenhuma com o sistema de
+    verdade — ver _pipe_params) em vez do tipo que o sistema realmente
+    está usando ali.
+
+    Retorna o elemento Pipe encontrado, ou None se nenhum Pipe estiver
+    acessível dentro de max_profundidade saltos (ex.: fitting
+    completamente isolado, sem nada conectado).
+    """
+    visitados = set([elemento.Id.IntegerValue])
+    fila = [(elemento, 0)]
+    while fila:
+        atual, profundidade = fila.pop(0)
+        if profundidade >= max_profundidade:
+            continue
+        try:
+            mgr = atual.ConnectorManager
+        except AttributeError:
+            try:
+                mgr = atual.MEPModel.ConnectorManager
+            except Exception:
+                continue
+        for c in mgr.Connectors:
+            if not c.IsConnected:
+                continue
+            try:
+                refs = c.AllRefs
+            except Exception:
+                continue
+            for c_outro in refs:
+                vizinho = c_outro.Owner
+                if vizinho is None:
+                    continue
+                vid = vizinho.Id.IntegerValue
+                if vid in visitados:
+                    continue
+                visitados.add(vid)
+                if isinstance(vizinho, Pipe):
+                    return vizinho
+                fila.append((vizinho, profundidade + 1))
+    return None
+
+
 def _pipe_params(doc, pipe):
     """Retorna (pipe_type_id, sys_type_id, level_id, diam_ft) herdados de pipe."""
     from Autodesk.Revit.DB.Plumbing import PipeType
+
+    if not isinstance(pipe, Pipe):
+        # pipe pode ser um FITTING (joelho/tê/válvula) sem PipeType
+        # próprio — ex.: pipe_ref conectado por um conector livre, não
+        # um Pipe de verdade (ver _FiltroPipeRef). Em vez de cair direto
+        # no fallback arbitrário abaixo (1º PipeType do projeto), caça
+        # primeiro um Pipe de verdade já conectado à rede desse fitting
+        # e herda TUDO dele (tipo, sistema, nível, diâmetro) — é o tipo
+        # que o sistema de tubulação REAL está usando ali, não um tipo
+        # qualquer sem relação nenhuma com o sistema.
+        pipe_conectado = _achar_pipe_conectado(pipe)
+        if pipe_conectado is not None:
+            return _pipe_params(doc, pipe_conectado)
 
     pipe_type_id = pipe.GetTypeId()
     # GetTypeId() nunca é "Invalid" pra um FamilyInstance (ex.: pipe é um
