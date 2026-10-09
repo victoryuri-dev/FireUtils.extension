@@ -20,12 +20,17 @@ ShowDialog()) com duas etapas:
 Acompanhamento ao vivo via Application.DocumentChanged — o painel nunca
 roda seu próprio loop de cliques (PickPoint): ele só OBSERVA o que o
 Revit cria quando o usuário usa a ferramenta padrão, somando o
-comprimento de cada novo elemento de linha (Detail Line ou Model Line)
-cujo estilo bata com o escolhido na etapa 1. Ler propriedades dentro do
-evento DocumentChanged é sempre permitido; é proibido abrir transação
-nesse contexto — por isso a leitura/soma do comprimento acontece direto
-no handler, e qualquer ação que precise ESCREVER no documento (Cancelar/
-Finalizar e Limitar) é despachada por ExternalEvent (mesmo padrão de
+comprimento de QUALQUER novo elemento de linha (Detail Line ou Model
+Line, categoria OST_Lines) — não exige que o usuário tenha deixado o
+estilo escolhido ativo no seletor de tipo do Revit (é comum o Revit abrir
+a ferramenta com o último estilo usado, não o que foi escolhido aqui).
+Em vez disso, todo elemento criado com um estilo diferente do escolhido
+na etapa 1 entra numa lista de pendências e é reestilizado pra bater
+(_aplicar_estilo_pendentes), numa transação própria despachada por
+ExternalEvent — o DocumentChanged em si NUNCA abre transação (é proibido
+nesse contexto); só leitura/soma acontece direto no handler. Qualquer
+ação que precise ESCREVER no documento (Cancelar/Finalizar e Limitar/
+reestilizar) é despachada por ExternalEvent (mesmo padrão de
 hidrantes/fila_acoes.py e family_loader_events.py: cada feature cria sua
 própria fila, pra não acoplar uma à outra).
 
@@ -151,6 +156,7 @@ class _JanelaLimite(forms.WPFWindow):
         self._app = None                   # Application, atribuído por _assinar_mudancas
         self._itens = []                   # [(ElementId.IntegerValue, comprimento_interno), ...] em ordem de criação
         self._processados = set()          # IntegerValue já somados, pra não contar o mesmo elemento 2x
+        self._pendentes_restilo = []       # IntegerValue criados com outro estilo, aguardando reestilizar
         self._finalizado = False
         self.fila_acoes = criar_fila_acoes()
 
@@ -231,6 +237,8 @@ class _JanelaLimite(forms.WPFWindow):
                 self._itens = [item for item in self._itens if item[0] != chave]
                 mudou = True
 
+        precisa_reestilizar = False
+
         for eid in args.GetAddedElementIds():
             chave = eid.IntegerValue
             if chave in self._processados:
@@ -238,24 +246,36 @@ class _JanelaLimite(forms.WPFWindow):
             elemento = self.doc.GetElement(eid)
             if not isinstance(elemento, CurveElement):
                 continue
-            try:
-                estilo = elemento.LineStyle
-            except Exception:
-                continue
-            if estilo is None or self._estilo_atual is None:
-                continue
-            if estilo.Id.IntegerValue != self._estilo_atual.Id.IntegerValue:
+            categoria = elemento.Category
+            if categoria is None or categoria.Id.IntegerValue != int(BuiltInCategory.OST_Lines):
                 continue
             try:
                 comprimento = elemento.Location.Curve.Length
             except Exception:
                 continue
+
             self._processados.add(chave)
             self._itens.append((chave, comprimento))
             mudou = True
 
+            # O Revit pode ter aberto a ferramenta com outro estilo ativo
+            # (ex.: o último usado) em vez do escolhido na etapa 1 — conta
+            # o comprimento de qualquer jeito, mas agenda esse elemento
+            # pra ser reestilizado (ver _aplicar_estilo_pendentes), já que
+            # o usuário escolheu explicitamente qual estilo usar.
+            try:
+                estilo = elemento.LineStyle
+            except Exception:
+                estilo = None
+            if (self._estilo_atual is not None and
+                    (estilo is None or estilo.Id.IntegerValue != self._estilo_atual.Id.IntegerValue)):
+                self._pendentes_restilo.append(chave)
+                precisa_reestilizar = True
+
         if mudou:
             self._atualizar_total()
+        if precisa_reestilizar:
+            self.fila_acoes.enfileirar(self._aplicar_estilo_pendentes)
 
     def _atualizar_total(self):
         total_interno = sum(c for _, c in self._itens)
@@ -308,6 +328,28 @@ class _JanelaLimite(forms.WPFWindow):
             except Exception:
                 pass
             self._app = None
+
+    def _aplicar_estilo_pendentes(self, uiapp):
+        """Reestiliza, numa transação própria, os elementos contados que
+        não nasceram no estilo escolhido na etapa 1 (ver _ao_documento_
+        mudar). Só MODIFICA elementos já existentes — nunca dispara
+        DocumentChanged na faixa "Added" de novo, então não há risco de
+        reprocessar/contar esses elementos outra vez."""
+        pendentes = self._pendentes_restilo
+        self._pendentes_restilo = []
+        if not pendentes or self._estilo_atual is None:
+            return
+        with Transaction(self.doc, u"Fire Utils - Aplicar Estilo de Linha") as t:
+            t.Start()
+            for chave in pendentes:
+                elemento = self.doc.GetElement(ElementId(chave))
+                if elemento is None:
+                    continue
+                try:
+                    elemento.LineStyle = self._estilo_atual
+                except Exception:
+                    pass
+            t.Commit()
 
     def _acao_finalizar(self, uiapp):
         self._desinscrever()
