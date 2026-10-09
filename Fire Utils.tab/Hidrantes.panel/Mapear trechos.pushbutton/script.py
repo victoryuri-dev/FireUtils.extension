@@ -231,11 +231,24 @@ itens_recalque = [
 itens_recalque.extend(_itens_pontas(u"Recalque (Bomba → Válvulas)", pontas_recalque))
 
 if not rotas:
-    forms.alert(
-        u"Nenhuma valvula de hidrante ('Valvula para Hidrante') foi encontrada "
-        u"percorrendo a rede a partir da saida da bomba.\n\n"
-        u"Verifique se a tubulacao de recalque esta conectada ate as valvulas.",
-        title="Fire Utils", warn_icon=True)
+    # Mesmo padrão da sucção (passo 2 acima): itens_recalque já traz todas
+    # as válvulas sem rota (aqui, todas — nenhuma foi alcançada) e qualquer
+    # ponta aberta encontrada ao percorrer a árvore de recalque, pronto pra
+    # janela de inconsistências em vez de um alert genérico sem pistas de
+    # onde a tubulação está desconectada.
+    if itens_recalque:
+        mostrar_inconsistencias_mapeamento(itens_recalque, bloqueante=True,
+                                           fila_acoes=fila_acoes, ao_localizar=_ao_localizar)
+    else:
+        # Caso degenerado: nem válvula nenhuma no modelo, nem ponta aberta
+        # encontrada (rede de recalque é um loop fechado sem nenhuma
+        # "Valvula para Hidrante" nela) — não há elemento nenhum pra
+        # apontar na janela de inconsistências.
+        forms.alert(
+            u"Nenhuma valvula de hidrante ('Valvula para Hidrante') foi encontrada "
+            u"percorrendo a rede a partir da saida da bomba.\n\n"
+            u"Verifique se a tubulacao de recalque esta conectada ate as valvulas.",
+            title="Fire Utils", warn_icon=True)
     script.exit()
 
 if len(rotas) < 2:
