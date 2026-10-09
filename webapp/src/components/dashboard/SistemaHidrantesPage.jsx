@@ -468,7 +468,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               )}
               {sugestao.opcoes.length === 1 && (
                 <div className="hid-pills-linha" style={{ marginTop: 14, marginBottom: 14 }}>
-                  <Pill active disabled>
+                  <Pill active onClick={() => escolherTipo(sugestao.opcoes[0])} disabled={aplicando}>
                     Tipo {sugestao.opcoes[0].tipo} — RTI {sugestao.opcoes[0].rti} m³
                   </Pill>
                 </div>
