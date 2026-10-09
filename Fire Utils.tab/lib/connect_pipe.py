@@ -426,10 +426,22 @@ def _conector_livre_mais_proximo(element, pt_click):
 
 def _pipe_params(doc, pipe):
     """Retorna (pipe_type_id, sys_type_id, level_id, diam_ft) herdados de pipe."""
+    from Autodesk.Revit.DB.Plumbing import PipeType
+
     pipe_type_id = pipe.GetTypeId()
+    # GetTypeId() nunca é "Invalid" pra um FamilyInstance (ex.: pipe é um
+    # fitting — pipe_ref conectado por um conector livre, não um Pipe de
+    # verdade) — só que o tipo que ele devolve é o da família do fitting
+    # (ex.: "Joelho - Genérico 90°"), não um PipeType de verdade. Usar
+    # esse Id direto em Pipe.Create derruba com "pipeTypeId is not valid
+    # pipe type" — por isso confirma o TIPO do elemento resolvido, não só
+    # se o Id é válido, antes de aceitar pipe_type_id como está.
+    tipo_el = doc.GetElement(pipe_type_id) if pipe_type_id != ElementId.InvalidElementId else None
+    if not isinstance(tipo_el, PipeType):
+        pipe_type_id = ElementId.InvalidElementId
+
     if pipe_type_id == ElementId.InvalidElementId:
         try:
-            from Autodesk.Revit.DB.Plumbing import PipeType
             ts = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
             if ts:
                 pipe_type_id = ts[0].Id
