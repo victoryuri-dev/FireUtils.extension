@@ -8,6 +8,7 @@ from Autodesk.Revit.DB import (
     Transaction, UnitUtils, CurveElement, HorizontalTextAlignment
 )
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
+from comprimento_linha_config import carregar as carregar_config
 import clr
 
 clr.AddReference("RevitAPI")
@@ -59,8 +60,9 @@ try:
             forms.alert("Nenhuma linha selecionada.", exitscript=True)
         elements = [doc.GetElement(r.ElementId) for r in refs]
 
+    _, prefixo = carregar_config(doc)
     total_length = sum(get_length_meters(e) for e in elements)
-    text_content = "L = {:.2f} m".format(total_length)
+    text_content = u"{}{:.2f} m".format(prefixo, total_length)
 
     insert_point = uidoc.Selection.PickPoint("Clique para inserir o texto")
 
