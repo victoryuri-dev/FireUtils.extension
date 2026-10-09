@@ -13,11 +13,12 @@ funciona direto na vista ativa.
 Ao atingir o limite, um painel (linha_limite_atingido.xaml) oferece
 "Fechar" ou "Inserir Comprimento" — essa última insere um TextNote (mesmo
 formato/prefixo configurável de "Medir e Inserir Texto", ver
-comprimento_linha_config.py) 0,25 m ACIMA (view.UpDirection, não eixo Z
-do mundo — funciona em planta, corte ou elevação) do ponto onde a linha
-parou. Tudo roda dentro do mesmo script.py síncrono (loop de PickPoint),
-nunca modeless, então o painel pode ser um ShowDialog() comum — sem
-precisar de ExternalEvent pra tocar o documento depois.
+comprimento_linha_config.py) 0,25 m ACIMA, na tela, do ponto onde a linha
+parou (sempre vista de planta — é o único jeito de desenhar essas linhas
+— ver _direcao_acima_na_view). Tudo roda dentro do mesmo script.py
+síncrono (loop de PickPoint), nunca modeless, então o painel pode ser um
+ShowDialog() comum — sem precisar de ExternalEvent pra tocar o documento
+depois.
 """
 
 import os
@@ -83,11 +84,21 @@ def _mostrar_painel_limite_atingido(comprimento_max_m, total_m):
     return janela.inserir_comprimento
 
 
+def _direcao_acima_na_view(view):
+    """"Pra cima" na tela (não o eixo Z do mundo — em planta, Z aponta pra
+    fora da tela, não pra cima nela). view.UpDirection não se mostrou
+    confiável em planta (testado: deslocamento saiu pra DIREITA, não pra
+    cima) — em vez disso, calcula a partir da base da própria view
+    (RightDirection × ViewDirection), que dá "pra cima na tela" mesmo com
+    a planta rotacionada (norte do projeto x norte verdadeiro)."""
+    return view.RightDirection.CrossProduct(view.ViewDirection)
+
+
 def _inserir_texto_comprimento(doc, view, ponto_final, comprimento_m):
     """TextNote com o mesmo prefixo configurável de "Medir e Inserir
-    Texto" (comprimento_linha_config.py), 0,25 m ACIMA de ponto_final na
-    direção "pra cima" DA VIEW (view.UpDirection) — não o eixo Z do
-    mundo, pra funcionar certo tanto em planta quanto em corte/elevação."""
+    Texto" (comprimento_linha_config.py), 0,25 m ACIMA de ponto_final —
+    sempre vista de planta aqui (único jeito de desenhar as linhas), ver
+    _direcao_acima_na_view."""
     tipos = list(FilteredElementCollector(doc).OfClass(TextNoteType))
     if not tipos:
         forms.alert(u"Nenhum tipo de TextNote encontrado.",
@@ -98,7 +109,7 @@ def _inserir_texto_comprimento(doc, view, ponto_final, comprimento_m):
     _, prefixo = carregar_config(doc)
     texto = u"{}{:.2f} m".format(prefixo, comprimento_m)
 
-    deslocamento = view.UpDirection.Multiply(_metros_para_interno(0.25))
+    deslocamento = _direcao_acima_na_view(view).Multiply(_metros_para_interno(0.25))
     ponto_texto = ponto_final + deslocamento
 
     with Transaction(doc, u"Inserir Comprimento de Linha") as t:
