@@ -34,7 +34,12 @@ class _FilaAcoesHandler(IExternalEventHandler):
         self._fila.append(funcao)
         if self.evento is not None:
             resultado = self.evento.Raise()
-            if str(resultado) != u"Accepted":
+            # "Pending" é o retorno normal quando outra chamada já tinha
+            # disparado o evento e o Revit ainda não processou — a função
+            # já está na fila e vai rodar quando o Execute() em andamento
+            # (ou prestes a começar) a alcançar; não é erro. Só vale avisar
+            # em retornos realmente anômalos (ex.: "Denied", "TimedOut").
+            if str(resultado) not in (u"Accepted", u"Pending"):
                 print(
                     u"[AVISO] ExternalEvent do Carregador de Famílias "
                     u"retornou '{}' ao tentar disparar.".format(resultado)
