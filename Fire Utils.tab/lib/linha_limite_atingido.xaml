@@ -1,0 +1,42 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fire Utils — Limite Atingido"
+        Width="360"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F5">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="BrushLabel"   Color="#646464"/>
+        <SolidColorBrush x:Key="BrushValor"   Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="BrushAccent"  Color="#D83B01"/>
+        <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
+
+        <Style x:Key="BotaoStyle" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="22,18,22,18">
+
+        <TextBlock Text="Limite atingido" FontSize="15" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushAccent}" Margin="0,0,0,8"/>
+        <TextBlock x:Name="TxtMensagem" Text="" FontSize="12"
+                   Foreground="{StaticResource BrushValor}" TextWrapping="Wrap" Margin="0,0,0,18"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnFechar" Content="Fechar" Width="100" Style="{StaticResource BotaoStyle}"
+                    Background="{StaticResource BrushCancela}" Foreground="{StaticResource BrushValor}"
+                    Click="on_fechar"/>
+            <Button x:Name="BtnInserirComprimento" Content="Inserir Comprimento" Width="170" Style="{StaticResource BotaoStyle}"
+                    Background="{StaticResource BrushAccent}" Foreground="{StaticResource BrushBranco}"
+                    IsDefault="True" Click="on_inserir_comprimento"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>
