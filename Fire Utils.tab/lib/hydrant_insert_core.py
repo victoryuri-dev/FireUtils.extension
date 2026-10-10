@@ -5,17 +5,36 @@ Lógica central de inserção da coluna de hidrante.
 
 Chamado pelos botões:
   - Inserir Hidrante           → run(doc, uidoc, output, forcar_nivel=False)
-  - Inserir Hidrante por Nível → run(doc, uidoc, output, forcar_nivel=True)
+  - Inserir Hidrante com Abrigo → run(doc, uidoc, output, forcar_nivel=False)
+                                  (+ shelter_insert_core.posicionar_abrigo)
+  - Inserir Hidrante por Nível → run_coluna_multilevel(doc, uidoc, output)
+                                  Coluna vertical atravessando vários
+                                  níveis de uma vez (ver docstring de
+                                  run_coluna_multilevel) — reaproveita as
+                                  mesmas medidas/geometria de run()
+                                  (ALTURA_VALVULA_M, COMP_HORIZ_M) pra
+                                  cada ramal horizontal, só que repetido
+                                  em cada nível escolhido num diálogo em
+                                  vez de perguntado uma vez só.
 """
 
+import os
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
+# Necessário pra System.Windows.Controls.CheckBox, criado dinamicamente em
+# _JanelaOpcoesColuna.__init__ (número de níveis varia por projeto, não dá
+# pra declarar um checkbox por nível direto no XAML) — pyrevit.forms já usa
+# essas assemblies internamente pra qualquer WPFWindow, mas referencia
+# explicitamente aqui em vez de depender disso como efeito colateral.
+clr.AddReference("PresentationFramework")
+clr.AddReference("PresentationCore")
+clr.AddReference("WindowsBase")
 
 import math
 
 from Autodesk.Revit.DB import (
-    Transaction, XYZ, Line, UnitUtils,
+    Transaction, XYZ, Line, UnitUtils, Level,
     BuiltInParameter, FilteredElementCollector,
     ElementId, LocationCurve, ElementTransformUtils,
     FamilyInstance,
@@ -42,6 +61,9 @@ COMP_HORIZ_M     = 0.20
 DIAM_RAMAL_M     = 0.065
 TOL              = 1e-4
 TOL_FIM          = 0.05   # metros — distância máxima ao endpoint para ser "ponta"
+
+_LIB_DIR           = os.path.dirname(os.path.abspath(__file__))
+_XAML_COLUNA_PATH  = os.path.join(_LIB_DIR, u"hydrant_coluna_opcoes.xaml")
 
 
 # ===========================================================================
@@ -744,3 +766,313 @@ def run(doc, uidoc, output, forcar_nivel=False):
         output.print_md(u"| Conexão tubo principal | **falhou** — `{}` |".format(conexao_erro or u"motivo desconhecido"))
 
     return {u"valvula": valvula, u"dir_saida": dir_saida, u"nivel": nivel}
+
+# ===========================================================================
+# COLUNA MULTINÍVEL — Inserir Hidrante por Nível
+# ===========================================================================
+
+def _segmento_com_topo_maior(pipe_a, pipe_b):
+    """Entre dois segmentos de Pipe (pós-BreakCurve de um tubo vertical),
+    retorna o que se estende mais pra CIMA — usado por
+    run_coluna_multilevel pra continuar subindo a coluna depois de cada
+    Tê, já que BreakCurve não documenta qual dos dois lados fica com o
+    Id original."""
+    def _z_max(p):
+        try:
+            c = p.Location.Curve
+            return max(c.GetEndPoint(0).Z, c.GetEndPoint(1).Z)
+        except Exception:
+            return float("-inf")
+    return pipe_a if _z_max(pipe_a) >= _z_max(pipe_b) else pipe_b
+
+
+class _JanelaOpcoesColuna(forms.WPFWindow):
+    """Janela MODAL (hydrant_coluna_opcoes.xaml) — escolhe os níveis onde
+    a coluna de hidrantes vai ramificar (checkbox por nível, multi-
+    seleção, criados dinamicamente em __init__ porque o número de níveis
+    varia por projeto) e se cada hidrante leva abrigo de mangueira
+    junto. Sem prévia ao vivo no modelo — diferente de Conectar
+    Tubo/Abrigo, aqui ainda não existe nada no modelo pra prever antes
+    de confirmar (a coluna só é construída depois, já com níveis e
+    cliques de posição/direção definidos) — então ShowDialog() simples
+    (modal) é suficiente, sem precisar da fila de ExternalEvent."""
+
+    def __init__(self, niveis):
+        forms.WPFWindow.__init__(self, _XAML_COLUNA_PATH)
+        self.niveis               = niveis
+        self.niveis_selecionados  = []
+        self.inserir_abrigo       = False
+        self.confirmado           = False
+
+        from System.Windows.Controls import CheckBox
+        estilo = self.FindResource(u"NivelCheckStyle")
+
+        self._checkboxes = []
+        for nivel in niveis:
+            cb = CheckBox()
+            cb.Content = nivel.Name
+            cb.Tag     = nivel
+            cb.Style   = estilo
+            self.PainelNiveis.Children.Add(cb)
+            self._checkboxes.append(cb)
+
+    def on_cancel(self, sender, args):
+        self.confirmado = False
+        self.Close()
+
+    def on_ok(self, sender, args):
+        selecionados = [cb.Tag for cb in self._checkboxes if cb.IsChecked]
+        if len(selecionados) < 2:
+            self.TxtStatus.Text = (
+                u"Selecione pelo menos 2 níveis (a coluna precisa de uma "
+                u"base e um topo).")
+            return
+        self.niveis_selecionados = selecionados
+        self.inserir_abrigo      = bool(self.ChkAbrigo.IsChecked)
+        self.confirmado          = True
+        self.Close()
+
+
+def _escolher_niveis_e_abrigo(doc):
+    """Mostra _JanelaOpcoesColuna com todos os níveis do projeto
+    (ordenados por elevação). Retorna (niveis_selecionados, inserir_abrigo)
+    ordenados por elevação, ou (None, False) se cancelado/sem níveis."""
+    niveis = sorted(
+        FilteredElementCollector(doc).OfClass(Level).ToElements(),
+        key=lambda n: n.Elevation
+    )
+    if not niveis:
+        forms.alert(u"Nenhum nível encontrado no projeto.",
+                    title=u"Fire Utils", warn_icon=True)
+        return None, False
+
+    janela = _JanelaOpcoesColuna(niveis)
+    janela.ShowDialog()
+    if not janela.confirmado:
+        return None, False
+
+    selecionados = sorted(janela.niveis_selecionados, key=lambda n: n.Elevation)
+    return selecionados, janela.inserir_abrigo
+
+
+def run_coluna_multilevel(doc, uidoc, output):
+    """
+    Inserir Hidrante por Nível: cria uma ÚNICA coluna vertical
+    atravessando vários níveis de uma vez, com um ramal horizontal +
+    válvula (e, opcionalmente, abrigo de mangueira) em CADA nível
+    escolhido — em vez de rodar run() uma vez por nível manualmente.
+
+    Fluxo:
+      1. Diálogo (_JanelaOpcoesColuna): níveis a incluir (mín. 2) +
+         "inserir abrigo em cada hidrante" (sim/não).
+      2. Clique 1: posição XY da coluna (ponto livre — a coluna não se
+         conecta a nenhum tubo existente, diferente de run()).
+      3. Clique 2: direção de saída dos ramais horizontais (snapping a
+         90°, igual a run()).
+      4. Constrói, numa ÚNICA transação:
+         - O tubo vertical, de ALTURA_VALVULA_M acima do nível mais
+           baixo até ALTURA_VALVULA_M acima do nível mais alto
+           selecionados.
+         - Em cada nível (de baixo pra cima): um ramal horizontal de
+           COMP_HORIZ_M (mesma medida de run()) saindo do tubo vertical
+           a essa altura, com uma válvula na ponta. No nível mais baixo
+           e no mais alto, o ramal fecha com um joelho na PONTA do tubo
+           vertical; nos níveis intermediários, com um Tê no MEIO (via
+           PlumbingUtils.BreakCurve, igual ao caso "tê no meio" de run()).
+      5. Se "inserir abrigo" estiver marcado, chama
+         shelter_insert_core.posicionar_abrigo pra cada válvula criada
+         (fora da transação principal — cada abrigo já abre a própria,
+         igual a posicionar_todos_abrigos).
+    """
+
+    # ── Etapa 1 — Garantir família da válvula ────────────────────────────
+    simbolo, erro = garantir_valvula(doc)
+    if erro:
+        forms.alert(erro, title=u"Fire Utils – Erro", warn_icon=True)
+        pyscript.exit()
+
+    # ── Etapa 2 — Diálogo: níveis + abrigo ───────────────────────────────
+    niveis_sel, inserir_abrigo = _escolher_niveis_e_abrigo(doc)
+    if not niveis_sel:
+        pyscript.exit()
+
+    # ── Etapa 3 — Clique 1: posição XY da coluna ─────────────────────────
+    try:
+        pt_clique = uidoc.Selection.PickPoint(
+            u"Clique no ponto onde posicionar a coluna de hidrantes "
+            u"({} níveis selecionados)".format(len(niveis_sel))
+        )
+    except Exception:
+        pyscript.exit()
+
+    # ── Etapa 4 — Clique 2: direção de saída dos ramais ──────────────────
+    try:
+        pt_dir = uidoc.Selection.PickPoint(
+            u"Clique para indicar a direção de saída dos ramais"
+        )
+    except Exception:
+        pyscript.exit()
+
+    _dx   = pt_dir.X - pt_clique.X
+    _dy   = pt_dir.Y - pt_clique.Y
+    _dlen = math.sqrt(_dx * _dx + _dy * _dy)
+    if _dlen > _to_ft(0.05):
+        _v       = XYZ(_dx / _dlen, _dy / _dlen, 0.0)
+        _opcoes  = [XYZ(1, 0, 0), XYZ(-1, 0, 0), XYZ(0, 1, 0), XYZ(0, -1, 0)]
+        dir_saida = max(_opcoes, key=lambda d: _v.DotProduct(d))
+    else:
+        dir_saida = XYZ(1, 0, 0)
+
+    # Direção da face do abrigo: perpendicular ao ramal, lado "direita" —
+    # mesmo padrão default usado em posicionar_todos_abrigos (sem clique
+    # extra pra escolher lado, já que aqui é uma coluna inteira de uma vez).
+    dir_abrigo = XYZ(dir_saida.Y, -dir_saida.X, 0.0)
+
+    comp_horiz_ft      = _to_ft(COMP_HORIZ_M)
+    altura_valvula_ft  = _to_ft(ALTURA_VALVULA_M)
+
+    nivel_base = niveis_sel[0]
+    nivel_topo = niveis_sel[-1]
+    z_base     = nivel_base.Elevation + altura_valvula_ft
+    z_topo     = nivel_topo.Elevation + altura_valvula_ft
+
+    if z_topo - z_base < TOL:
+        forms.alert(
+            u"Os níveis selecionados precisam ter elevações diferentes "
+            u"pra formar uma coluna vertical (pra um único nível, use "
+            u"'Inserir Hidrante').",
+            title=u"Fire Utils", warn_icon=True)
+        pyscript.exit()
+
+    pt_base = XYZ(pt_clique.X, pt_clique.Y, z_base)
+    pt_topo = XYZ(pt_clique.X, pt_clique.Y, z_topo)
+
+    # ── Etapa 5 — Tipo/sistema de tubulação ──────────────────────────────
+    # Sem tubo de referência aqui (coluna nova, isolada) — usa o primeiro
+    # PipeType/PipingSystemType disponível no projeto, igual ao fallback
+    # que run() já usa quando não há nada pra herdar.
+    pipe_type_id = ElementId.InvalidElementId
+    try:
+        from Autodesk.Revit.DB.Plumbing import PipeType
+        tipos_pipe = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
+        if tipos_pipe:
+            pipe_type_id = tipos_pipe[0].Id
+    except Exception:
+        pass
+
+    sys_type_id = ElementId.InvalidElementId
+    try:
+        tipos = FilteredElementCollector(doc).OfClass(PipingSystemType).ToElements()
+        if tipos:
+            sys_type_id = tipos[0].Id
+    except Exception:
+        pass
+
+    diam_ft = _to_ft(DIAM_RAMAL_M)
+
+    # ── Etapa 6 — Criar a coluna inteira (transação única) ───────────────
+    valvulas_criadas = []
+    avisos           = []
+
+    with Transaction(doc, u"FireUtils - Inserir Coluna de Hidrantes") as t:
+        t.Start()
+        try:
+            tubo_vert = Pipe.Create(
+                doc, sys_type_id, pipe_type_id, nivel_base.Id, pt_base, pt_topo
+            )
+            _setar_diametro_ft(tubo_vert, diam_ft)
+
+            for nivel in niveis_sel:
+                z         = nivel.Elevation + altura_valvula_ft
+                pt_joelho = XYZ(pt_clique.X, pt_clique.Y, z)
+                pt_valv   = XYZ(
+                    pt_joelho.X + dir_saida.X * comp_horiz_ft,
+                    pt_joelho.Y + dir_saida.Y * comp_horiz_ft,
+                    pt_joelho.Z,
+                )
+
+                tubo_horiz = Pipe.Create(
+                    doc, sys_type_id, pipe_type_id, nivel.Id, pt_joelho, pt_valv
+                )
+                _setar_diametro_ft(tubo_horiz, diam_ft)
+                conn_h_ini = _get_connector_at(tubo_horiz, pt_joelho)
+
+                extremo_base = abs(z - z_base) < TOL
+                extremo_topo = abs(z - z_topo) < TOL
+
+                if extremo_base or extremo_topo:
+                    pt_ref = pt_base if extremo_base else pt_topo
+                    conn_v = _get_connector_near(tubo_vert, pt_ref)
+                    if conn_v and conn_h_ini:
+                        try:
+                            doc.Create.NewElbowFitting(conn_v, conn_h_ini)
+                        except Exception as e:
+                            avisos.append(u"{}: joelho falhou ({})".format(nivel.Name, str(e)))
+                    else:
+                        avisos.append(u"{}: conector do tubo vertical não encontrado".format(nivel.Name))
+                else:
+                    try:
+                        new_id        = PlumbingUtils.BreakCurve(doc, tubo_vert.Id, pt_joelho)
+                        tubo_vert_sec = doc.GetElement(new_id)
+                        conn_v1       = _get_connector_near(tubo_vert,     pt_joelho)
+                        conn_v2       = _get_connector_near(tubo_vert_sec, pt_joelho)
+                        if conn_v1 and conn_v2 and conn_h_ini:
+                            ord_ = _ordenar_conectores([conn_v1, conn_v2, conn_h_ini])
+                            doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+                        else:
+                            avisos.append(u"{}: conectores pós-Tê não encontrados".format(nivel.Name))
+                        # Continua subindo a partir do segmento de CIMA do
+                        # corte — não dá pra saber a priori qual dos dois
+                        # IDs (original/novo) ficou com a metade de cima.
+                        tubo_vert = _segmento_com_topo_maior(tubo_vert, tubo_vert_sec)
+                    except Exception as e:
+                        avisos.append(u"{}: Tê falhou ({})".format(nivel.Name, str(e)))
+
+                conn_tubo_fim = _get_far_connector(tubo_horiz, pt_joelho)
+                pos_insercao  = conn_tubo_fim.Origin if conn_tubo_fim else pt_valv
+
+                valvula = doc.Create.NewFamilyInstance(
+                    pos_insercao, simbolo, nivel, StructuralType.NonStructural
+                )
+                angulo = _angulo_entre(XYZ(1.0, 0.0, 0.0), dir_saida)
+                if abs(angulo) > TOL:
+                    eixo_rot = Line.CreateBound(
+                        pos_insercao,
+                        XYZ(pos_insercao.X, pos_insercao.Y, pos_insercao.Z + 1.0)
+                    )
+                    ElementTransformUtils.RotateElement(doc, valvula.Id, eixo_rot, angulo)
+
+                if conn_tubo_fim:
+                    conn_val = _conector_mais_proximo(valvula, pos_insercao)
+                    if conn_val:
+                        deslocamento = conn_tubo_fim.Origin - conn_val.Origin
+                        if deslocamento.GetLength() > TOL:
+                            ElementTransformUtils.MoveElement(doc, valvula.Id, deslocamento)
+                        try:
+                            conn_tubo_fim.ConnectTo(conn_val)
+                        except Exception:
+                            avisos.append(u"{}: válvula não conectada ao ramal".format(nivel.Name))
+
+                valvulas_criadas.append((valvula, nivel))
+
+            t.Commit()
+
+        except Exception as e:
+            t.RollBack()
+            forms.alert(
+                u"Erro ao criar a coluna de hidrantes:\n{}".format(str(e)),
+                title=u"Fire Utils – Erro",
+                warn_icon=True
+            )
+            pyscript.exit()
+
+    # ── Etapa 7 — Abrigos (opcional, fora da transação principal) ────────
+    if inserir_abrigo:
+        from shelter_insert_core import posicionar_abrigo
+        for valvula, nivel in valvulas_criadas:
+            posicionar_abrigo(doc, valvula, dir_saida, nivel, output, dir_abrigo=dir_abrigo)
+
+    # ── Etapa 8 — Relatório ───────────────────────────────────────────────
+    output.print_md(u"| Coluna de hidrantes | **{} níveis** |".format(len(niveis_sel)))
+    for aviso in avisos:
+        output.print_md(u"| Aviso | {} |".format(aviso))
