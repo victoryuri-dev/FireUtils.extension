@@ -349,59 +349,45 @@ def run(doc, uidoc, output, forcar_nivel=False):
         if not nivel_pre:
             pyscript.exit()
 
-    # ── Etapa 3 — Selecionar ponto no tubo ───────────────────────────────
+    # ── Etapa 3 — Selecionar elemento (tubo/fitting) ou ponto livre ──────
     msg_nivel = (u" Nível: {}.".format(nivel_pre.Name)
                  if nivel_pre else
                  u" O nível será detectado da vista ativa.")
 
-    # PickPoint aceita qualquer clique — no vazio OU sobre elemento.
-    # Em seguida, detectamos automaticamente se há tubo/fitting próximo.
+    # PickObject (clique direto NUM elemento) em vez de PickPoint + detecção
+    # manual por distância XY: essa detecção manual assumia uma vista em
+    # planta, onde PickPoint devolve o Z do plano de corte da vista e dá pra
+    # "achatar" o clique e comparar só X/Y contra o eixo de cada pipe — mas
+    # numa vista 3D/isométrica essa suposição não vale (não existe um único
+    # plano de corte, e o Z que o PickPoint devolve não tem relação alguma
+    # com o que está visualmente sob o cursor), então o clique nunca caía
+    # dentro do raio de nenhum pipe e a ferramenta sempre caía em modo
+    # livre — mesmo clicando bem em cima do tubo. PickObject resolve o
+    # ponto por ray-casting contra a geometria de verdade, o que funciona
+    # em qualquer tipo de vista. Esc aqui não cancela o comando inteiro —
+    # só pula pro modo livre (clique em ponto qualquer, próximo PickPoint).
+    elem_sel  = None
+    pt_clique = None
     try:
-        pt_clique = uidoc.Selection.PickPoint(
-            u"Clique no tubo/fitting para conectar — ou em ponto livre para posicionar"
+        ref_sel   = uidoc.Selection.PickObject(
+            ObjectType.PointOnElement, _FiltroElemento(),
+            u"Clique no tubo/fitting para conectar (Esc para posicionar "
+            u"livremente).{}".format(msg_nivel)
         )
+        elem_sel  = doc.GetElement(ref_sel.ElementId)
+        pt_clique = ref_sel.GlobalPoint
     except Exception:
-        pyscript.exit()
-
-    # Raio de detecção automática (metros → pés internos)
-    _RAIO_AUTO_FT = _to_ft(0.25)
-    elem_sel      = None
-
-    # Detecção em XY apenas — PickPoint retorna o Z do plano de corte da vista,
-    # não o Z real do elemento, então distância 3D seria sempre grande demais.
-    def _dist_xy_pt(a, b):
-        return math.sqrt((a.X - b.X) ** 2 + (a.Y - b.Y) ** 2)
-
-    # 1) Pipes próximos: distância XY do clique ao eixo do pipe
-    for _p in FilteredElementCollector(doc).OfClass(Pipe).ToElements():
-        try:
-            _loc = _p.Location.Curve
-            _p0  = _loc.GetEndPoint(0)
-            _p1  = _loc.GetEndPoint(1)
-            # Projeta o clique no eixo do pipe usando o mesmo Z do pipe
-            _pt_flat = XYZ(pt_clique.X, pt_clique.Y, _p0.Z)
-            _proj    = _projetar_no_eixo(_pt_flat, _p0, _p1)
-            if _dist_xy_pt(pt_clique, _proj) < _RAIO_AUTO_FT:
-                elem_sel  = _p
-                pt_clique = _proj   # ancora o clique no eixo do tubo
-                break
-        except Exception:
-            pass
-
-    # 2) Fittings próximos (joelho / tê — 2 ou 3 conectores) — distância XY
-    if elem_sel is None:
-        for _fi in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements():
-            try:
-                _n = _fi.MEPModel.ConnectorManager.Connectors.Size
-                if 2 <= _n <= 3:
-                    _pos = _posicao_fitting(_fi)
-                    if _pos and _dist_xy_pt(pt_clique, _pos) < _RAIO_AUTO_FT:
-                        elem_sel = _fi
-                        break
-            except Exception:
-                pass
+        pass
 
     modo_livre = (elem_sel is None)
+
+    if modo_livre:
+        try:
+            pt_clique = uidoc.Selection.PickPoint(
+                u"Clique no ponto onde posicionar o hidrante livremente.{}".format(msg_nivel)
+            )
+        except Exception:
+            pyscript.exit()
 
     try:
         pt_dir = uidoc.Selection.PickPoint(
