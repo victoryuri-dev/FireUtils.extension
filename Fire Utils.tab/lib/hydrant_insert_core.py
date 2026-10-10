@@ -363,15 +363,34 @@ def run(doc, uidoc, output, forcar_nivel=False):
     # diferente de um PickPoint() sem snap, que em planta devolve o Z do
     # plano de corte da vista (comparável só em X/Y) mas em 3D/isométrica
     # não tem relação alguma com o que está visualmente sob o cursor.
-    _SNAP_TUBO = (ObjectSnapTypes.Endpoints | ObjectSnapTypes.Midpoints |
-                  ObjectSnapTypes.Nearest | ObjectSnapTypes.Centers2D |
-                  ObjectSnapTypes.Centers3D | ObjectSnapTypes.Intersections)
+    #
+    # Os nomes exatos dos membros do enum ObjectSnapTypes mudam entre
+    # versões do Revit (ex.: "Centers2D"/"Centers3D" não existem em
+    # algumas, "Centerlines" em outras) — em vez de arriscar outro nome
+    # errado, tenta uma lista de candidatos plausíveis via getattr e usa
+    # só os que existem de verdade nesta versão.
+    _SNAP_CANDIDATOS = [
+        u"Endpoints", u"Midpoints", u"Nearest", u"Intersections",
+        u"Centerlines", u"Centers2D", u"Centers3D", u"WorkPlaneGrid",
+    ]
+    _SNAP_TUBO = None
+    for _nome in _SNAP_CANDIDATOS:
+        _flag = getattr(ObjectSnapTypes, _nome, None)
+        if _flag is not None:
+            _SNAP_TUBO = _flag if _SNAP_TUBO is None else (_SNAP_TUBO | _flag)
+
     try:
-        pt_clique = uidoc.Selection.PickPoint(
-            _SNAP_TUBO,
-            u"Clique no tubo/fitting para conectar — ou em ponto livre "
-            u"para posicionar.{}".format(msg_nivel)
-        )
+        if _SNAP_TUBO is not None:
+            pt_clique = uidoc.Selection.PickPoint(
+                _SNAP_TUBO,
+                u"Clique no tubo/fitting para conectar — ou em ponto livre "
+                u"para posicionar.{}".format(msg_nivel)
+            )
+        else:
+            pt_clique = uidoc.Selection.PickPoint(
+                u"Clique no tubo/fitting para conectar — ou em ponto livre "
+                u"para posicionar.{}".format(msg_nivel)
+            )
     except Exception:
         pyscript.exit()
 
