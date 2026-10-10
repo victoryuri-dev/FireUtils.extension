@@ -22,7 +22,7 @@ from Autodesk.Revit.DB import (
 )
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.DB.Structure import StructuralType
-from Autodesk.Revit.UI.Selection import ObjectType, ObjectSnapTypes, ISelectionFilter
+from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
 
 try:
@@ -349,81 +349,45 @@ def run(doc, uidoc, output, forcar_nivel=False):
         if not nivel_pre:
             pyscript.exit()
 
-    # ── Etapa 3 — Selecionar ponto no tubo (com snap nativo do Revit) ────
+    # ── Etapa 3 — Selecionar elemento (tubo/fitting) ou ponto livre ──────
     msg_nivel = (u" Nível: {}.".format(nivel_pre.Name)
                  if nivel_pre else
                  u" O nível será detectado da vista ativa.")
 
-    # PickPoint COM ObjectSnapTypes explícito (não um PickPoint() cru) —
-    # mostra os símbolos roxos nativos do Revit (ponta, meio, centro,
-    # interseção) ao passar perto de um tubo/fitting, igual ao
-    # posicionamento normal de uma família. Isso também já resolve o
-    # problema de vista: com snap ativo, o ponto devolvido é resolvido
-    # contra a geometria 3D de verdade sob o cursor em QUALQUER vista —
-    # diferente de um PickPoint() sem snap, que em planta devolve o Z do
-    # plano de corte da vista (comparável só em X/Y) mas em 3D/isométrica
-    # não tem relação alguma com o que está visualmente sob o cursor.
-    #
-    # Os nomes exatos dos membros do enum ObjectSnapTypes mudam entre
-    # versões do Revit (ex.: "Centers2D"/"Centers3D" não existem em
-    # algumas, "Centerlines" em outras) — em vez de arriscar outro nome
-    # errado, tenta uma lista de candidatos plausíveis via getattr e usa
-    # só os que existem de verdade nesta versão.
-    _SNAP_CANDIDATOS = [
-        u"Endpoints", u"Midpoints", u"Nearest", u"Intersections",
-        u"Centerlines", u"Centers2D", u"Centers3D", u"WorkPlaneGrid",
-    ]
-    _SNAP_TUBO = None
-    for _nome in _SNAP_CANDIDATOS:
-        _flag = getattr(ObjectSnapTypes, _nome, None)
-        if _flag is not None:
-            _SNAP_TUBO = _flag if _SNAP_TUBO is None else (_SNAP_TUBO | _flag)
-
+    # PickObject (clique direto NUM elemento) em vez de PickPoint + detecção
+    # manual por distância XY: essa detecção manual assumia uma vista em
+    # planta, onde PickPoint devolve o Z do plano de corte da vista e dá pra
+    # "achatar" o clique e comparar só X/Y contra o eixo de cada pipe — mas
+    # numa vista 3D/isométrica essa suposição não vale (não existe um único
+    # plano de corte, e o Z que o PickPoint devolve não tem relação alguma
+    # com o que está visualmente sob o cursor), então o clique nunca caía
+    # dentro do raio de nenhum pipe e a ferramenta sempre caía em modo
+    # livre — mesmo clicando bem em cima do tubo. PickObject resolve o
+    # ponto por ray-casting contra a geometria de verdade, o que funciona
+    # em qualquer tipo de vista. Esc aqui não cancela o comando inteiro —
+    # só pula pro modo livre (clique em ponto qualquer, próximo PickPoint).
+    elem_sel  = None
+    pt_clique = None
     try:
-        if _SNAP_TUBO is not None:
-            pt_clique = uidoc.Selection.PickPoint(
-                _SNAP_TUBO,
-                u"Clique no tubo/fitting para conectar — ou em ponto livre "
-                u"para posicionar.{}".format(msg_nivel)
-            )
-        else:
-            pt_clique = uidoc.Selection.PickPoint(
-                u"Clique no tubo/fitting para conectar — ou em ponto livre "
-                u"para posicionar.{}".format(msg_nivel)
-            )
+        ref_sel   = uidoc.Selection.PickObject(
+            ObjectType.PointOnElement, _FiltroElemento(),
+            u"Clique no tubo/fitting para conectar (Esc para posicionar "
+            u"livremente).{}".format(msg_nivel)
+        )
+        elem_sel  = doc.GetElement(ref_sel.ElementId)
+        pt_clique = ref_sel.GlobalPoint
     except Exception:
-        pyscript.exit()
-
-    # Raio de detecção do elemento sob o clique (já resolvido pelo snap
-    # acima, então em distância 3D de verdade — não precisa mais achatar
-    # em X/Y como antes).
-    _RAIO_AUTO_FT = _to_ft(0.15)
-    elem_sel      = None
-
-    for _p in FilteredElementCollector(doc).OfClass(Pipe).ToElements():
-        try:
-            _loc  = _p.Location.Curve
-            _proj = _projetar_no_eixo(pt_clique, _loc.GetEndPoint(0), _loc.GetEndPoint(1))
-            if pt_clique.DistanceTo(_proj) < _RAIO_AUTO_FT:
-                elem_sel  = _p
-                pt_clique = _proj   # ancora o clique no eixo do tubo
-                break
-        except Exception:
-            pass
-
-    if elem_sel is None:
-        for _fi in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements():
-            try:
-                _n = _fi.MEPModel.ConnectorManager.Connectors.Size
-                if 2 <= _n <= 3:
-                    _pos = _posicao_fitting(_fi)
-                    if _pos and pt_clique.DistanceTo(_pos) < _RAIO_AUTO_FT:
-                        elem_sel = _fi
-                        break
-            except Exception:
-                pass
+        pass
 
     modo_livre = (elem_sel is None)
+
+    if modo_livre:
+        try:
+            pt_clique = uidoc.Selection.PickPoint(
+                u"Clique no ponto onde posicionar o hidrante livremente.{}".format(msg_nivel)
+            )
+        except Exception:
+            pyscript.exit()
 
     try:
         pt_dir = uidoc.Selection.PickPoint(
