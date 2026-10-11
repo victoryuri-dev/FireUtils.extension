@@ -1125,16 +1125,18 @@
 }
 
 /* Dashboard do projeto/estrutura ------------------------------------------ */
+/* Bento: cada cartão com a própria altura de conteúdo, empilhado logo
+   abaixo do anterior na mesma coluna — display:grid (mesmo com
+   align-items:start) ainda força as DUAS colunas de uma linha a terem a
+   altura do cartão mais alto dela, sobrando vão embaixo do mais curto
+   (ex.: Sistema de Hidrantes sem classificação vs. Extintores Portáteis
+   ao lado, mais alto). columns (multi-coluna) resolve isso: cada coluna
+   empacota os cartões um embaixo do outro pela própria altura, sem
+   esperar a outra coluna. break-inside: avoid (ver .cartao-info abaixo)
+   evita um cartão ser cortado ao meio entre as colunas. */
 .grade-cartoes-info {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  /* align-items: start (em vez do stretch padrão do grid) — cada cartão
-     fica com a própria altura de conteúdo, em vez de esticar pra bater
-     com o mais alto da mesma linha (ex.: Edificação, com 6 campos desde
-     que ganhou Endereço/CNAE, não deve mais ditar a altura do cartão de
-     Classificação ao lado, mais curto). */
-  align-items: start;
-  gap: 12px;
+  columns: 2;
+  column-gap: 12px;
   margin-bottom: 22px;
 }
 
@@ -1143,6 +1145,17 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 14px 16px;
+}
+
+/* Espaçamento vertical entre cartões empilhados na mesma coluna — o
+   column-gap de .grade-cartoes-info só cobre o vão horizontal entre as
+   duas colunas, não o vertical entre cartões dentro de uma delas.
+   break-inside evita um cartão ser cortado ao meio quando o conteúdo da
+   coluna passa pra página/tela seguinte (o navegador trata colunas como
+   "páginas" pra esse efeito). */
+.grade-cartoes-info .cartao-info {
+  margin-bottom: 12px;
+  break-inside: avoid;
 }
 
 .cartao-info h3 {
