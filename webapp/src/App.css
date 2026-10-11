@@ -518,12 +518,22 @@
   margin: 0 0 10px;
 }
 
+/* Carrossel de 2 linhas: grid com fluxo por coluna (grid-auto-flow:
+   column) — preenche 2 pills por coluna (grid-template-rows) e só então
+   abre uma coluna nova, em vez de empilhar numa 3ª linha quando a
+   dockpane fica mais estreita (flex-wrap fazia isso). overflow-x
+   rola horizontalmente o que não couber, com a mesma barra fina do tema
+   (::-webkit-scrollbar em index.css). */
 .pills {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-rows: repeat(2, auto);
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
   gap: 10px;
   margin-bottom: 18px;
-  justify-content: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
 }
 
 .pill {
