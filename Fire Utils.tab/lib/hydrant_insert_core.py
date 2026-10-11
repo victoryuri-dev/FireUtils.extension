@@ -855,6 +855,27 @@ def _escolher_niveis_e_abrigo(doc):
     return selecionados, janela.inserir_abrigo
 
 
+def _criar_fitting_generico(doc, conectores):
+    """
+    Cria o fitting certo pra N conectores (2 → joelho, 3 → tê, 4 →
+    cruzeta) já ordenados por _ordenar_conectores — generaliza a mesma
+    lógica que run() já usa pra reconectar o elemento principal (ver
+    bloco "Conexão ao elemento principal" em run()), agora reusada pro
+    ponto onde a coluna multinível cruza/termina um tubo de origem.
+    """
+    conectores = [c for c in conectores if c is not None]
+    ord_ = _ordenar_conectores(conectores)
+    n = len(ord_)
+    if n == 2:
+        doc.Create.NewElbowFitting(ord_[0], ord_[1])
+    elif n == 3:
+        doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+    elif n == 4:
+        doc.Create.NewCrossFitting(ord_[0], ord_[1], ord_[2], ord_[3])
+    else:
+        raise Exception(u"número de conectores não suportado ({})".format(n))
+
+
 def run_coluna_multilevel(doc, uidoc, output):
     """
     Inserir Hidrante por Nível: cria uma ÚNICA coluna vertical
@@ -865,20 +886,34 @@ def run_coluna_multilevel(doc, uidoc, output):
     Fluxo:
       1. Diálogo (_JanelaOpcoesColuna): níveis a incluir (mín. 2) +
          "inserir abrigo em cada hidrante" (sim/não).
-      2. Clique 1: posição XY da coluna (ponto livre — a coluna não se
-         conecta a nenhum tubo existente, diferente de run()).
+      2. Clique 1: tubo de origem pra conectar a coluna (PickObject,
+         igual a run()) OU Esc pra posicionar livremente (sem conexão a
+         nada existente). Se um tubo for clicado, a coluna nasce
+         exatamente sobre o eixo dele (X/Y do clique projetado nesse
+         eixo) — não um ponto arbitrário.
       3. Clique 2: direção de saída dos ramais horizontais (snapping a
          90°, igual a run()).
       4. Constrói, numa ÚNICA transação:
          - O tubo vertical, de ALTURA_VALVULA_M acima do nível mais
            baixo até ALTURA_VALVULA_M acima do nível mais alto
-           selecionados.
+           selecionados — esse intervalo se ESTENDE automaticamente pra
+           incluir a cota do tubo de origem, se ela cair fora dele (ex.:
+           só níveis acima do tubo de origem foram escolhidos).
          - Em cada nível (de baixo pra cima): um ramal horizontal de
            COMP_HORIZ_M (mesma medida de run()) saindo do tubo vertical
            a essa altura, com uma válvula na ponta. No nível mais baixo
            e no mais alto, o ramal fecha com um joelho na PONTA do tubo
            vertical; nos níveis intermediários, com um Tê no MEIO (via
            PlumbingUtils.BreakCurve, igual ao caso "tê no meio" de run()).
+         - Se houver tubo de origem, a conexão da coluna nele é
+           resolvida pelo número de "pernas" dos dois lados (ver
+           _criar_fitting_generico): tubo de origem cortado no MEIO (2
+           pernas) + coluna com hidrante só pra cima OU só pra baixo
+           daquele ponto (1 perna) → TÊ; tubo de origem na PONTA (1
+           perna) + coluna só pra um lado (1 perna) → JOELHO; tubo de
+           origem no MEIO (2 pernas) + coluna com hidrante pra cima E
+           pra baixo (2 pernas) → CRUZETA; tubo de origem na PONTA (1
+           perna) + coluna pra cima E pra baixo (2 pernas) → TÊ.
       5. Se "inserir abrigo" estiver marcado, chama
          shelter_insert_core.posicionar_abrigo pra cada válvula criada
          (fora da transação principal — cada abrigo já abre a própria,
@@ -896,14 +931,44 @@ def run_coluna_multilevel(doc, uidoc, output):
     if not niveis_sel:
         pyscript.exit()
 
-    # ── Etapa 3 — Clique 1: posição XY da coluna ─────────────────────────
+    # ── Etapa 3 — Clique 1: tubo de origem (opcional) ou ponto livre ─────
+    # PickObject primeiro (igual a run()) — Esc não cancela o comando,
+    # só pula pro modo livre (PickPoint de ponto qualquer).
+    tubo_origem = None
+    pt_clique   = None
     try:
-        pt_clique = uidoc.Selection.PickPoint(
-            u"Clique no ponto onde posicionar a coluna de hidrantes "
-            u"({} níveis selecionados)".format(len(niveis_sel))
+        ref_sel = uidoc.Selection.PickObject(
+            ObjectType.PointOnElement, _FiltroElemento(),
+            u"Clique no tubo de origem pra conectar a coluna (Esc pra "
+            u"posicionar livremente) — {} níveis selecionados".format(len(niveis_sel))
         )
+        elem_ref = doc.GetElement(ref_sel.ElementId)
+        if isinstance(elem_ref, Pipe):
+            tubo_origem = elem_ref
+            pt_clique   = ref_sel.GlobalPoint
+        # FamilyInstance (joelho/tê) como origem não é suportado aqui —
+        # cai pro modo livre abaixo, com um aviso.
     except Exception:
-        pyscript.exit()
+        pass
+
+    if tubo_origem is None:
+        try:
+            pt_clique = uidoc.Selection.PickPoint(
+                u"Clique no ponto onde posicionar a coluna de hidrantes "
+                u"({} níveis selecionados)".format(len(niveis_sel))
+            )
+        except Exception:
+            pyscript.exit()
+
+    # Coluna nasce exatamente sobre o eixo do tubo de origem (X/Y do
+    # clique projetado nesse eixo) — não faz sentido a coluna "quase"
+    # cruzar o tubo sem estar exatamente sobre o ponto de corte.
+    z_origem = None
+    if tubo_origem is not None:
+        _loc_o = tubo_origem.Location.Curve
+        pt_origem = _projetar_no_eixo(pt_clique, _loc_o.GetEndPoint(0), _loc_o.GetEndPoint(1))
+        pt_clique = XYZ(pt_origem.X, pt_origem.Y, pt_clique.Z)
+        z_origem  = pt_origem.Z
 
     # ── Etapa 4 — Clique 2: direção de saída dos ramais ──────────────────
     try:
@@ -944,22 +1009,32 @@ def run_coluna_multilevel(doc, uidoc, output):
             title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
+    # Estende o intervalo da coluna pra incluir a cota do tubo de origem,
+    # se ela cair fora do que os níveis selecionados já cobrem (ex.:
+    # usuário só marcou níveis ACIMA do tubo de origem — o tubo de
+    # origem vira a nova base da coluna).
+    if z_origem is not None:
+        z_base = min(z_base, z_origem)
+        z_topo = max(z_topo, z_origem)
+
     pt_base = XYZ(pt_clique.X, pt_clique.Y, z_base)
     pt_topo = XYZ(pt_clique.X, pt_clique.Y, z_topo)
 
     # ── Etapa 5 — Tipo/sistema de tubulação ──────────────────────────────
-    # Sem tubo de referência aqui (coluna nova, isolada) — PREFERE herdar
-    # de um Pipe JÁ EXISTENTE no projeto (qualquer um): um PipeType que já
-    # tem tubos de verdade modelados quase certamente já tem Preferências
-    # de Roteamento configuradas (joelho/tê definidos pra esse tipo/
-    # tamanho). O fallback antigo ("1º PipeType do
-    # FilteredElementCollector") podia pegar um tipo NUNCA usado no
-    # projeto, sem fitting nenhum configurado nas Preferências de
-    # Roteamento — daí TODO joelho/tê (até o primeiro, sem nenhum
-    # BreakCurve envolvido) derrubar com "failed to insert elbow/tee.":
-    # o tipo em si não tem família de joelho/tê associada, não é um
-    # problema de geometria.
-    pipe_existente = next(iter(FilteredElementCollector(doc).OfClass(Pipe).ToElements()), None)
+    # Prefere herdar do PRÓPRIO tubo de origem (garante compatibilidade
+    # perfeita com o sistema que a coluna está entrando); sem tubo de
+    # origem, prefere qualquer Pipe JÁ EXISTENTE no projeto — um PipeType
+    # que já tem tubos de verdade modelados quase certamente já tem
+    # Preferências de Roteamento configuradas (joelho/tê definidos pra
+    # esse tipo/tamanho). O fallback final ("1º PipeType do
+    # FilteredElementCollector") pode pegar um tipo NUNCA usado no
+    # projeto, sem fitting nenhum configurado — daí TODO joelho/tê (até o
+    # primeiro, sem nenhum BreakCurve envolvido) derrubar com "failed to
+    # insert elbow/tee.": o tipo em si não tem família de joelho/tê
+    # associada, não é um problema de geometria.
+    pipe_existente = tubo_origem
+    if pipe_existente is None:
+        pipe_existente = next(iter(FilteredElementCollector(doc).OfClass(Pipe).ToElements()), None)
 
     pipe_type_id = ElementId.InvalidElementId
     sys_type_id  = ElementId.InvalidElementId
@@ -993,9 +1068,23 @@ def run_coluna_multilevel(doc, uidoc, output):
         except Exception:
             pass
 
-    diam_ft = _to_ft(DIAM_RAMAL_M)
+    diam_ft    = _to_ft(DIAM_RAMAL_M)
+    tol_fim_ft = _to_ft(TOL_FIM)
 
     # ── Etapa 6 — Criar a coluna inteira (transação única) ───────────────
+    # Eventos ordenados por cota (de baixo pra cima): um por nível
+    # selecionado (ramal + válvula) e, se houver, um pro tubo de origem
+    # (só a conexão, sem ramal/válvula — não é um hidrante, é onde a
+    # coluna entra na rede existente). Processar tudo numa lista só, na
+    # mesma ordem de baixo pra cima, mantém tubo_vert sempre apontando
+    # pro segmento de cima certo, não importa a ordem relativa entre
+    # níveis de hidrante e o ponto de conexão do tubo de origem.
+    eventos = [{u"tipo": u"hidrante", u"z": n.Elevation + altura_valvula_ft, u"nivel": n}
+               for n in niveis_sel]
+    if tubo_origem is not None:
+        eventos.append({u"tipo": u"origem", u"z": z_origem})
+    eventos.sort(key=lambda e: e[u"z"])
+
     valvulas_criadas = []
     avisos           = []
 
@@ -1007,89 +1096,141 @@ def run_coluna_multilevel(doc, uidoc, output):
             )
             _setar_diametro_ft(tubo_vert, diam_ft)
 
-            for nivel in niveis_sel:
-                z         = nivel.Elevation + altura_valvula_ft
-                pt_joelho = XYZ(pt_clique.X, pt_clique.Y, z)
-                pt_valv   = XYZ(
-                    pt_joelho.X + dir_saida.X * comp_horiz_ft,
-                    pt_joelho.Y + dir_saida.Y * comp_horiz_ft,
-                    pt_joelho.Z,
-                )
-
-                tubo_horiz = Pipe.Create(
-                    doc, sys_type_id, pipe_type_id, nivel.Id, pt_joelho, pt_valv
-                )
-                _setar_diametro_ft(tubo_horiz, diam_ft)
-                conn_h_ini = _get_connector_at(tubo_horiz, pt_joelho)
-
+            for evento in eventos:
+                z = evento[u"z"]
+                pt_z = XYZ(pt_clique.X, pt_clique.Y, z)
                 extremo_base = abs(z - z_base) < TOL
                 extremo_topo = abs(z - z_topo) < TOL
 
+                # ── Pernas do lado da COLUNA neste ponto: 1 se for
+                # extremo (só continua pra um lado), 2 se for meio da
+                # coluna (corta e continua pros dois lados).
+                conns_coluna = []
                 if extremo_base or extremo_topo:
                     pt_ref = pt_base if extremo_base else pt_topo
                     conn_v = _get_connector_near(tubo_vert, pt_ref)
-                    if conn_v and conn_h_ini:
-                        try:
-                            doc.Create.NewElbowFitting(conn_v, conn_h_ini)
-                        except Exception as e:
-                            avisos.append(u"{}: joelho falhou ({})".format(nivel.Name, str(e)))
+                    if conn_v:
+                        conns_coluna.append(conn_v)
                     else:
-                        avisos.append(u"{}: conector do tubo vertical não encontrado".format(nivel.Name))
+                        avisos.append(u"z={:.2f}: conector do tubo vertical não encontrado".format(_to_m(z)))
                 else:
                     tubo_vert_sec = None
                     try:
-                        new_id        = PlumbingUtils.BreakCurve(doc, tubo_vert.Id, pt_joelho)
-                        tubo_vert_sec = doc.GetElement(new_id)
+                        new_id_v      = PlumbingUtils.BreakCurve(doc, tubo_vert.Id, pt_z)
+                        tubo_vert_sec = doc.GetElement(new_id_v)
                     except Exception as e:
-                        avisos.append(u"{}: corte do tubo vertical falhou ({})".format(nivel.Name, str(e)))
+                        avisos.append(u"z={:.2f}: corte do tubo vertical falhou ({})".format(_to_m(z), str(e)))
 
                     if tubo_vert_sec is not None:
-                        conn_v1 = _get_connector_near(tubo_vert,     pt_joelho)
-                        conn_v2 = _get_connector_near(tubo_vert_sec, pt_joelho)
-                        if conn_v1 and conn_v2 and conn_h_ini:
-                            try:
-                                ord_ = _ordenar_conectores([conn_v1, conn_v2, conn_h_ini])
-                                doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
-                            except Exception as e:
-                                avisos.append(u"{}: Tê falhou ({})".format(nivel.Name, str(e)))
+                        conn_v1 = _get_connector_near(tubo_vert,     pt_z)
+                        conn_v2 = _get_connector_near(tubo_vert_sec, pt_z)
+                        if conn_v1 and conn_v2:
+                            conns_coluna.extend([conn_v1, conn_v2])
                         else:
-                            avisos.append(u"{}: conectores pós-Tê não encontrados".format(nivel.Name))
+                            avisos.append(u"z={:.2f}: conectores pós-corte da coluna não encontrados".format(_to_m(z)))
                         # SEMPRE continua subindo a partir do segmento de
-                        # CIMA do corte, mesmo se o Tê não tiver sido
-                        # criado — o corte geométrico (BreakCurve) já
-                        # aconteceu de qualquer jeito, e os dois pedaços
-                        # (acima/abaixo) continuam sendo pipes de verdade;
-                        # sem isso, uma falha no Tê deixava tubo_vert
-                        # apontando pro pedaço ERRADO (de baixo) pro resto
-                        # do loop, quebrando em cascata os níveis acima.
+                        # CIMA do corte, mesmo se o fitting não tiver
+                        # sido criado — o corte geométrico (BreakCurve)
+                        # já aconteceu de qualquer jeito, e os dois
+                        # pedaços continuam sendo pipes de verdade; sem
+                        # isso, uma falha no fitting deixava tubo_vert
+                        # apontando pro pedaço ERRADO (de baixo) pro
+                        # resto do loop, quebrando em cascata os eventos
+                        # acima.
                         tubo_vert = _segmento_com_topo_maior(tubo_vert, tubo_vert_sec)
 
-                conn_tubo_fim = _get_far_connector(tubo_horiz, pt_joelho)
-                pos_insercao  = conn_tubo_fim.Origin if conn_tubo_fim else pt_valv
-
-                valvula = doc.Create.NewFamilyInstance(
-                    pos_insercao, simbolo, nivel, StructuralType.NonStructural
-                )
-                angulo = _angulo_entre(XYZ(1.0, 0.0, 0.0), dir_saida)
-                if abs(angulo) > TOL:
-                    eixo_rot = Line.CreateBound(
-                        pos_insercao,
-                        XYZ(pos_insercao.X, pos_insercao.Y, pos_insercao.Z + 1.0)
+                if evento[u"tipo"] == u"hidrante":
+                    nivel     = evento[u"nivel"]
+                    pt_valv   = XYZ(
+                        pt_z.X + dir_saida.X * comp_horiz_ft,
+                        pt_z.Y + dir_saida.Y * comp_horiz_ft,
+                        pt_z.Z,
                     )
-                    ElementTransformUtils.RotateElement(doc, valvula.Id, eixo_rot, angulo)
 
-                if conn_tubo_fim:
-                    conn_val = _conector_mais_proximo(valvula, pos_insercao)
-                    if conn_val:
-                        deslocamento = conn_tubo_fim.Origin - conn_val.Origin
-                        if deslocamento.GetLength() > TOL:
-                            ElementTransformUtils.MoveElement(doc, valvula.Id, deslocamento)
+                    tubo_horiz = Pipe.Create(
+                        doc, sys_type_id, pipe_type_id, nivel.Id, pt_z, pt_valv
+                    )
+                    _setar_diametro_ft(tubo_horiz, diam_ft)
+                    conn_h_ini = _get_connector_at(tubo_horiz, pt_z)
+
+                    if conn_h_ini and conns_coluna:
                         try:
-                            conn_tubo_fim.ConnectTo(conn_val)
-                        except Exception:
-                            avisos.append(u"{}: válvula não conectada ao ramal".format(nivel.Name))
+                            _criar_fitting_generico(doc, conns_coluna + [conn_h_ini])
+                        except Exception as e:
+                            avisos.append(u"{}: conexão do ramal falhou ({})".format(nivel.Name, str(e)))
+                    elif not conn_h_ini:
+                        avisos.append(u"{}: conector do ramal não encontrado".format(nivel.Name))
 
-                valvulas_criadas.append((valvula, nivel))
+                    conn_tubo_fim = _get_far_connector(tubo_horiz, pt_z)
+                    pos_insercao  = conn_tubo_fim.Origin if conn_tubo_fim else pt_valv
+
+                    valvula = doc.Create.NewFamilyInstance(
+                        pos_insercao, simbolo, nivel, StructuralType.NonStructural
+                    )
+                    angulo = _angulo_entre(XYZ(1.0, 0.0, 0.0), dir_saida)
+                    if abs(angulo) > TOL:
+                        eixo_rot = Line.CreateBound(
+                            pos_insercao,
+                            XYZ(pos_insercao.X, pos_insercao.Y, pos_insercao.Z + 1.0)
+                        )
+                        ElementTransformUtils.RotateElement(doc, valvula.Id, eixo_rot, angulo)
+
+                    if conn_tubo_fim:
+                        conn_val = _conector_mais_proximo(valvula, pos_insercao)
+                        if conn_val:
+                            deslocamento = conn_tubo_fim.Origin - conn_val.Origin
+                            if deslocamento.GetLength() > TOL:
+                                ElementTransformUtils.MoveElement(doc, valvula.Id, deslocamento)
+                            try:
+                                conn_tubo_fim.ConnectTo(conn_val)
+                            except Exception:
+                                avisos.append(u"{}: válvula não conectada ao ramal".format(nivel.Name))
+
+                    valvulas_criadas.append((valvula, nivel))
+
+                else:  # evento[u"tipo"] == u"origem"
+                    # ── Pernas do lado do TUBO DE ORIGEM: 1 se o ponto
+                    # de corte cair perto de uma ponta (estende até lá,
+                    # igual ao caso "ponta" de run()), 2 se for no meio
+                    # (BreakCurve, igual ao caso "tê no meio" de run()).
+                    p0o, p1o = _loc_o.GetEndPoint(0), _loc_o.GetEndPoint(1)
+                    dist_a = pt_z.DistanceTo(p0o)
+                    dist_b = pt_z.DistanceTo(p1o)
+                    em_ponta_origem = (dist_a < tol_fim_ft or dist_b < tol_fim_ft)
+
+                    conns_origem = []
+                    if em_ponta_origem:
+                        pt_fim_o = p0o if dist_a < dist_b else p1o
+                        _ajustar_endpoint(tubo_origem, pt_fim_o, pt_z)
+                        doc.Regenerate()
+                        conn_o = _get_connector_near(tubo_origem, pt_z)
+                        if conn_o:
+                            conns_origem.append(conn_o)
+                        else:
+                            avisos.append(u"Tubo de origem: conector da ponta não encontrado")
+                    else:
+                        tubo_origem_sec = None
+                        try:
+                            new_id_o        = PlumbingUtils.BreakCurve(doc, tubo_origem.Id, pt_z)
+                            tubo_origem_sec = doc.GetElement(new_id_o)
+                        except Exception as e:
+                            avisos.append(u"Tubo de origem: corte falhou ({})".format(str(e)))
+                        if tubo_origem_sec is not None:
+                            conn_o1 = _get_connector_near(tubo_origem,     pt_z)
+                            conn_o2 = _get_connector_near(tubo_origem_sec, pt_z)
+                            if conn_o1 and conn_o2:
+                                conns_origem.extend([conn_o1, conn_o2])
+                            else:
+                                avisos.append(u"Tubo de origem: conectores pós-corte não encontrados")
+
+                    conns_totais = conns_origem + conns_coluna
+                    if len(conns_totais) >= 2:
+                        try:
+                            _criar_fitting_generico(doc, conns_totais)
+                        except Exception as e:
+                            avisos.append(u"Tubo de origem: conexão falhou ({})".format(str(e)))
+                    else:
+                        avisos.append(u"Tubo de origem: conectores insuficientes pra criar a conexão")
 
             t.Commit()
 
