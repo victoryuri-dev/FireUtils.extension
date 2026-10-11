@@ -534,6 +534,13 @@
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 4px;
+  /* .pills é item de um flex column (.biblioteca-scroll) — um item flex
+     com overflow diferente de "visible" tem tamanho mínimo automático 0
+     (em vez do tamanho do conteúdo), então ele podia encolher até sumir
+     quando o espaço disponível apertava (as categorias "somem"/cortam).
+     flex-shrink: 0 trava a altura no conteúdo, sem depender desse
+     mínimo automático. */
+  flex-shrink: 0;
 }
 
 .pill {
