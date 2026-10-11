@@ -1145,7 +1145,12 @@
    esperar a outra coluna. break-inside: avoid (ver .cartao-info abaixo)
    evita um cartão ser cortado ao meio entre as colunas. */
 .grade-cartoes-info {
-  columns: 2;
+  /* columns: <column-width> <column-count> — 2 colunas no máximo, mas só
+     quando cada uma couber em pelo menos 215.5px; abaixo disso o
+     navegador cai pra 1 coluna só, em vez de espremer os cartões
+     (mesmo princípio do piso de 95px na grade da Biblioteca de
+     Famílias, ver .grade). */
+  columns: 215.5px 2;
   column-gap: 12px;
   margin-bottom: 22px;
 }
