@@ -306,16 +306,8 @@ export default function DashboardEstrutura({
           <h3>Edificação</h3>
           <dl>
             <div>
-              <dt>Endereço:</dt>
-              <dd>{estrutura.endereco || "—"}</dd>
-            </div>
-            <div>
-              <dt>CNAE:</dt>
-              <dd>{estrutura.cnae || "—"}</dd>
-            </div>
-            <div>
-              <dt>Descrição do CNAE:</dt>
-              <dd>{estrutura.cnaeDesc || "—"}</dd>
+              <dt>UF:</dt>
+              <dd>{estrutura.uf || "—"}</dd>
             </div>
             <div>
               <dt>Área construída:</dt>
