@@ -1249,7 +1249,6 @@ def run_coluna_multilevel(doc, uidoc, output):
         for valvula, nivel in valvulas_criadas:
             posicionar_abrigo(doc, valvula, dir_saida, nivel, output, dir_abrigo=dir_abrigo)
 
-    # ── Etapa 8 — Relatório ───────────────────────────────────────────────
-    output.print_md(u"| Coluna de hidrantes | **{} níveis** |".format(len(niveis_sel)))
+    # ── Etapa 8 — Relatório (só avisos/falhas — nada informativo) ────────
     for aviso in avisos:
         output.print_md(u"| Aviso | {} |".format(aviso))
