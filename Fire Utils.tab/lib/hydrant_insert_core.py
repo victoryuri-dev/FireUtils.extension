@@ -948,25 +948,50 @@ def run_coluna_multilevel(doc, uidoc, output):
     pt_topo = XYZ(pt_clique.X, pt_clique.Y, z_topo)
 
     # ── Etapa 5 — Tipo/sistema de tubulação ──────────────────────────────
-    # Sem tubo de referência aqui (coluna nova, isolada) — usa o primeiro
-    # PipeType/PipingSystemType disponível no projeto, igual ao fallback
-    # que run() já usa quando não há nada pra herdar.
-    pipe_type_id = ElementId.InvalidElementId
-    try:
-        from Autodesk.Revit.DB.Plumbing import PipeType
-        tipos_pipe = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
-        if tipos_pipe:
-            pipe_type_id = tipos_pipe[0].Id
-    except Exception:
-        pass
+    # Sem tubo de referência aqui (coluna nova, isolada) — PREFERE herdar
+    # de um Pipe JÁ EXISTENTE no projeto (qualquer um): um PipeType que já
+    # tem tubos de verdade modelados quase certamente já tem Preferências
+    # de Roteamento configuradas (joelho/tê definidos pra esse tipo/
+    # tamanho). O fallback antigo ("1º PipeType do
+    # FilteredElementCollector") podia pegar um tipo NUNCA usado no
+    # projeto, sem fitting nenhum configurado nas Preferências de
+    # Roteamento — daí TODO joelho/tê (até o primeiro, sem nenhum
+    # BreakCurve envolvido) derrubar com "failed to insert elbow/tee.":
+    # o tipo em si não tem família de joelho/tê associada, não é um
+    # problema de geometria.
+    pipe_existente = next(iter(FilteredElementCollector(doc).OfClass(Pipe).ToElements()), None)
 
-    sys_type_id = ElementId.InvalidElementId
-    try:
-        tipos = FilteredElementCollector(doc).OfClass(PipingSystemType).ToElements()
-        if tipos:
-            sys_type_id = tipos[0].Id
-    except Exception:
-        pass
+    pipe_type_id = ElementId.InvalidElementId
+    sys_type_id  = ElementId.InvalidElementId
+
+    if pipe_existente is not None:
+        try:
+            pipe_type_id = pipe_existente.GetTypeId()
+        except Exception:
+            pass
+        try:
+            mep_sys = pipe_existente.MEPSystem
+            if mep_sys:
+                sys_type_id = mep_sys.GetTypeId()
+        except Exception:
+            pass
+
+    if pipe_type_id == ElementId.InvalidElementId:
+        try:
+            from Autodesk.Revit.DB.Plumbing import PipeType
+            tipos_pipe = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
+            if tipos_pipe:
+                pipe_type_id = tipos_pipe[0].Id
+        except Exception:
+            pass
+
+    if sys_type_id == ElementId.InvalidElementId:
+        try:
+            tipos = FilteredElementCollector(doc).OfClass(PipingSystemType).ToElements()
+            if tipos:
+                sys_type_id = tipos[0].Id
+        except Exception:
+            pass
 
     diam_ft = _to_ft(DIAM_RAMAL_M)
 
@@ -1011,22 +1036,33 @@ def run_coluna_multilevel(doc, uidoc, output):
                     else:
                         avisos.append(u"{}: conector do tubo vertical não encontrado".format(nivel.Name))
                 else:
+                    tubo_vert_sec = None
                     try:
                         new_id        = PlumbingUtils.BreakCurve(doc, tubo_vert.Id, pt_joelho)
                         tubo_vert_sec = doc.GetElement(new_id)
-                        conn_v1       = _get_connector_near(tubo_vert,     pt_joelho)
-                        conn_v2       = _get_connector_near(tubo_vert_sec, pt_joelho)
+                    except Exception as e:
+                        avisos.append(u"{}: corte do tubo vertical falhou ({})".format(nivel.Name, str(e)))
+
+                    if tubo_vert_sec is not None:
+                        conn_v1 = _get_connector_near(tubo_vert,     pt_joelho)
+                        conn_v2 = _get_connector_near(tubo_vert_sec, pt_joelho)
                         if conn_v1 and conn_v2 and conn_h_ini:
-                            ord_ = _ordenar_conectores([conn_v1, conn_v2, conn_h_ini])
-                            doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+                            try:
+                                ord_ = _ordenar_conectores([conn_v1, conn_v2, conn_h_ini])
+                                doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+                            except Exception as e:
+                                avisos.append(u"{}: Tê falhou ({})".format(nivel.Name, str(e)))
                         else:
                             avisos.append(u"{}: conectores pós-Tê não encontrados".format(nivel.Name))
-                        # Continua subindo a partir do segmento de CIMA do
-                        # corte — não dá pra saber a priori qual dos dois
-                        # IDs (original/novo) ficou com a metade de cima.
+                        # SEMPRE continua subindo a partir do segmento de
+                        # CIMA do corte, mesmo se o Tê não tiver sido
+                        # criado — o corte geométrico (BreakCurve) já
+                        # aconteceu de qualquer jeito, e os dois pedaços
+                        # (acima/abaixo) continuam sendo pipes de verdade;
+                        # sem isso, uma falha no Tê deixava tubo_vert
+                        # apontando pro pedaço ERRADO (de baixo) pro resto
+                        # do loop, quebrando em cascata os níveis acima.
                         tubo_vert = _segmento_com_topo_maior(tubo_vert, tubo_vert_sec)
-                    except Exception as e:
-                        avisos.append(u"{}: Tê falhou ({})".format(nivel.Name, str(e)))
 
                 conn_tubo_fim = _get_far_connector(tubo_horiz, pt_joelho)
                 pos_insercao  = conn_tubo_fim.Origin if conn_tubo_fim else pt_valv
