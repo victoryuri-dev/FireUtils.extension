@@ -55,11 +55,14 @@ except ImportError:
 
 from hydrant_family import garantir_valvula
 from hydrant_level  import get_nivel
+# Reexportados daqui (mantidos importáveis como hydrant_insert_core.X pra
+# não quebrar quem já importava assim) mas definidos em hydrant_shared —
+# ver docstring do módulo sobre por quê.
+from hydrant_shared import (
+    ALTURA_VALVULA_M, COMP_HORIZ_M, DIAM_RAMAL_M, TOL,
+    _setar_diametro_ft, _angulo_entre, _conector_mais_proximo,
+)
 
-ALTURA_VALVULA_M = 1.30
-COMP_HORIZ_M     = 0.20
-DIAM_RAMAL_M     = 0.065
-TOL              = 1e-4
 TOL_FIM          = 0.05   # metros — distância máxima ao endpoint para ser "ponta"
 
 _LIB_DIR           = os.path.dirname(os.path.abspath(__file__))
@@ -94,19 +97,6 @@ def _get_diametro_ft(pipe):
     return _to_ft(0.065)
 
 
-def _setar_diametro_ft(pipe, d_ft):
-    for bip in [BuiltInParameter.RBS_PIPE_OUTER_DIAMETER,
-                BuiltInParameter.RBS_PIPE_DIAMETER_PARAM]:
-        try:
-            p = pipe.get_Parameter(bip)
-            if p and not p.IsReadOnly:
-                p.Set(d_ft)
-                return True
-        except Exception:
-            pass
-    return False
-
-
 def _direcao_horizontal(pipe):
     loc = pipe.Location
     if isinstance(loc, LocationCurve):
@@ -135,10 +125,6 @@ def _pipe_is_vertical(pipe):
             return math.sqrt(dx*dx + dy*dy) / length < 0.1
     return False
 
-
-
-def _angulo_entre(v_de, v_para):
-    return math.atan2(v_para.Y, v_para.X) - math.atan2(v_de.Y, v_de.X)
 
 
 def _get_connector_at(pipe, pt):
@@ -240,21 +226,6 @@ def _pt_intersecao_pipes(pipe1, pipe2):
         return XYZ(p1.X + d1.X * t, p1.Y + d1.Y * t, p1.Z + d1.Z * t)
     except Exception:
         return None
-
-
-def _conector_mais_proximo(familia_inst, pt):
-    """Retorna o conector MEP da família mais próximo de pt."""
-    try:
-        mgr = familia_inst.MEPModel.ConnectorManager
-    except Exception:
-        return None
-    melhor, menor_dist = None, float('inf')
-    for conn in mgr.Connectors:
-        d = conn.Origin.DistanceTo(pt)
-        if d < menor_dist:
-            menor_dist = d
-            melhor = conn
-    return melhor
 
 
 def _dir_conn(conn):

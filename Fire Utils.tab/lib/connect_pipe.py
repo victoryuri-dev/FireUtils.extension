@@ -930,16 +930,15 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         finally:
             self._sincronizando = False
 
-        try:
-            self._ciclo_preview()
-        except Exception:
-            # _ciclo_preview já trata os erros esperados internamente (e
-            # sempre fecha a própria transação, mesmo em erro); isto é só
-            # uma rede de segurança pra desfazer qualquer coisa que tenha
-            # escapado antes de propagar, o que travaria o fallback (uma
-            # transação por vez no documento).
-            self._finalizar(False)
-            raise
+        # O 1º ciclo de prévia (Transaction + Regenerate + roteamento real)
+        # NÃO roda aqui mais — rodava antes de run() chamar Show(), então a
+        # janela só aparecia na tela depois do ciclo inteiro terminar (é
+        # esse tempo, com a janela ainda invisível, que o usuário reportou
+        # como "carrega muito antes de poder editar"). Agora run() mostra a
+        # janela primeiro (com este texto de status) e só então chama
+        # _ciclo_preview() — ver _forcar_render().
+        self.TxtStatus.Text       = u"Carregando prévia…"
+        self.TxtStatus.Foreground = self.Resources[u"BrushLabel"]
 
     def _desfazer_elementos_criados(self):
         for eid in self._elementos_criados:
@@ -1050,6 +1049,21 @@ class _JanelaOpcoesRota(forms.WPFWindow):
                 self.TxtOrdemInfo.Text = u"Por último: {}".format(_NOME_EIXO[ordem[-1]])
         finally:
             self._sincronizando = False
+
+    def _forcar_render(self):
+        """Processa a fila de mensagens do WPF até a prioridade Render.
+        Show() só AGENDA a exibição da janela — sem isto, ela só pintaria
+        de fato quando a UI thread ficasse ociosa de novo, ou seja, só
+        depois do 1º _ciclo_preview() (que roda na mesma thread e bloqueia
+        até terminar). Chamado por run() entre Show() e o 1º ciclo, pra
+        garantir que a janela (com "Carregando prévia…") já apareça na
+        tela antes do ciclo pesado começar."""
+        try:
+            from System.Windows.Threading import DispatcherPriority
+            from System import Action
+            self.Dispatcher.Invoke(DispatcherPriority.Render, Action(lambda: None))
+        except Exception:
+            pass
 
     def _ciclo_preview(self):
         """Um ciclo completo de prévia, numa transação própria aberta E
@@ -1296,6 +1310,15 @@ def run(doc, uidoc, output):
                                     clicou_ponta_exata=clicou_ponta_exata)
         pyscript.set_envvar(_CHAVE_JANELA_ATIVA, janela)
         janela.Show()
+        # Força a janela a aparecer na tela (com "Carregando prévia…")
+        # ANTES do 1º ciclo de prévia — que é síncrono e só devolve a
+        # thread de UI depois de terminar (ver docstring de
+        # _forcar_render). Continua dentro do mesmo contexto de API
+        # válido desta chamada, então pode chamar _ciclo_preview() direto
+        # (sem passar pela fila de ações, usada só pelos ciclos depois
+        # que a janela já está aberta e o comando original já retornou).
+        janela._forcar_render()
+        janela._ciclo_preview()
         return
     except Exception as ex:
         # Se falhar depois da janela já ter aberto (ex.: erro ao exibir),
