@@ -1644,34 +1644,37 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         if e not in ordem_ativa:
             ordem_ativa.append(e)
 
-    # Corpo + a ordem escolhida fecha o trecho perpendicular ANTES do
-    # paralelo, já na cota de pipe_ref (sem outro trecho de Z pelo meio): o
-    # ponto onde o perpendicular termina cai, por construção, EXATAMENTE
-    # sobre a reta infinita de pipe_ref — se isso acontece antes do
-    # paralelo, o trecho paralelo posterior rodaria por cima do próprio
-    # pipe_ref. _ajustar_alvo_corpo_invertido decide o que fazer com isso
-    # ANTES de criar o trecho paralelo: ponto dentro do corpo físico →
-    # conecta ali mesmo (Tê), dispensa o paralelo; fora → cai pra ponta
-    # LIVRE mais próxima (modo joelho).
-    if modo_conexao_ref == u"corpo" and not clicou_ponta and u"perp" in ordem_ativa and u"par" in ordem_ativa:
-        i_perp  = ordem_ativa.index(u"perp")
-        i_par   = ordem_ativa.index(u"par")
-        z_antes = u"z" not in ordem_ativa or ordem_ativa.index(u"z") < i_perp
-        if i_perp < i_par and z_antes:
-            P_mid_check, _, _ = _rota_ate_endpoint(
-                XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
-            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
-                pipe_ref, pt_A, pt_B, d_ref, P_mid_check, pt_click_ref)
-            if modo_resultado == u"corpo":
-                P_final = alvo
-            else:
-                clicou_ponta = True
-                P_final = alvo
-            necessarios = _eixos_necessarios(P_start, P_final, d_ref)
-            ordem_ativa = [e for e in ordem_eixos if e in necessarios]
-            for e in necessarios:
-                if e not in ordem_ativa:
-                    ordem_ativa.append(e)
+    # Corpo + "paralelo" é a ÚLTIMA perna da rota (não importa se "z" e/ou
+    # "perp" vêm antes dela, nem em que ordem entre si): pela própria
+    # definição dos eixos, uma vez que z e perp (as duas únicas outras
+    # direções possíveis) já foram fechadas, o ponto onde a perna anterior
+    # termina cai, por construção, EXATAMENTE sobre a reta infinita de
+    # pipe_ref — então o trecho paralelo que viria a seguir rodaria por
+    # cima do próprio corpo de pipe_ref (um tubo "entrando" dentro do
+    # outro, e um joelho sendo criado no meio do corpo em vez de um Tê).
+    # _ajustar_alvo_corpo_invertido decide o que fazer com isso ANTES de
+    # criar o trecho paralelo: ponto dentro do corpo físico de pipe_ref →
+    # conecta ali mesmo (Tê), dispensa o paralelo; ponto fora do corpo
+    # (uma das pontas de pipe_ref fica entre esse ponto e o alvo clicado)
+    # → cai pra ponta LIVRE mais próxima (modo joelho), recalculando a
+    # rota pra ela.
+    if (modo_conexao_ref == u"corpo" and not clicou_ponta
+            and u"par" in ordem_ativa and len(ordem_ativa) >= 2
+            and ordem_ativa.index(u"par") == len(ordem_ativa) - 1):
+        P_mid_check, _, _ = _rota_ate_endpoint(
+            XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
+        modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
+            pipe_ref, pt_A, pt_B, d_ref, P_mid_check, pt_click_ref)
+        if modo_resultado == u"corpo":
+            P_final = alvo
+        else:
+            clicou_ponta = True
+            P_final = alvo
+        necessarios = _eixos_necessarios(P_start, P_final, d_ref)
+        ordem_ativa = [e for e in ordem_eixos if e in necessarios]
+        for e in necessarios:
+            if e not in ordem_ativa:
+                ordem_ativa.append(e)
 
     pt_id, sys_id, _,      diam_ft = _pipe_params(doc, pipe_desc)
     _,     _,      lvl_id, _       = _pipe_params(doc, pipe_ref)
