@@ -83,7 +83,7 @@ from hydrant_shared import (
 from connect_pipe import (
     _construir_conexao, _ConexaoError, _FiltroPipeRef, _pipe_params, TOL_SEG,
     _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO,
-    _iniciar_rastreamento, _parar_rastreamento, _rastrear,
+    _iniciar_rastreamento, _parar_rastreamento, _rastrear, _OUTPUT_MUDO,
 )
 from family_loader_events import criar_fila_acoes
 
@@ -501,10 +501,16 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             _iniciar_rastreamento()
             erro = None
             try:
+                # _OUTPUT_MUDO (não self.output): ver docstring da classe,
+                # em connect_pipe.py — falhas pontuais de ciclos
+                # intermediários (ex.: o 1º, com as opções ainda no
+                # padrão) não devem acumular no console real entre uma
+                # troca de opção e outra. TxtStatus, logo abaixo, já
+                # reporta o resultado do ciclo atual.
                 _construir_valvula_stub_e_rota(
                     self.doc, self.pipe_ref, self.pt_click_ref, self.simbolo,
                     self.pt_abrigo, self.nivel, self.dir_face,
-                    self.pipe_type_id, self.sys_type_id, self.output,
+                    self.pipe_type_id, self.sys_type_id, _OUTPUT_MUDO,
                     lado=self._lado_atual(), ordem_eixos=self._ordem_pref,
                     modo_conexao_ref=self._modo_conexao_ref_atual(),
                 )

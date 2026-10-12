@@ -1103,9 +1103,14 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             _iniciar_rastreamento()
             erro = None
             try:
+                # _OUTPUT_MUDO (não self.output): ver docstring da classe —
+                # falhas pontuais de ciclos intermediários não devem
+                # acumular no console real entre uma troca de opção e
+                # outra. TxtStatus, logo abaixo, já reporta o resultado do
+                # ciclo atual.
                 _construir_conexao(
                     self.doc, self.pipe_desc, self.pipe_ref,
-                    self.pt_click_desc, self.pt_click_ref, self.output,
+                    self.pt_click_desc, self.pt_click_ref, _OUTPUT_MUDO,
                     ordem_eixos=self._ordem_pref,
                     modo_conexao_ref=self._modo_conexao_ref_atual(),
                 )
@@ -1369,6 +1374,26 @@ class _ConexaoError(Exception):
     usuário (alerta no fluxo sem prévia, texto de status no fluxo com
     prévia). Erros inesperados propagam como Exception normal."""
     pass
+
+
+class _OutputMudo(object):
+    """Substituto de 'output' passado a _construir_conexao durante um
+    ciclo de prévia ao vivo (_ciclo_preview) — print_md ali reporta
+    falhas pontuais (ex.: mesclagem colinear caiu pro joelho, joelho
+    também falhou) de QUALQUER ciclo intermediário, inclusive o 1º, com
+    as opções ainda no padrão antes do usuário escolher as dele — e o
+    console do pyRevit não é limpo entre ciclos, então uma falha de um
+    ciclo JÁ DESCARTADO ficava visível mesmo depois de um ciclo seguinte
+    ter corrigido o problema e a prévia ter dado certo (TxtStatus, na
+    própria janela, já reflete corretamente o resultado do ciclo ATUAL —
+    é isso que o usuário deve olhar durante a prévia). O console real
+    (self.output) só é usado no fluxo sem prévia (_conectar/fallback),
+    onde não há TxtStatus nenhum pra mostrar o resultado."""
+    def print_md(self, *args, **kwargs):
+        pass
+
+
+_OUTPUT_MUDO = _OutputMudo()
 
 
 def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
