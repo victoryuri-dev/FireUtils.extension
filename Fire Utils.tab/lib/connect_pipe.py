@@ -1420,7 +1420,7 @@ def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
         u"as duas pontas já estão conectadas a outros elementos.")
 
 
-def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref):
+def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid):
     """
     Corpo (Tê) + ordem invertida + ainda sobra 2º trecho: o 1º trecho, ao
     fechar o desvio perpendicular inteiro, sempre termina EXATAMENTE sobre
@@ -1432,8 +1432,12 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_r
                alvo do Tê, dispensando o 2º trecho (que rodaria por cima
                do próprio pipe_ref até o ponto clicado originalmente).
       fora   → não tem tubo naquele ponto da reta; cai para a ponta LIVRE
-               mais próxima de pipe_ref (rota recalculada para esse novo
-               alvo, agora em modo joelho).
+               mais próxima de P_MID — não do ponto clicado originalmente
+               — já que é o último tubo criado no roteamento, terminando
+               em P_mid, que vai ser estendido até lá; usar o clique como
+               referência podia escolher a ponta ERRADA (mais longe de
+               P_mid, mais perto do clique) e o tubo sobrepor o próprio
+               pipe_ref no caminho até ela.
 
     Retorna ("corpo", P_mid) ou ("ponta", pt_endpoint).
     """
@@ -1441,7 +1445,7 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_r
     t_mid = (P_mid - pt_A).DotProduct(d_ref)
     if -TOL <= t_mid <= L_ref + TOL:
         return u"corpo", P_mid
-    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, P_mid)
 
 
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
@@ -1664,7 +1668,7 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         P_mid_check, _, _ = _rota_ate_endpoint(
             XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
         modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
-            pipe_ref, pt_A, pt_B, d_ref, P_mid_check, pt_click_ref)
+            pipe_ref, pt_A, pt_B, d_ref, P_mid_check)
         if modo_resultado == u"corpo":
             P_final = alvo
         else:
