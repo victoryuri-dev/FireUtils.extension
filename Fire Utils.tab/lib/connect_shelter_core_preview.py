@@ -305,6 +305,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self._preview_ok       = False
         self._finalizado       = False
         self._sincronizando    = False
+        self._atualizacao_pendente = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
         self._elementos_criados = set()
         self.fila_acoes        = criar_fila_acoes()
@@ -550,8 +551,19 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
     def _agendar_atualizacao(self):
         """Pede pro Revit rodar _ciclo_preview assim que liberar o contexto
         de API — toca o documento (transação), então não pode rodar direto
-        do evento de clique numa janela modeless."""
+        do evento de clique numa janela modeless.
+
+        Coalescido (ver docstring de _JanelaOpcoesRota._agendar_atualizacao,
+        em connect_pipe.py, mesma lógica): no máximo 1 ciclo enfileirado
+        por vez, pra não rodar vários ciclos completos em sequência quando
+        o usuário troca mais de uma opção antes do primeiro ser
+        processado — só o estado final importa."""
+        if self._atualizacao_pendente:
+            return
+        self._atualizacao_pendente = True
+
         def _acao(uiapp):
+            self._atualizacao_pendente = False
             self._ciclo_preview()
         self.fila_acoes.enfileirar(_acao)
 

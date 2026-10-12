@@ -906,6 +906,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self._preview_ok       = False
         self._finalizado       = False
         self._sincronizando    = False
+        self._atualizacao_pendente = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
         self._elementos_criados = set()
         self.fila_acoes        = criar_fila_acoes()
@@ -1150,8 +1151,28 @@ class _JanelaOpcoesRota(forms.WPFWindow):
     def _agendar_atualizacao(self):
         """Pede pro Revit rodar _ciclo_preview assim que liberar o contexto
         de API — toca o documento (transação), então não pode rodar direto
-        do evento de clique numa janela modeless."""
+        do evento de clique numa janela modeless.
+
+        Coalescido: cada _ciclo_preview reconstrói a conexão do zero
+        (Transaction + Regenerate + roteamento), um custo real que não dá
+        pra cortar sem arriscar os bugs de posição de conector já
+        corrigidos nesta mesma função (ver _ciclo_preview). Mas se o
+        usuário trocar MAIS de uma opção antes do Revit processar a
+        primeira (ex.: escolher o 1º eixo e já emendar o 2º, ou a própria
+        prévia estar lenta o bastante pra sobrar tempo pra outro clique no
+        meio) cada troca enfileirava seu PRÓPRIO ciclo completo — rodando
+        vários ciclos em sequência, um logo em seguida do outro, quando só
+        o ESTADO FINAL importa. _atualizacao_pendente garante no máximo 1
+        ciclo enfileirado por vez: a ação só lê as opções (via
+        self._ordem_pref/_modo_conexao_ref_atual(), ambos já atualizados
+        pelo clique) quando realmente roda, então sempre reflete a
+        combinação mais recente, mesmo pulando os estados intermediários."""
+        if self._atualizacao_pendente:
+            return
+        self._atualizacao_pendente = True
+
         def _acao(uiapp):
+            self._atualizacao_pendente = False
             self._ciclo_preview()
         self.fila_acoes.enfileirar(_acao)
 
