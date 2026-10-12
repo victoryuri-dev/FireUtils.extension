@@ -571,13 +571,15 @@ def _mk_pipe(doc, pa, pb, pt_id, sys_id, lvl_id, diam_ft):
     """Cria tubo de pa a pb e aplica diâmetro."""
     novo = Pipe.Create(doc, sys_id, pt_id, lvl_id, pa, pb)
     _set_diam(novo, diam_ft)
+    _rastrear(novo)
     return novo
 
 
 def _elbow(doc, c1, c2):
     """Cria joelho entre c1 e c2. Falha silenciosa."""
     try:
-        doc.Create.NewElbowFitting(c1, c2)
+        fitting = doc.Create.NewElbowFitting(c1, c2)
+        _rastrear(fitting)
         return True
     except Exception:
         return False
@@ -673,6 +675,7 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
                     elbows_pend[i] = (nc1, nc2)
 
     doc.Delete(pipe_last.Id)
+    _desrastrear(pipe_last.Id)
     return True
 
 
@@ -688,6 +691,7 @@ def _tee(doc, pipe_ref, P_target, conn_branch):
 
     new_id   = PlumbingUtils.BreakCurve(doc, pipe_ref.Id, P_target)
     pipe_sec = doc.GetElement(new_id)
+    _rastrear(pipe_sec)
     c_r1     = _conn_near(pipe_ref, P_target)
     c_r2     = _conn_near(pipe_sec,  P_target)
     if not (c_r1 and c_r2):
@@ -702,7 +706,8 @@ def _tee(doc, pipe_ref, P_target, conn_branch):
     run  = [conns[par[0]], conns[par[1]]]
     rest = [c for k, c in enumerate(conns) if k not in par]
     try:
-        doc.Create.NewTeeFitting(run[0], run[1], rest[0])
+        fitting = doc.Create.NewTeeFitting(run[0], run[1], rest[0])
+        _rastrear(fitting)
         return True
     except Exception:
         return False
@@ -771,27 +776,57 @@ class _FiltroPipeRef(ISelectionFilter):
         return True  # fitting: qualquer clique nele vale (sem linha central)
 
 
-def _snapshot_ids(doc):
-    """
-    IDs de todos os Pipe e FamilyInstance do documento — usado pra
-    descobrir que elementos uma rodada de prévia criou (diff antes/depois
-    de construir a conexão). Necessário porque, numa janela modeless, cada
-    ciclo de prévia precisa abrir E FECHAR (Commit) sua própria transação —
-    o Revit reclama de "transação aberta mas não fechada" assim que o
-    comando externo (ou o ExternalEvent) que a abriu retorna, então não dá
-    mais pra manter uma transação só "pendurada" entre uma troca de opção
-    e a próxima, esperando o usuário decidir. Sem esse diff não teria como
-    saber o que desfazer (apagar) no próximo ciclo.
+# ── Rastreamento de elementos criados (prévia ao vivo) ───────────────────
+# A versão anterior descobria o que uma rodada de _construir_conexao criou
+# comparando TODOS os Pipe + FamilyInstance do documento inteiro (duas
+# varreduras via FilteredElementCollector) antes e depois de cada ciclo —
+# em qualquer projeto de porte real, isso é uma varredura cara repetida a
+# CADA troca de opção na janela de prévia ao vivo (Conectar Tubo/Abrigo),
+# não só uma vez ao abrir a ferramenta. Em vez disso, os próprios pontos
+# de criação (_mk_pipe, _elbow, _tee, e os equivalentes em
+# connect_shelter_core_preview) já registram o Id assim que criam,
+# enquanto o rastreamento está ativo — custo proporcional ao que ESTE
+# ciclo cria (poucos elementos), não ao tamanho do documento inteiro.
+_rastreador_ativo   = False
+_rastreador_criados = []
 
-    Restrito a Pipe/FamilyInstance (tubos, joelhos, tês, válvulas) — os
-    únicos tipos que esse módulo cria — em vez do documento inteiro, pra
-    não pesar em projetos grandes.
-    """
-    ids = set()
-    for cls in (Pipe, FamilyInstance):
-        for eid in FilteredElementCollector(doc).OfClass(cls).ToElementIds():
-            ids.add(eid)
+
+def _iniciar_rastreamento():
+    """Chamado no início de um ciclo de prévia (_ciclo_preview) — zera e
+    liga o rastreamento antes de construir a conexão."""
+    global _rastreador_ativo, _rastreador_criados
+    _rastreador_ativo   = True
+    _rastreador_criados = []
+
+
+def _parar_rastreamento():
+    """Desliga o rastreamento e retorna o conjunto de Ids registrados
+    nesta rodada — chamado no fim de _ciclo_preview."""
+    global _rastreador_ativo
+    ids = set(_rastreador_criados)
+    _rastreador_ativo = False
     return ids
+
+
+def _rastrear(elemento):
+    """Registra um elemento recém-criado, se o rastreamento estiver
+    ativo — fora de um ciclo de prévia (ex.: fluxo _conectar sem prévia,
+    que já controla sua própria transação do jeito tradicional) é um
+    no-op barato."""
+    if _rastreador_ativo and elemento is not None:
+        _rastreador_criados.append(elemento.Id)
+
+
+def _desrastrear(elemento_id):
+    """Remove um Id já registrado nesta rodada — usado quando um
+    elemento criado agora mesmo acaba sendo apagado antes do fim do
+    ciclo (ex.: _mesclar_colinear funde dois tubos num só, apagando um
+    deles)."""
+    if _rastreador_ativo:
+        try:
+            _rastreador_criados.remove(elemento_id)
+        except ValueError:
+            pass
 
 
 # ============================================================================
@@ -942,7 +977,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self._restaurar_curvas_originais()
         finally:
             # Sempre fecha a transação antes de sair daqui — nunca pode
-            # ficar aberta, nem em erro inesperado (ver _snapshot_ids).
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
             try:
                 t.Commit()
             except Exception:
@@ -1031,7 +1066,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self.doc.Regenerate()
             self._sincronizar_ordem()
 
-            ids_antes = _snapshot_ids(self.doc)
+            _iniciar_rastreamento()
             erro = None
             try:
                 _construir_conexao(
@@ -1045,7 +1080,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
                 erro = u"{}".format(ex)
             except Exception as ex:
                 erro = u"Erro na prévia: {}".format(ex)
-            self._elementos_criados = _snapshot_ids(self.doc) - ids_antes
+            self._elementos_criados = _parar_rastreamento()
 
             if erro is not None:
                 self._desfazer_elementos_criados()
@@ -1060,7 +1095,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
                 self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
         finally:
             # Sempre fecha a transação antes de sair daqui — nunca pode
-            # ficar aberta, nem em erro inesperado (ver _snapshot_ids).
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
             try:
                 t.Commit()
             except Exception:
