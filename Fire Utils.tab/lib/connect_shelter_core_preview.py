@@ -77,7 +77,8 @@ from hydrant_insert_core import (
 )
 from connect_pipe import (
     _construir_conexao, _ConexaoError, _FiltroPipeRef, _pipe_params, TOL_SEG,
-    _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO, _snapshot_ids,
+    _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO,
+    _iniciar_rastreamento, _parar_rastreamento, _rastrear,
 )
 from family_loader_events import criar_fila_acoes
 
@@ -191,10 +192,12 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
 
     tubo_stub = Pipe.Create(doc, sys_type_id, pipe_type_id, nivel.Id, pt_valvula, pt_stub_end)
     _setar_diametro_ft(tubo_stub, diam_ft)
+    _rastrear(tubo_stub)
 
     valvula = doc.Create.NewFamilyInstance(
         pt_valvula, simbolo, nivel, StructuralType.NonStructural
     )
+    _rastrear(valvula)
 
     # Rotação: + π porque dir_pipe aponta para a rede;
     # a face da válvula fica voltada para o lado do abrigo
@@ -383,7 +386,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             self._restaurar_curva_original()
         finally:
             # Sempre fecha a transação antes de sair daqui — nunca pode
-            # ficar aberta, nem em erro inesperado (ver _snapshot_ids).
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
             try:
                 t.Commit()
             except Exception:
@@ -476,7 +479,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             self.doc.Regenerate()
             self._sincronizar_ordem()
 
-            ids_antes = _snapshot_ids(self.doc)
+            _iniciar_rastreamento()
             erro = None
             try:
                 _construir_valvula_stub_e_rota(
@@ -491,7 +494,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 erro = u"{}".format(ex)
             except Exception as ex:
                 erro = u"Erro na prévia: {}".format(ex)
-            self._elementos_criados = _snapshot_ids(self.doc) - ids_antes
+            self._elementos_criados = _parar_rastreamento()
 
             if erro is not None:
                 self._desfazer_elementos_criados()
@@ -506,7 +509,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
         finally:
             # Sempre fecha a transação antes de sair daqui — nunca pode
-            # ficar aberta, nem em erro inesperado (ver _snapshot_ids).
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
             try:
                 t.Commit()
             except Exception:
