@@ -637,7 +637,18 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
 
     Retorna True se mesclou (quem chamou não deve mais tentar
     joelho/ConnectTo — já está tudo resolvido aqui). False se não são
-    colineares (ou é pipe_desc/pipe_ref) — segue o fluxo normal (joelho/Tê).
+    colineares (ou é pipe_desc/pipe_ref), OU se algo inesperado falhar no
+    meio do processo — segue o fluxo normal (joelho/Tê) nos dois casos.
+
+    pipe_last (o "último tubo da rota", dono de conn_final) pode ainda
+    estar FLUTUANDO/desconectado do resto da rota já construída quando
+    isto roda — os joelhos de elbows_pend só são criados DEPOIS, no loop
+    final de _construir_conexao (ver seu docstring) — então, se o eixo
+    "par" (colinear com pipe_ref por definição) não for a 1ª perna
+    construída, pipe_last pode ter 0 ou 1 conexões reais além de
+    conn_final. Por segurança (não travar a prévia inteira por causa só
+    desta otimização), qualquer exceção aqui desfaz a extensão de
+    pipe_ref já aplicada e cai pro joelho normal, em vez de propagar.
     """
     if not isinstance(pipe_ref, Pipe):
         # Fitting (joelho/tê/válvula) não é "esticável" — não tem
@@ -651,32 +662,41 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
     if pipe_last.Id == pipe_ref.Id or pipe_last.Id == pipe_desc.Id:
         return False  # segurança: nunca mesclar pipe_ref/pipe_desc apagando-os
 
-    # Conector do outro lado de pipe_last — o que segue pro resto da rota
-    # já construída (None se pipe_last só tiver o próprio conn_final, ex.:
-    # tubo degenerado/sem outra ponta).
-    conn_outro = None
-    for c in pipe_last.ConnectorManager.Connectors:
-        if c.Origin.DistanceTo(conn_final.Origin) > TOL:
-            conn_outro = c
-            break
+    curva_ref_antes = pipe_ref.Location.Curve
+    try:
+        # Conector do outro lado de pipe_last — o que segue pro resto da
+        # rota já construída (None se pipe_last só tiver o próprio
+        # conn_final, ex.: tubo degenerado/sem outra ponta).
+        conn_outro = None
+        for c in pipe_last.ConnectorManager.Connectors:
+            if c.Origin.DistanceTo(conn_final.Origin) > TOL:
+                conn_outro = c
+                break
 
-    p_ref_fixo = _extremo_oposto(pipe_ref.Location.Curve, c_ref_end.Origin)
-    alvo = conn_outro.Origin if conn_outro is not None else conn_final.Origin
-    pipe_ref.Location.Curve = Line.CreateBound(p_ref_fixo, alvo)
-    doc.Regenerate()
+        p_ref_fixo = _extremo_oposto(pipe_ref.Location.Curve, c_ref_end.Origin)
+        alvo = conn_outro.Origin if conn_outro is not None else conn_final.Origin
+        pipe_ref.Location.Curve = Line.CreateBound(p_ref_fixo, alvo)
+        doc.Regenerate()
 
-    if conn_outro is not None:
-        novo_conn = _conn_near(pipe_ref, alvo)
-        if novo_conn is not None:
-            for i, (pc1, pc2) in enumerate(elbows_pend):
-                nc1 = novo_conn if (pc1.Owner.Id == pipe_last.Id) else pc1
-                nc2 = novo_conn if (pc2.Owner.Id == pipe_last.Id) else pc2
-                if nc1 is not pc1 or nc2 is not pc2:
-                    elbows_pend[i] = (nc1, nc2)
+        if conn_outro is not None:
+            novo_conn = _conn_near(pipe_ref, alvo)
+            if novo_conn is not None:
+                for i, (pc1, pc2) in enumerate(elbows_pend):
+                    nc1 = novo_conn if (pc1.Owner.Id == pipe_last.Id) else pc1
+                    nc2 = novo_conn if (pc2.Owner.Id == pipe_last.Id) else pc2
+                    if nc1 is not pc1 or nc2 is not pc2:
+                        elbows_pend[i] = (nc1, nc2)
 
-    doc.Delete(pipe_last.Id)
-    _desrastrear(pipe_last.Id)
-    return True
+        doc.Delete(pipe_last.Id)
+        _desrastrear(pipe_last.Id)
+        return True
+    except Exception:
+        try:
+            pipe_ref.Location.Curve = curva_ref_antes
+            doc.Regenerate()
+        except Exception:
+            pass
+        return False
 
 
 def _tee(doc, pipe_ref, P_target, conn_branch):
