@@ -518,29 +518,69 @@
   margin: 0 0 10px;
 }
 
-/* Carrossel de 2 linhas: grid com fluxo por coluna (grid-auto-flow:
-   column) — preenche 2 pills por coluna (grid-template-rows) e só então
-   abre uma coluna nova, em vez de empilhar numa 3ª linha quando a
-   dockpane fica mais estreita (flex-wrap fazia isso). overflow-x
-   rola horizontalmente o que não couber, com a mesma barra fina do tema
-   (::-webkit-scrollbar em index.css). */
-.pills {
-  display: grid;
-  grid-template-rows: repeat(2, auto);
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
-  gap: 10px;
+/* Carrossel de 2 linhas: [seta] [trilho rolável] [seta]. O trilho
+   (.pills) empilha duas linhas flex (.pills-linha) — ao contrário de um
+   grid de 2 linhas por coluna (tentativa anterior), aqui cada pill larga
+   só o que o próprio texto pede: um grid com grid-auto-flow:column
+   compartilha a largura da coluna entre os dois pills empilhados nela,
+   então "Todas" (curto) esticava pra bater com o pill mais comprido
+   embaixo dele na mesma coluna ("Detecção de Incêndio"). */
+.pills-carrossel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 18px;
+  /* Mesmo motivo do flex-shrink em .pills abaixo: item de um flex
+     column (.biblioteca-scroll) com filho de overflow non-visible
+     podia encolher até sumir. */
+  flex-shrink: 0;
+}
+
+.pills-seta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--pill-bg);
+  color: var(--text-2);
+}
+
+.pills-seta:hover {
+  color: var(--text);
+}
+
+.pills-seta .icon {
+  width: 14px;
+  height: 14px;
+  /* O SVG (chevron-right-icon) aponta pra direita — a seta "voltar"
+     espelha ele em vez de precisar de um segundo asset. */
+  transform: scaleX(-1);
+}
+
+.pills-seta-direita .icon {
+  transform: none;
+}
+
+.pills {
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 4px;
-  /* .pills é item de um flex column (.biblioteca-scroll) — um item flex
-     com overflow diferente de "visible" tem tamanho mínimo automático 0
-     (em vez do tamanho do conteúdo), então ele podia encolher até sumir
-     quando o espaço disponível apertava (as categorias "somem"/cortam).
-     flex-shrink: 0 trava a altura no conteúdo, sem depender desse
-     mínimo automático. */
   flex-shrink: 0;
+}
+
+.pills-linha {
+  display: flex;
+  gap: 10px;
+}
+
+.pills-linha + .pills-linha {
+  margin-top: 10px;
 }
 
 .pill {
