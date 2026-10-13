@@ -611,6 +611,25 @@ def _juntar(doc, c1, c2):
     return _elbow(doc, c1, c2)
 
 
+def _juntar_obrigatorio(doc, c1, c2, descricao):
+    """
+    Igual a _juntar, mas propaga _ConexaoError se não conseguir conectar
+    de jeito nenhum (nem ConnectTo, nem NewElbowFitting) — usado nas
+    junções internas da rota (_elbows_pend), que antes eram criadas sem
+    checar o retorno de _juntar: uma falha ali (ex.: tipo de tubo sem
+    joelho configurado nas Preferências de Roteamento) deixava dois
+    segmentos apenas encostados, sem conexão real, e a prévia mostrava
+    "tudo certo" mesmo assim — silenciosamente, sem nenhum aviso. Falhar
+    alto aqui garante que a rota nunca "termina com sucesso" deixando
+    tubos desconectados pelo caminho: a transação inteira é desfeita (ver
+    _ciclo_preview/_conectar) e o problema real fica visível pro usuário.
+    """
+    if not _juntar(doc, c1, c2):
+        raise _ConexaoError(
+            u"Falha ao conectar {} — verifique se o tipo de tubo tem "
+            u"joelho configurado nas Preferências de Roteamento.".format(descricao))
+
+
 def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pend):
     """
     Se c_ref_end (ponta de pipe_ref) e conn_final (conector do último tubo
@@ -1779,15 +1798,21 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                     if not ok:
                         ok = _juntar(doc, c_ponta, conn_final)
                     if not ok:
-                        output.print_md(u"| Conexão na ponta | **falhou** |")
+                        raise _ConexaoError(
+                            u"Falha ao conectar na ponta de pipe_ref — verifique "
+                            u"se o tipo de tubo tem joelho configurado nas "
+                            u"Preferências de Roteamento.")
             else:
                 ok = _tee(doc, pipe_ref, P_final, conn_final)
                 if not ok:
-                    output.print_md(u"| Tê | **falhou** — verifique se há família de tê carregada |")
+                    raise _ConexaoError(
+                        u"Falha ao criar o Tê — verifique se há família de "
+                        u"Tê carregada e configurada nas Preferências de "
+                        u"Roteamento do tipo de tubo.")
 
             doc.Regenerate()
-            for c1, c2 in _elbows_pend:
-                _juntar(doc, c1, c2)
+            for i, (c1, c2) in enumerate(_elbows_pend):
+                _juntar_obrigatorio(doc, c1, c2, u"o trecho {} da rota".format(i + 1))
 
     else:
         doc.Regenerate()
@@ -1799,13 +1824,14 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             if not ok:
                 ok = _juntar(doc, c_ref_end, conn_final)
             if not ok:
-                output.print_md(
-                    u"| Conexão na ponta | **falhou** — "
-                    u"verifique se o endpoint de pipe_ref está livre |")
+                raise _ConexaoError(
+                    u"Falha ao conectar na ponta de pipe_ref — verifique se "
+                    u"o endpoint está livre e se o tipo de tubo tem joelho "
+                    u"configurado nas Preferências de Roteamento.")
 
         doc.Regenerate()
-        for c1, c2 in _elbows_pend:
-            _juntar(doc, c1, c2)
+        for i, (c1, c2) in enumerate(_elbows_pend):
+            _juntar_obrigatorio(doc, c1, c2, u"o trecho {} da rota".format(i + 1))
 
 
 def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,

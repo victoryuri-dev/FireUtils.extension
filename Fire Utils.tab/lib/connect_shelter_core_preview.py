@@ -84,6 +84,7 @@ from connect_pipe import (
     _construir_conexao, _ConexaoError, _FiltroPipeRef, _pipe_params, TOL_SEG,
     _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO,
     _iniciar_rastreamento, _parar_rastreamento, _rastrear, _OUTPUT_MUDO,
+    _juntar_obrigatorio,
 )
 from family_loader_events import criar_fila_acoes
 
@@ -222,16 +223,21 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
         if d < best_d:
             best_d, conn_stub_val = d, c
 
-    if conn_stub_val:
-        conn_val = _conector_mais_proximo(valvula, pt_valvula)
-        if conn_val:
-            desl = conn_stub_val.Origin - conn_val.Origin
-            if desl.GetLength() > TOL:
-                ElementTransformUtils.MoveElement(doc, valvula.Id, desl)
-            try:
-                conn_stub_val.ConnectTo(conn_val)
-            except Exception:
-                pass
+    # Falha em conectar a válvula ao stub (ConnectTo, ou nem achar os
+    # conectores) antes era silenciosa (except/pass) — a válvula ficava
+    # visualmente no lugar certo mas sem conexão real nenhuma com o resto
+    # da rede, sem nenhum aviso. _juntar_obrigatorio propaga erro (e cai
+    # pra joelho se ConnectTo falhar, ex.: direções não ficarem
+    # perfeitamente opostas) em vez de deixar passar.
+    if not conn_stub_val:
+        raise _ConexaoError(u"Não foi possível localizar o conector do stub para conectar a válvula.")
+    conn_val = _conector_mais_proximo(valvula, pt_valvula)
+    if not conn_val:
+        raise _ConexaoError(u"Não foi possível localizar o conector da válvula para conectar ao stub.")
+    desl = conn_stub_val.Origin - conn_val.Origin
+    if desl.GetLength() > TOL:
+        ElementTransformUtils.MoveElement(doc, valvula.Id, desl)
+    _juntar_obrigatorio(doc, conn_stub_val, conn_val, u"a válvula ao stub")
 
     doc.Regenerate()
 
