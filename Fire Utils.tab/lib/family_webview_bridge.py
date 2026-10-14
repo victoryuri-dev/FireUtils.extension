@@ -39,6 +39,31 @@ import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
 import niveis_bridge
+import licenca
+
+
+def _tratar_set_sessao(payload, postar_mensagem):
+    """
+    A dockpane acabou de autenticar e mandou a sessão do Supabase.
+
+    Guardar o refresh token é o que permite ao startup.py verificar a licença
+    nas próximas aberturas do Revit, antes de o painel existir. E verificar
+    agora libera as ferramentas na hora, sem o usuário ter que reiniciar o
+    Revit depois de fazer login.
+
+    Roda em thread porque conversa com o servidor — na thread da interface,
+    a dockpane congelaria durante a chamada.
+    """
+    try:
+        licenca.salvar_sessao(payload.get(u"refreshToken"))
+        modulos, erro = licenca.verificar()
+        postar_mensagem(u"LICENCAS", {
+            u"modulos": sorted(modulos),
+            u"erro": erro,
+        })
+    except Exception as ex:
+        print_seguro(u"[ERRO] Falha ao registrar a sessão: {}".format(texto_erro(ex)))
+        postar_mensagem(u"LICENCAS", {u"modulos": [], u"erro": texto_erro(ex)})
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -242,5 +267,20 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: niveis_bridge.tratar_set_niveis_correlacao(uiapp, payload, postar_mensagem)
         )
+    elif tipo == u"SET_SESSAO":
+        threading.Thread(
+            target=_tratar_set_sessao,
+            args=(payload, postar_mensagem),
+        ).start()
+    elif tipo == u"LIMPAR_SESSAO":
+        # Logout na dockpane: sem sessão guardada, a próxima abertura do
+        # Revit já não libera ferramenta nenhuma.
+        licenca.esquecer_sessao()
+        postar_mensagem(u"LICENCAS", {u"modulos": [], u"erro": None})
+    elif tipo == u"GET_LICENCAS":
+        postar_mensagem(u"LICENCAS", {
+            u"modulos": sorted(licenca.modulos_liberados()),
+            u"erro": None,
+        })
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

@@ -218,6 +218,14 @@ export const BridgeMessageTypes = {
   REVIT_LEVELS: "REVIT_LEVELS",
   SET_NIVEIS_CORRELACAO: "SET_NIVEIS_CORRELACAO",
   NIVEIS_CORRELACAO_SAVED: "NIVEIS_CORRELACAO_SAVED",
+  // Licenças: o Python precisa da sessão para verificar quais módulos a
+  // conta pode usar — inclusive no startup do Revit seguinte, antes de esta
+  // dockpane existir. Só o refresh token é enviado; o access token expira em
+  // uma hora e não serviria para isso.
+  SET_SESSAO: "SET_SESSAO",
+  LIMPAR_SESSAO: "LIMPAR_SESSAO",
+  GET_LICENCAS: "GET_LICENCAS",
+  LICENCAS: "LICENCAS",
 };
 
 function obterWebView() {

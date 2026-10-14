@@ -25,6 +25,27 @@ const TIMEOUT_CARREGAMENTO_MS = 30000;
 // Título da seção usa o mesmo rótulo curto exibido no pill (ex.: "Extintor"
 // -> "EXTINTOR"), conforme o mockup — categorias sem rótulo curto caem no
 // nome cheio do catálogo, só em maiúsculas.
+/**
+ * Informa ao Python quem está logado, para ele poder verificar as licenças.
+ *
+ * Vai só o refresh token: o access token expira em cerca de uma hora e não
+ * serviria para o startup do Revit da próxima vez, que é justamente quando
+ * o Python precisa resolver as licenças sem esta dockpane estar aberta. Do
+ * lado de lá ele é guardado cifrado pelo DPAPI do Windows.
+ *
+ * Sem sessão (logout, ou sessão expirada), manda limpar — assim cancelar o
+ * login aqui também corta o acesso às ferramentas do Revit.
+ */
+function enviarSessaoAoHost(sessao) {
+  if (!estaDentroDoWebView2()) return;
+
+  if (sessao?.refresh_token) {
+    postToHost(BridgeMessageTypes.SET_SESSAO, { refreshToken: sessao.refresh_token });
+  } else {
+    postToHost(BridgeMessageTypes.LIMPAR_SESSAO, {});
+  }
+}
+
 function tituloDaSecao(categorias, categoriaAtual) {
   if (categoriaAtual === TODAS_ID) return "FAMÍLIAS";
   const categoria = categorias.find((c) => c.id === categoriaAtual);
@@ -72,9 +93,13 @@ export default function App() {
       setSessao(null);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => setSessao(data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setSessao(data.session);
+      enviarSessaoAoHost(data.session);
+    });
     const { data: assinatura } = supabase.auth.onAuthStateChange((_evento, novaSessao) => {
       setSessao(novaSessao);
+      enviarSessaoAoHost(novaSessao);
     });
     return () => assinatura.subscription.unsubscribe();
   }, []);
