@@ -3395,3 +3395,59 @@
   font-weight: 400;
   color: var(--text-3);
 }
+
+/* Aba bloqueada por licença — ocupa o lugar do conteúdo (ver SemLicenca.jsx).
+   Centralizado e sem ação além de "Ver planos": aqui não há nada a fazer na
+   dockpane, a contratação acontece no site. */
+.sem-licenca {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 60px 32px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.sem-licenca h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin: 0;
+}
+
+.sem-licenca p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-3);
+  margin: 0;
+}
+
+.sem-licenca-botao {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 8px 18px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--white, #fff);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.sem-licenca-botao:hover {
+  filter: brightness(1.1);
+}
+
+.sem-licenca-nota {
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+/* Item da sidebar cujo módulo a conta não tem. Continua clicável de
+   propósito: abrir e ver o que falta ensina mais do que um botão morto. */
+.sidebar-item.bloqueada {
+  opacity: 0.45;
+}

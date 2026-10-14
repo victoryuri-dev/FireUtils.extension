@@ -6,6 +6,8 @@ import { postToHost, escutarMensagensDoHost, estaDentroDoWebView2, BridgeMessage
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
+import SemLicenca from "./components/SemLicenca";
+import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
 import { useToasts } from "./lib/toasts";
@@ -80,6 +82,10 @@ export default function App() {
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [carregando, setCarregando] = useState(false);
   const [vinculo, setVinculo] = useState(undefined); // undefined = ainda não respondeu
+  // Módulos que esta conta pode usar, resolvidos pelo Python uma vez por
+  // sessão do Revit. null = ainda não respondeu (não é o mesmo que "nenhum":
+  // tratar os dois igual faria a tela piscar um bloqueio indevido).
+  const [modulosLiberados, setModulosLiberados] = useState(null);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const { toasts, adicionarToast, removerToast } = useToasts();
@@ -140,6 +146,10 @@ export default function App() {
       fetchCatalog().then(setCatalogo);
       if (estaDentroDoWebView2()) {
         postToHost(BridgeMessageTypes.GET_PROJECT_LINK, {});
+        // O SET_SESSAO do login já responde LICENCAS, mas reabrir o painel
+        // numa sessão em que o login aconteceu antes não dispararia nada —
+        // aqui o estado é recuperado do que o Python já resolveu.
+        postToHost(BridgeMessageTypes.GET_LICENCAS, {});
       } else {
         // Fora do WebView2 (ex.: `npm run dev` no navegador comum) não há
         // Python do outro lado pra responder GET_PROJECT_LINK — sem isso o
@@ -150,6 +160,10 @@ export default function App() {
           "[App] WebView2 não detectado — simulando vínculo vazio pra testar o Dashboard no navegador."
         );
         setVinculo({ docSalvo: true, projetoId: null, projetoNome: null, estruturaId: null, estruturaNome: null });
+        // Idem para as licenças: sem Python, esperar a resposta deixaria as
+        // abas em carregamento eterno. PRO libera tudo, que é o que permite
+        // desenvolver as telas no navegador.
+        setModulosLiberados(["pro"]);
       }
     }
   }, [sessao]);
@@ -172,15 +186,17 @@ export default function App() {
       if (!mensagem) return;
 
       if (mensagem.type === BridgeMessageTypes.LICENCAS) {
-        // Resposta do Python ao registro da sessão. Fica no console porque é
-        // a única janela acessível de dentro do Revit — a saída do pyRevit
-        // some junto com o engine que a abriu.
         const { modulos, erro } = mensagem.payload || {};
         if (erro) {
+          // Também no console: é a única janela acessível de dentro do
+          // Revit, já que a saída do pyRevit some com o engine que a abriu.
           console.warn("[licenças] falha:", erro);
         } else {
           console.info("[licenças] módulos liberados:", modulos);
         }
+        // Falha vira lista vazia, não null: null significa "ainda não sei" e
+        // deixaria a tela em carregamento para sempre.
+        setModulosLiberados(modulos || []);
         return;
       }
 
@@ -416,10 +432,23 @@ export default function App() {
           window.location.reload();
         }}
         email={sessao?.user?.email}
+        modulosLiberados={modulosLiberados}
       />
 
       <div className="app">
         {abaAtual === "dashboard" || abaAtual === "saidas" || abaAtual === "hidrantes" ? (
+          modulosLiberados === null ? (
+            // Ainda sem resposta do Python: esperar, em vez de piscar um
+            // bloqueio que pode nem se confirmar.
+            <div className="tela-carregando">
+              <span className="loading-spinner" />
+            </div>
+          ) : !abaLiberada(modulosLiberados, abaAtual) ? (
+            <SemLicenca
+              modulo={rotuloDoModuloDaAba(abaAtual)}
+              temAlgumaLicenca={modulosLiberados.length > 0}
+            />
+          ) : (
           // Sem <header> genérico aqui de propósito: cada tela do Dashboard
           // (ConectarProjeto/SelecionarEstrutura/DashboardEstrutura) já
           // mostra o próprio título ("Conectar um projeto", nome do
@@ -440,6 +469,7 @@ export default function App() {
             onGravarQuantitativos={gravarQuantitativos}
             gravandoQuantitativos={gravandoQuantitativos}
           />
+          )
         ) : (
           <>
             <div className="biblioteca-scroll">

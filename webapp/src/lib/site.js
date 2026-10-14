@@ -17,3 +17,11 @@ export function urlProjeto(projetoId) {
 export function urlNovoProjeto() {
   return SITE_URL ? `${SITE_URL}${NOVO_PROJETO_PATH}` : null;
 }
+
+/** Link "Ver planos", mostrado quando a conta não tem o módulo da aba.
+ * Rota ajustável via VITE_SITE_PLANOS_PATH (padrão "/planos"). Sem
+ * VITE_SITE_URL, o botão some em vez de apontar para lugar nenhum. */
+export function urlPlanos() {
+  const caminho = import.meta.env.VITE_SITE_PLANOS_PATH || "/planos";
+  return SITE_URL ? `${SITE_URL}${caminho}` : null;
+}

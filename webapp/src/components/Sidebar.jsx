@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "./Icon";
 import Loader from "./Loader";
 import { supabase } from "../lib/supabaseClient";
+import { abaLiberada } from "../lib/licencas";
 import { useTema } from "../hooks/useTema";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
@@ -37,6 +38,7 @@ export default function Sidebar({
   projetoVinculado,
   onDesconectar,
   email,
+  modulosLiberados,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -77,18 +79,30 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-nav">
-        {ITENS_NAV.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`sidebar-item ${item.id === abaAtual ? "ativa" : ""}`}
-            disabled={item.disabled}
-            onClick={() => onSelecionarAba?.(item.id)}
-            title={item.label}
-          >
-            <Icon svg={item.svg} title={item.label} />
-          </button>
-        ))}
+        {ITENS_NAV.map((item) => {
+          // Enquanto as licenças não chegam (null), nada é marcado como
+          // bloqueado: um cadeado que aparece e some no boot é pior do que
+          // só esperar.
+          const bloqueada =
+            modulosLiberados != null && !abaLiberada(modulosLiberados, item.id);
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`sidebar-item ${item.id === abaAtual ? "ativa" : ""} ${
+                bloqueada ? "bloqueada" : ""
+              }`}
+              disabled={item.disabled}
+              // Clicável mesmo bloqueada: abrir e ler o que falta ensina
+              // mais do que um botão que não responde.
+              onClick={() => onSelecionarAba?.(item.id)}
+              title={bloqueada ? `${item.label} (fora da sua assinatura)` : item.label}
+            >
+              <Icon svg={item.svg} title={item.label} />
+            </button>
+          );
+        })}
       </div>
 
       <div className="sidebar-rodape">
