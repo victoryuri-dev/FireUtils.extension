@@ -72,6 +72,33 @@ def _arquivo_licencas():
     return os.path.join(_dir_dados(), u"licencas.json")
 
 
+def _arquivo_log():
+    return os.path.join(_dir_dados(), u"licenca.log")
+
+
+def _log(mensagem):
+    """
+    Registra em arquivo além do print.
+
+    O print vai para a janela de saída do engine que chamou — no startup ela
+    aparece, mas durante o uso do painel ela já foi fechada, e a mensagem se
+    perde. Como é justamente aí que o diagnóstico importa, tudo fica também
+    em %LOCALAPPDATA%\\FireUtils\\licenca.log.
+    """
+    linha = u"{} {}".format(datetime.datetime.now().strftime(u"%H:%M:%S"), mensagem)
+
+    try:
+        print(u"[licenças] {}".format(mensagem))
+    except Exception:
+        pass
+
+    try:
+        with io.open(_arquivo_log(), u"a", encoding=u"utf-8") as arquivo:
+            arquivo.write(linha + u"\n")
+    except Exception:
+        pass
+
+
 def _pid_do_revit():
     from System.Diagnostics import Process
     return Process.GetCurrentProcess().Id
@@ -95,7 +122,7 @@ def salvar_sessao(refresh_token):
     para outra máquina (ou outra conta) não serve de nada.
     """
     if not refresh_token:
-        print(u"[AVISO] Sessão recebida sem refresh token — login não registrado.")
+        _log(u"sessão recebida sem refresh token — login não registrado.")
         return False
 
     try:
@@ -111,7 +138,7 @@ def salvar_sessao(refresh_token):
     except Exception as ex:
         # Falhar em silêncio aqui deixaria o usuário logado na dockpane e
         # barrado nas ferramentas, sem nenhuma pista do motivo.
-        print(u"[ERRO] Falha ao guardar a sessão: {}".format(texto_erro(ex)))
+        _log(u"falha ao guardar a sessão: {}".format(texto_erro(ex)))
         return False
 
 
@@ -236,6 +263,13 @@ def _renovar_acesso(refresh_token):
     if not acesso:
         return None, u"resposta sem access_token"
 
+    # Sem identificar o usuário, uma licença no banco e um token de outra
+    # conta dariam exatamente o mesmo sintoma.
+    usuario = dados.get(u"user") or {}
+    _log(u"sessão renovada para {} (id {})".format(
+        usuario.get(u"email") or u"?", usuario.get(u"id") or u"?"
+    ))
+
     novo_refresh = dados.get(u"refresh_token")
     if novo_refresh:
         salvar_sessao(novo_refresh)
@@ -264,6 +298,11 @@ def _buscar_licencas(access_token):
     )
     if erro:
         return None, erro
+
+    # A resposta crua resolve a ambiguidade do resultado vazio: uma lista
+    # vazia de verdade significa coisa diferente de um objeto de erro do
+    # PostgREST, e os dois acabariam como "nenhum módulo".
+    _log(u"resposta de /licencas: {}".format((texto or u"")[:400]))
 
     try:
         return json.loads(texto), None
@@ -301,12 +340,40 @@ def _licenca_vale(linha):
 
 
 def _modulos_validos(linhas):
+    """
+    Módulos utilizáveis entre as linhas recebidas.
+
+    O log distingue dois vazios que levam ao mesmo resultado e pedem
+    investigações opostas: nenhuma linha (a conta não tem licença, ou a
+    requisição não foi autenticada e o PostgREST devolveu lista vazia em
+    silêncio) e linhas recusadas pelo filtro (situação ou validade).
+    """
+    linhas = linhas or []
+
+    if not linhas:
+        _log(u"o servidor não retornou nenhuma licença para esta conta.")
+        return set()
+
     liberados = set()
-    for linha in linhas or []:
+    recusadas = []
+
+    for linha in linhas:
+        if not isinstance(linha, dict):
+            _log(u"resposta inesperada do servidor: {!r}".format(linha))
+            continue
+
+        modulo = linha.get(u"modulo")
         if _licenca_vale(linha):
-            modulo = linha.get(u"modulo")
             if modulo:
                 liberados.add(modulo)
+        else:
+            recusadas.append(u"{} (situação={}, expira_em={})".format(
+                modulo, linha.get(u"situacao"), linha.get(u"expira_em")
+            ))
+
+    if recusadas:
+        _log(u"recusadas: {}".format(u"; ".join(recusadas)))
+
     return liberados
 
 
@@ -329,7 +396,7 @@ def _gravar_cache(modulos, email=None):
     except Exception as ex:
         # Sem o cache, toda consulta de licença volta à rede e o resultado
         # da sessão se perde entre um clique e outro.
-        print(u"[ERRO] Falha ao gravar o cache de licenças: {}".format(texto_erro(ex)))
+        _log(u"falha ao gravar o cache: {}".format(texto_erro(ex)))
 
 
 def _ler_cache():
