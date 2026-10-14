@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { publicAssetUrl } from "../lib/supabaseClient";
 import Icon from "./Icon";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
@@ -5,6 +6,7 @@ import extintorIconSvg from "../assets/icons/extintor-icon.svg?raw";
 import hidranteIconSvg from "../assets/icons/hidrante-icon.svg?raw";
 import sireneIconSvg from "../assets/icons/sirene-icon.svg?raw";
 import detectorIconSvg from "../assets/icons/detector-icon.svg?raw";
+import chevronRightIconSvg from "../assets/icons/chevron-right-icon.svg?raw";
 
 const TODAS_ID = "__todas__";
 
@@ -58,22 +60,62 @@ function IconePill({ categoryId, iconKey, nomeCategoria }) {
   return <span className="icone-fallback">{letra}</span>;
 }
 
+// Distância de rolagem por clique nas setas — "quase uma tela" do
+// carrossel (não a largura toda), pra sempre sobrar um pedaço do pill
+// seguinte visível como dica de que tem mais categoria pra esse lado.
+const PASSO_ROLAGEM_PX = 180;
+
+function Pill({ categoria, categoriaAtual, onSelect }) {
+  return (
+    <button
+      type="button"
+      className={`pill ${categoria.id === categoriaAtual ? "ativa" : ""}`}
+      onClick={() => onSelect(categoria.id)}
+    >
+      {/* Ícones desligados por enquanto (ver IconePill) — só texto. */}
+      {ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name}
+    </button>
+  );
+}
+
 export default function CategoryPills({ categorias, todasIconKey, categoriaAtual, onSelect }) {
   const itens = [{ id: TODAS_ID, name: "Todas", icon_key: todasIconKey }, ...categorias];
+  const trilhoRef = useRef(null);
+
+  // Duas linhas flex empilhadas (cada botão larga só o que o próprio
+  // texto pede) dentro do mesmo trilho rolável — ao contrário de um
+  // grid de 2 linhas por coluna (tentativa anterior), aqui as duas
+  // linhas não compartilham largura de coluna entre si: um pill curto
+  // ("Todas") não fica esticado só porque o pill embaixo dele é mais
+  // comprido ("Detecção de Incêndio").
+  const metade = Math.ceil(itens.length / 2);
+  const linha1 = itens.slice(0, metade);
+  const linha2 = itens.slice(metade);
+
+  function rolar(delta) {
+    trilhoRef.current?.scrollBy({ left: delta, behavior: "smooth" });
+  }
 
   return (
-    <div className="pills">
-      {itens.map((categoria) => (
-        <button
-          key={categoria.id}
-          type="button"
-          className={`pill ${categoria.id === categoriaAtual ? "ativa" : ""}`}
-          onClick={() => onSelect(categoria.id)}
-        >
-          {/* Ícones desligados por enquanto (ver IconePill) — só texto. */}
-          {ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name}
-        </button>
-      ))}
+    <div className="pills-carrossel">
+      <button type="button" className="pills-seta" onClick={() => rolar(-PASSO_ROLAGEM_PX)} aria-label="Categorias anteriores">
+        <Icon svg={chevronRightIconSvg} />
+      </button>
+      <div className="pills" ref={trilhoRef}>
+        <div className="pills-linha">
+          {linha1.map((categoria) => (
+            <Pill key={categoria.id} categoria={categoria} categoriaAtual={categoriaAtual} onSelect={onSelect} />
+          ))}
+        </div>
+        <div className="pills-linha">
+          {linha2.map((categoria) => (
+            <Pill key={categoria.id} categoria={categoria} categoriaAtual={categoriaAtual} onSelect={onSelect} />
+          ))}
+        </div>
+      </div>
+      <button type="button" className="pills-seta pills-seta-direita" onClick={() => rolar(PASSO_ROLAGEM_PX)} aria-label="Próximas categorias">
+        <Icon svg={chevronRightIconSvg} />
+      </button>
     </div>
   );
 }

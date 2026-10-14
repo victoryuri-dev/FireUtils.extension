@@ -5,17 +5,36 @@ Lógica central de inserção da coluna de hidrante.
 
 Chamado pelos botões:
   - Inserir Hidrante           → run(doc, uidoc, output, forcar_nivel=False)
-  - Inserir Hidrante por Nível → run(doc, uidoc, output, forcar_nivel=True)
+  - Inserir Hidrante com Abrigo → run(doc, uidoc, output, forcar_nivel=False)
+                                  (+ shelter_insert_core.posicionar_abrigo)
+  - Inserir Hidrante por Nível → run_coluna_multilevel(doc, uidoc, output)
+                                  Coluna vertical atravessando vários
+                                  níveis de uma vez (ver docstring de
+                                  run_coluna_multilevel) — reaproveita as
+                                  mesmas medidas/geometria de run()
+                                  (ALTURA_VALVULA_M, COMP_HORIZ_M) pra
+                                  cada ramal horizontal, só que repetido
+                                  em cada nível escolhido num diálogo em
+                                  vez de perguntado uma vez só.
 """
 
+import os
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
+# Necessário pra System.Windows.Controls.CheckBox, criado dinamicamente em
+# _JanelaOpcoesColuna.__init__ (número de níveis varia por projeto, não dá
+# pra declarar um checkbox por nível direto no XAML) — pyrevit.forms já usa
+# essas assemblies internamente pra qualquer WPFWindow, mas referencia
+# explicitamente aqui em vez de depender disso como efeito colateral.
+clr.AddReference("PresentationFramework")
+clr.AddReference("PresentationCore")
+clr.AddReference("WindowsBase")
 
 import math
 
 from Autodesk.Revit.DB import (
-    Transaction, XYZ, Line, UnitUtils,
+    Transaction, XYZ, Line, UnitUtils, Level,
     BuiltInParameter, FilteredElementCollector,
     ElementId, LocationCurve, ElementTransformUtils,
     FamilyInstance,
@@ -36,12 +55,18 @@ except ImportError:
 
 from hydrant_family import garantir_valvula
 from hydrant_level  import get_nivel
+# Reexportados daqui (mantidos importáveis como hydrant_insert_core.X pra
+# não quebrar quem já importava assim) mas definidos em hydrant_shared —
+# ver docstring do módulo sobre por quê.
+from hydrant_shared import (
+    ALTURA_VALVULA_M, COMP_HORIZ_M, DIAM_RAMAL_M, TOL,
+    _setar_diametro_ft, _angulo_entre, _conector_mais_proximo,
+)
 
-ALTURA_VALVULA_M = 1.30
-COMP_HORIZ_M     = 0.20
-DIAM_RAMAL_M     = 0.065
-TOL              = 1e-4
 TOL_FIM          = 0.05   # metros — distância máxima ao endpoint para ser "ponta"
+
+_LIB_DIR           = os.path.dirname(os.path.abspath(__file__))
+_XAML_COLUNA_PATH  = os.path.join(_LIB_DIR, u"hydrant_coluna_opcoes.xaml")
 
 
 # ===========================================================================
@@ -72,19 +97,6 @@ def _get_diametro_ft(pipe):
     return _to_ft(0.065)
 
 
-def _setar_diametro_ft(pipe, d_ft):
-    for bip in [BuiltInParameter.RBS_PIPE_OUTER_DIAMETER,
-                BuiltInParameter.RBS_PIPE_DIAMETER_PARAM]:
-        try:
-            p = pipe.get_Parameter(bip)
-            if p and not p.IsReadOnly:
-                p.Set(d_ft)
-                return True
-        except Exception:
-            pass
-    return False
-
-
 def _direcao_horizontal(pipe):
     loc = pipe.Location
     if isinstance(loc, LocationCurve):
@@ -113,10 +125,6 @@ def _pipe_is_vertical(pipe):
             return math.sqrt(dx*dx + dy*dy) / length < 0.1
     return False
 
-
-
-def _angulo_entre(v_de, v_para):
-    return math.atan2(v_para.Y, v_para.X) - math.atan2(v_de.Y, v_de.X)
 
 
 def _get_connector_at(pipe, pt):
@@ -218,21 +226,6 @@ def _pt_intersecao_pipes(pipe1, pipe2):
         return XYZ(p1.X + d1.X * t, p1.Y + d1.Y * t, p1.Z + d1.Z * t)
     except Exception:
         return None
-
-
-def _conector_mais_proximo(familia_inst, pt):
-    """Retorna o conector MEP da família mais próximo de pt."""
-    try:
-        mgr = familia_inst.MEPModel.ConnectorManager
-    except Exception:
-        return None
-    melhor, menor_dist = None, float('inf')
-    for conn in mgr.Connectors:
-        d = conn.Origin.DistanceTo(pt)
-        if d < menor_dist:
-            menor_dist = d
-            melhor = conn
-    return melhor
 
 
 def _dir_conn(conn):
@@ -349,59 +342,45 @@ def run(doc, uidoc, output, forcar_nivel=False):
         if not nivel_pre:
             pyscript.exit()
 
-    # ── Etapa 3 — Selecionar ponto no tubo ───────────────────────────────
+    # ── Etapa 3 — Selecionar elemento (tubo/fitting) ou ponto livre ──────
     msg_nivel = (u" Nível: {}.".format(nivel_pre.Name)
                  if nivel_pre else
                  u" O nível será detectado da vista ativa.")
 
-    # PickPoint aceita qualquer clique — no vazio OU sobre elemento.
-    # Em seguida, detectamos automaticamente se há tubo/fitting próximo.
+    # PickObject (clique direto NUM elemento) em vez de PickPoint + detecção
+    # manual por distância XY: essa detecção manual assumia uma vista em
+    # planta, onde PickPoint devolve o Z do plano de corte da vista e dá pra
+    # "achatar" o clique e comparar só X/Y contra o eixo de cada pipe — mas
+    # numa vista 3D/isométrica essa suposição não vale (não existe um único
+    # plano de corte, e o Z que o PickPoint devolve não tem relação alguma
+    # com o que está visualmente sob o cursor), então o clique nunca caía
+    # dentro do raio de nenhum pipe e a ferramenta sempre caía em modo
+    # livre — mesmo clicando bem em cima do tubo. PickObject resolve o
+    # ponto por ray-casting contra a geometria de verdade, o que funciona
+    # em qualquer tipo de vista. Esc aqui não cancela o comando inteiro —
+    # só pula pro modo livre (clique em ponto qualquer, próximo PickPoint).
+    elem_sel  = None
+    pt_clique = None
     try:
-        pt_clique = uidoc.Selection.PickPoint(
-            u"Clique no tubo/fitting para conectar — ou em ponto livre para posicionar"
+        ref_sel   = uidoc.Selection.PickObject(
+            ObjectType.PointOnElement, _FiltroElemento(),
+            u"Clique no tubo/fitting para conectar (Esc para posicionar "
+            u"livremente).{}".format(msg_nivel)
         )
+        elem_sel  = doc.GetElement(ref_sel.ElementId)
+        pt_clique = ref_sel.GlobalPoint
     except Exception:
-        pyscript.exit()
-
-    # Raio de detecção automática (metros → pés internos)
-    _RAIO_AUTO_FT = _to_ft(0.25)
-    elem_sel      = None
-
-    # Detecção em XY apenas — PickPoint retorna o Z do plano de corte da vista,
-    # não o Z real do elemento, então distância 3D seria sempre grande demais.
-    def _dist_xy_pt(a, b):
-        return math.sqrt((a.X - b.X) ** 2 + (a.Y - b.Y) ** 2)
-
-    # 1) Pipes próximos: distância XY do clique ao eixo do pipe
-    for _p in FilteredElementCollector(doc).OfClass(Pipe).ToElements():
-        try:
-            _loc = _p.Location.Curve
-            _p0  = _loc.GetEndPoint(0)
-            _p1  = _loc.GetEndPoint(1)
-            # Projeta o clique no eixo do pipe usando o mesmo Z do pipe
-            _pt_flat = XYZ(pt_clique.X, pt_clique.Y, _p0.Z)
-            _proj    = _projetar_no_eixo(_pt_flat, _p0, _p1)
-            if _dist_xy_pt(pt_clique, _proj) < _RAIO_AUTO_FT:
-                elem_sel  = _p
-                pt_clique = _proj   # ancora o clique no eixo do tubo
-                break
-        except Exception:
-            pass
-
-    # 2) Fittings próximos (joelho / tê — 2 ou 3 conectores) — distância XY
-    if elem_sel is None:
-        for _fi in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements():
-            try:
-                _n = _fi.MEPModel.ConnectorManager.Connectors.Size
-                if 2 <= _n <= 3:
-                    _pos = _posicao_fitting(_fi)
-                    if _pos and _dist_xy_pt(pt_clique, _pos) < _RAIO_AUTO_FT:
-                        elem_sel = _fi
-                        break
-            except Exception:
-                pass
+        pass
 
     modo_livre = (elem_sel is None)
+
+    if modo_livre:
+        try:
+            pt_clique = uidoc.Selection.PickPoint(
+                u"Clique no ponto onde posicionar o hidrante livremente.{}".format(msg_nivel)
+            )
+        except Exception:
+            pyscript.exit()
 
     try:
         pt_dir = uidoc.Selection.PickPoint(
@@ -758,3 +737,489 @@ def run(doc, uidoc, output, forcar_nivel=False):
         output.print_md(u"| Conexão tubo principal | **falhou** — `{}` |".format(conexao_erro or u"motivo desconhecido"))
 
     return {u"valvula": valvula, u"dir_saida": dir_saida, u"nivel": nivel}
+
+# ===========================================================================
+# COLUNA MULTINÍVEL — Inserir Hidrante por Nível
+# ===========================================================================
+
+def _segmento_com_topo_maior(pipe_a, pipe_b):
+    """Entre dois segmentos de Pipe (pós-BreakCurve de um tubo vertical),
+    retorna o que se estende mais pra CIMA — usado por
+    run_coluna_multilevel pra continuar subindo a coluna depois de cada
+    Tê, já que BreakCurve não documenta qual dos dois lados fica com o
+    Id original."""
+    def _z_max(p):
+        try:
+            c = p.Location.Curve
+            return max(c.GetEndPoint(0).Z, c.GetEndPoint(1).Z)
+        except Exception:
+            return float("-inf")
+    return pipe_a if _z_max(pipe_a) >= _z_max(pipe_b) else pipe_b
+
+
+class _JanelaOpcoesColuna(forms.WPFWindow):
+    """Janela MODAL (hydrant_coluna_opcoes.xaml) — escolhe os níveis onde
+    a coluna de hidrantes vai ramificar (checkbox por nível, multi-
+    seleção, criados dinamicamente em __init__ porque o número de níveis
+    varia por projeto) e se cada hidrante leva abrigo de mangueira
+    junto. Sem prévia ao vivo no modelo — diferente de Conectar
+    Tubo/Abrigo, aqui ainda não existe nada no modelo pra prever antes
+    de confirmar (a coluna só é construída depois, já com níveis e
+    cliques de posição/direção definidos) — então ShowDialog() simples
+    (modal) é suficiente, sem precisar da fila de ExternalEvent."""
+
+    def __init__(self, niveis):
+        forms.WPFWindow.__init__(self, _XAML_COLUNA_PATH)
+        self.niveis               = niveis
+        self.niveis_selecionados  = []
+        self.inserir_abrigo       = False
+        self.confirmado           = False
+
+        from System.Windows.Controls import CheckBox
+        estilo = self.FindResource(u"NivelCheckStyle")
+
+        self._checkboxes = []
+        for nivel in niveis:
+            cb = CheckBox()
+            cb.Content = nivel.Name
+            cb.Tag     = nivel
+            cb.Style   = estilo
+            self.PainelNiveis.Children.Add(cb)
+            self._checkboxes.append(cb)
+
+    def on_cancel(self, sender, args):
+        self.confirmado = False
+        self.Close()
+
+    def on_ok(self, sender, args):
+        selecionados = [cb.Tag for cb in self._checkboxes if cb.IsChecked]
+        if len(selecionados) < 2:
+            self.TxtStatus.Text = (
+                u"Selecione pelo menos 2 níveis (a coluna precisa de uma "
+                u"base e um topo).")
+            return
+        self.niveis_selecionados = selecionados
+        self.inserir_abrigo      = bool(self.ChkAbrigo.IsChecked)
+        self.confirmado          = True
+        self.Close()
+
+
+def _escolher_niveis_e_abrigo(doc):
+    """Mostra _JanelaOpcoesColuna com todos os níveis do projeto
+    (ordenados por elevação). Retorna (niveis_selecionados, inserir_abrigo)
+    ordenados por elevação, ou (None, False) se cancelado/sem níveis."""
+    niveis = sorted(
+        FilteredElementCollector(doc).OfClass(Level).ToElements(),
+        key=lambda n: n.Elevation
+    )
+    if not niveis:
+        forms.alert(u"Nenhum nível encontrado no projeto.",
+                    title=u"Fire Utils", warn_icon=True)
+        return None, False
+
+    janela = _JanelaOpcoesColuna(niveis)
+    janela.ShowDialog()
+    if not janela.confirmado:
+        return None, False
+
+    selecionados = sorted(janela.niveis_selecionados, key=lambda n: n.Elevation)
+    return selecionados, janela.inserir_abrigo
+
+
+def _criar_fitting_generico(doc, conectores):
+    """
+    Cria o fitting certo pra N conectores (2 → joelho, 3 → tê, 4 →
+    cruzeta) já ordenados por _ordenar_conectores — generaliza a mesma
+    lógica que run() já usa pra reconectar o elemento principal (ver
+    bloco "Conexão ao elemento principal" em run()), agora reusada pro
+    ponto onde a coluna multinível cruza/termina um tubo de origem.
+    """
+    conectores = [c for c in conectores if c is not None]
+    ord_ = _ordenar_conectores(conectores)
+    n = len(ord_)
+    if n == 2:
+        doc.Create.NewElbowFitting(ord_[0], ord_[1])
+    elif n == 3:
+        doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+    elif n == 4:
+        doc.Create.NewCrossFitting(ord_[0], ord_[1], ord_[2], ord_[3])
+    else:
+        raise Exception(u"número de conectores não suportado ({})".format(n))
+
+
+def run_coluna_multilevel(doc, uidoc, output):
+    """
+    Inserir Hidrante por Nível: cria uma ÚNICA coluna vertical
+    atravessando vários níveis de uma vez, com um ramal horizontal +
+    válvula (e, opcionalmente, abrigo de mangueira) em CADA nível
+    escolhido — em vez de rodar run() uma vez por nível manualmente.
+
+    Fluxo:
+      1. Diálogo (_JanelaOpcoesColuna): níveis a incluir (mín. 2) +
+         "inserir abrigo em cada hidrante" (sim/não).
+      2. Clique 1: tubo de origem pra conectar a coluna (PickObject,
+         igual a run()) OU Esc pra posicionar livremente (sem conexão a
+         nada existente). Se um tubo for clicado, a coluna nasce
+         exatamente sobre o eixo dele (X/Y do clique projetado nesse
+         eixo) — não um ponto arbitrário.
+      3. Clique 2: direção de saída dos ramais horizontais (snapping a
+         90°, igual a run()).
+      4. Constrói, numa ÚNICA transação:
+         - O tubo vertical, de ALTURA_VALVULA_M acima do nível mais
+           baixo até ALTURA_VALVULA_M acima do nível mais alto
+           selecionados — esse intervalo se ESTENDE automaticamente pra
+           incluir a cota do tubo de origem, se ela cair fora dele (ex.:
+           só níveis acima do tubo de origem foram escolhidos).
+         - Em cada nível (de baixo pra cima): um ramal horizontal de
+           COMP_HORIZ_M (mesma medida de run()) saindo do tubo vertical
+           a essa altura, com uma válvula na ponta. No nível mais baixo
+           e no mais alto, o ramal fecha com um joelho na PONTA do tubo
+           vertical; nos níveis intermediários, com um Tê no MEIO (via
+           PlumbingUtils.BreakCurve, igual ao caso "tê no meio" de run()).
+         - Se houver tubo de origem, a conexão da coluna nele é
+           resolvida pelo número de "pernas" dos dois lados (ver
+           _criar_fitting_generico): tubo de origem cortado no MEIO (2
+           pernas) + coluna com hidrante só pra cima OU só pra baixo
+           daquele ponto (1 perna) → TÊ; tubo de origem na PONTA (1
+           perna) + coluna só pra um lado (1 perna) → JOELHO; tubo de
+           origem no MEIO (2 pernas) + coluna com hidrante pra cima E
+           pra baixo (2 pernas) → CRUZETA; tubo de origem na PONTA (1
+           perna) + coluna pra cima E pra baixo (2 pernas) → TÊ.
+      5. Se "inserir abrigo" estiver marcado, chama
+         shelter_insert_core.posicionar_abrigo pra cada válvula criada
+         (fora da transação principal — cada abrigo já abre a própria,
+         igual a posicionar_todos_abrigos).
+    """
+
+    # ── Etapa 1 — Garantir família da válvula ────────────────────────────
+    simbolo, erro = garantir_valvula(doc)
+    if erro:
+        forms.alert(erro, title=u"Fire Utils – Erro", warn_icon=True)
+        pyscript.exit()
+
+    # ── Etapa 2 — Diálogo: níveis + abrigo ───────────────────────────────
+    niveis_sel, inserir_abrigo = _escolher_niveis_e_abrigo(doc)
+    if not niveis_sel:
+        pyscript.exit()
+
+    # ── Etapa 3 — Clique 1: tubo de origem (opcional) ou ponto livre ─────
+    # PickObject primeiro (igual a run()) — Esc não cancela o comando,
+    # só pula pro modo livre (PickPoint de ponto qualquer).
+    tubo_origem = None
+    pt_clique   = None
+    try:
+        ref_sel = uidoc.Selection.PickObject(
+            ObjectType.PointOnElement, _FiltroElemento(),
+            u"Clique no tubo de origem pra conectar a coluna (Esc pra "
+            u"posicionar livremente) — {} níveis selecionados".format(len(niveis_sel))
+        )
+        elem_ref = doc.GetElement(ref_sel.ElementId)
+        if isinstance(elem_ref, Pipe):
+            tubo_origem = elem_ref
+            pt_clique   = ref_sel.GlobalPoint
+        # FamilyInstance (joelho/tê) como origem não é suportado aqui —
+        # cai pro modo livre abaixo, com um aviso.
+    except Exception:
+        pass
+
+    if tubo_origem is None:
+        try:
+            pt_clique = uidoc.Selection.PickPoint(
+                u"Clique no ponto onde posicionar a coluna de hidrantes "
+                u"({} níveis selecionados)".format(len(niveis_sel))
+            )
+        except Exception:
+            pyscript.exit()
+
+    # Coluna nasce exatamente sobre o eixo do tubo de origem (X/Y do
+    # clique projetado nesse eixo) — não faz sentido a coluna "quase"
+    # cruzar o tubo sem estar exatamente sobre o ponto de corte.
+    z_origem = None
+    if tubo_origem is not None:
+        _loc_o = tubo_origem.Location.Curve
+        pt_origem = _projetar_no_eixo(pt_clique, _loc_o.GetEndPoint(0), _loc_o.GetEndPoint(1))
+        pt_clique = XYZ(pt_origem.X, pt_origem.Y, pt_clique.Z)
+        z_origem  = pt_origem.Z
+
+    # ── Etapa 4 — Clique 2: direção de saída dos ramais ──────────────────
+    try:
+        pt_dir = uidoc.Selection.PickPoint(
+            u"Clique para indicar a direção de saída dos ramais"
+        )
+    except Exception:
+        pyscript.exit()
+
+    _dx   = pt_dir.X - pt_clique.X
+    _dy   = pt_dir.Y - pt_clique.Y
+    _dlen = math.sqrt(_dx * _dx + _dy * _dy)
+    if _dlen > _to_ft(0.05):
+        _v       = XYZ(_dx / _dlen, _dy / _dlen, 0.0)
+        _opcoes  = [XYZ(1, 0, 0), XYZ(-1, 0, 0), XYZ(0, 1, 0), XYZ(0, -1, 0)]
+        dir_saida = max(_opcoes, key=lambda d: _v.DotProduct(d))
+    else:
+        dir_saida = XYZ(1, 0, 0)
+
+    # Direção da face do abrigo: perpendicular ao ramal, lado "direita" —
+    # mesmo padrão default usado em posicionar_todos_abrigos (sem clique
+    # extra pra escolher lado, já que aqui é uma coluna inteira de uma vez).
+    dir_abrigo = XYZ(dir_saida.Y, -dir_saida.X, 0.0)
+
+    comp_horiz_ft      = _to_ft(COMP_HORIZ_M)
+    altura_valvula_ft  = _to_ft(ALTURA_VALVULA_M)
+
+    nivel_base = niveis_sel[0]
+    nivel_topo = niveis_sel[-1]
+    z_base     = nivel_base.Elevation + altura_valvula_ft
+    z_topo     = nivel_topo.Elevation + altura_valvula_ft
+
+    if z_topo - z_base < TOL:
+        forms.alert(
+            u"Os níveis selecionados precisam ter elevações diferentes "
+            u"pra formar uma coluna vertical (pra um único nível, use "
+            u"'Inserir Hidrante').",
+            title=u"Fire Utils", warn_icon=True)
+        pyscript.exit()
+
+    # Estende o intervalo da coluna pra incluir a cota do tubo de origem,
+    # se ela cair fora do que os níveis selecionados já cobrem (ex.:
+    # usuário só marcou níveis ACIMA do tubo de origem — o tubo de
+    # origem vira a nova base da coluna).
+    if z_origem is not None:
+        z_base = min(z_base, z_origem)
+        z_topo = max(z_topo, z_origem)
+
+    pt_base = XYZ(pt_clique.X, pt_clique.Y, z_base)
+    pt_topo = XYZ(pt_clique.X, pt_clique.Y, z_topo)
+
+    # ── Etapa 5 — Tipo/sistema de tubulação ──────────────────────────────
+    # Prefere herdar do PRÓPRIO tubo de origem (garante compatibilidade
+    # perfeita com o sistema que a coluna está entrando); sem tubo de
+    # origem, prefere qualquer Pipe JÁ EXISTENTE no projeto — um PipeType
+    # que já tem tubos de verdade modelados quase certamente já tem
+    # Preferências de Roteamento configuradas (joelho/tê definidos pra
+    # esse tipo/tamanho). O fallback final ("1º PipeType do
+    # FilteredElementCollector") pode pegar um tipo NUNCA usado no
+    # projeto, sem fitting nenhum configurado — daí TODO joelho/tê (até o
+    # primeiro, sem nenhum BreakCurve envolvido) derrubar com "failed to
+    # insert elbow/tee.": o tipo em si não tem família de joelho/tê
+    # associada, não é um problema de geometria.
+    pipe_existente = tubo_origem
+    if pipe_existente is None:
+        pipe_existente = next(iter(FilteredElementCollector(doc).OfClass(Pipe).ToElements()), None)
+
+    pipe_type_id = ElementId.InvalidElementId
+    sys_type_id  = ElementId.InvalidElementId
+
+    if pipe_existente is not None:
+        try:
+            pipe_type_id = pipe_existente.GetTypeId()
+        except Exception:
+            pass
+        try:
+            mep_sys = pipe_existente.MEPSystem
+            if mep_sys:
+                sys_type_id = mep_sys.GetTypeId()
+        except Exception:
+            pass
+
+    if pipe_type_id == ElementId.InvalidElementId:
+        try:
+            from Autodesk.Revit.DB.Plumbing import PipeType
+            tipos_pipe = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
+            if tipos_pipe:
+                pipe_type_id = tipos_pipe[0].Id
+        except Exception:
+            pass
+
+    if sys_type_id == ElementId.InvalidElementId:
+        try:
+            tipos = FilteredElementCollector(doc).OfClass(PipingSystemType).ToElements()
+            if tipos:
+                sys_type_id = tipos[0].Id
+        except Exception:
+            pass
+
+    diam_ft    = _to_ft(DIAM_RAMAL_M)
+    tol_fim_ft = _to_ft(TOL_FIM)
+
+    # ── Etapa 6 — Criar a coluna inteira (transação única) ───────────────
+    # Eventos ordenados por cota (de baixo pra cima): um por nível
+    # selecionado (ramal + válvula) e, se houver, um pro tubo de origem
+    # (só a conexão, sem ramal/válvula — não é um hidrante, é onde a
+    # coluna entra na rede existente). Processar tudo numa lista só, na
+    # mesma ordem de baixo pra cima, mantém tubo_vert sempre apontando
+    # pro segmento de cima certo, não importa a ordem relativa entre
+    # níveis de hidrante e o ponto de conexão do tubo de origem.
+    eventos = [{u"tipo": u"hidrante", u"z": n.Elevation + altura_valvula_ft, u"nivel": n}
+               for n in niveis_sel]
+    if tubo_origem is not None:
+        eventos.append({u"tipo": u"origem", u"z": z_origem})
+    eventos.sort(key=lambda e: e[u"z"])
+
+    valvulas_criadas = []
+    avisos           = []
+
+    with Transaction(doc, u"FireUtils - Inserir Coluna de Hidrantes") as t:
+        t.Start()
+        try:
+            tubo_vert = Pipe.Create(
+                doc, sys_type_id, pipe_type_id, nivel_base.Id, pt_base, pt_topo
+            )
+            _setar_diametro_ft(tubo_vert, diam_ft)
+
+            for evento in eventos:
+                z = evento[u"z"]
+                pt_z = XYZ(pt_clique.X, pt_clique.Y, z)
+                extremo_base = abs(z - z_base) < TOL
+                extremo_topo = abs(z - z_topo) < TOL
+
+                # ── Pernas do lado da COLUNA neste ponto: 1 se for
+                # extremo (só continua pra um lado), 2 se for meio da
+                # coluna (corta e continua pros dois lados).
+                conns_coluna = []
+                if extremo_base or extremo_topo:
+                    pt_ref = pt_base if extremo_base else pt_topo
+                    conn_v = _get_connector_near(tubo_vert, pt_ref)
+                    if conn_v:
+                        conns_coluna.append(conn_v)
+                    else:
+                        avisos.append(u"z={:.2f}: conector do tubo vertical não encontrado".format(_to_m(z)))
+                else:
+                    tubo_vert_sec = None
+                    try:
+                        new_id_v      = PlumbingUtils.BreakCurve(doc, tubo_vert.Id, pt_z)
+                        tubo_vert_sec = doc.GetElement(new_id_v)
+                    except Exception as e:
+                        avisos.append(u"z={:.2f}: corte do tubo vertical falhou ({})".format(_to_m(z), str(e)))
+
+                    if tubo_vert_sec is not None:
+                        conn_v1 = _get_connector_near(tubo_vert,     pt_z)
+                        conn_v2 = _get_connector_near(tubo_vert_sec, pt_z)
+                        if conn_v1 and conn_v2:
+                            conns_coluna.extend([conn_v1, conn_v2])
+                        else:
+                            avisos.append(u"z={:.2f}: conectores pós-corte da coluna não encontrados".format(_to_m(z)))
+                        # SEMPRE continua subindo a partir do segmento de
+                        # CIMA do corte, mesmo se o fitting não tiver
+                        # sido criado — o corte geométrico (BreakCurve)
+                        # já aconteceu de qualquer jeito, e os dois
+                        # pedaços continuam sendo pipes de verdade; sem
+                        # isso, uma falha no fitting deixava tubo_vert
+                        # apontando pro pedaço ERRADO (de baixo) pro
+                        # resto do loop, quebrando em cascata os eventos
+                        # acima.
+                        tubo_vert = _segmento_com_topo_maior(tubo_vert, tubo_vert_sec)
+
+                if evento[u"tipo"] == u"hidrante":
+                    nivel     = evento[u"nivel"]
+                    pt_valv   = XYZ(
+                        pt_z.X + dir_saida.X * comp_horiz_ft,
+                        pt_z.Y + dir_saida.Y * comp_horiz_ft,
+                        pt_z.Z,
+                    )
+
+                    tubo_horiz = Pipe.Create(
+                        doc, sys_type_id, pipe_type_id, nivel.Id, pt_z, pt_valv
+                    )
+                    _setar_diametro_ft(tubo_horiz, diam_ft)
+                    conn_h_ini = _get_connector_at(tubo_horiz, pt_z)
+
+                    if conn_h_ini and conns_coluna:
+                        try:
+                            _criar_fitting_generico(doc, conns_coluna + [conn_h_ini])
+                        except Exception as e:
+                            avisos.append(u"{}: conexão do ramal falhou ({})".format(nivel.Name, str(e)))
+                    elif not conn_h_ini:
+                        avisos.append(u"{}: conector do ramal não encontrado".format(nivel.Name))
+
+                    conn_tubo_fim = _get_far_connector(tubo_horiz, pt_z)
+                    pos_insercao  = conn_tubo_fim.Origin if conn_tubo_fim else pt_valv
+
+                    valvula = doc.Create.NewFamilyInstance(
+                        pos_insercao, simbolo, nivel, StructuralType.NonStructural
+                    )
+                    angulo = _angulo_entre(XYZ(1.0, 0.0, 0.0), dir_saida)
+                    if abs(angulo) > TOL:
+                        eixo_rot = Line.CreateBound(
+                            pos_insercao,
+                            XYZ(pos_insercao.X, pos_insercao.Y, pos_insercao.Z + 1.0)
+                        )
+                        ElementTransformUtils.RotateElement(doc, valvula.Id, eixo_rot, angulo)
+
+                    if conn_tubo_fim:
+                        conn_val = _conector_mais_proximo(valvula, pos_insercao)
+                        if conn_val:
+                            deslocamento = conn_tubo_fim.Origin - conn_val.Origin
+                            if deslocamento.GetLength() > TOL:
+                                ElementTransformUtils.MoveElement(doc, valvula.Id, deslocamento)
+                            try:
+                                conn_tubo_fim.ConnectTo(conn_val)
+                            except Exception:
+                                avisos.append(u"{}: válvula não conectada ao ramal".format(nivel.Name))
+
+                    valvulas_criadas.append((valvula, nivel))
+
+                else:  # evento[u"tipo"] == u"origem"
+                    # ── Pernas do lado do TUBO DE ORIGEM: 1 se o ponto
+                    # de corte cair perto de uma ponta (estende até lá,
+                    # igual ao caso "ponta" de run()), 2 se for no meio
+                    # (BreakCurve, igual ao caso "tê no meio" de run()).
+                    p0o, p1o = _loc_o.GetEndPoint(0), _loc_o.GetEndPoint(1)
+                    dist_a = pt_z.DistanceTo(p0o)
+                    dist_b = pt_z.DistanceTo(p1o)
+                    em_ponta_origem = (dist_a < tol_fim_ft or dist_b < tol_fim_ft)
+
+                    conns_origem = []
+                    if em_ponta_origem:
+                        pt_fim_o = p0o if dist_a < dist_b else p1o
+                        _ajustar_endpoint(tubo_origem, pt_fim_o, pt_z)
+                        doc.Regenerate()
+                        conn_o = _get_connector_near(tubo_origem, pt_z)
+                        if conn_o:
+                            conns_origem.append(conn_o)
+                        else:
+                            avisos.append(u"Tubo de origem: conector da ponta não encontrado")
+                    else:
+                        tubo_origem_sec = None
+                        try:
+                            new_id_o        = PlumbingUtils.BreakCurve(doc, tubo_origem.Id, pt_z)
+                            tubo_origem_sec = doc.GetElement(new_id_o)
+                        except Exception as e:
+                            avisos.append(u"Tubo de origem: corte falhou ({})".format(str(e)))
+                        if tubo_origem_sec is not None:
+                            conn_o1 = _get_connector_near(tubo_origem,     pt_z)
+                            conn_o2 = _get_connector_near(tubo_origem_sec, pt_z)
+                            if conn_o1 and conn_o2:
+                                conns_origem.extend([conn_o1, conn_o2])
+                            else:
+                                avisos.append(u"Tubo de origem: conectores pós-corte não encontrados")
+
+                    conns_totais = conns_origem + conns_coluna
+                    if len(conns_totais) >= 2:
+                        try:
+                            _criar_fitting_generico(doc, conns_totais)
+                        except Exception as e:
+                            avisos.append(u"Tubo de origem: conexão falhou ({})".format(str(e)))
+                    else:
+                        avisos.append(u"Tubo de origem: conectores insuficientes pra criar a conexão")
+
+            t.Commit()
+
+        except Exception as e:
+            t.RollBack()
+            forms.alert(
+                u"Erro ao criar a coluna de hidrantes:\n{}".format(str(e)),
+                title=u"Fire Utils – Erro",
+                warn_icon=True
+            )
+            pyscript.exit()
+
+    # ── Etapa 7 — Abrigos (opcional, fora da transação principal) ────────
+    if inserir_abrigo:
+        from shelter_insert_core import posicionar_abrigo
+        for valvula, nivel in valvulas_criadas:
+            posicionar_abrigo(doc, valvula, dir_saida, nivel, output, dir_abrigo=dir_abrigo)
+
+    # ── Etapa 8 — Relatório (só avisos/falhas — nada informativo) ────────
+    for aviso in avisos:
+        output.print_md(u"| Aviso | {} |".format(aviso))

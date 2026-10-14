@@ -285,3 +285,40 @@ export function taxaOpcoes(divisao, taxaPopulacional) {
 export function popTipoPadrao(divisao, taxaPopulacional) {
   return taxaOpcoes(divisao, taxaPopulacional)[0]?.value || 'manual'
 }
+
+/** Índice da faixa de altura piso a piso em que a estrutura se encaixa,
+ * dentro de `tiposEscada.faixas_altura` (cada faixa: { min, max, label }). */
+export function faixaAlturaEscada(altura, faixas) {
+  const h = parseFloat(altura)
+  if (!(h > 0) || !faixas?.length) return -1
+  return faixas.findIndex(f => (f.min == null || h > f.min) && (f.max == null || h <= f.max))
+}
+
+/** Tipo de escada de emergência exigido pra estrutura (Anexo C, Tabela 3) —
+ * cruza a faixa de altura piso a piso com a(s) divisão(ões) de ocupação dos
+ * pavimentos; quando há mais de uma divisão, prevalece a mais restritiva
+ * (maior rank). Só se aplica a estruturas com mais de 1 pavimento (térrea
+ * não tem escada). Mesma função do site (data/se_calc.js). */
+export function tipoEscadaEstrutura(estrutura, divisoes, tiposEscada) {
+  if (!tiposEscada) return null
+  const totalPav = (parseInt(estrutura.nPavimentos) || 1) + (parseInt(estrutura.nSubsolos) || 0)
+  if (totalPav <= 1) return { status: 'nao_aplica' }
+  const idx = faixaAlturaEscada(estrutura.alturaPisoPiso, tiposEscada.faixas_altura)
+  if (idx < 0) return { status: 'sem_altura' }
+  const chaveDe = d => (tiposEscada.tabela[d] ? d : d.split('-')[0])
+  const divs = [...new Set((divisoes || []).filter(Boolean))].filter(d => tiposEscada.tabela[chaveDe(d)])
+  if (divs.length === 0) return { status: 'sem_divisao', faixa: tiposEscada.faixas_altura[idx] }
+  const porDivisao = divs.map(d => ({ divisao: d, tipo: tiposEscada.tabela[chaveDe(d)][idx] }))
+  const ranks = porDivisao.map(p => tiposEscada.tipos[p.tipo]?.rank).filter(r => r != null)
+  const maxRank = ranks.length ? Math.max(...ranks) : null
+  const exigido = maxRank != null
+    ? porDivisao.find(p => tiposEscada.tipos[p.tipo]?.rank === maxRank).tipo
+    : porDivisao[0].tipo
+  const consultar = porDivisao.some(p => p.tipo === '+')
+  const chaves = [
+    ...divs.flatMap(d => tiposEscada.notas_por_divisao?.[d] || tiposEscada.notas_por_divisao?.[chaveDe(d)] || []),
+    ...(tiposEscada.notas_gerais || []),
+  ]
+  const notas = [...new Set(chaves)].map(k => ({ chave: k, texto: tiposEscada.notas[k] }))
+  return { status: 'ok', faixa: tiposEscada.faixas_altura[idx], porDivisao, exigido, consultar, notas }
+}

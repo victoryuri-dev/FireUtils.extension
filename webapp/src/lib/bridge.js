@@ -179,6 +179,46 @@
  *     ao preparar/coletar/gravar (parâmetro ausente, etc.) — vira uma
  *     notificação (ver ToastStack.jsx), nunca interrompe as demais
  *     medidas.
+ *
+ *   { type: "SELECIONAR_TRECHO_HIDRANTE", payload: { rota: number[] } }
+ *     JS -> Python: seleciona e enquadra, na view ativa do Revit, todo o
+ *     trecho (Bomba -> válvula) de um hidrante — botão "Localizar" da
+ *     tabela "Verificação do Hidrante Mais Desfavorável"
+ *     (HidrantesDimensionamento.jsx). `rota` é o campo de mesmo nome de um
+ *     item de `ranking_hidrantes` (dentro de `dimensionamento`, ver
+ *     HIDRANTES_DIMENSIONAMENTO acima) — ausente/vazio num ranking salvo
+ *     antes dessa rota existir (reexecute "Mapear Trechos" pra preencher).
+ *     Fire-and-forget: não há resposta — sucesso já aparece no Revit, e uma
+ *     falha mostra um alerta nativo por lá (mesmo botão "Localizar"/
+ *     "Mostrar no Projeto" das janelas do pushbutton "Mapear Trechos").
+ *
+ *   { type: "GET_REVIT_LEVELS", payload: { estruturaId } }
+ *     JS -> Python: pede os níveis (Level) do documento Revit ativo,
+ *     ordenados por elevação, pro painel "Correlacionar Níveis"
+ *     (CorrelacaoNiveisModal.jsx) — nem sempre o nome do nível no Revit
+ *     bate com o pavimento cadastrado no site (ex.: "Nível 1" em vez de
+ *     "Térreo"), então o usuário alinha as duas listas manualmente
+ *     arrastando, em vez do plugin tentar adivinhar por nome.
+ *     `estruturaId` também traz de volta a correlação já salva (se houver)
+ *     pra essa estrutura, pronta pra reabrir o painel já no estado salvo.
+ *
+ *   { type: "REVIT_LEVELS", payload: { levels: [{ uniqueId, nome, elevacao }],
+ *     correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }], erro? } }
+ *     Python -> JS: resposta de GET_REVIT_LEVELS. `correlacao` é a
+ *     correlação salva por último (ver SET_NIVEIS_CORRELACAO) — vazia se
+ *     a estrutura nunca foi correlacionada ainda.
+ *
+ *   { type: "SET_NIVEIS_CORRELACAO", payload: { estruturaId,
+ *     correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }] } }
+ *     JS -> Python: grava a correlação Nível do Revit <-> Pavimento do
+ *     FireUtils no firedata.json do documento ativo, por estrutura — fica
+ *     só local (não vai pro Supabase): um `Level` é um elemento deste
+ *     documento Revit, não faz sentido compartilhar entre documentos
+ *     diferentes vinculados à mesma estrutura. Chave persistida é o
+ *     `Level.UniqueId` (sobrevive a um rename do nível no Revit).
+ *
+ *   { type: "NIVEIS_CORRELACAO_SAVED", payload: { ok, erro? } }
+ *     Python -> JS: resultado de um SET_NIVEIS_CORRELACAO.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -198,6 +238,11 @@ export const BridgeMessageTypes = {
   HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
   GRAVAR_QUANTITATIVOS: "GRAVAR_QUANTITATIVOS",
   QUANTITATIVOS_GRAVADOS: "QUANTITATIVOS_GRAVADOS",
+  SELECIONAR_TRECHO_HIDRANTE: "SELECIONAR_TRECHO_HIDRANTE",
+  GET_REVIT_LEVELS: "GET_REVIT_LEVELS",
+  REVIT_LEVELS: "REVIT_LEVELS",
+  SET_NIVEIS_CORRELACAO: "SET_NIVEIS_CORRELACAO",
+  NIVEIS_CORRELACAO_SAVED: "NIVEIS_CORRELACAO_SAVED",
 };
 
 function obterWebView() {

@@ -55,27 +55,71 @@ npm run dev
 controle de acesso de verdade é a política de RLS do bucket privado no
 Supabase.
 
-## Build de produção (o que a Fase 3 consome)
+## De onde a dockpane carrega a interface
 
-```bash
-npm run build
+Da URL configurada em `fireutils.config.json`, na raiz da extensão:
+
+```json
+{
+  "webappUrl": "https://fire-utils-extension.vercel.app"
+}
 ```
 
-Gera `dist/` — um `index.html` + assets estáticos, sem servidor Node
-nenhum por trás. É essa pasta que o pyRevit aponta o WebView2 pra carregar
-(Fase 3), via
-[`SetVirtualHostNameToFolderMapping`](https://learn.microsoft.com/microsoft-edge/webview2/how-to/hostnametofoldermapping)
-em vez de abrir o `index.html` direto com `file://` (evita restrições de
-CORS/módulos ES do Chromium com `file://`).
+A interface **não é empacotada com a extensão**. Publicar uma correção é um
+deploy (`git push` → a Vercel publica), sem gerar instalador novo e sem
+ninguém reinstalar nada. O `.rfa`, o Python e as DLLs continuam vindo da
+instalação local; só o HTML/JS vem do servidor.
 
-**`dist/` é commitado no git** (não está no `.gitignore`), de propósito:
-este plugin é distribuído via `git clone`/`git pull` direto pra cada
-computador, sem CI/CD nem instalador — se `dist/` não fosse versionado,
-cada máquina nova precisaria de Node/npm instalados só pra rodar o
-Carregador de Famílias, o que não faz sentido pro usuário final do plugin.
-Sempre que mudar algo em `src/`, rode `npm run build` de novo e **comite o
-`dist/` atualizado junto** — sem isso, o plugin instalado continua rodando
-a versão antiga da interface.
+Por isso `dist/` **não é versionado** — ele é artefato local de quem roda
+`npm run build` ou `npm run dev`, e não entra no instalador.
+
+Regras de funcionamento:
+
+- **Só `https://`**, com exceção de `http://localhost` e `http://127.0.0.1`
+  (ver desenvolvimento abaixo). Sem TLS, o bridge — que carrega família e
+  grava no `firedata.json` — ficaria exposto a quem estivesse na mesma rede;
+  localhost não trafega em rede nenhuma.
+- **Sem internet, o painel não abre.** A dockpane é online por definição: a
+  interface vem do servidor e o acervo de famílias vive no Supabase. A falha
+  vira uma mensagem explicando isso, não um painel em branco.
+- **O bridge valida a origem.** Mensagens que não venham da origem carregada
+  são descartadas — o WebView2 expõe esse canal a qualquer página que
+  carregue, e ele manda o Python mexer no documento do Revit.
+
+O arquivo de configuração vai junto no instalador (`installer/build.ps1` o
+inclui no payload e recusa gerar o instalador se a URL faltar ou não for
+válida), então a URL chega configurada na máquina instalada.
+
+## Desenvolvendo com o Revit aberto
+
+Para editar o React e ver o resultado na dockpane sem publicar nada, aponte
+a configuração para o servidor do Vite:
+
+```bash
+npm run dev     # sobe em http://localhost:5173
+```
+
+```json
+{
+  "webappUrl": "http://localhost:5173"
+}
+```
+
+Reabra o painel no Revit e você tem hot reload lá dentro: salvar o arquivo
+atualiza a dockpane sozinha, sem build e sem reabrir.
+
+Lembre de devolver a URL de produção antes de commitar — e o build do
+instalador, de qualquer forma, recusa gerar um `.exe` apontando para
+localhost.
+
+### Qual versão o usuário vê
+
+Sempre o último deploy. Todo push que chega na Vercel vale para todo mundo
+na próxima vez que abrirem o painel — não existe versão instalada da
+interface para ficar para trás.
+
+As demais ferramentas (hidrantes, saídas, tubos) são Python local e
+continuam funcionando sem internet; só a dockpane depende de conexão.
 
 ## Contrato da ponte JS ↔ Python (Fase 3/4)
 
@@ -286,10 +330,15 @@ Documentadas com mais detalhe no topo de `lib/bridge.js`. Resumo:
 | `PROJECT_LINK_SAVED` | Python → JS | `{ ok, erro? }` |
 | `DISCONNECT_PROJECT` | JS → Python | — |
 | `GET_DIMENSIONAMENTOS_STATUS` | JS → Python | — |
-| `DIMENSIONAMENTOS_STATUS` | Python → JS | `{ hidrantes: boolean, saidaEmergencia: boolean }` |
+| `DIMENSIONAMENTOS_STATUS` | Python → JS | `{ hidrantes: boolean, saidaEmergencia: boolean, niveis: boolean }` |
+| `GET_REVIT_LEVELS` | JS → Python | `{ estruturaId }` |
+| `REVIT_LEVELS` | Python → JS | `{ levels: [{ uniqueId, nome, elevacao }], correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }], erro? }` |
+| `SET_NIVEIS_CORRELACAO` | JS → Python | `{ estruturaId, correlacao: [{ pavimentoId, nivelUniqueId, nivelNome }] }` |
+| `NIVEIS_CORRELACAO_SAVED` | Python → JS | `{ ok, erro? }` |
 
 Do lado Python, tratadas em `Fire Utils.tab/lib/project_link_bridge.py`
-(despachado a partir de `family_webview_bridge.py`).
+(despachado a partir de `family_webview_bridge.py`); `GET_REVIT_LEVELS`/
+`SET_NIVEIS_CORRELACAO` em `Fire Utils.tab/lib/niveis_bridge.py`.
 
 ## Saída de Emergência — árvore de Acessos e Descargas
 
@@ -299,8 +348,26 @@ Clicar no card "Saída de Emergência" do Dashboard abre a mesma árvore
 drag-and-drop (`@dnd-kit/core`). Ao contrário do resto do Dashboard (só
 leitura), esta tela **escreve** direto na coluna `dados` do Supabase —
 sem passar pela bridge Python: não há nada aqui que dependa da API do
-Revit (os níveis do Revit não entram nessa tela; a expectativa é que o
-usuário já os tenha renomeado pra bater com os pavimentos do site).
+Revit (os níveis do Revit não entram nessa tela).
+
+## Correlacionar Níveis (Nível do Revit <-> Pavimento do FireUtils)
+
+Card "Correlacionar Níveis" do Dashboard abre `CorrelacaoNiveisModal.jsx`:
+duas colunas lado a lado — Pavimentos do FireUtils (esquerda, ordem fixa,
+já cadastrada no site) e Níveis do Revit (direita, arrastável via
+`@dnd-kit/core`, mesmo padrão de `AcessosDescargasView.jsx`, sem usar
+`@dnd-kit/sortable`). A linha *i* de cada coluna vira um par
+pavimento/nível ao salvar — substitui qualquer tentativa de casar por
+nome (nem sempre o nível no Revit se chama "Térreo").
+
+Ao contrário da árvore de Acessos e Descargas, esta correlação **fica só
+local** (firedata.json do documento Revit ativo, chave
+`niveis_pavimentos`, por `estruturaId`) — nunca vai pro Supabase: um
+`Level` é um elemento deste documento Revit específico, sem sentido
+compartilhar entre documentos diferentes vinculados à mesma estrutura.
+Chave persistida por nível é o `Level.UniqueId` (sobrevive a um rename do
+nível no Revit, ao contrário do `ElementId`). Ver
+`Fire Utils.tab/lib/niveis_bridge.py`.
 
 - `lib/seReducer.js` — mesmas ações do reducer do site (CRIAR_SAIDA,
   MOVER_ACESSO, SET_PISO_DESCARGA, ...), mas puras: recebem `dados` (a

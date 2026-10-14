@@ -28,10 +28,19 @@ export function faixaAreaIndex(areaTotal, norma) {
   return norma.FAIXAS_AREA.findIndex((f) => (f.min == null || a > f.min) && (f.max == null || a <= f.max));
 }
 
-/** Opções de classificação (Tipo + RTI) para uma coluna/faixa, já
- * aplicando o rebaixamento automático por chuveiros automáticos (Notas 1
- * e 2 da Tabela 3) quando `possuiSprinklers` é true. Normalmente 1 opção,
- * 2 quando a coluna 1 permite escolher entre Tipo 1 e Tipo 2. */
+/** Opções de classificação (Tipo + RTI) para uma coluna/faixa, considerando
+ * chuveiros automáticos (`possuiSprinklers`, só "está ativo" — a dockpane
+ * não sabe se o sistema é EXIGIDO ou instalado por conta própria, só se o
+ * RT marcou o toggle manual; ver projetoDados.js:sistemasAtivos). Isso
+ * basta pra coluna 4 Tipo 5 (Nota 1 da Tabela 3 conta a exigência, a Nota 2
+ * conta "não exigido mas instalado" — os dois casos levam ao MESMO Tipo 4
+ * aqui, só muda a nota citada, que a dockpane nem mostra). NÃO basta pra
+ * coluna 3 ou coluna 4 Tipo 4: aí só a Nota 2 se aplica, e ela exige que os
+ * chuveiros NÃO sejam exigidos — sem esse dado, a dockpane não rebaixa
+ * esses dois casos (fica só no Tipo da tabela, sem pills) pra nunca
+ * oferecer um rebaixamento que a norma não permitiria se os chuveiros
+ * forem exigidos. Classificação completa (as duas notas, os dois sinais)
+ * só no site — ver hidrantes_calc.js:opcoesClassificacao. */
 export function opcoesClassificacao(coluna, faixaIndex, possuiSprinklers, norma) {
   if (coluna == null || faixaIndex < 0 || faixaIndex >= norma.TABELA3.length) return [];
   const linha = norma.TABELA3[faixaIndex];
@@ -46,13 +55,14 @@ export function opcoesClassificacao(coluna, faixaIndex, possuiSprinklers, norma)
     return [{ tipo: linha.col2.tipo, rti: linha.col2.rti }];
   }
   if (coluna === 3) {
-    if (possuiSprinklers) return [{ tipo: 3, rti: linha.col2.rti }];
     return [{ tipo: linha.col3.tipo, rti: linha.col3.rti }];
   }
   if (coluna === 4) {
-    if (!possuiSprinklers) return [{ tipo: linha.col4.tipo, rti: linha.col4.rti }];
-    if (linha.col4.tipo === 5) return [{ tipo: 4, rti: linha.col3.rti }];
-    return [{ tipo: 3, rti: linha.col2.rti }];
+    const base = { tipo: linha.col4.tipo, rti: linha.col4.rti };
+    if (linha.col4.tipo === 5 && possuiSprinklers) {
+      return [base, { tipo: 4, rti: linha.col3.rti }];
+    }
+    return [base];
   }
   return [];
 }

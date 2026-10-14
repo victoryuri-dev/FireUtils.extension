@@ -4,11 +4,13 @@ __doc__ = (
     "Desenha uma sequência de linhas (clique a clique) num estilo de linha "
     "escolhido, até um comprimento total máximo informado — o último "
     "segmento é encurtado automaticamente pra fechar exatamente no limite, "
-    "em vez de ultrapassar."
+    "em vez de ultrapassar. Usa o estilo pré-configurado em \"Configurar\" "
+    "quando houver um salvo; senão pede pra escolher, como antes."
 )
 
 from pyrevit import revit, forms
 from linha_limite_core import listar_estilos_de_linha, inserir_linha_com_limite
+from comprimento_linha_config import carregar as carregar_config
 
 doc = revit.doc
 uidoc = revit.uidoc
@@ -18,14 +20,18 @@ estilos = listar_estilos_de_linha(doc)
 if not estilos:
     forms.alert(u"Nenhum estilo de linha encontrado no projeto.", exitscript=True)
 
-nome_escolhido = forms.SelectFromList.show(
-    sorted(estilos.keys()),
-    title=u"Inserir Linha com Limite",
-    prompt=u"Escolha o estilo da linha:",
-    multiselect=False,
-)
-if not nome_escolhido:
-    forms.alert(u"Nenhum estilo selecionado.", exitscript=True)
+estilo_padrao, _prefixo_nao_usado = carregar_config(doc)
+if estilo_padrao and estilo_padrao in estilos:
+    nome_escolhido = estilo_padrao
+else:
+    nome_escolhido = forms.SelectFromList.show(
+        sorted(estilos.keys()),
+        title=u"Inserir Linha com Limite",
+        prompt=u"Escolha o estilo da linha:",
+        multiselect=False,
+    )
+    if not nome_escolhido:
+        forms.alert(u"Nenhum estilo selecionado.", exitscript=True)
 
 comprimento_str = forms.ask_for_string(
     default=u"10",

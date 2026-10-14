@@ -557,9 +557,12 @@ if verif_succao is not None and verif_succao[u"exige_npsh"]:
         erro_npshd = _txt(_e)
 
 # ===========================================================================
-# Etapa 5 — Verificações normativas: para o dimensionamento no primeiro
-# ponto que não atender, em vez de seguir adiante com um resultado que não
-# atende a norma. Mostra exatamente onde o projetista deve corrigir.
+# Etapa 5 — Verificações normativas: mostra exatamente onde o projetista
+# deve corrigir. Pressão/vazão no hidrante para o dimensionamento (não dá
+# pra seguir com um resultado que não atende); velocidade só avisa e
+# continua (ver houve_falha_velocidade) — a correção de diâmetro pode ser
+# feita depois, sem bloquear o restante do fluxo (resultado final, memorial,
+# sincronização com o site/dockpane).
 # ===========================================================================
 v_max_tubo    = req(perfil, u"v_max_tubulacao")
 v_max_suc_pos = req(perfil, u"v_max_succao_positiva")
@@ -575,6 +578,14 @@ else:
     p_hd02_ref = res["P_hd02"]
     p_ref_desc = u"pressão na válvula"
 
+# Velocidade acima do limite não interrompe mais o dimensionamento (lista
+# de 1 item só pra poder ser alterada de dentro de _para_por_velocidade,
+# já que IronPython 2.7 não tem "nonlocal") — o RT já vê o aviso por
+# trecho na hora (mostrar_bloqueio_velocidade), e o resumo final (Etapa 6)
+# mostra a verificação reprovada de verdade, em vez de travar o fluxo do
+# projeto por uma correção de diâmetro que pode ser feita depois.
+houve_falha_velocidade = [False]
+
 def _para_por_velocidade(j, limite, nome_trecho, comprimento_min=None):
     """comprimento_min (m), quando informado: sub-trechos mais curtos que
     isso (ex.: redução na entrada/saída da bomba) ficam fora da
@@ -585,12 +596,12 @@ def _para_por_velocidade(j, limite, nome_trecho, comprimento_min=None):
     falhas = [s for s in segmentos if s["V"] > limite + 1e-9]
     if not falhas:
         return
+    houve_falha_velocidade[0] = True
     ids_falha = [eid for s in falhas for eid in s.get("ids", [])]
     ids_mostrar = mostrar_bloqueio_velocidade(nome_trecho, j, limite, falhas,
                                               ids_problema=ids_falha)
     if ids_mostrar:
         mostrar_no_revit(ids_mostrar)
-    script.exit()
 
 def _para_por_hidrante(label, p, q, p_ref_desc, trecho_desc, elems_trecho):
     if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
@@ -626,6 +637,7 @@ mostrar_resultado_ok(
     v_max_tubo, v_max_succao, p_ref_desc, p_hd01_ref, p_hd02_ref,
     Pmin, Qs_lmin,
     comprimento_min_velocidade=COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
+    houve_falha_velocidade=houve_falha_velocidade[0],
 )
 
 # --- Etapa 7: salvar cache (sincroniza com o site — memorial de cálculo e a

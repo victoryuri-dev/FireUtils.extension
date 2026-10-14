@@ -27,87 +27,108 @@ Dependências externas que NÃO vêm com o pyRevit/Revit:
   3. WebView2 Runtime instalado na máquina (Windows 10/11 atualizado já
      vem com ele via Edge; senão, instalar o "Evergreen Bootstrapper" da
      Microsoft).
+
+IMPORTS PESADOS SÃO TODOS LAZY (dentro de método, não no topo do módulo):
+os AddReferenceToFileAndPath dos assemblies do WebView2 e o import de
+family_webview_bridge (que puxa toda a cascata de módulos do bridge —
+family_loader, family_cache, project_link_bridge, hidrantes_*_bridge,
+niveis_bridge -> sync, projeto, normas, hidrantes.*, saidas.calc) só
+rodam dentro de __init__/_ao_inicializar_core/_ao_receber_mensagem, não
+no topo do módulo. __init__ roda uma ÚNICA VEZ por sessão do Revit (o
+painel é criado uma vez no registro, em startup.py — cliques
+subsequentes no botão da faixa de opções só mostram/escondem a MESMA
+instância via forms.get_dockable_panel, ver alternar_painel). Como cada
+engine IronPython reimporta este módulo do zero a cada clique, import no
+topo do módulo pagaria esse custo pesado
+de novo TODA VEZ que o botão fosse clicado, mesmo quando o clique é só
+pra esconder o painel — daí esses imports serem lazy.
 """
 
 import os
-
-import clr
-
-_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
-_WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
-
-# Precisa rodar ANTES de qualquer AddReference/uso do WebView2: o
-# Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
-# WebView2Loader.dll (nativo) sem caminho absoluto — carregar só o
-# assembly gerenciado via AddReferenceToFileAndPath não é suficiente pro
-# Windows achar a DLL nativa correspondente.
-os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
-
-clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Core.dll"))
-clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Wpf.dll"))
-
-clr.AddReference(u"System")
-clr.AddReference(u"PresentationFramework")
-clr.AddReference(u"PresentationCore")
-clr.AddReference(u"WindowsBase")
-
-import System
-import System.Threading
-import System.Windows.Threading
-from System import Uri, Environment as DotNetEnvironment
-
-from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
 
 from pyrevit import forms
 from pyrevit.coreutils.logger import get_logger
 
 from family_loader_events import criar_fila_acoes
-from family_webview_bridge import processar_mensagem_webview
 from family_error_utils import texto_erro, print_seguro
 
 _mlogger = get_logger(__name__)
 
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_WEBVIEW2_RUNTIME_DIR = os.path.join(_LIB_DIR, u"webview2_runtime")
+
 _XAML_PATH = os.path.join(_LIB_DIR, u"family_loader_webview.xaml")
 
-# Fire Utils.tab/lib/ -> Fire Utils.tab/ -> raiz da extensão -> webapp/dist/
-# (webapp/ fica fora de "Fire Utils.tab", na raiz do repositório).
+# Fire Utils.tab/lib/ -> Fire Utils.tab/ -> raiz da extensão.
 _EXT_ROOT = os.path.dirname(os.path.dirname(_LIB_DIR))
-_WEBAPP_DIST_DIR = os.path.join(_EXT_ROOT, u"webapp", u"dist")
 
-_VIRTUAL_HOST = u"appassets"
-
-# Pasta gravável onde o WebView2 guarda seu profile (cache, cookies) — sem
-# isso, ele tenta criar essa pasta ao lado do Revit.exe (dentro de
-# "Program Files") e falha por falta de permissão de escrita.
-_USER_DATA_FOLDER = os.path.join(
-    DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
-    u"FireUtils", u"WebView2UserData",
-)
+# A interface da dockpane é servida pela web, não empacotada com a extensão:
+# publicar uma correção é um deploy, sem instalador novo, e todo mundo roda a
+# mesma versão. Sem conexão o painel não abre — o acervo de famílias também
+# vive no Supabase, então não haveria o que mostrar de qualquer forma.
+_ARQUIVO_CONFIG = os.path.join(_EXT_ROOT, u"fireutils.config.json")
+_CHAVE_URL = u"webappUrl"
 
 
-def _valor_enum_allow(core):
+def _url_aceita(url):
     """
-    Resolve o valor "Allow" do enum CoreWebView2HostResourceAccessKind a
-    partir do tipo que o próprio método SetVirtualHostNameToFolderMapping
-    de `core` espera (via reflection), em vez de um import estático de
-    nível de módulo.
+    Exige https, com exceção de localhost.
 
-    O pyRevit roda o startup.py (que registra/instancia o painel) e o
-    script.py do botão (que só localiza essa instância já existente) em
-    engines IronPython separados; cada engine reimporta este módulo do
-    zero e refaz os clr.AddReferenceToFileAndPath, o que pode carregar
-    duas cópias distintas do assembly Microsoft.Web.WebView2.Core.dll no
-    mesmo processo. Um import estático do enum aqui pode acabar vindo de
-    uma cópia diferente da que o `core` em mãos realmente espera — mesmo
-    nome de tipo, mas identidades .NET diferentes — causando
-    "expected CoreWebView2HostResourceAccessKind, got
-    CoreWebView2HostResourceAccessKind". Resolver via reflection a partir
-    do método do objeto que já temos em mãos garante que é sempre a
-    cópia certa.
+    Sem TLS, o bridge (que carrega família e grava no documento do Revit)
+    ficaria exposto a quem estivesse na mesma rede. localhost não trafega
+    em rede nenhuma — só a própria máquina serve nesse endereço —, e é o
+    que permite apontar o Revit para o `npm run dev` do Vite. É a mesma
+    exceção que os navegadores fazem ao tratar localhost como origem
+    segura em HTTP.
     """
-    metodo = core.GetType().GetMethod(u"SetVirtualHostNameToFolderMapping")
-    tipo_enum = metodo.GetParameters()[2].ParameterType
-    return System.Enum.Parse(tipo_enum, u"Allow")
+    baixa = url.lower()
+    return (
+        baixa.startswith(u"https://")
+        or baixa.startswith(u"http://localhost")
+        or baixa.startswith(u"http://127.0.0.1")
+    )
+
+
+def _url_do_frontend():
+    """URL da interface, ou None se não houver uma utilizável."""
+    if not os.path.isfile(_ARQUIVO_CONFIG):
+        _mlogger.error(u"Arquivo de configuração não encontrado: {}".format(_ARQUIVO_CONFIG))
+        return None
+
+    try:
+        import json
+        with open(_ARQUIVO_CONFIG, u"rb") as arquivo:
+            dados = json.loads(arquivo.read().decode(u"utf-8"))
+        url = dados.get(_CHAVE_URL)
+    except Exception as ex:
+        _mlogger.error(u"Falha ao ler {}: {}".format(_ARQUIVO_CONFIG, texto_erro(ex)))
+        return None
+
+    url = (url or u"").strip()
+    if not url:
+        _mlogger.error(u"'{}' ausente ou vazio em {}".format(_CHAVE_URL, _ARQUIVO_CONFIG))
+        return None
+
+    if not _url_aceita(url):
+        _mlogger.error(
+            u"URL recusada (só https, ou http em localhost): {}".format(url)
+        )
+        return None
+
+    return url
+
+
+def _origem_de(url):
+    """
+    scheme://host:porta de uma URL, para comparar origens. Devolve None se
+    a URL for inválida.
+    """
+    try:
+        from System import Uri
+        uri = Uri(url)
+        return u"{}://{}:{}".format(uri.Scheme.lower(), uri.Host.lower(), uri.Port)
+    except Exception:
+        return None
 
 
 def _string_para_unicode_seguro(valor):
@@ -256,22 +277,86 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
     panel_title = u"FireUtils"
 
     def __init__(self):
+        # Carregado aqui (lazy, não no topo do módulo) — __init__ roda uma
+        # ÚNICA VEZ por sessão do Revit (ver docstring do módulo), então
+        # não há custo repetido em cliques subsequentes no botão.
+        #
+        # CRÍTICO: isto precisa rodar ANTES de forms.WPFPanel.__init__(self)
+        # logo abaixo — é esse __init__ da classe-base que carrega o XAML
+        # (family_loader_webview.xaml), e o XAML referencia
+        # Microsoft.Web.WebView2.Wpf por conta própria
+        # (`assembly=Microsoft.Web.WebView2.Wpf`), resolvido pelo binder
+        # padrão do .NET assim que o elemento <wv2:WebView2> é parseado.
+        # Se os assemblies do WebView2 ainda não tiverem sido carregados
+        # explicitamente a partir daqui (webview2_runtime/) nesse momento,
+        # o binder resolve esse nome por conta própria — e o
+        # clr.AddReferenceToFileAndPath logo abaixo acaba carregando uma
+        # SEGUNDA cópia/identidade do mesmo assembly pro lado do Python.
+        # Resultado: self.WebView (construído pelo XAML, 1ª cópia) e
+        # CoreWebView2CreationProperties (Python, 2ª cópia) são tipos
+        # .NET diferentes com o mesmo nome — e
+        # `self.WebView.CreationProperties = propriedades` mais abaixo
+        # falha com "TypeError: expected CoreWebView2CreationProperties,
+        # got CoreWebView2CreationProperties" (mesmo texto dos dois
+        # lados, tipos diferentes por baixo).
+        import clr
+        os.environ[u"PATH"] = _WEBVIEW2_RUNTIME_DIR + os.pathsep + os.environ.get(u"PATH", u"")
+        # Precisa rodar ANTES de qualquer AddReference/uso do WebView2: o
+        # Microsoft.Web.WebView2.Core.dll (gerenciado) faz P/Invoke pro
+        # WebView2Loader.dll (nativo) sem caminho absoluto — carregar só o
+        # assembly gerenciado via AddReferenceToFileAndPath não é
+        # suficiente pro Windows achar a DLL nativa correspondente (daí o
+        # PATH acima, antes destas duas linhas).
+        clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Core.dll"))
+        clr.AddReferenceToFileAndPath(os.path.join(_WEBVIEW2_RUNTIME_DIR, u"Microsoft.Web.WebView2.Wpf.dll"))
+        clr.AddReference(u"System")
+        clr.AddReference(u"PresentationFramework")
+        clr.AddReference(u"PresentationCore")
+        clr.AddReference(u"WindowsBase")
+
+        import System
+        import System.Threading
+        import System.Windows.Threading
+        from System import Environment as DotNetEnvironment
+        from Microsoft.Web.WebView2.Wpf import CoreWebView2CreationProperties
+
         forms.WPFPanel.__init__(self)
 
         self.fila_acoes = criar_fila_acoes()
 
-        if not os.path.isdir(_WEBAPP_DIST_DIR):
+        # Definidos antes do _erro_fatal abaixo: se não houver URL, o
+        # __init__ retorna cedo e estes atributos precisam existir mesmo
+        # assim, senão qualquer evento que chegue depois quebra com
+        # AttributeError em vez da mensagem de erro de verdade.
+        self._url_frontend = _url_do_frontend()
+
+        # O bridge só aceita mensagem vinda da origem que está carregada.
+        self._origens_confiaveis = set()
+        if self._url_frontend:
+            origem = _origem_de(self._url_frontend)
+            if origem:
+                self._origens_confiaveis.add(origem)
+
+        if not self._url_frontend:
             self._erro_fatal(
-                u"Build do frontend não encontrado em:\n{}\n\n"
-                u"Rode `npm install && npm run build` dentro de webapp/.".format(_WEBAPP_DIST_DIR)
+                u"Configuração da interface ausente ou inválida.\n\n"
+                u"Verifique a chave '{}' em:\n{}".format(_CHAVE_URL, _ARQUIVO_CONFIG)
             )
             return  # painel abre em branco — sem WebView configurado
 
-        if not os.path.isdir(_USER_DATA_FOLDER):
-            os.makedirs(_USER_DATA_FOLDER)
+        # Pasta gravável onde o WebView2 guarda seu profile (cache,
+        # cookies) — sem isso, ele tenta criar essa pasta ao lado do
+        # Revit.exe (dentro de "Program Files") e falha por falta de
+        # permissão de escrita.
+        user_data_folder = os.path.join(
+            DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.LocalApplicationData),
+            u"FireUtils", u"WebView2UserData",
+        )
+        if not os.path.isdir(user_data_folder):
+            os.makedirs(user_data_folder)
 
         propriedades = CoreWebView2CreationProperties()
-        propriedades.UserDataFolder = _USER_DATA_FOLDER
+        propriedades.UserDataFolder = user_data_folder
         self.WebView.CreationProperties = propriedades
 
         # A thread de UI do Revit nunca instala um
@@ -326,18 +411,58 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             core.Settings.AreDefaultContextMenusEnabled = True
             core.Settings.AreDevToolsEnabled = True
 
-            core.SetVirtualHostNameToFolderMapping(
-                _VIRTUAL_HOST, _WEBAPP_DIST_DIR, _valor_enum_allow(core)
-            )
             core.WebMessageReceived += self._ao_receber_mensagem
             core.NavigationCompleted += self._ao_navegar
             core.NewWindowRequested += self._ao_pedir_nova_janela
 
-            self.WebView.Source = Uri(u"https://{}/index.html".format(_VIRTUAL_HOST))
+            from System import Uri
+            _mlogger.info(u"Carregando a interface de {}".format(self._url_frontend))
+            self.WebView.Source = Uri(self._url_frontend)
         except Exception as ex:
             self._erro_fatal(u"Falha ao configurar o CoreWebView2 após inicializar: {}".format(texto_erro(ex)))
 
+    def _origem_confiavel(self, args):
+        """
+        Só processa mensagem vinda do build local ou da URL remota
+        configurada.
+
+        Esse canal manda o Python carregar família e gravar o firedata.json
+        do projeto, e o WebView2 o expõe a qualquer página que venha a
+        carregar — não só à nossa. Enquanto a página vinha de uma pasta do
+        disco isso era inofensivo; apontando para a web, uma navegação
+        inesperada passaria a conversar com o Revit.
+        """
+        try:
+            origem = _origem_de(args.Source)
+        except Exception:
+            origem = None
+
+        if origem is None:
+            # Sem conseguir identificar de onde veio, recusar é a única
+            # escolha defensável: a página chega pela rede.
+            _mlogger.warning(u"Mensagem do WebView2 recusada: origem não identificada.")
+            return False
+
+        if origem in self._origens_confiaveis:
+            return True
+
+        _mlogger.warning(
+            u"Mensagem do WebView2 recusada, origem não confiável: {}".format(origem)
+        )
+        return False
+
     def _ao_receber_mensagem(self, sender, args):
+        if not self._origem_confiavel(args):
+            return
+
+        # Import lazy (não no topo do módulo): puxa toda a cascata de
+        # módulos do bridge (family_loader, family_cache,
+        # project_link_bridge, hidrantes_*_bridge, niveis_bridge -> sync,
+        # projeto, normas, hidrantes.*, saidas.calc) — só precisa disso
+        # quando o React manda uma mensagem de verdade, não em todo clique
+        # no botão que só mostra/esconde o painel (ver docstring do
+        # módulo). sys.modules já cacheia depois da primeira mensagem.
+        from family_webview_bridge import processar_mensagem_webview
         processar_mensagem_webview(args.WebMessageAsJson, self.fila_acoes, self._postar_mensagem)
 
     def _postar_mensagem(self, tipo, payload):
@@ -395,6 +520,7 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
         sistema em vez disso."""
         args.Handled = True
         try:
+            import System
             info = System.Diagnostics.ProcessStartInfo(args.Uri)
             info.UseShellExecute = True
             System.Diagnostics.Process.Start(info)
@@ -402,14 +528,25 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             _mlogger.warning(u"Falha ao abrir link externo ({}): {}".format(args.Uri, texto_erro(ex)))
 
     def _ao_navegar(self, sender, args):
-        """Diagnóstico: se a navegação pro index.html falhar (ex.: caminho
-        errado no SetVirtualHostNameToFolderMapping, dist/ incompleto),
-        args.IsSuccess vem False com o motivo em WebErrorStatus — sem isso,
-        o painel só ficaria em branco, sem nenhuma pista do porquê."""
-        if not args.IsSuccess:
-            self._erro_fatal(
-                u"Falha ao carregar a página do Carregador de Famílias: {}".format(args.WebErrorStatus)
-            )
+        """Se a navegação falhar (sem rede, DNS, servidor fora do ar, URL
+        errada), args.IsSuccess vem False com o motivo em WebErrorStatus —
+        sem isso, o painel só ficaria em branco, sem nenhuma pista do porquê.
+
+        O Carregador de Famílias é online por definição: a interface vem do
+        servidor e o acervo de famílias vive no Supabase. Sem conexão não há
+        o que mostrar, então a falha vira uma mensagem explicando isso, em
+        vez de um painel em branco."""
+        if args.IsSuccess:
+            return
+
+        _mlogger.warning(
+            u"Falha ao carregar {}: {}".format(self._url_frontend, args.WebErrorStatus)
+        )
+        self._erro_fatal(
+            u"O Carregador de Famílias precisa de conexão com a internet.\n\n"
+            u"Verifique sua conexão e abra o painel novamente.\n\n"
+            u"(detalhe técnico: {})".format(args.WebErrorStatus)
+        )
 
 
 # ---------------------------------------------------------------------------

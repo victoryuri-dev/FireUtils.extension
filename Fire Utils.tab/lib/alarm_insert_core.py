@@ -235,7 +235,8 @@ def inserir_alarmes(doc, uidoc, output):
                 output.print_md(u"| {} | **falhou** — `{}` |".format(aid, str(e)))
                 erros += 1
 
-    output.print_md(
-        u"**Conjuntos inseridos:** {} | **Pulados (já existem):** {} | **Erros:** {}".format(
-            inseridos, pulados, erros)
+    forms.alert(
+        u"Conjuntos inseridos: {}\nPulados (já existem): {}\nErros: {}".format(
+            inseridos, pulados, erros),
+        title=u"Fire Utils — Inserir Alarmes"
     )

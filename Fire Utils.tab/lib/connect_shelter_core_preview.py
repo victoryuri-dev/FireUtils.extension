@@ -10,6 +10,8 @@ Fluxo de cliques
 ----------------
   1. Selecionar o abrigo de referência
   2. Clicar no tubo de referência — corpo → Tê  |  ponta → joelhos em L
+     (ou no conector LIVRE de um fitting — joelho/tê/válvula — pra
+     conectar direto nele; ver connect_pipe._FiltroPipeRef)
   3. Janela WPF (connect_shelter_opcoes.xaml, classe _JanelaOpcoesAbrigo)
      pergunta:
        • lado do ramal (esquerda/direita da face do abrigo)
@@ -18,9 +20,9 @@ Fluxo de cliques
          Perpendicular ao eixo de pipe_ref) — livre, só com os eixos que
          realmente precisam de ajuste (ver connect_pipe._eixos_disponiveis)
      A cada troca de opção, válvula + stub + roteamento são reconstruídos
-     no modelo dentro de uma transação já aberta (revertida/refeita a cada
-     mudança) — nada é gravado de fato até o usuário confirmar em OK.
-     Cancelar ou fechar a janela reverte TUDO (inclusive a válvula e o
+     no modelo — cada troca roda sua própria transação, aberta e já
+     comitada no mesmo ciclo (ver docstring de _JanelaOpcoesAbrigo).
+     Cancelar ou fechar a janela desfaz TUDO (inclusive a válvula e o
      stub, que antes desta versão ficavam aplicados no projeto mesmo se o
      usuário desistisse da conexão — só desfazendo manualmente).
      Se essa janela falhar por qualquer motivo, cai para forms.SelectFromList
@@ -67,16 +69,23 @@ except ImportError:
     from Autodesk.Revit.DB import DisplayUnitType
     def _to_ft(v): return UnitUtils.ConvertToInternalUnits(v, DisplayUnitType.DUT_METERS)
 
-from hydrant_family      import garantir_valvula
-from shelter_family      import NOME_FAMILIA_ABRIGO
-from hydrant_insert_core import (
+from hydrant_family import garantir_valvula
+from shelter_family  import NOME_FAMILIA_ABRIGO
+# De hydrant_shared (não de hydrant_insert_core) — este aqui é só com as
+# ~4 constantes e 3 funções realmente usadas por Conectar Abrigo, pra não
+# forçar o parse/execução do hydrant_insert_core.py inteiro (~1250 linhas,
+# a maior parte da função "Inserir Hidrante por Nível", sem relação com
+# este botão) a cada clique.
+from hydrant_shared import (
     ALTURA_VALVULA_M, COMP_HORIZ_M, DIAM_RAMAL_M, TOL,
     _angulo_entre, _conector_mais_proximo, _setar_diametro_ft,
 )
 from connect_pipe import (
-    _construir_conexao, _ConexaoError, _FiltroPipe, _pipe_params, TOL_SEG,
+    _construir_conexao, _ConexaoError, _FiltroPipeRef, _pipe_params, TOL_SEG,
     _eixos_necessarios, _preparar_alvo_nominal, _NOME_EIXO,
+    _iniciar_rastreamento, _parar_rastreamento, _rastrear, _OUTPUT_MUDO,
 )
+from family_loader_events import criar_fila_acoes
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"connect_shelter_opcoes.xaml")
@@ -188,10 +197,12 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
 
     tubo_stub = Pipe.Create(doc, sys_type_id, pipe_type_id, nivel.Id, pt_valvula, pt_stub_end)
     _setar_diametro_ft(tubo_stub, diam_ft)
+    _rastrear(tubo_stub)
 
     valvula = doc.Create.NewFamilyInstance(
         pt_valvula, simbolo, nivel, StructuralType.NonStructural
     )
+    _rastrear(valvula)
 
     # Rotação: + π porque dir_pipe aponta para a rede;
     # a face da válvula fica voltada para o lado do abrigo
@@ -238,13 +249,34 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
 # ===========================================================================
 
 class _JanelaOpcoesAbrigo(forms.WPFWindow):
-    """Janela WPF (connect_shelter_opcoes.xaml) com PRÉVIA AO VIVO: a cada
-    troca de opção (lado do ramal / onde conectar / ordem dos eixos),
-    válvula + stub + roteamento são reconstruídos no modelo dentro de uma
-    transação já aberta — revertida e refeita a cada mudança. Só é gravado
-    de fato (Commit) quando o usuário clica OK; Cancelar ou fechar a janela
-    reverte (RollBack) tudo o que foi mostrado na prévia, válvula e stub
-    incluídos.
+    """Janela WPF MODELESS (connect_shelter_opcoes.xaml) com PRÉVIA AO VIVO:
+    a cada troca de opção (lado do ramal / onde conectar / ordem dos
+    eixos), válvula + stub + roteamento são reconstruídos no modelo para o
+    usuário ver o resultado antes de confirmar.
+
+    Cada troca roda um ciclo completo (_ciclo_preview) que abre E FECHA
+    (Commit) sua PRÓPRIA transação — o Revit não permite deixar uma
+    transação "pendurada" entre uma troca de opção e a próxima (reclama de
+    "transação aberta mas não fechada" assim que o comando externo que a
+    abriu retorna), diferente de uma janela modal onde a mesma transação
+    podia ficar aberta do início ao fim. Por isso não existe mais
+    RollBack/Commit de uma transação única: cada ciclo primeiro DESFAZ
+    manualmente o que o ciclo anterior criou (válvula + stub + roteamento
+    — tudo criado do zero a cada ciclo, nunca pré-existente) e restaura a
+    curva original de pipe_ref (guardada no __init__, já que o Tê do modo
+    "corpo" quebra a curva em dois). "Cancelar" ou fechar sem confirmar
+    roda esse mesmo desfazer uma última vez; "OK" não precisa fazer nada
+    no documento — o que já está comitado da última prévia bem sucedida
+    já É o resultado final.
+
+    Por ser modeless (Show(), não ShowDialog() — ver conectar_abrigo_preview),
+    o Revit continua respondendo normalmente: dá pra orbitar, aproximar/
+    afastar e girar a câmera no modelo com a janela aberta. Em
+    compensação, qualquer clique nela acontece FORA do contexto de API
+    válido do Revit — toda ação que toca o documento (self.fila_acoes, de
+    family_loader_events.criar_fila_acoes) é enfileirada e executada assim
+    que o Revit libera o contexto via ExternalEvent, nunca chamada direto
+    do evento de clique.
 
     Ordem dos eixos: mesmo mecanismo de connect_pipe._JanelaOpcoesRota —
     até 3 trechos retos (z/par/perp), só os necessários aparecem como
@@ -271,9 +303,26 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
 
         self.confirmado        = False
         self._preview_ok       = False
-        self._transacao_ativa  = False
+        self._finalizado       = False
         self._sincronizando    = False
+        self._atualizacao_pendente = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
+        self._elementos_criados = set()
+        self.fila_acoes        = criar_fila_acoes()
+
+        # Estado original de pipe_ref (antes de qualquer prévia) — cada
+        # ciclo restaura isso antes de construir a prévia nova, já que o
+        # modo "corpo" quebra essa curva num Tê. pipe_ref pode ser um
+        # FITTING (joelho/tê/válvula com conector livre) em vez de outro
+        # Pipe — sem Location.Curve, e a prévia nunca mexe na geometria
+        # dele nesse caso, então não há nada pra guardar/restaurar.
+        if isinstance(pipe_ref, Pipe):
+            loc_ref = pipe_ref.Location.Curve
+            self._p0_ref_orig = loc_ref.GetEndPoint(0)
+            self._p1_ref_orig = loc_ref.GetEndPoint(1)
+        else:
+            self._p0_ref_orig = None
+            self._p1_ref_orig = None
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -281,47 +330,75 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         if clicou_ponta_exata:
             self.SecaoRef.Visibility = SW.Visibility.Collapsed
 
-        # Dispara on_opcao_changed (via evento Checked), mas nesse momento
-        # _transacao_ativa ainda é False, então _atualizar_preview só sai
-        # sem fazer nada — a prévia real só começa abaixo, após abrir a
-        # transação.
-        if clicou_ponta_exata:
-            self.RbRefPonta.IsChecked = True
-        else:
-            self.RbRefCorpo.IsChecked = True
-        self.RbLadoDireita.IsChecked  = True
-        self._sincronizar_ordem()
-
-        self._t = Transaction(doc, u"FireUtils - Conectar Abrigo")
-        self._t.Start()
-        self._transacao_ativa = True
+        # Marcado com _sincronizando=True: IsChecked dispara o evento
+        # Checked já aqui, de forma síncrona (mesmo com a janela ainda não
+        # exibida), e on_opcao_changed enfileiraria uma rodada extra de
+        # _ciclo_preview via ExternalEvent — redundante (a prévia real já
+        # roda logo abaixo, direto) e é a causa do aviso "ExternalEvent ...
+        # retornou 'Pending'" (um 2º/3º Raise() emendado no 1º antes do
+        # Revit sequer ter devolvido o contexto de API pro fim do
+        # __init__).
+        self._sincronizando = True
         try:
-            self._atualizar_preview()
-        except Exception:
-            # _atualizar_preview já trata os erros esperados internamente;
-            # isto é só uma rede de segurança pra nunca deixar a transação
-            # presa (sem RollBack) se algo inesperado escapar daqui, o que
-            # travaria o fallback (uma transação por vez no documento).
-            self._descartar()
-            raise
+            if clicou_ponta_exata:
+                self.RbRefPonta.IsChecked = True
+            else:
+                self.RbRefCorpo.IsChecked = True
+            self.RbLadoDireita.IsChecked = True
+        finally:
+            self._sincronizando = False
 
-    def _descartar(self):
-        if self._transacao_ativa:
+        # O 1º ciclo de prévia (Transaction + Regenerate + roteamento real)
+        # NÃO roda aqui mais — rodava antes de conectar_abrigo_preview()
+        # chamar Show(), então a janela só aparecia na tela depois do ciclo
+        # inteiro terminar (é esse tempo, com a janela ainda invisível, que
+        # o usuário reportou como "carrega muito antes de poder editar").
+        # Agora a janela é mostrada primeiro (com este texto de status) e
+        # só então vem o 1º _ciclo_preview() — ver _forcar_render().
+        self.TxtStatus.Text       = u"Carregando prévia…"
+        self.TxtStatus.Foreground = self.Resources[u"BrushLabel"]
+
+    def _desfazer_elementos_criados(self):
+        for eid in self._elementos_criados:
             try:
-                self._t.RollBack()
+                self.doc.Delete(eid)
             except Exception:
                 pass
-            self._transacao_ativa = False
+        self._elementos_criados = set()
 
-    def _restaurar_pristino(self):
-        """Desfaz a prévia do ciclo anterior sem construir uma nova ainda —
-        chamado antes de _sincronizar_ordem, que lê a geometria atual de
-        pipe_ref pra decidir quais eixos precisam de ajuste; sem isso, ela
-        leria pipe_ref ainda quebrado pelo Tê da prévia anterior (só
-        desfeito dentro de _atualizar_preview, chamado depois)."""
-        if self._transacao_ativa:
-            self._t.RollBack()
-            self._t.Start()
+    def _restaurar_curva_original(self):
+        if self._p0_ref_orig is None:
+            return
+        try:
+            self.pipe_ref.Location.Curve = Line.CreateBound(self._p0_ref_orig, self._p1_ref_orig)
+        except Exception:
+            pass
+
+    def _finalizar(self, confirmado):
+        """Fecha a prévia de vez: se confirmado, não mexe em nada — o que
+        já está comitado no documento (da última prévia bem sucedida) já É
+        o resultado final. Senão, desfaz tudo numa transação própria,
+        aberta e fechada aqui mesmo. Chamado tanto de dentro da fila de
+        ações (fechar a janela modeless) quanto direto, já num contexto de
+        API válido (ex.: __init__/conectar_abrigo_preview(), se algo falhar
+        antes da janela aparecer de verdade)."""
+        if confirmado:
+            return
+        t = Transaction(self.doc, u"FireUtils - Conectar Abrigo (descartar prévia)")
+        t.Start()
+        try:
+            self._desfazer_elementos_criados()
+            self._restaurar_curva_original()
+        finally:
+            # Sempre fecha a transação antes de sair daqui — nunca pode
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
+            try:
+                t.Commit()
+            except Exception:
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
 
     def _lado_atual(self):
         return u"esquerda" if self.RbLadoEsquerda.IsChecked else u"direita"
@@ -391,68 +468,127 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         finally:
             self._sincronizando = False
 
-    def _atualizar_preview(self):
-        """Descarta a prévia anterior e reconstrói válvula + stub + rota com
-        as opções atuais, dentro da mesma transação (ainda não confirmada)."""
-        if not self._transacao_ativa:
-            return
-        self._t.RollBack()
-        self._t.Start()
+    def _forcar_render(self):
+        """Processa a fila de mensagens do WPF até a prioridade Render.
+        Show() só AGENDA a exibição da janela — sem isto, ela só pintaria
+        de fato quando a UI thread ficasse ociosa de novo, ou seja, só
+        depois do 1º _ciclo_preview() (que roda na mesma thread e bloqueia
+        até terminar). Chamado por conectar_abrigo_preview() entre Show()
+        e o 1º ciclo, pra garantir que a janela (com "Carregando
+        prévia…") já apareça na tela antes do ciclo pesado começar."""
         try:
-            _construir_valvula_stub_e_rota(
-                self.doc, self.pipe_ref, self.pt_click_ref, self.simbolo,
-                self.pt_abrigo, self.nivel, self.dir_face,
-                self.pipe_type_id, self.sys_type_id, self.output,
-                lado=self._lado_atual(), ordem_eixos=self._ordem_pref,
-                modo_conexao_ref=self._modo_conexao_ref_atual(),
-            )
+            from System.Windows.Threading import DispatcherPriority
+            from System import Action
+            self.Dispatcher.Invoke(DispatcherPriority.Render, Action(lambda: None))
+        except Exception:
+            pass
+
+    def _ciclo_preview(self):
+        """Um ciclo completo de prévia, numa transação própria aberta E
+        fechada aqui mesmo (nunca deixada pendurada — ver docstring da
+        classe): desfaz o que o ciclo anterior criou/mudou, sincroniza as
+        opções de ordem disponíveis e reconstrói válvula + stub + rota com
+        as opções atuais. Em erro de validação/inesperado, desfaz de novo
+        (deixa o modelo em branco, sem a prévia) e mostra o aviso em
+        TxtStatus."""
+        t = Transaction(self.doc, u"FireUtils - Conectar Abrigo")
+        t.Start()
+        try:
+            self._desfazer_elementos_criados()
+            self._restaurar_curva_original()
             self.doc.Regenerate()
-            self._preview_ok = True
-            self.TxtStatus.Text       = u""
-            self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
-        except _ConexaoError as ex:
-            self.doc.Regenerate()
-            self._preview_ok = False
-            self.TxtStatus.Text       = u"{}".format(ex)
-            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
-        except Exception as ex:
-            self.doc.Regenerate()
-            self._preview_ok = False
-            self.TxtStatus.Text       = u"Erro na prévia: {}".format(ex)
-            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+            self._sincronizar_ordem()
+
+            _iniciar_rastreamento()
+            erro = None
+            try:
+                # _OUTPUT_MUDO (não self.output): ver docstring da classe,
+                # em connect_pipe.py — falhas pontuais de ciclos
+                # intermediários (ex.: o 1º, com as opções ainda no
+                # padrão) não devem acumular no console real entre uma
+                # troca de opção e outra. TxtStatus, logo abaixo, já
+                # reporta o resultado do ciclo atual.
+                _construir_valvula_stub_e_rota(
+                    self.doc, self.pipe_ref, self.pt_click_ref, self.simbolo,
+                    self.pt_abrigo, self.nivel, self.dir_face,
+                    self.pipe_type_id, self.sys_type_id, _OUTPUT_MUDO,
+                    lado=self._lado_atual(), ordem_eixos=self._ordem_pref,
+                    modo_conexao_ref=self._modo_conexao_ref_atual(),
+                )
+                self.doc.Regenerate()
+            except _ConexaoError as ex:
+                erro = u"{}".format(ex)
+            except Exception as ex:
+                erro = u"Erro na prévia: {}".format(ex)
+            self._elementos_criados = _parar_rastreamento()
+
+            if erro is not None:
+                self._desfazer_elementos_criados()
+                self._restaurar_curva_original()
+                self.doc.Regenerate()
+                self._preview_ok = False
+                self.TxtStatus.Text       = erro
+                self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+            else:
+                self._preview_ok = True
+                self.TxtStatus.Text       = u""
+                self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
+        finally:
+            # Sempre fecha a transação antes de sair daqui — nunca pode
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
+            try:
+                t.Commit()
+            except Exception:
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
         try:
             self.uidoc.RefreshActiveView()
         except Exception:
             pass
 
+    def _agendar_atualizacao(self):
+        """Pede pro Revit rodar _ciclo_preview assim que liberar o contexto
+        de API — toca o documento (transação), então não pode rodar direto
+        do evento de clique numa janela modeless.
+
+        Coalescido (ver docstring de _JanelaOpcoesRota._agendar_atualizacao,
+        em connect_pipe.py, mesma lógica): no máximo 1 ciclo enfileirado
+        por vez, pra não rodar vários ciclos completos em sequência quando
+        o usuário troca mais de uma opção antes do primeiro ser
+        processado — só o estado final importa."""
+        if self._atualizacao_pendente:
+            return
+        self._atualizacao_pendente = True
+
+        def _acao(uiapp):
+            self._atualizacao_pendente = False
+            self._ciclo_preview()
+        self.fila_acoes.enfileirar(_acao)
+
     def on_opcao_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_ordem1_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
         novo = self._ordem1_atual()
         if novo is not None:
             self._ordem_pref = [novo] + [e for e in self._ordem_pref if e != novo]
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_ordem2_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
         novo2 = self._ordem2_atual()
         if novo2 is not None and self._ordem_pref:
             primeiro = self._ordem_pref[0]
             self._ordem_pref = ([primeiro, novo2] +
                                  [e for e in self._ordem_pref if e not in (primeiro, novo2)])
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_cancel(self, sender, args):
         self.Close()
@@ -467,19 +603,20 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self.Close()
 
     def on_closing(self, sender, args):
-        """Sempre finaliza a transação da prévia ao fechar — confirma (Commit)
-        só se o usuário clicou OK; qualquer outro fechamento reverte tudo,
-        válvula e stub incluídos."""
-        if not self._transacao_ativa:
+        """Sempre finaliza a prévia ao fechar — mantém o resultado comitado
+        só se o usuário clicou OK; qualquer outro fechamento desfaz tudo,
+        válvula e stub incluídos. Fechar a janela em si (Close/Hide) é só
+        WPF, não precisa de contexto de API — mas desfazer toca o
+        documento, então vai pra fila de ações em vez de rodar direto aqui."""
+        if self._finalizado:
             return
-        if self.confirmado:
-            try:
-                self._t.Commit()
-            except Exception:
-                pass
-            self._transacao_ativa = False
-        else:
-            self._descartar()
+        self._finalizado = True
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
+        confirmado = self.confirmado
+
+        def _acao(uiapp):
+            self._finalizar(confirmado)
+        self.fila_acoes.enfileirar(_acao)
 
 
 def _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face,
@@ -549,7 +686,22 @@ def _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel, d
 # PONTO DE ENTRADA
 # ===========================================================================
 
+_CHAVE_JANELA_ATIVA = u"FireUtils_ConectarAbrigo_JanelaAtiva"
+
+
 def conectar_abrigo_preview(doc, uidoc, output):
+    # Janela de prévia é modeless (Show, não ShowDialog) — nada impede o
+    # usuário de chamar o comando de novo com a anterior ainda aberta; como
+    # o Revit só permite uma transação aberta por documento, uma segunda
+    # instância pisaria na transação da primeira. Só traz a existente pra
+    # frente em vez de abrir outra.
+    janela_ativa = pyscript.get_envvar(_CHAVE_JANELA_ATIVA)
+    if janela_ativa is not None:
+        try:
+            janela_ativa.Activate()
+            return
+        except Exception:
+            pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
 
     # ── Família da válvula ───────────────────────────────────────────────
     simbolo, erro = garantir_valvula(doc)
@@ -587,11 +739,12 @@ def conectar_abrigo_preview(doc, uidoc, output):
     except Exception:
         dir_face = XYZ(0.0, 1.0, 0.0)
 
-    # ── Clique 2: tubo de referência ─────────────────────────────────────
+    # ── Clique 2: tubo de referência (ou conector livre de um fitting) ────
     try:
         ref_p        = uidoc.Selection.PickObject(
-            ObjectType.PointOnElement, _FiltroPipe(doc),
-            u"[2/2] Clique no tubo de referência — corpo para Tê, ponta para joelho"
+            ObjectType.PointOnElement, _FiltroPipeRef(doc),
+            u"[2/2] Clique no tubo de referência (corpo para Tê, ponta "
+            u"para joelho) ou no conector livre de um joelho/tê/válvula"
         )
         pipe_ref     = doc.GetElement(ref_p.ElementId)
         pt_click_ref = ref_p.GlobalPoint
@@ -601,31 +754,49 @@ def conectar_abrigo_preview(doc, uidoc, output):
     # Tipo e sistema de tubulação SEMPRE herdados do tubo de referência
     pipe_type_id, sys_type_id, _, _ = _pipe_params(doc, pipe_ref)
 
-    # Clique caiu exatamente numa ponta de pipe_ref? Se sim, a resposta pra
-    # "onde conectar no tubo de referência?" já é óbvia — pula a pergunta.
-    clicou_ponta_exata = False
-    if pt_click_ref is not None:
-        loc_ref_click = pipe_ref.Location.Curve
-        pt_a_click = loc_ref_click.GetEndPoint(0)
-        pt_b_click = loc_ref_click.GetEndPoint(1)
-        clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
-                               pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
+    # Clique caiu exatamente numa ponta de pipe_ref (ou pipe_ref é um
+    # FITTING, que só tem o modo "ponta")? Se sim, a resposta pra "onde
+    # conectar no tubo de referência?" já é óbvia — pula a pergunta.
+    if not isinstance(pipe_ref, Pipe):
+        clicou_ponta_exata = True
+    else:
+        clicou_ponta_exata = False
+        if pt_click_ref is not None:
+            loc_ref_click = pipe_ref.Location.Curve
+            pt_a_click = loc_ref_click.GetEndPoint(0)
+            pt_b_click = loc_ref_click.GetEndPoint(1)
+            clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
+                                   pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
 
     # ── Preferências (lado + altura), com prévia ao vivo no modelo ─────────
+    # Show() (modeless), não ShowDialog() — deixa o Revit responder
+    # normalmente (orbitar/zoom/pan) com a janela aberta. Ver docstring de
+    # _JanelaOpcoesAbrigo sobre como isso afeta o toque no documento.
     janela = None
     try:
         janela = _JanelaOpcoesAbrigo(doc, uidoc, pipe_ref, pt_click_ref, simbolo,
                                       pt_abrigo, nivel, dir_face,
                                       pipe_type_id, sys_type_id, output,
                                       clicou_ponta_exata=clicou_ponta_exata)
-        janela.ShowDialog()
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, janela)
+        janela.Show()
+        # Força a janela a aparecer na tela (com "Carregando prévia…")
+        # ANTES do 1º ciclo de prévia — que é síncrono e só devolve a
+        # thread de UI depois de terminar (ver docstring de
+        # _forcar_render). Continua dentro do mesmo contexto de API
+        # válido desta chamada, então pode chamar _ciclo_preview() direto
+        # (sem passar pela fila de ações, usada só pelos ciclos depois
+        # que a janela já está aberta e o comando original já retornou).
+        janela._forcar_render()
+        janela._ciclo_preview()
         return
     except Exception as ex:
         # Se falhar depois da janela já ter aberto, garante que a
         # transação da prévia não fique presa — senão o fallback abaixo
         # não conseguiria abrir a dele (só uma transação por vez).
         if janela is not None:
-            janela._descartar()
+            janela._finalizar(False)
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
         print(u"[AVISO] Formulário WPF de Conectar Abrigo falhou ({}), "
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 

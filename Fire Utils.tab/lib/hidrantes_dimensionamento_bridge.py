@@ -123,3 +123,28 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
         u"dimensionamento": cache,
         u"erroDimensionamento": None if cache else erro_cache,
     })
+
+
+def tratar_selecionar_trecho_hidrante(uiapp, payload):
+    """
+    Processa SELECIONAR_TRECHO_HIDRANTE: botão "Localizar" da tabela
+    "Verificação do Hidrante Mais Desfavorável" na dockpane (ver
+    HidrantesDimensionamento.jsx) — seleciona e enquadra, na view ativa do
+    Revit, todo o trecho (Bomba -> válvula) daquele hidrante.
+    `payload["rota"]` é a lista de ElementId (int) de um item de
+    `ranking_hidrantes` (gravada por "Mapear Trechos"/script.py, repassada
+    sem reduzir pelo cache de "Dimensionar Hidrantes" — ver
+    tratar_get_hidrantes_dimensionamento acima). Fire-and-forget: não manda
+    nada de volta pro React — sucesso já é visível no Revit, e
+    mostrar_no_revit mostra seu próprio alerta nativo em caso de falha
+    (mesmo padrão dos botões "Localizar"/"Mostrar no Projeto" das janelas
+    WPF do pushbutton "Mapear Trechos" — ver hidrantes/resultado_ui.py).
+    """
+    uidoc = uiapp.ActiveUIDocument
+    if uidoc is None:
+        return
+    ids = payload.get(u"rota") or []
+    if not ids:
+        return
+    from hidrantes.rede import mostrar_no_revit
+    mostrar_no_revit(uidoc, ids)

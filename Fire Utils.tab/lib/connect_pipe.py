@@ -8,10 +8,13 @@ Fluxo:
   Clique 2 — PIPE_REF (tubo referência): o CLIQUE só marca a posição no
              corpo (usada se o modo "corpo" for escolhido); corpo vs ponta
              não é mais adivinhado pela distância do clique — ver form abaixo.
-  Form     — janela WPF (connect_pipe_opcoes.xaml, classe _JanelaOpcoesRota)
-             reúne as preferências de rota E mostra PRÉVIA AO VIVO no
-             modelo a cada mudança de opção (dentro de uma transação aberta,
-             revertida/refeita a cada troca — só grava de fato no OK):
+  Form     — janela WPF MODELESS (connect_pipe_opcoes.xaml, classe
+             _JanelaOpcoesRota) — fica aberta sem travar o Revit, então dá
+             pra continuar orbitando/aproximando/afastando a câmera no
+             modelo com ela aberta. Reúne as preferências de rota E mostra
+             PRÉVIA AO VIVO no modelo a cada mudança de opção (cada troca
+             roda sua própria transação, aberta e já comitada no mesmo
+             ciclo — ver docstring de _JanelaOpcoesRota):
              • onde conectar em pipe_ref: ponto clicado no corpo (Tê,
                padrão) ou ponta livre — se houver (ver modo_conexao_ref em
                _construir_conexao)
@@ -19,9 +22,15 @@ Fluxo:
                e Perpendicular ao eixo de pipe_ref) — livre, escolhida pelo
                usuário; só os eixos que realmente precisam de ajuste
                aparecem como opção (ver ordem_eixos/_eixos_disponiveis)
-             Se essa janela falhar por qualquer motivo, cai para diálogos
-             forms.SelectFromList em sequência + fluxo sem prévia
-             (_escolher_opcoes_rota_fallback + _conectar).
+             Por ser modeless, qualquer clique na janela acontece fora do
+             contexto de API válido do Revit — toda ação que toca o
+             documento (atualizar a prévia, confirmar, descartar) é
+             despachada através de uma fila de ExternalEvent
+             (family_loader_events.criar_fila_acoes), nunca chamada direto
+             do clique. Se essa janela falhar por qualquer motivo, cai para
+             diálogos forms.SelectFromList em sequência + fluxo sem prévia
+             (_escolher_opcoes_rota_fallback + _conectar) — esse fallback
+             continua modal (sem prévia, sem navegação no modelo).
 
 Etapa 1 — Extensão direta:
   Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref
@@ -63,6 +72,14 @@ Etapa 2 — Roteamento genérico em até 3 trechos retos:
 Casos PIPE_REF (modo_conexao_ref):
   corpo  → Tê no ponto final da rota (BreakCurve)
   ponta  → joelho na ponta livre de pipe_ref
+
+PIPE_REF nem sempre é outro Pipe: o clique 2 também aceita um FITTING de
+MEP (joelho, tê, válvula etc.) que tenha algum conector LIVRE — ex.: um
+joelho com uma ponta solta. Nesse caso só o modo "ponta" existe (um
+fitting não tem corpo pra abrir Tê) e a conexão é feita direto nesse
+conector livre, como se fosse a ponta de um Pipe (ver _FiltroPipeRef,
+_conector_livre_mais_proximo e o branch "não é Pipe" em
+_preparar_alvo_nominal/_construir_conexao).
 """
 
 import os
@@ -81,11 +98,13 @@ import System.Windows as SW
 from Autodesk.Revit.DB import (
     Transaction, XYZ, Line, LocationCurve,
     BuiltInParameter, FilteredElementCollector,
-    ElementId, UnitUtils,
+    ElementId, UnitUtils, FamilyInstance,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
+
+from family_loader_events import criar_fila_acoes
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"connect_pipe_opcoes.xaml")
@@ -214,8 +233,21 @@ def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref):
     por sobreposição (que só é decidido depois, já com a ordem escolhida —
     ver o bloco de _ajustar_alvo_corpo_invertido em _construir_conexao).
     Retorna (P_final, d_ref). Propaga _ConexaoError se modo "ponta" e
-    nenhuma ponta de pipe_ref estiver livre.
+    nenhuma ponta de pipe_ref estiver livre, ou se pipe_ref for um
+    FITTING (joelho/tê/válvula) sem nenhum conector livre.
+
+    Se pipe_ref não for um Pipe (ex.: joelho com uma ponta solta), só
+    "ponta" faz sentido — não há corpo pra abrir Tê — e o alvo é o
+    conector livre mais próximo do clique, com d_ref = direção desse
+    conector (a direção que um tubo conectado ali seguiria).
     """
+    if not isinstance(pipe_ref, Pipe):
+        conn = _conector_livre_mais_proximo(pipe_ref, pt_click_ref)
+        if conn is None:
+            raise _ConexaoError(
+                u"O elemento de referência não tem nenhum conector livre para conectar.")
+        return conn.Origin, _conn_dir(conn)
+
     loc_ref = pipe_ref.Location.Curve
     pt_A    = loc_ref.GetEndPoint(0)
     pt_B    = loc_ref.GetEndPoint(1)
@@ -365,12 +397,116 @@ def _conn_nearest(pipe, pt):
     return best
 
 
+def _free_connectors(element):
+    """Conectores LIVRES (sem conexão) de element — Pipe ou FamilyInstance
+    de MEP (joelho, tê, válvula etc., via MEPModel.ConnectorManager)."""
+    try:
+        mgr = element.ConnectorManager
+    except AttributeError:
+        try:
+            mgr = element.MEPModel.ConnectorManager
+        except Exception:
+            return []
+    return [c for c in mgr.Connectors if not c.IsConnected]
+
+
+def _conector_livre_mais_proximo(element, pt_click):
+    """Conector livre de element mais próximo de pt_click (ou qualquer um,
+    se pt_click for None ou só houver um). None se não houver conector
+    livre — usado pra permitir conectar pipe_desc direto num conector
+    livre de um FITTING (ex.: joelho com uma ponta solta), não só na
+    ponta/corpo de outro Pipe."""
+    livres = _free_connectors(element)
+    if not livres:
+        return None
+    if pt_click is None:
+        return livres[0]
+    return min(livres, key=lambda c: c.Origin.DistanceTo(pt_click))
+
+
+def _achar_pipe_conectado(elemento, max_profundidade=6):
+    """
+    Busca em largura, pela rede de CONEXÕES (conectores já conectados) de
+    `elemento`, o Pipe de verdade mais próximo — atravessando outros
+    fittings (joelhos, tês, válvulas) no caminho, se precisar (ex.:
+    joelho -> joelho -> Pipe). Usado quando pipe_ref é um FITTING sem
+    Pipe próprio (conectado por um conector livre, não outro Pipe): sem
+    isso, o tubo/roteamento criado herdaria um PipeType/PipingSystemType
+    arbitrário (o 1º do projeto, sem relação nenhuma com o sistema de
+    verdade — ver _pipe_params) em vez do tipo que o sistema realmente
+    está usando ali.
+
+    Retorna o elemento Pipe encontrado, ou None se nenhum Pipe estiver
+    acessível dentro de max_profundidade saltos (ex.: fitting
+    completamente isolado, sem nada conectado).
+    """
+    # ElementId em si (não .IntegerValue/.Value) como chave de set/dict —
+    # funciona em qualquer versão do Revit (.IntegerValue foi removido no
+    # Revit 2024+, substituído por .Value; ElementId já implementa
+    # Equals/GetHashCode corretamente, então comparar o objeto direto
+    # evita depender de qual das duas propriedades existe nesta versão).
+    visitados = set([elemento.Id])
+    fila = [(elemento, 0)]
+    while fila:
+        atual, profundidade = fila.pop(0)
+        if profundidade >= max_profundidade:
+            continue
+        try:
+            mgr = atual.ConnectorManager
+        except AttributeError:
+            try:
+                mgr = atual.MEPModel.ConnectorManager
+            except Exception:
+                continue
+        for c in mgr.Connectors:
+            if not c.IsConnected:
+                continue
+            try:
+                refs = c.AllRefs
+            except Exception:
+                continue
+            for c_outro in refs:
+                vizinho = c_outro.Owner
+                if vizinho is None or vizinho.Id in visitados:
+                    continue
+                visitados.add(vizinho.Id)
+                if isinstance(vizinho, Pipe):
+                    return vizinho
+                fila.append((vizinho, profundidade + 1))
+    return None
+
+
 def _pipe_params(doc, pipe):
     """Retorna (pipe_type_id, sys_type_id, level_id, diam_ft) herdados de pipe."""
+    from Autodesk.Revit.DB.Plumbing import PipeType
+
+    if not isinstance(pipe, Pipe):
+        # pipe pode ser um FITTING (joelho/tê/válvula) sem PipeType
+        # próprio — ex.: pipe_ref conectado por um conector livre, não
+        # um Pipe de verdade (ver _FiltroPipeRef). Em vez de cair direto
+        # no fallback arbitrário abaixo (1º PipeType do projeto), caça
+        # primeiro um Pipe de verdade já conectado à rede desse fitting
+        # e herda TUDO dele (tipo, sistema, nível, diâmetro) — é o tipo
+        # que o sistema de tubulação REAL está usando ali, não um tipo
+        # qualquer sem relação nenhuma com o sistema.
+        pipe_conectado = _achar_pipe_conectado(pipe)
+        if pipe_conectado is not None:
+            return _pipe_params(doc, pipe_conectado)
+
     pipe_type_id = pipe.GetTypeId()
+    # GetTypeId() nunca é "Invalid" pra um FamilyInstance (ex.: pipe é um
+    # fitting — pipe_ref conectado por um conector livre, não um Pipe de
+    # verdade) — só que o tipo que ele devolve é o da família do fitting
+    # (ex.: "Joelho - Genérico 90°"), não um PipeType de verdade. Usar
+    # esse Id direto em Pipe.Create derruba com "pipeTypeId is not valid
+    # pipe type" — por isso confirma o TIPO do elemento resolvido, não só
+    # se o Id é válido, antes de aceitar pipe_type_id como está.
+    tipo_el = doc.GetElement(pipe_type_id) if pipe_type_id != ElementId.InvalidElementId else None
+    if not isinstance(tipo_el, PipeType):
+        pipe_type_id = ElementId.InvalidElementId
+
     if pipe_type_id == ElementId.InvalidElementId:
         try:
-            from Autodesk.Revit.DB.Plumbing import PipeType
             ts = FilteredElementCollector(doc).OfClass(PipeType).ToElements()
             if ts:
                 pipe_type_id = ts[0].Id
@@ -396,6 +532,14 @@ def _pipe_params(doc, pipe):
         level_id = pipe.ReferenceLevel.Id
     except Exception:
         level_id = ElementId.InvalidElementId
+    if level_id == ElementId.InvalidElementId:
+        # Fallback pra elementos sem ReferenceLevel (ex.: FamilyInstance de
+        # fitting, quando pipe_ref é um conector livre de joelho/tê em vez
+        # de outro Pipe) — LevelId existe em FamilyInstance normalmente.
+        try:
+            level_id = pipe.LevelId
+        except Exception:
+            pass
 
     diam_ft = _to_ft(0.065)
     for bip in [BuiltInParameter.RBS_PIPE_DIAMETER_PARAM,
@@ -427,13 +571,15 @@ def _mk_pipe(doc, pa, pb, pt_id, sys_id, lvl_id, diam_ft):
     """Cria tubo de pa a pb e aplica diâmetro."""
     novo = Pipe.Create(doc, sys_id, pt_id, lvl_id, pa, pb)
     _set_diam(novo, diam_ft)
+    _rastrear(novo)
     return novo
 
 
 def _elbow(doc, c1, c2):
     """Cria joelho entre c1 e c2. Falha silenciosa."""
     try:
-        doc.Create.NewElbowFitting(c1, c2)
+        fitting = doc.Create.NewElbowFitting(c1, c2)
+        _rastrear(fitting)
         return True
     except Exception:
         return False
@@ -491,8 +637,23 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
 
     Retorna True se mesclou (quem chamou não deve mais tentar
     joelho/ConnectTo — já está tudo resolvido aqui). False se não são
-    colineares (ou é pipe_desc/pipe_ref) — segue o fluxo normal (joelho/Tê).
+    colineares (ou é pipe_desc/pipe_ref), OU se algo inesperado falhar no
+    meio do processo — segue o fluxo normal (joelho/Tê) nos dois casos.
+
+    pipe_last (o "último tubo da rota", dono de conn_final) pode ainda
+    estar FLUTUANDO/desconectado do resto da rota já construída quando
+    isto roda — os joelhos de elbows_pend só são criados DEPOIS, no loop
+    final de _construir_conexao (ver seu docstring) — então, se o eixo
+    "par" (colinear com pipe_ref por definição) não for a 1ª perna
+    construída, pipe_last pode ter 0 ou 1 conexões reais além de
+    conn_final. Por segurança (não travar a prévia inteira por causa só
+    desta otimização), qualquer exceção aqui desfaz a extensão de
+    pipe_ref já aplicada e cai pro joelho normal, em vez de propagar.
     """
+    if not isinstance(pipe_ref, Pipe):
+        # Fitting (joelho/tê/válvula) não é "esticável" — não tem
+        # Location.Curve pra estender. Segue pro joelho normal.
+        return False
     d1, d2 = _conn_dir(c_ref_end), _conn_dir(conn_final)
     if d1 is None or d2 is None or d1.DotProduct(d2) >= -0.999:
         return False
@@ -501,31 +662,41 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
     if pipe_last.Id == pipe_ref.Id or pipe_last.Id == pipe_desc.Id:
         return False  # segurança: nunca mesclar pipe_ref/pipe_desc apagando-os
 
-    # Conector do outro lado de pipe_last — o que segue pro resto da rota
-    # já construída (None se pipe_last só tiver o próprio conn_final, ex.:
-    # tubo degenerado/sem outra ponta).
-    conn_outro = None
-    for c in pipe_last.ConnectorManager.Connectors:
-        if c.Origin.DistanceTo(conn_final.Origin) > TOL:
-            conn_outro = c
-            break
+    curva_ref_antes = pipe_ref.Location.Curve
+    try:
+        # Conector do outro lado de pipe_last — o que segue pro resto da
+        # rota já construída (None se pipe_last só tiver o próprio
+        # conn_final, ex.: tubo degenerado/sem outra ponta).
+        conn_outro = None
+        for c in pipe_last.ConnectorManager.Connectors:
+            if c.Origin.DistanceTo(conn_final.Origin) > TOL:
+                conn_outro = c
+                break
 
-    p_ref_fixo = _extremo_oposto(pipe_ref.Location.Curve, c_ref_end.Origin)
-    alvo = conn_outro.Origin if conn_outro is not None else conn_final.Origin
-    pipe_ref.Location.Curve = Line.CreateBound(p_ref_fixo, alvo)
-    doc.Regenerate()
+        p_ref_fixo = _extremo_oposto(pipe_ref.Location.Curve, c_ref_end.Origin)
+        alvo = conn_outro.Origin if conn_outro is not None else conn_final.Origin
+        pipe_ref.Location.Curve = Line.CreateBound(p_ref_fixo, alvo)
+        doc.Regenerate()
 
-    if conn_outro is not None:
-        novo_conn = _conn_near(pipe_ref, alvo)
-        if novo_conn is not None:
-            for i, (pc1, pc2) in enumerate(elbows_pend):
-                nc1 = novo_conn if (pc1.Owner.Id == pipe_last.Id) else pc1
-                nc2 = novo_conn if (pc2.Owner.Id == pipe_last.Id) else pc2
-                if nc1 is not pc1 or nc2 is not pc2:
-                    elbows_pend[i] = (nc1, nc2)
+        if conn_outro is not None:
+            novo_conn = _conn_near(pipe_ref, alvo)
+            if novo_conn is not None:
+                for i, (pc1, pc2) in enumerate(elbows_pend):
+                    nc1 = novo_conn if (pc1.Owner.Id == pipe_last.Id) else pc1
+                    nc2 = novo_conn if (pc2.Owner.Id == pipe_last.Id) else pc2
+                    if nc1 is not pc1 or nc2 is not pc2:
+                        elbows_pend[i] = (nc1, nc2)
 
-    doc.Delete(pipe_last.Id)
-    return True
+        doc.Delete(pipe_last.Id)
+        _desrastrear(pipe_last.Id)
+        return True
+    except Exception:
+        try:
+            pipe_ref.Location.Curve = curva_ref_antes
+            doc.Regenerate()
+        except Exception:
+            pass
+        return False
 
 
 def _tee(doc, pipe_ref, P_target, conn_branch):
@@ -540,6 +711,7 @@ def _tee(doc, pipe_ref, P_target, conn_branch):
 
     new_id   = PlumbingUtils.BreakCurve(doc, pipe_ref.Id, P_target)
     pipe_sec = doc.GetElement(new_id)
+    _rastrear(pipe_sec)
     c_r1     = _conn_near(pipe_ref, P_target)
     c_r2     = _conn_near(pipe_sec,  P_target)
     if not (c_r1 and c_r2):
@@ -554,7 +726,8 @@ def _tee(doc, pipe_ref, P_target, conn_branch):
     run  = [conns[par[0]], conns[par[1]]]
     rest = [c for k, c in enumerate(conns) if k not in par]
     try:
-        doc.Create.NewTeeFitting(run[0], run[1], rest[0])
+        fitting = doc.Create.NewTeeFitting(run[0], run[1], rest[0])
+        _rastrear(fitting)
         return True
     except Exception:
         return False
@@ -595,17 +768,119 @@ class _FiltroPipe(ISelectionFilter):
             return True
 
 
+class _FiltroPipeRef(ISelectionFilter):
+    """Filtro do clique de referência (2º clique): tudo que _FiltroPipe já
+    aceita (Pipe, só perto da linha central) MAIS qualquer FamilyInstance
+    de MEP com pelo menos um conector LIVRE — um joelho, tê ou válvula com
+    uma ponta solta, por exemplo. Permite conectar o tubo desconectado
+    direto nesse conector, sem precisar que a referência seja
+    necessariamente outro Pipe. doc é obrigatório (precisa consultar o
+    elemento pra checar conectores livres)."""
+    def __init__(self, doc):
+        self.doc = doc
+
+    def AllowElement(self, e):
+        if isinstance(e, Pipe):
+            return True
+        if isinstance(e, FamilyInstance):
+            return bool(_free_connectors(e))
+        return False
+
+    def AllowReference(self, r, p):
+        el = self.doc.GetElement(r.ElementId)
+        if isinstance(el, Pipe):
+            try:
+                return el.Location.Curve.Project(p).Distance <= _TOL_LINHA_CENTRAL
+            except Exception:
+                return True
+        return True  # fitting: qualquer clique nele vale (sem linha central)
+
+
+# ── Rastreamento de elementos criados (prévia ao vivo) ───────────────────
+# A versão anterior descobria o que uma rodada de _construir_conexao criou
+# comparando TODOS os Pipe + FamilyInstance do documento inteiro (duas
+# varreduras via FilteredElementCollector) antes e depois de cada ciclo —
+# em qualquer projeto de porte real, isso é uma varredura cara repetida a
+# CADA troca de opção na janela de prévia ao vivo (Conectar Tubo/Abrigo),
+# não só uma vez ao abrir a ferramenta. Em vez disso, os próprios pontos
+# de criação (_mk_pipe, _elbow, _tee, e os equivalentes em
+# connect_shelter_core_preview) já registram o Id assim que criam,
+# enquanto o rastreamento está ativo — custo proporcional ao que ESTE
+# ciclo cria (poucos elementos), não ao tamanho do documento inteiro.
+_rastreador_ativo   = False
+_rastreador_criados = []
+
+
+def _iniciar_rastreamento():
+    """Chamado no início de um ciclo de prévia (_ciclo_preview) — zera e
+    liga o rastreamento antes de construir a conexão."""
+    global _rastreador_ativo, _rastreador_criados
+    _rastreador_ativo   = True
+    _rastreador_criados = []
+
+
+def _parar_rastreamento():
+    """Desliga o rastreamento e retorna o conjunto de Ids registrados
+    nesta rodada — chamado no fim de _ciclo_preview."""
+    global _rastreador_ativo
+    ids = set(_rastreador_criados)
+    _rastreador_ativo = False
+    return ids
+
+
+def _rastrear(elemento):
+    """Registra um elemento recém-criado, se o rastreamento estiver
+    ativo — fora de um ciclo de prévia (ex.: fluxo _conectar sem prévia,
+    que já controla sua própria transação do jeito tradicional) é um
+    no-op barato."""
+    if _rastreador_ativo and elemento is not None:
+        _rastreador_criados.append(elemento.Id)
+
+
+def _desrastrear(elemento_id):
+    """Remove um Id já registrado nesta rodada — usado quando um
+    elemento criado agora mesmo acaba sendo apagado antes do fim do
+    ciclo (ex.: _mesclar_colinear funde dois tubos num só, apagando um
+    deles)."""
+    if _rastreador_ativo:
+        try:
+            _rastreador_criados.remove(elemento_id)
+        except ValueError:
+            pass
+
+
 # ============================================================================
 # FORM — preferências de roteamento (altura + ordem dos eixos X/Y)
 # ============================================================================
 
 class _JanelaOpcoesRota(forms.WPFWindow):
-    """Janela WPF (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a cada troca
-    de opção (onde conectar / ordem dos eixos), o tubo é reconstruído no
-    modelo dentro de uma transação já aberta — revertida e refeita a cada
-    mudança — para o usuário ver o resultado antes de confirmar. Só é
-    gravado de fato (Commit) quando o usuário clica OK; Cancelar ou fechar
-    a janela reverte (RollBack) tudo o que foi mostrado na prévia.
+    """Janela WPF MODELESS (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a
+    cada troca de opção (onde conectar / ordem dos eixos), o tubo é
+    reconstruído no modelo para o usuário ver o resultado antes de
+    confirmar.
+
+    Cada troca roda um ciclo completo (_ciclo_preview) que abre E FECHA
+    (Commit) sua PRÓPRIA transação — o Revit não permite deixar uma
+    transação "pendurada" entre uma troca de opção e a próxima (reclama de
+    "transação aberta mas não fechada" assim que o comando externo que a
+    abriu retorna), diferente de uma janela modal onde a mesma transação
+    podia ficar aberta do início ao fim. Por isso não existe mais
+    RollBack/Commit de uma transação única: cada ciclo primeiro DESFAZ
+    manualmente o que o ciclo anterior criou/mudou (_elementos_criados +
+    curvas originais de pipe_desc/pipe_ref, guardadas no __init__) e só
+    depois constrói e já comita a prévia nova. "Cancelar" ou fechar sem
+    confirmar roda esse mesmo desfazer uma última vez; "OK" não precisa
+    fazer nada no documento — o que já está comitado da última prévia bem
+    sucedida já É o resultado final.
+
+    Por ser modeless (Show(), não ShowDialog() — ver run()), o Revit
+    continua respondendo normalmente: dá pra orbitar, aproximar/afastar e
+    girar a câmera no modelo com a janela aberta. Em compensação, qualquer
+    clique nela (mudar opção, OK, Cancelar) acontece FORA do contexto de
+    API válido do Revit — toda ação que toca o documento (self.fila_acoes,
+    de family_loader_events.criar_fila_acoes) é enfileirada e executada
+    assim que o Revit libera o contexto via ExternalEvent, nunca chamada
+    direto do evento de clique.
 
     Ordem dos eixos: até 3 trechos retos (z = vertical, par = paralelo ao
     eixo de pipe_ref, perp = perpendicular a ele) — só os que realmente
@@ -629,9 +904,30 @@ class _JanelaOpcoesRota(forms.WPFWindow):
 
         self.confirmado        = False
         self._preview_ok       = False
-        self._transacao_ativa  = False
+        self._finalizado       = False
         self._sincronizando    = False
+        self._atualizacao_pendente = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
+        self._elementos_criados = set()
+        self.fila_acoes        = criar_fila_acoes()
+
+        # Estado original de pipe_desc/pipe_ref (antes de qualquer prévia) —
+        # cada ciclo restaura isso antes de construir a prévia nova, já que
+        # _construir_conexao pode estender/quebrar essas curvas.
+        loc_desc = pipe_desc.Location.Curve
+        self._p0_desc_orig = loc_desc.GetEndPoint(0)
+        self._p1_desc_orig = loc_desc.GetEndPoint(1)
+        # pipe_ref pode ser um FITTING (joelho/tê/válvula com conector
+        # livre) em vez de outro Pipe — sem Location.Curve pra guardar; a
+        # prévia nunca mexe na geometria dele nesse caso (só cria
+        # elementos novos em volta), então não há nada pra restaurar.
+        if isinstance(pipe_ref, Pipe):
+            loc_ref = pipe_ref.Location.Curve
+            self._p0_ref_orig = loc_ref.GetEndPoint(0)
+            self._p1_ref_orig = loc_ref.GetEndPoint(1)
+        else:
+            self._p0_ref_orig = None
+            self._p1_ref_orig = None
 
         # Se o clique já caiu exatamente na ponta de pipe_ref, a resposta
         # já é óbvia (ponta) — esconde a pergunta e força a opção, em vez
@@ -639,46 +935,76 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         if clicou_ponta_exata:
             self.SecaoRef.Visibility = SW.Visibility.Collapsed
 
-        # Dispara on_opcao_changed (via evento Checked), mas nesse momento
-        # _transacao_ativa ainda é False, então _atualizar_preview só sai
-        # sem fazer nada — a prévia real só começa abaixo, após abrir a
-        # transação.
-        if clicou_ponta_exata:
-            self.RbRefPonta.IsChecked = True
-        else:
-            self.RbRefCorpo.IsChecked = True
-        self._sincronizar_ordem()
-
-        self._t = Transaction(doc, u"FireUtils - Conectar Tubo")
-        self._t.Start()
-        self._transacao_ativa = True
+        # Marcado com _sincronizando=True: IsChecked dispara o evento
+        # Checked já aqui, de forma síncrona (mesmo com a janela ainda não
+        # exibida), e on_opcao_changed enfileiraria uma rodada extra de
+        # _ciclo_preview via ExternalEvent — redundante (a prévia real já
+        # roda logo abaixo, direto) e é a causa do aviso "ExternalEvent ...
+        # retornou 'Pending'" (um 2º Raise() emendado no 1º antes do Revit
+        # sequer ter devolvido o contexto de API pro fim do __init__).
+        self._sincronizando = True
         try:
-            self._atualizar_preview()
-        except Exception:
-            # _atualizar_preview já trata os erros esperados internamente;
-            # isto é só uma rede de segurança pra nunca deixar a transação
-            # presa (sem RollBack) se algo inesperado escapar daqui, o que
-            # travaria o fallback (uma transação por vez no documento).
-            self._descartar()
-            raise
+            if clicou_ponta_exata:
+                self.RbRefPonta.IsChecked = True
+            else:
+                self.RbRefCorpo.IsChecked = True
+        finally:
+            self._sincronizando = False
 
-    def _descartar(self):
-        if self._transacao_ativa:
+        # O 1º ciclo de prévia (Transaction + Regenerate + roteamento real)
+        # NÃO roda aqui mais — rodava antes de run() chamar Show(), então a
+        # janela só aparecia na tela depois do ciclo inteiro terminar (é
+        # esse tempo, com a janela ainda invisível, que o usuário reportou
+        # como "carrega muito antes de poder editar"). Agora run() mostra a
+        # janela primeiro (com este texto de status) e só então chama
+        # _ciclo_preview() — ver _forcar_render().
+        self.TxtStatus.Text       = u"Carregando prévia…"
+        self.TxtStatus.Foreground = self.Resources[u"BrushLabel"]
+
+    def _desfazer_elementos_criados(self):
+        for eid in self._elementos_criados:
             try:
-                self._t.RollBack()
+                self.doc.Delete(eid)
             except Exception:
                 pass
-            self._transacao_ativa = False
+        self._elementos_criados = set()
 
-    def _restaurar_pristino(self):
-        """Desfaz a prévia do ciclo anterior sem construir uma nova ainda —
-        chamado antes de _sincronizar_ordem, que lê a geometria atual de
-        pipe_desc/pipe_ref pra decidir quais eixos precisam de ajuste; sem
-        isso, ela leria o tubo ainda modificado pela prévia anterior (só
-        desfeita dentro de _atualizar_preview, chamado depois)."""
-        if self._transacao_ativa:
-            self._t.RollBack()
-            self._t.Start()
+    def _restaurar_curvas_originais(self):
+        try:
+            self.pipe_desc.Location.Curve = Line.CreateBound(self._p0_desc_orig, self._p1_desc_orig)
+        except Exception:
+            pass
+        if self._p0_ref_orig is not None:
+            try:
+                self.pipe_ref.Location.Curve = Line.CreateBound(self._p0_ref_orig, self._p1_ref_orig)
+            except Exception:
+                pass
+
+    def _finalizar(self, confirmado):
+        """Fecha a prévia de vez: se confirmado, não mexe em nada — o que
+        já está comitado no documento (da última prévia bem sucedida) já É
+        o resultado final. Senão, desfaz tudo numa transação própria,
+        aberta e fechada aqui mesmo. Chamado tanto de dentro da fila de
+        ações (fechar a janela modeless) quanto direto, já num contexto de
+        API válido (ex.: __init__/run(), se algo falhar antes da janela
+        aparecer de verdade)."""
+        if confirmado:
+            return
+        t = Transaction(self.doc, u"FireUtils - Conectar Tubo (descartar prévia)")
+        t.Start()
+        try:
+            self._desfazer_elementos_criados()
+            self._restaurar_curvas_originais()
+        finally:
+            # Sempre fecha a transação antes de sair daqui — nunca pode
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
+            try:
+                t.Commit()
+            except Exception:
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
 
     def _modo_conexao_ref_atual(self):
         return u"ponta" if self.RbRefPonta.IsChecked else u"corpo"
@@ -745,67 +1071,133 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         finally:
             self._sincronizando = False
 
-    def _atualizar_preview(self):
-        """Descarta a prévia anterior e reconstrói a conexão com as opções
-        atuais, dentro da mesma transação (ainda não confirmada)."""
-        if not self._transacao_ativa:
-            return
-        self._t.RollBack()
-        self._t.Start()
+    def _forcar_render(self):
+        """Processa a fila de mensagens do WPF até a prioridade Render.
+        Show() só AGENDA a exibição da janela — sem isto, ela só pintaria
+        de fato quando a UI thread ficasse ociosa de novo, ou seja, só
+        depois do 1º _ciclo_preview() (que roda na mesma thread e bloqueia
+        até terminar). Chamado por run() entre Show() e o 1º ciclo, pra
+        garantir que a janela (com "Carregando prévia…") já apareça na
+        tela antes do ciclo pesado começar."""
         try:
-            _construir_conexao(
-                self.doc, self.pipe_desc, self.pipe_ref,
-                self.pt_click_desc, self.pt_click_ref, self.output,
-                ordem_eixos=self._ordem_pref,
-                modo_conexao_ref=self._modo_conexao_ref_atual(),
-            )
+            from System.Windows.Threading import DispatcherPriority
+            from System import Action
+            self.Dispatcher.Invoke(DispatcherPriority.Render, Action(lambda: None))
+        except Exception:
+            pass
+
+    def _ciclo_preview(self):
+        """Um ciclo completo de prévia, numa transação própria aberta E
+        fechada aqui mesmo (nunca deixada pendurada — ver docstring da
+        classe): desfaz o que o ciclo anterior criou/mudou, sincroniza as
+        opções de ordem disponíveis e reconstrói a conexão com as opções
+        atuais. Em erro de validação/inesperado, desfaz de novo (deixa o
+        modelo em branco, sem a prévia) e mostra o aviso em TxtStatus."""
+        t = Transaction(self.doc, u"FireUtils - Conectar Tubo")
+        t.Start()
+        try:
+            self._desfazer_elementos_criados()
+            self._restaurar_curvas_originais()
             self.doc.Regenerate()
-            self._preview_ok = True
-            self.TxtStatus.Text       = u""
-            self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
-        except _ConexaoError as ex:
-            self.doc.Regenerate()
-            self._preview_ok = False
-            self.TxtStatus.Text       = u"{}".format(ex)
-            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
-        except Exception as ex:
-            self.doc.Regenerate()
-            self._preview_ok = False
-            self.TxtStatus.Text       = u"Erro na prévia: {}".format(ex)
-            self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+            self._sincronizar_ordem()
+
+            _iniciar_rastreamento()
+            erro = None
+            try:
+                # _OUTPUT_MUDO (não self.output): ver docstring da classe —
+                # falhas pontuais de ciclos intermediários não devem
+                # acumular no console real entre uma troca de opção e
+                # outra. TxtStatus, logo abaixo, já reporta o resultado do
+                # ciclo atual.
+                _construir_conexao(
+                    self.doc, self.pipe_desc, self.pipe_ref,
+                    self.pt_click_desc, self.pt_click_ref, _OUTPUT_MUDO,
+                    ordem_eixos=self._ordem_pref,
+                    modo_conexao_ref=self._modo_conexao_ref_atual(),
+                )
+                self.doc.Regenerate()
+            except _ConexaoError as ex:
+                erro = u"{}".format(ex)
+            except Exception as ex:
+                erro = u"Erro na prévia: {}".format(ex)
+            self._elementos_criados = _parar_rastreamento()
+
+            if erro is not None:
+                self._desfazer_elementos_criados()
+                self._restaurar_curvas_originais()
+                self.doc.Regenerate()
+                self._preview_ok = False
+                self.TxtStatus.Text       = erro
+                self.TxtStatus.Foreground = self.Resources[u"BrushWarn"]
+            else:
+                self._preview_ok = True
+                self.TxtStatus.Text       = u""
+                self.TxtStatus.Foreground = self.Resources[u"BrushOk"]
+        finally:
+            # Sempre fecha a transação antes de sair daqui — nunca pode
+            # ficar aberta, nem em erro inesperado (ver _parar_rastreamento).
+            try:
+                t.Commit()
+            except Exception:
+                try:
+                    t.RollBack()
+                except Exception:
+                    pass
         try:
             self.uidoc.RefreshActiveView()
         except Exception:
             pass
 
+    def _agendar_atualizacao(self):
+        """Pede pro Revit rodar _ciclo_preview assim que liberar o contexto
+        de API — toca o documento (transação), então não pode rodar direto
+        do evento de clique numa janela modeless.
+
+        Coalescido: cada _ciclo_preview reconstrói a conexão do zero
+        (Transaction + Regenerate + roteamento), um custo real que não dá
+        pra cortar sem arriscar os bugs de posição de conector já
+        corrigidos nesta mesma função (ver _ciclo_preview). Mas se o
+        usuário trocar MAIS de uma opção antes do Revit processar a
+        primeira (ex.: escolher o 1º eixo e já emendar o 2º, ou a própria
+        prévia estar lenta o bastante pra sobrar tempo pra outro clique no
+        meio) cada troca enfileirava seu PRÓPRIO ciclo completo — rodando
+        vários ciclos em sequência, um logo em seguida do outro, quando só
+        o ESTADO FINAL importa. _atualizacao_pendente garante no máximo 1
+        ciclo enfileirado por vez: a ação só lê as opções (via
+        self._ordem_pref/_modo_conexao_ref_atual(), ambos já atualizados
+        pelo clique) quando realmente roda, então sempre reflete a
+        combinação mais recente, mesmo pulando os estados intermediários."""
+        if self._atualizacao_pendente:
+            return
+        self._atualizacao_pendente = True
+
+        def _acao(uiapp):
+            self._atualizacao_pendente = False
+            self._ciclo_preview()
+        self.fila_acoes.enfileirar(_acao)
+
     def on_opcao_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_ordem1_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
         novo = self._ordem1_atual()
         if novo is not None:
             self._ordem_pref = [novo] + [e for e in self._ordem_pref if e != novo]
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_ordem2_changed(self, sender, args):
         if self._sincronizando:
             return
-        self._restaurar_pristino()
         novo2 = self._ordem2_atual()
         if novo2 is not None and self._ordem_pref:
             primeiro = self._ordem_pref[0]
             self._ordem_pref = ([primeiro, novo2] +
                                  [e for e in self._ordem_pref if e not in (primeiro, novo2)])
-        self._sincronizar_ordem()
-        self._atualizar_preview()
+        self._agendar_atualizacao()
 
     def on_cancel(self, sender, args):
         self.Close()
@@ -820,18 +1212,20 @@ class _JanelaOpcoesRota(forms.WPFWindow):
         self.Close()
 
     def on_closing(self, sender, args):
-        """Sempre finaliza a transação da prévia ao fechar — confirma (Commit)
-        só se o usuário clicou OK; qualquer outro fechamento reverte tudo."""
-        if not self._transacao_ativa:
+        """Sempre finaliza a prévia ao fechar — mantém o resultado comitado
+        só se o usuário clicou OK; qualquer outro fechamento desfaz tudo.
+        Fechar a janela em si (Close/Hide) é só WPF, não precisa de contexto
+        de API — mas desfazer toca o documento, então vai pra fila de ações
+        em vez de rodar direto aqui."""
+        if self._finalizado:
             return
-        if self.confirmado:
-            try:
-                self._t.Commit()
-            except Exception:
-                pass
-            self._transacao_ativa = False
-        else:
-            self._descartar()
+        self._finalizado = True
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
+        confirmado = self.confirmado
+
+        def _acao(uiapp):
+            self._finalizar(confirmado)
+        self.fila_acoes.enfileirar(_acao)
 
 
 def _escolher_opcoes_rota_fallback(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref,
@@ -891,7 +1285,23 @@ def _escolher_opcoes_rota_fallback(pipe_desc, pipe_ref, pt_click_desc, pt_click_
 # PONTO DE ENTRADA
 # ============================================================================
 
+_CHAVE_JANELA_ATIVA = u"FireUtils_ConectarTubo_JanelaAtiva"
+
+
 def run(doc, uidoc, output):
+    # Janela de prévia é modeless (Show, não ShowDialog) — nada impede o
+    # usuário de chamar o comando de novo com a anterior ainda aberta; como
+    # o Revit só permite uma transação aberta por documento, uma segunda
+    # instância pisaria na transação da primeira. Só traz a existente pra
+    # frente em vez de abrir outra.
+    janela_ativa = pyscript.get_envvar(_CHAVE_JANELA_ATIVA)
+    if janela_ativa is not None:
+        try:
+            janela_ativa.Activate()
+            return
+        except Exception:
+            pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
+
     # ── Clique 1: ponta do PIPE_DESC ────────────────────────────────────────
     try:
         ref1         = uidoc.Selection.PickObject(
@@ -903,11 +1313,12 @@ def run(doc, uidoc, output):
     except Exception:
         pyscript.exit()
 
-    # ── Clique 2: PIPE_REF (corpo ou ponta) ─────────────────────────────────
+    # ── Clique 2: PIPE_REF (corpo, ponta, ou conector livre de um fitting) ──
     try:
         ref2         = uidoc.Selection.PickObject(
-            ObjectType.PointOnElement, _FiltroPipe(doc),
-            u"[2/2] Clique no tubo referência — corpo para Tê, ponta para joelho"
+            ObjectType.PointOnElement, _FiltroPipeRef(doc),
+            u"[2/2] Clique no tubo referência (corpo para Tê, ponta para "
+            u"joelho) ou no conector livre de um joelho/tê/válvula"
         )
         pipe_ref     = doc.GetElement(ref2.ElementId)
         pt_click_ref = _global_pt(ref2)
@@ -919,30 +1330,49 @@ def run(doc, uidoc, output):
                     title=u"Fire Utils", warn_icon=True)
         pyscript.exit()
 
-    # Clique caiu exatamente numa ponta de pipe_ref? Se sim, a resposta pra
-    # "onde conectar no tubo de referência?" já é óbvia — pula a pergunta.
-    clicou_ponta_exata = False
-    if pt_click_ref is not None:
-        loc_ref_click = pipe_ref.Location.Curve
-        pt_a_click = loc_ref_click.GetEndPoint(0)
-        pt_b_click = loc_ref_click.GetEndPoint(1)
-        clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
-                               pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
+    # Clique caiu exatamente numa ponta de pipe_ref (ou pipe_ref é um
+    # FITTING, que só tem o modo "ponta" — conector livre, sem corpo pra
+    # Tê)? Se sim, a resposta pra "onde conectar no tubo de referência?"
+    # já é óbvia — pula a pergunta.
+    if not isinstance(pipe_ref, Pipe):
+        clicou_ponta_exata = True
+    else:
+        clicou_ponta_exata = False
+        if pt_click_ref is not None:
+            loc_ref_click = pipe_ref.Location.Curve
+            pt_a_click = loc_ref_click.GetEndPoint(0)
+            pt_b_click = loc_ref_click.GetEndPoint(1)
+            clicou_ponta_exata = (pt_click_ref.DistanceTo(pt_a_click) < TOL_SEG or
+                                   pt_click_ref.DistanceTo(pt_b_click) < TOL_SEG)
 
     # ── Preferências de roteamento, com prévia ao vivo no modelo ────────────
+    # Show() (modeless), não ShowDialog() — deixa o Revit responder
+    # normalmente (orbitar/zoom/pan) com a janela aberta. Ver docstring de
+    # _JanelaOpcoesRota sobre como isso afeta o toque no documento.
     janela = None
     try:
         janela = _JanelaOpcoesRota(doc, uidoc, pipe_desc, pipe_ref,
                                     pt_click_desc, pt_click_ref, output,
                                     clicou_ponta_exata=clicou_ponta_exata)
-        janela.ShowDialog()
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, janela)
+        janela.Show()
+        # Força a janela a aparecer na tela (com "Carregando prévia…")
+        # ANTES do 1º ciclo de prévia — que é síncrono e só devolve a
+        # thread de UI depois de terminar (ver docstring de
+        # _forcar_render). Continua dentro do mesmo contexto de API
+        # válido desta chamada, então pode chamar _ciclo_preview() direto
+        # (sem passar pela fila de ações, usada só pelos ciclos depois
+        # que a janela já está aberta e o comando original já retornou).
+        janela._forcar_render()
+        janela._ciclo_preview()
         return
     except Exception as ex:
         # Se falhar depois da janela já ter aberto (ex.: erro ao exibir),
         # garante que a transação da prévia não fique presa — senão o
         # fallback abaixo não conseguiria abrir a dele (só uma por vez).
         if janela is not None:
-            janela._descartar()
+            janela._finalizar(False)
+        pyscript.set_envvar(_CHAVE_JANELA_ATIVA, None)
         print(u"[AVISO] Formulário WPF com prévia de Conectar Tubo falhou ({}), "
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
@@ -965,6 +1395,26 @@ class _ConexaoError(Exception):
     usuário (alerta no fluxo sem prévia, texto de status no fluxo com
     prévia). Erros inesperados propagam como Exception normal."""
     pass
+
+
+class _OutputMudo(object):
+    """Substituto de 'output' passado a _construir_conexao durante um
+    ciclo de prévia ao vivo (_ciclo_preview) — print_md ali reporta
+    falhas pontuais (ex.: mesclagem colinear caiu pro joelho, joelho
+    também falhou) de QUALQUER ciclo intermediário, inclusive o 1º, com
+    as opções ainda no padrão antes do usuário escolher as dele — e o
+    console do pyRevit não é limpo entre ciclos, então uma falha de um
+    ciclo JÁ DESCARTADO ficava visível mesmo depois de um ciclo seguinte
+    ter corrigido o problema e a prévia ter dado certo (TxtStatus, na
+    própria janela, já reflete corretamente o resultado do ciclo ATUAL —
+    é isso que o usuário deve olhar durante a prévia). O console real
+    (self.output) só é usado no fluxo sem prévia (_conectar/fallback),
+    onde não há TxtStatus nenhum pra mostrar o resultado."""
+    def print_md(self, *args, **kwargs):
+        pass
+
+
+_OUTPUT_MUDO = _OutputMudo()
 
 
 def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
@@ -991,7 +1441,7 @@ def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
         u"as duas pontas já estão conectadas a outros elementos.")
 
 
-def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_ref):
+def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid):
     """
     Corpo (Tê) + ordem invertida + ainda sobra 2º trecho: o 1º trecho, ao
     fechar o desvio perpendicular inteiro, sempre termina EXATAMENTE sobre
@@ -1003,8 +1453,12 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_r
                alvo do Tê, dispensando o 2º trecho (que rodaria por cima
                do próprio pipe_ref até o ponto clicado originalmente).
       fora   → não tem tubo naquele ponto da reta; cai para a ponta LIVRE
-               mais próxima de pipe_ref (rota recalculada para esse novo
-               alvo, agora em modo joelho).
+               mais próxima de P_MID — não do ponto clicado originalmente
+               — já que é o último tubo criado no roteamento, terminando
+               em P_mid, que vai ser estendido até lá; usar o clique como
+               referência podia escolher a ponta ERRADA (mais longe de
+               P_mid, mais perto do clique) e o tubo sobrepor o próprio
+               pipe_ref no caminho até ela.
 
     Retorna ("corpo", P_mid) ou ("ponta", pt_endpoint).
     """
@@ -1012,7 +1466,7 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid, pt_click_r
     t_mid = (P_mid - pt_A).DotProduct(d_ref)
     if -TOL <= t_mid <= L_ref + TOL:
         return u"corpo", P_mid
-    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, P_mid)
 
 
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
@@ -1052,9 +1506,16 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                               antiga por proximidade do clique.
     """
 
+    eh_fitting_ref = not isinstance(pipe_ref, Pipe)
+
     # ── Endpoint de PIPE_DESC selecionado pelo clique ────────────────────────
     if pt_click_desc is not None:
         conn_desc = _conn_nearest(pipe_desc, pt_click_desc)
+    elif eh_fitting_ref:
+        conn_ref_fb = _conector_livre_mais_proximo(pipe_ref, None)
+        mid_fb = (conn_ref_fb.Origin if conn_ref_fb is not None
+                  else pipe_desc.Location.Curve.GetEndPoint(0))
+        conn_desc = _conn_nearest(pipe_desc, mid_fb)
     else:
         loc_fb = pipe_ref.Location.Curve
         mid_fb = XYZ((loc_fb.GetEndPoint(0).X + loc_fb.GetEndPoint(1).X) / 2,
@@ -1073,46 +1534,62 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     P_start = conn_desc.Origin
 
     # ── Geometria de PIPE_REF ────────────────────────────────────────────────
-    loc_ref = pipe_ref.Location.Curve
-    pt_A    = loc_ref.GetEndPoint(0)
-    pt_B    = loc_ref.GetEndPoint(1)
-    d_ref   = (pt_B - pt_A).Normalize()
-
-    # ── Modo de conexão: ponta ou corpo? ────────────────────────────────────
-    # Decisão explícita do usuário via diálogo, por padrão — não é mais
-    # adivinhada por um raio de tolerância (dava falso positivo em pipe_ref
-    # curto: corpo inteiro "parecia" ponta).
-    if modo_conexao_ref == u"ponta":
+    # pipe_ref pode ser um FITTING (joelho/tê/válvula) com conector livre em
+    # vez de outro Pipe — nesse caso só "ponta" faz sentido (sem corpo pra
+    # abrir Tê) e o alvo já é o próprio conector livre, não uma projeção
+    # num segmento (ver _preparar_alvo_nominal).
+    if eh_fitting_ref:
+        modo_conexao_ref = u"ponta"
+        conn_ref_livre = _conector_livre_mais_proximo(pipe_ref, pt_click_ref)
+        if conn_ref_livre is None:
+            raise _ConexaoError(
+                u"O elemento de referência não tem nenhum conector livre para conectar.")
+        pt_A = pt_B = conn_ref_livre.Origin
+        d_ref        = _conn_dir(conn_ref_livre)
         clicou_ponta = True
-        pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
-    elif modo_conexao_ref == u"corpo":
-        clicou_ponta = False
-        pt_endpoint  = None
-    elif pt_click_ref is not None:
-        # "auto" (compatibilidade, sem diálogo) — heurística antiga por
-        # proximidade do clique, com raio proporcional ao comprimento de
-        # pipe_ref (até o teto de TOL_PONTA_REF).
-        L_ref          = pt_A.DistanceTo(pt_B)
-        tol_ponta_ref  = min(TOL_PONTA_REF, L_ref * 0.25)
-        da = pt_click_ref.DistanceTo(pt_A)
-        db = pt_click_ref.DistanceTo(pt_B)
-        clicou_ponta = da < tol_ponta_ref or db < tol_ponta_ref
-        pt_endpoint  = pt_A if da < db else pt_B
+        pt_endpoint  = pt_A
     else:
-        clicou_ponta = False
-        pt_endpoint  = None
+        loc_ref = pipe_ref.Location.Curve
+        pt_A    = loc_ref.GetEndPoint(0)
+        pt_B    = loc_ref.GetEndPoint(1)
+        d_ref   = (pt_B - pt_A).Normalize()
+
+        # ── Modo de conexão: ponta ou corpo? ────────────────────────────────
+        # Decisão explícita do usuário via diálogo, por padrão — não é mais
+        # adivinhada por um raio de tolerância (dava falso positivo em
+        # pipe_ref curto: corpo inteiro "parecia" ponta).
+        if modo_conexao_ref == u"ponta":
+            clicou_ponta = True
+            pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
+        elif modo_conexao_ref == u"corpo":
+            clicou_ponta = False
+            pt_endpoint  = None
+        elif pt_click_ref is not None:
+            # "auto" (compatibilidade, sem diálogo) — heurística antiga por
+            # proximidade do clique, com raio proporcional ao comprimento de
+            # pipe_ref (até o teto de TOL_PONTA_REF).
+            L_ref          = pt_A.DistanceTo(pt_B)
+            tol_ponta_ref  = min(TOL_PONTA_REF, L_ref * 0.25)
+            da = pt_click_ref.DistanceTo(pt_A)
+            db = pt_click_ref.DistanceTo(pt_B)
+            clicou_ponta = da < tol_ponta_ref or db < tol_ponta_ref
+            pt_endpoint  = pt_A if da < db else pt_B
+        else:
+            clicou_ponta = False
+            pt_endpoint  = None
 
     # ── Etapa 1: extensão direta ─────────────────────────────────────────────
     # Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref,
     # apenas estende e conecta sem criar tubos extras. Só roda no modo "auto"
     # (compatibilidade, sem diálogo) — com ponta/corpo escolhidos
     # explicitamente pelo usuário, pular esse atalho evita que o resultado
-    # saia "silenciosamente" diferente do que foi pedido no diálogo.
+    # saia "silenciosamente" diferente do que foi pedido no diálogo. Nunca
+    # roda pra pipe_ref fitting (sempre "ponta", nunca "auto").
     loc_desc = pipe_desc.Location.Curve
     p_desc_0 = loc_desc.GetEndPoint(0)
     p_desc_1 = loc_desc.GetEndPoint(1)
     L_desc   = p_desc_0.DistanceTo(p_desc_1)
-    if modo_conexao_ref == u"auto" and L_desc > TOL:
+    if not eh_fitting_ref and modo_conexao_ref == u"auto" and L_desc > TOL:
         P_other = (p_desc_1 if p_desc_0.DistanceTo(P_start) < p_desc_1.DistanceTo(P_start)
                    else p_desc_0)
         d_ext = XYZ(
@@ -1192,34 +1669,37 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         if e not in ordem_ativa:
             ordem_ativa.append(e)
 
-    # Corpo + a ordem escolhida fecha o trecho perpendicular ANTES do
-    # paralelo, já na cota de pipe_ref (sem outro trecho de Z pelo meio): o
-    # ponto onde o perpendicular termina cai, por construção, EXATAMENTE
-    # sobre a reta infinita de pipe_ref — se isso acontece antes do
-    # paralelo, o trecho paralelo posterior rodaria por cima do próprio
-    # pipe_ref. _ajustar_alvo_corpo_invertido decide o que fazer com isso
-    # ANTES de criar o trecho paralelo: ponto dentro do corpo físico →
-    # conecta ali mesmo (Tê), dispensa o paralelo; fora → cai pra ponta
-    # LIVRE mais próxima (modo joelho).
-    if modo_conexao_ref == u"corpo" and not clicou_ponta and u"perp" in ordem_ativa and u"par" in ordem_ativa:
-        i_perp  = ordem_ativa.index(u"perp")
-        i_par   = ordem_ativa.index(u"par")
-        z_antes = u"z" not in ordem_ativa or ordem_ativa.index(u"z") < i_perp
-        if i_perp < i_par and z_antes:
-            P_mid_check, _, _ = _rota_ate_endpoint(
-                XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
-            modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
-                pipe_ref, pt_A, pt_B, d_ref, P_mid_check, pt_click_ref)
-            if modo_resultado == u"corpo":
-                P_final = alvo
-            else:
-                clicou_ponta = True
-                P_final = alvo
-            necessarios = _eixos_necessarios(P_start, P_final, d_ref)
-            ordem_ativa = [e for e in ordem_eixos if e in necessarios]
-            for e in necessarios:
-                if e not in ordem_ativa:
-                    ordem_ativa.append(e)
+    # Corpo + "paralelo" é a ÚLTIMA perna da rota (não importa se "z" e/ou
+    # "perp" vêm antes dela, nem em que ordem entre si): pela própria
+    # definição dos eixos, uma vez que z e perp (as duas únicas outras
+    # direções possíveis) já foram fechadas, o ponto onde a perna anterior
+    # termina cai, por construção, EXATAMENTE sobre a reta infinita de
+    # pipe_ref — então o trecho paralelo que viria a seguir rodaria por
+    # cima do próprio corpo de pipe_ref (um tubo "entrando" dentro do
+    # outro, e um joelho sendo criado no meio do corpo em vez de um Tê).
+    # _ajustar_alvo_corpo_invertido decide o que fazer com isso ANTES de
+    # criar o trecho paralelo: ponto dentro do corpo físico de pipe_ref →
+    # conecta ali mesmo (Tê), dispensa o paralelo; ponto fora do corpo
+    # (uma das pontas de pipe_ref fica entre esse ponto e o alvo clicado)
+    # → cai pra ponta LIVRE mais próxima (modo joelho), recalculando a
+    # rota pra ela.
+    if (modo_conexao_ref == u"corpo" and not clicou_ponta
+            and u"par" in ordem_ativa and len(ordem_ativa) >= 2
+            and ordem_ativa.index(u"par") == len(ordem_ativa) - 1):
+        P_mid_check, _, _ = _rota_ate_endpoint(
+            XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
+        modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
+            pipe_ref, pt_A, pt_B, d_ref, P_mid_check)
+        if modo_resultado == u"corpo":
+            P_final = alvo
+        else:
+            clicou_ponta = True
+            P_final = alvo
+        necessarios = _eixos_necessarios(P_start, P_final, d_ref)
+        ordem_ativa = [e for e in ordem_eixos if e in necessarios]
+        for e in necessarios:
+            if e not in ordem_ativa:
+                ordem_ativa.append(e)
 
     pt_id, sys_id, _,      diam_ft = _pipe_params(doc, pipe_desc)
     _,     _,      lvl_id, _       = _pipe_params(doc, pipe_ref)

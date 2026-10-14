@@ -1,0 +1,79 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fire Utils — Inserir Hidrante por Nível"
+        Width="340"
+        MinHeight="200"
+        MaxHeight="560"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F5">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="BrushCard"    Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BrushBorder"  Color="#D5D5D5"/>
+        <SolidColorBrush x:Key="BrushLabel"   Color="#646464"/>
+        <SolidColorBrush x:Key="BrushValor"   Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="BrushAccent"  Color="#D83B01"/>
+        <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
+        <SolidColorBrush x:Key="BrushWarn"    Color="#B03A2E"/>
+
+        <Style x:Key="LabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushLabel}"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+
+        <Style x:Key="BotaoStyle" TargetType="Button">
+            <Setter Property="Width" Value="100"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="NivelCheckStyle" TargetType="CheckBox">
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushValor}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="22,18,22,18">
+
+        <TextBlock Text="Inserir Hidrante por Nível" FontSize="15" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushAccent}" Margin="0,0,0,16"/>
+
+        <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Níveis onde inserir hidrante (mín. 2 — base e topo da coluna)"
+                           Style="{StaticResource LabelStyle}" TextWrapping="Wrap"/>
+                <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="PainelNiveis"/>
+                </ScrollViewer>
+            </StackPanel>
+        </Border>
+
+        <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,12">
+            <CheckBox x:Name="ChkAbrigo" Content="Inserir abrigo de mangueira em cada hidrante"
+                      Style="{StaticResource NivelCheckStyle}" Margin="0"/>
+        </Border>
+
+        <TextBlock x:Name="TxtStatus" Text="" FontSize="11" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushWarn}" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnCancelar" Content="Cancelar" Style="{StaticResource BotaoStyle}"
+                    Background="{StaticResource BrushCancela}" Foreground="{StaticResource BrushValor}"
+                    Click="on_cancel" IsCancel="True"/>
+            <Button x:Name="BtnOk" Content="OK" Style="{StaticResource BotaoStyle}"
+                    Background="{StaticResource BrushAccent}" Foreground="{StaticResource BrushBranco}"
+                    IsDefault="True" Click="on_ok"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

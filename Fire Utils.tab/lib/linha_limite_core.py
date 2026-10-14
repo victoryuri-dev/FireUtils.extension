@@ -9,10 +9,28 @@ valor máximo, em vez de simplesmente recusar o clique.
 
 Detail Line (não Model Line): não depende de SketchPlane,
 funciona direto na vista ativa.
+
+Ao atingir o limite, um painel (linha_limite_atingido.xaml) oferece
+"Fechar" ou "Inserir Comprimento" — essa última insere um TextNote (mesmo
+formato/prefixo configurável de "Medir e Inserir Texto", ver
+comprimento_linha_config.py) 0,25 m ACIMA, na tela, do ponto onde a linha
+parou (sempre vista de planta — é o único jeito de desenhar essas linhas
+— ver _direcao_acima_na_view). Tudo roda dentro do mesmo script.py
+síncrono (loop de PickPoint), nunca modeless, então o painel pode ser um
+ShowDialog() comum — sem precisar de ExternalEvent pra tocar o documento
+depois.
 """
 
-from Autodesk.Revit.DB import Line, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType
+import os
+
+from Autodesk.Revit.DB import (
+    Line, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType,
+    FilteredElementCollector, TextNoteType, TextNote, TextNoteOptions,
+    HorizontalTextAlignment,
+)
 from pyrevit import forms
+
+_XAML_LIMITE_ATINGIDO = os.path.join(os.path.dirname(__file__), u"linha_limite_atingido.xaml")
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -41,6 +59,65 @@ def listar_estilos_de_linha(doc):
         if estilo is not None:
             estilos[subcategoria.Name] = estilo
     return estilos
+
+
+class _JanelaLimiteAtingido(forms.WPFWindow):
+
+    def __init__(self, mensagem):
+        forms.WPFWindow.__init__(self, _XAML_LIMITE_ATINGIDO)
+        self.TxtMensagem.Text = mensagem
+        self.inserir_comprimento = False
+
+    def on_fechar(self, sender, args):
+        self.Close()
+
+    def on_inserir_comprimento(self, sender, args):
+        self.inserir_comprimento = True
+        self.Close()
+
+
+def _mostrar_painel_limite_atingido(comprimento_max_m, total_m):
+    mensagem = u"Limite de {:.2f} m atingido.\nComprimento total inserido: {:.2f} m".format(
+        comprimento_max_m, total_m)
+    janela = _JanelaLimiteAtingido(mensagem)
+    janela.ShowDialog()
+    return janela.inserir_comprimento
+
+
+def _direcao_acima_na_view(view):
+    """"Pra cima" na tela (não o eixo Z do mundo — em planta, Z aponta pra
+    fora da tela, não pra cima nela). view.UpDirection não se mostrou
+    confiável em planta (testado: deslocamento saiu pra DIREITA, não pra
+    cima) — em vez disso, calcula a partir da base da própria view
+    (RightDirection × ViewDirection), que dá "pra cima na tela" mesmo com
+    a planta rotacionada (norte do projeto x norte verdadeiro)."""
+    return view.RightDirection.CrossProduct(view.ViewDirection)
+
+
+def _inserir_texto_comprimento(doc, view, ponto_final, comprimento_m):
+    """TextNote com o mesmo prefixo configurável de "Medir e Inserir
+    Texto" (comprimento_linha_config.py), 0,25 m ACIMA de ponto_final —
+    sempre vista de planta aqui (único jeito de desenhar as linhas), ver
+    _direcao_acima_na_view."""
+    tipos = list(FilteredElementCollector(doc).OfClass(TextNoteType))
+    if not tipos:
+        forms.alert(u"Nenhum tipo de TextNote encontrado.",
+                    title=u"Inserir Linha com Limite", warn_icon=True)
+        return
+
+    from comprimento_linha_config import carregar as carregar_config
+    _, prefixo = carregar_config(doc)
+    texto = u"{}{:.2f} m".format(prefixo, comprimento_m)
+
+    deslocamento = _direcao_acima_na_view(view).Multiply(_metros_para_interno(0.25))
+    ponto_texto = ponto_final + deslocamento
+
+    with Transaction(doc, u"Inserir Comprimento de Linha") as t:
+        t.Start()
+        opcoes = TextNoteOptions(tipos[0].Id)
+        opcoes.HorizontalAlignment = HorizontalTextAlignment.Left
+        TextNote.Create(doc, view.Id, ponto_texto, texto, opcoes)
+        t.Commit()
 
 
 def _criar_detail_line(doc, view, linha, graphics_style):
@@ -112,9 +189,5 @@ def inserir_linha_com_limite(doc, uidoc, view, graphics_style, comprimento_max_m
 
     if parou_no_limite:
         total_m = _interno_para_metros(total_interno)
-        forms.alert(
-            u"Limite de {:.2f} m atingido.\nComprimento total inserido: {:.2f} m".format(
-                comprimento_max_m, total_m
-            ),
-            title=u"Inserir Linha com Limite",
-        )
+        if _mostrar_painel_limite_atingido(comprimento_max_m, total_m):
+            _inserir_texto_comprimento(doc, view, ponto_final, total_m)
