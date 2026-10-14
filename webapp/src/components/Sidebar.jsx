@@ -11,7 +11,6 @@ import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import configuracoesIconSvg from "../assets/icons/config-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
-import saveIconSvg from "../assets/icons/save-icon.svg?raw";
 import temaClaroIconSvg from "../assets/icons/theme-light-icon.svg?raw";
 import temaEscuroIconSvg from "../assets/icons/theme-dark-icon.svg?raw";
 
@@ -38,8 +37,6 @@ export default function Sidebar({
   projetoVinculado,
   onDesconectar,
   email,
-  onGravarQuantitativos,
-  gravandoQuantitativos,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -95,15 +92,6 @@ export default function Sidebar({
       </div>
 
       <div className="sidebar-rodape">
-        <button
-          type="button"
-          className="sidebar-item"
-          disabled={gravandoQuantitativos}
-          onClick={onGravarQuantitativos}
-          title="Gravar Quantitativos"
-        >
-          <Icon svg={saveIconSvg} title="Gravar Quantitativos" />
-        </button>
         <button
           type="button"
           className="sidebar-item"

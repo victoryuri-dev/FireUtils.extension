@@ -377,8 +377,6 @@ export default function App() {
           window.location.reload();
         }}
         email={sessao?.user?.email}
-        onGravarQuantitativos={gravarQuantitativos}
-        gravandoQuantitativos={gravandoQuantitativos}
       />
 
       <div className="app">
@@ -400,6 +398,8 @@ export default function App() {
             modo={abaAtual}
             onAbrirSaidaEmergencia={() => setAbaAtual("saidas")}
             onAbrirHidrantes={() => setAbaAtual("hidrantes")}
+            onGravarQuantitativos={gravarQuantitativos}
+            gravandoQuantitativos={gravandoQuantitativos}
           />
         ) : (
           <>

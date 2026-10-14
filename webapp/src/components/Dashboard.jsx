@@ -37,7 +37,16 @@ function comTimeout(promessa, ms, mensagem) {
  * dela via lib/projetoDados.js, sem chamada adicional ao trocar de
  * estrutura.
  */
-export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, modo, onAbrirSaidaEmergencia, onAbrirHidrantes }) {
+export default function Dashboard({
+  vinculo,
+  dimensionamentos,
+  adicionarToast,
+  modo,
+  onAbrirSaidaEmergencia,
+  onAbrirHidrantes,
+  onGravarQuantitativos,
+  gravandoQuantitativos,
+}) {
   const [estado, setEstado] = useState(ESTADO_INICIAL);
 
   function persistirVinculo(linha, estruturaId) {
@@ -193,6 +202,8 @@ export default function Dashboard({ vinculo, dimensionamentos, adicionarToast, m
       modo={modo}
       onAbrirSaidaEmergencia={onAbrirSaidaEmergencia}
       onAbrirHidrantes={onAbrirHidrantes}
+      onGravarQuantitativos={onGravarQuantitativos}
+      gravandoQuantitativos={gravandoQuantitativos}
       // A tela de Saída de Emergência edita e persiste direto no Supabase
       // (ver AcessosDescargasView.jsx) — isso atualiza `estado.linha` aqui
       // pra manter uma única fonte de verdade (a mesma linha que o resto
