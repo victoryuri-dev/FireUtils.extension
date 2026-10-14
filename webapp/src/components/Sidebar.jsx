@@ -31,7 +31,13 @@ const ITENS_NAV = [
 // pausa parada do loop (que não fazem sentido num hover único).
 const DURACAO_LOGO_HOVER_MS = 1380;
 
-export default function Sidebar({ abaAtual, onSelecionarAba, projetoVinculado, onDesconectar, email }) {
+export default function Sidebar({
+  abaAtual,
+  onSelecionarAba,
+  projetoVinculado,
+  onDesconectar,
+  email,
+}) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
   const { tema, alternar: alternarTema } = useTema();

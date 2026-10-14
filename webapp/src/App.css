@@ -1025,6 +1025,7 @@
   padding: 16px;
   color: var(--cp-ink);
   font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  box-shadow: var(--shadow-sm);
   transition: background 0.15s, border-color 0.15s;
 }
 
@@ -1207,6 +1208,7 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Espaçamento vertical entre cartões empilhados na mesma coluna — o
@@ -2265,7 +2267,12 @@
 }
 
 .se-botao:hover {
-  background: var(--border-2);
+  /* Era background: var(--border-2) — preenchia o botão inteiro com a
+     cor da borda (achatada, "muito escura" sobre --bg-3, e invisível em
+     repouso por ser a mesma cor da borda em si). Só intensifica a
+     borda no hover, sem trocar o fundo — mesmo espírito do
+     .btn-ghost:hover do site (realça a borda, não preenche um bloco). */
+  border-color: var(--text-3);
 }
 
 .se-botao .icon {
@@ -2280,7 +2287,7 @@
 }
 
 .se-botao.se-botao-accent:hover {
-  background: rgba(234, 19, 48, 0.08);
+  background: var(--red-dim);
 }
 
 .se-botao:disabled {

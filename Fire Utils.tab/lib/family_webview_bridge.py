@@ -38,6 +38,7 @@ import project_link_bridge
 import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
+import quantitativos_bridge
 import niveis_bridge
 import licenca
 
@@ -253,6 +254,11 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_dimensionar_bridge.tratar_dimensionar_hidrantes(
                 uiapp, postar_mensagem)
+        )
+    elif tipo == u"GRAVAR_QUANTITATIVOS":
+        fila_acoes.enfileirar(
+            lambda uiapp: quantitativos_bridge.tratar_gravar_quantitativos(
+                uiapp, fila_acoes, postar_mensagem)
         )
     elif tipo == u"SELECIONAR_TRECHO_HIDRANTE":
         fila_acoes.enfileirar(

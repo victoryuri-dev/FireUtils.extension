@@ -15,6 +15,7 @@ import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 import stairIconSvg from "../../assets/icons/stair-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
+import saveIconSvg from "../../assets/icons/save-icon.svg?raw";
 
 // A ação de aplicar a classificação no Revit mora na página "Sistema de
 // Hidrantes" (SistemaHidrantesPage.jsx, mesmo destino deste cartão) — aqui
@@ -197,17 +198,25 @@ function rotuloPavimentosEstrutura(estrutura) {
   return `${nPav} pav.${nSub ? ` + ${nSub} subsolo${nSub !== 1 ? "s" : ""}` : ""}`;
 }
 
-function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotuloConcluido = "Dimensionado" }) {
+// `dimensionado` cobre o caso comum (status persistente: Pendente/
+// Dimensionado/Verificando...). "Gravar Quantitativos" não tem esse
+// conceito — é uma ação disparável de novo a qualquer momento, não um
+// estado que fica "concluído" — por isso usa `dimensionado={null}` (sem
+// badge nenhum, só o botão) + `carregando` (status "Gravando..." enquanto
+// o host processa, mesmo "Verificando..." visual dos outros cartões).
+function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotuloConcluido = "Dimensionado", carregando = false, rotuloCarregando = "Verificando..." }) {
   const Tag = onClick ? "button" : "div";
   return (
-    <Tag type={onClick ? "button" : undefined} className={`cartao-dimensionamento ${onClick ? "cartao-dimensionamento-clicavel" : ""}`} onClick={onClick}>
+    <Tag type={onClick ? "button" : undefined} className={`cartao-dimensionamento ${onClick ? "cartao-dimensionamento-clicavel" : ""}`} onClick={onClick} disabled={carregando}>
       <span className="cartao-dimensionamento-icone">
         <Icon svg={iconeSvg} />
       </span>
       <span className="cartao-dimensionamento-titulo">{titulo}</span>
-      {dimensionado === undefined ? (
+      {carregando ? (
+        <span className="status-dimensionamento status-carregando">{rotuloCarregando}</span>
+      ) : dimensionado === undefined ? (
         <span className="status-dimensionamento status-carregando">Verificando...</span>
-      ) : dimensionado ? (
+      ) : dimensionado === null ? null : dimensionado ? (
         <span className="status-dimensionamento status-ok">
           <Icon svg={checkIconSvg} />
           {rotuloConcluido}
@@ -228,6 +237,8 @@ export default function DashboardEstrutura({
   modo = "dashboard",
   onAbrirSaidaEmergencia,
   onAbrirHidrantes,
+  onGravarQuantitativos,
+  gravandoQuantitativos,
 }) {
   // Normas de Extintores e Saída de Emergência pros cartões-resumo do
   // Dashboard (abaixo) — busca uma vez por UF, só no modo "dashboard" (as
@@ -373,6 +384,14 @@ export default function DashboardEstrutura({
           dimensionado={dimensionamentos?.niveis}
           rotuloConcluido="Correlacionado"
           onClick={() => setMostrarCorrelacaoNiveis(true)}
+        />
+        <CartaoDimensionamento
+          titulo="Gravar Quantitativos"
+          iconeSvg={saveIconSvg}
+          dimensionado={null}
+          carregando={gravandoQuantitativos}
+          rotuloCarregando="Gravando..."
+          onClick={onGravarQuantitativos}
         />
       </div>
 
