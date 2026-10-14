@@ -134,9 +134,18 @@ export default function App() {
       setSessao(data.session);
       enviarSessaoAoHost(data.session);
     });
-    const { data: assinatura } = supabase.auth.onAuthStateChange((_evento, novaSessao) => {
+    const { data: assinatura } = supabase.auth.onAuthStateChange((evento, novaSessao) => {
       setSessao(novaSessao);
       enviarSessaoAoHost(novaSessao);
+
+      // Recarrega ao sair da conta, zerando de uma vez tudo que ficou da
+      // sessão anterior (licenças, vínculo de projeto, seleção, busca) —
+      // mesmo motivo do reload em onDesconectar. Preso ao evento SIGNED_OUT,
+      // e não a "ficou sem sessão": no boot sem login o estado também é
+      // nulo, e recarregar ali seria um laço infinito.
+      if (evento === "SIGNED_OUT") {
+        window.location.reload();
+      }
     });
     return () => assinatura.subscription.unsubscribe();
   }, []);

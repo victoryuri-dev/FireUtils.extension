@@ -59,12 +59,20 @@ def _tratar_set_sessao(payload, fila_acoes, postar_mensagem):
     licenças mudaram.
     """
     def responder(modulos, erro):
-        fila_acoes.enfileirar(
-            lambda uiapp: postar_mensagem(u"LICENCAS", {
+        def postar(uiapp):
+            # Em arquivo, não só print: é o que diz se a fila realmente
+            # executou. Sem esta linha, "enfileirado" e "entregue" são
+            # indistinguíveis — e são causas diferentes.
+            licenca.log(u"entregando à dockpane: {}".format(
+                u", ".join(sorted(modulos)) if modulos else u"nenhum"
+            ))
+            postar_mensagem(u"LICENCAS", {
                 u"modulos": sorted(modulos),
                 u"erro": erro,
             })
-        )
+
+        licenca.log(u"enfileirando resposta do login...")
+        fila_acoes.enfileirar(postar)
 
     try:
         if not licenca.salvar_sessao(payload.get(u"refreshToken")):

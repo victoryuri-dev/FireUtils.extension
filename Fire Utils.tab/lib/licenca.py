@@ -76,6 +76,11 @@ def _arquivo_log():
     return os.path.join(_dir_dados(), u"licenca.log")
 
 
+def log(mensagem):
+    """Mesma gravação de _log, para quem usa este módulo de fora."""
+    _log(mensagem)
+
+
 def _log(mensagem):
     """
     Registra em arquivo além do print.
