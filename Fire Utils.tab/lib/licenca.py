@@ -316,9 +316,12 @@ def _buscar_licencas(access_token):
     if erro:
         return None, erro
 
-    # A resposta crua resolve a ambiguidade do resultado vazio: uma lista
-    # vazia de verdade significa coisa diferente de um objeto de erro do
-    # PostgREST, e os dois acabariam como "nenhum módulo".
+    # DIAGNÓSTICO TEMPORÁRIO — remover quando o licenciamento estabilizar.
+    # Grava a resposta inteira a cada verificação, o que é ruído depois de
+    # pronto: o arquivo de log só cresce (modo append, sem rotação). O que
+    # vale manter daqui é a distinção entre lista vazia de verdade e objeto
+    # de erro do PostgREST, que hoje terminam os dois como "nenhum módulo" —
+    # provavelmente como uma linha só, quando nenhum módulo for liberado.
     _log(u"resposta de /licencas: {}".format((texto or u"")[:400]))
 
     try:
