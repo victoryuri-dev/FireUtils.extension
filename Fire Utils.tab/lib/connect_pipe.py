@@ -675,13 +675,26 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
     conn_final. Por segurança (não travar a prévia inteira por causa só
     desta otimização), qualquer exceção aqui desfaz a extensão de
     pipe_ref já aplicada e cai pro joelho normal, em vez de propagar.
+
+    O gate de colinearidade usa abs(dot) — não só dot < -0.999 — porque
+    só a ÚNICA ponta livre de pipe_ref disponível pode ficar do lado
+    "errado" relativo a de onde a rota se aproxima (ex.: a outra ponta já
+    está conectada a outro trecho da rede): nesse caso conn_final aponta
+    pro MESMO lado que c_ref_end (dot ≈ +1, "mesma direção") em vez de
+    pro lado oposto (dot ≈ -1, "de frente um pro outro") — mas a extensão
+    em si (mover pipe_ref até o conector "do outro lado" de pipe_last) é
+    a MESMA operação matemática nos dois casos: só depende de POSIÇÕES
+    (_extremo_oposto, conn_outro.Origin), nunca da direção dos
+    conectores. Só rejeitar ângulos que não sejam nem +1 nem -1 (ex.:
+    perpendicular) — esses não são colineares de verdade, seguem pro
+    joelho normal (_juntar), que é quem sabe lidar com ângulo.
     """
     if not isinstance(pipe_ref, Pipe):
         # Fitting (joelho/tê/válvula) não é "esticável" — não tem
         # Location.Curve pra estender. Segue pro joelho normal.
         return False
     d1, d2 = _conn_dir(c_ref_end), _conn_dir(conn_final)
-    if d1 is None or d2 is None or d1.DotProduct(d2) >= -0.999:
+    if d1 is None or d2 is None or abs(d1.DotProduct(d2)) <= 0.999:
         return False
 
     pipe_last = conn_final.Owner
