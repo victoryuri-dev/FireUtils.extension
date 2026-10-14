@@ -56,8 +56,21 @@ def _tratar_set_sessao(payload, postar_mensagem):
     a dockpane congelaria durante a chamada.
     """
     try:
-        licenca.salvar_sessao(payload.get(u"refreshToken"))
+        if not licenca.salvar_sessao(payload.get(u"refreshToken")):
+            postar_mensagem(u"LICENCAS", {
+                u"modulos": [],
+                u"erro": u"não foi possível guardar a sessão",
+            })
+            return
+
         modulos, erro = licenca.verificar()
+        if erro:
+            print_seguro(u"[AVISO] Licenças após o login: {}".format(erro))
+        else:
+            print_seguro(u"[OK] Licenças após o login: {}".format(
+                u", ".join(sorted(modulos)) if modulos else u"nenhuma"
+            ))
+
         postar_mensagem(u"LICENCAS", {
             u"modulos": sorted(modulos),
             u"erro": erro,

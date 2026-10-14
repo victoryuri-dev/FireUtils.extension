@@ -441,13 +441,24 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
             # Sem conseguir identificar de onde veio, recusar é a única
             # escolha defensável: a página chega pela rede.
             _mlogger.warning(u"Mensagem do WebView2 recusada: origem não identificada.")
+            print(u"[AVISO] Mensagem da dockpane recusada: origem não identificada.")
             return False
 
         if origem in self._origens_confiaveis:
             return True
 
+        # print além do log: uma recusa aqui deixa o painel aparentemente
+        # funcionando (a lista de projetos vem direto do Supabase, sem passar
+        # pelo bridge) enquanto tudo que depende do Python é descartado — sem
+        # esta linha na janela de saída, o sintoma não tem pista nenhuma.
         _mlogger.warning(
             u"Mensagem do WebView2 recusada, origem não confiável: {}".format(origem)
+        )
+        print(
+            u"[AVISO] Mensagem da dockpane recusada: origem {} não confere com a "
+            u"configurada ({}). Ajuste webappUrl em fireutils.config.json.".format(
+                origem, u", ".join(sorted(self._origens_confiaveis)) or u"nenhuma"
+            )
         )
         return False
 

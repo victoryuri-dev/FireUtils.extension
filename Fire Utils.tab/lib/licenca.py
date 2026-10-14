@@ -95,6 +95,7 @@ def salvar_sessao(refresh_token):
     para outra máquina (ou outra conta) não serve de nada.
     """
     if not refresh_token:
+        print(u"[AVISO] Sessão recebida sem refresh token — login não registrado.")
         return False
 
     try:
@@ -107,7 +108,10 @@ def salvar_sessao(refresh_token):
         )
         File.WriteAllBytes(_arquivo_sessao(), protegido)
         return True
-    except Exception:
+    except Exception as ex:
+        # Falhar em silêncio aqui deixaria o usuário logado na dockpane e
+        # barrado nas ferramentas, sem nenhuma pista do motivo.
+        print(u"[ERRO] Falha ao guardar a sessão: {}".format(texto_erro(ex)))
         return False
 
 
