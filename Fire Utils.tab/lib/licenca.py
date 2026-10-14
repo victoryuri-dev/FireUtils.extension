@@ -531,6 +531,9 @@ def garantir_verificado():
 def tem_acesso(modulo):
     """
     A conta pode usar este módulo nesta sessão? A licença PRO libera todos.
+
+    Quem contrata os três módulos avulsos recebe a linha 'pro' pela própria
+    assinatura — equivalências de plano são decididas lá, não aqui.
     """
     liberados = garantir_verificado()
     return modulo in liberados or MODULO_PRO in liberados

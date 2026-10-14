@@ -7,6 +7,11 @@ __doc__ = (
     "fixo em \"L = \")."
 )
 
+# Trava de licenca: as Ferramentas de Linha fazem parte do FireUtils BIM,
+# exclusivo do PRO.
+from licenca_guard import exigir
+exigir(u"pro")
+
 from pyrevit import revit
 from comprimento_linha_config import abrir_configuracao
 

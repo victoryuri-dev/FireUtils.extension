@@ -60,11 +60,19 @@ def exigir(modulo):
         )
         sys.exit()
 
+    # PRO é plano, não módulo: "licença do módulo FireUtils PRO" soaria
+    # errado para quem acabou de ler a página de preços, onde ele aparece
+    # como o plano que inclui os demais.
+    if modulo == licenca.MODULO_PRO:
+        motivo = u"Esta ferramenta é exclusiva do FireUtils PRO."
+    else:
+        motivo = u"Esta conta não tem licença do módulo {}.".format(_nome(modulo))
+
     forms.alert(
-        u"Esta conta não tem licença do módulo {}.\n\n"
+        u"{}\n\n"
         u"Contrate em:\n{}\n\n"
         u"Se você acabou de contratar, faça login novamente no Carregador "
-        u"de Famílias para atualizar o acesso.".format(_nome(modulo), _URL_PLANOS),
+        u"de Famílias para atualizar o acesso.".format(motivo, _URL_PLANOS),
         title=u"Fire Utils",
         warn_icon=True,
     )

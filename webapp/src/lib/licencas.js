@@ -45,6 +45,8 @@ export function abaLiberada(modulos, aba) {
   // em vez de mostrar bloqueio — senão a tela pisca um aviso indevido.
   if (!modulos) return false;
 
+  // PRO libera tudo. Quem contrata os três avulsos recebe a linha 'pro' pela
+  // própria assinatura — equivalências de plano são decididas lá, não aqui.
   if (modulos.includes(MODULO_PRO)) return true;
   if (exigido === QUALQUER_LICENCA) return modulos.length > 0;
   return modulos.includes(exigido);

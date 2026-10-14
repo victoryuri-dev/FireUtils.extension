@@ -10,6 +10,10 @@ __doc__ = (
     "este botão."
 )
 
+# Trava de licenca: as Ferramentas de Produtividade sao exclusivas do PRO.
+from licenca_guard import exigir
+exigir(u"pro")
+
 from pyrevit import script
 from signage_insert_core import sinalizar_equipamentos
 

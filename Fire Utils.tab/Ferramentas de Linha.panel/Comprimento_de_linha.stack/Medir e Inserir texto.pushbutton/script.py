@@ -2,6 +2,11 @@
 __title__ = "Inserir Comprimento de linhas"
 __doc__ = "Calcula o comprimento total de linhas selecionadas ou permite nova seleção."
 
+# Trava de licenca: as Ferramentas de Linha fazem parte do FireUtils BIM,
+# exclusivo do PRO.
+from licenca_guard import exigir
+exigir(u"pro")
+
 from pyrevit import revit, forms
 from Autodesk.Revit.DB import (
     FilteredElementCollector, TextNoteType, TextNote, TextNoteOptions,
