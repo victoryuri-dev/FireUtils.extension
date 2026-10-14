@@ -36,9 +36,22 @@ function tituloDaSecao(categorias, categoriaAtual) {
 // só pra confirmar rapidamente o que aconteceu com cada uma.
 const DURACAO_TOAST_FAMILIA_MS = 3000;
 
+// Navegação por URL (?aba=...) — sem isso, um F5/reload (ou o reload
+// forçado ao desconectar um projeto, ver onDesconectar abaixo) sempre
+// voltava pra Biblioteca de Famílias, perdendo a aba em que o usuário
+// estava. Sem lib de rotas: só a aba atual precisa sobreviver a um
+// reload (o estado interno do Dashboard — estrutura selecionada etc. —
+// já se reconstrói sozinho a partir do vínculo salvo no firedata.json).
+const ABAS_VALIDAS = ["biblioteca", "dashboard", "hidrantes", "saidas"];
+
+function lerAbaDaUrl() {
+  const aba = new URLSearchParams(window.location.search).get("aba");
+  return ABAS_VALIDAS.includes(aba) ? aba : "biblioteca";
+}
+
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
-  const [abaAtual, setAbaAtual] = useState("biblioteca");
+  const [abaAtual, setAbaAtual] = useState(lerAbaDaUrl);
   const [catalogo, setCatalogo] = useState(null);
   const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
   const [busca, setBusca] = useState("");
@@ -56,6 +69,16 @@ export default function App() {
   useEffect(() => {
     catalogoRef.current = catalogo;
   }, [catalogo]);
+
+  // replaceState (não pushState): troca de aba não deve empilhar
+  // histórico de navegação — não há botão "voltar" nessa UI, e um
+  // histórico crescendo a cada clique na sidebar não serviria pra nada.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("aba") === abaAtual) return;
+    params.set("aba", abaAtual);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params}${window.location.hash}`);
+  }, [abaAtual]);
 
   function gravarQuantitativos() {
     if (gravandoQuantitativos) return;
@@ -339,7 +362,20 @@ export default function App() {
         abaAtual={abaAtual}
         onSelecionarAba={setAbaAtual}
         projetoVinculado={!!vinculo?.projetoId}
-        onDesconectar={() => postToHost(BridgeMessageTypes.DISCONNECT_PROJECT, {})}
+        onDesconectar={() => {
+          // Reload completo em vez de só esperar o PROJECT_LINK de volta:
+          // zera estado local que não é derivado do vínculo (seleção de
+          // famílias, busca, categoria...), mesmo "limpo" que reabrir o
+          // painel. O DISCONNECT_PROJECT já foi enviado ao host antes do
+          // reload — é um postMessage síncrono pro lado nativo do
+          // WebView2, não depende da página React continuar viva pra
+          // completar (mesmo padrão de SELECIONAR_TRECHO_HIDRANTE, ver
+          // lib/bridge.js). abaAtual já está salvo na URL (?aba=...), e
+          // o Dashboard parte de "Conectar um projeto" assim que
+          // GET_PROJECT_LINK voltar sem projetoId, de qualquer forma.
+          postToHost(BridgeMessageTypes.DISCONNECT_PROJECT, {});
+          window.location.reload();
+        }}
         email={sessao?.user?.email}
         onGravarQuantitativos={gravarQuantitativos}
         gravandoQuantitativos={gravandoQuantitativos}
