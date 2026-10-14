@@ -318,10 +318,18 @@ def _gravar_cache(modulos, email=None):
         u"email": email,
     }
     try:
+        # json.dumps devolve str (bytes) no IronPython 2.7, e io.open em modo
+        # texto só aceita unicode — escrever direto levanta TypeError.
+        texto = json.dumps(dados, ensure_ascii=False)
+        if isinstance(texto, bytes):
+            texto = texto.decode(u"utf-8")
+
         with io.open(_arquivo_licencas(), u"w", encoding=u"utf-8") as arquivo:
-            arquivo.write(json.dumps(dados, ensure_ascii=False))
-    except Exception:
-        pass
+            arquivo.write(texto)
+    except Exception as ex:
+        # Sem o cache, toda consulta de licença volta à rede e o resultado
+        # da sessão se perde entre um clique e outro.
+        print(u"[ERRO] Falha ao gravar o cache de licenças: {}".format(texto_erro(ex)))
 
 
 def _ler_cache():

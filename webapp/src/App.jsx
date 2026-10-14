@@ -37,8 +37,9 @@ const TIMEOUT_CARREGAMENTO_MS = 30000;
  * login aqui também corta o acesso às ferramentas do Revit.
  */
 function enviarSessaoAoHost(sessao) {
-  if (!estaDentroDoWebView2()) return;
-
+  // Sem checar estaDentroDoWebView2() antes: fora do Revit o postToHost já
+  // avisa no console que não encontrou a ponte. Sair caladinho aqui deixaria
+  // o caso "logado na dockpane, barrado nas ferramentas" sem pista alguma.
   if (sessao?.refresh_token) {
     postToHost(BridgeMessageTypes.SET_SESSAO, { refreshToken: sessao.refresh_token });
   } else {
