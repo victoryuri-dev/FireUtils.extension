@@ -108,9 +108,24 @@ def _pid_do_revit():
 # Sessão — o refresh token, protegido pelo DPAPI do Windows
 # ---------------------------------------------------------------------------
 
-def _escopo_dpapi():
-    from System.Security.Cryptography import DataProtectionScope
-    return DataProtectionScope.CurrentUser
+def _dpapi():
+    """
+    (ProtectedData, escopo do usuário) do DPAPI do Windows.
+
+    ProtectedData mora em System.Security.dll, que o IronPython não
+    referencia por padrão — sem o AddReference, o import falha com
+    "Cannot import name ProtectedData".
+    """
+    import clr
+    try:
+        clr.AddReference(u"System.Security")
+    except Exception:
+        # Já referenciado neste engine, ou nome diferente nesta versão do
+        # .NET: o import abaixo é quem decide se deu certo.
+        pass
+
+    from System.Security.Cryptography import ProtectedData, DataProtectionScope
+    return ProtectedData, DataProtectionScope.CurrentUser
 
 
 def salvar_sessao(refresh_token):
@@ -126,12 +141,12 @@ def salvar_sessao(refresh_token):
         return False
 
     try:
-        from System.Security.Cryptography import ProtectedData
         from System.Text import Encoding
         from System.IO import File
 
-        protegido = ProtectedData.Protect(
-            Encoding.UTF8.GetBytes(refresh_token), None, _escopo_dpapi()
+        protegido_data, escopo = _dpapi()
+        protegido = protegido_data.Protect(
+            Encoding.UTF8.GetBytes(refresh_token), None, escopo
         )
         File.WriteAllBytes(_arquivo_sessao(), protegido)
         return True
@@ -148,17 +163,19 @@ def _refresh_token_guardado():
         return None
 
     try:
-        from System.Security.Cryptography import ProtectedData
         from System.Text import Encoding
         from System.IO import File
 
-        aberto = ProtectedData.Unprotect(
-            File.ReadAllBytes(caminho), None, _escopo_dpapi()
+        protegido_data, escopo = _dpapi()
+        aberto = protegido_data.Unprotect(
+            File.ReadAllBytes(caminho), None, escopo
         )
         return Encoding.UTF8.GetString(aberto)
-    except Exception:
+    except Exception as ex:
         # Arquivo de outra máquina, de outro usuário do Windows, ou
-        # corrompido: tratar como "não há sessão".
+        # corrompido: tratar como "não há sessão". O log distingue isso de
+        # uma falha de ambiente, que exigiria outra investigação.
+        _log(u"não foi possível ler a sessão guardada: {}".format(texto_erro(ex)))
         return None
 
 
