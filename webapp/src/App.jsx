@@ -170,9 +170,14 @@ export default function App() {
         );
         setVinculo({ docSalvo: true, projetoId: null, projetoNome: null, estruturaId: null, estruturaNome: null });
         // Idem para as licenças: sem Python, esperar a resposta deixaria as
-        // abas em carregamento eterno. PRO libera tudo, que é o que permite
-        // desenvolver as telas no navegador.
-        setModulosLiberados(["pro"]);
+        // abas em carregamento eterno.
+        //
+        // Só o build de desenvolvimento libera tudo. Em produção esta mesma
+        // condição vale para qualquer um que abra a URL da dockpane no
+        // navegador — liberar ali entregaria Dashboard, Hidrantes e Saídas
+        // a quem só tem o link. Quem precisa das telas é o Revit, e lá o
+        // Python responde com a licença de verdade.
+        setModulosLiberados(import.meta.env.DEV ? ["pro"] : []);
       }
     }
   }, [sessao]);
@@ -456,6 +461,7 @@ export default function App() {
             <SemLicenca
               modulo={rotuloDoModuloDaAba(abaAtual)}
               temAlgumaLicenca={modulosLiberados.length > 0}
+              foraDoRevit={!estaDentroDoWebView2()}
             />
           ) : (
           // Sem <header> genérico aqui de propósito: cada tela do Dashboard

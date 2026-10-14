@@ -8,8 +8,25 @@ import { urlPlanos } from "../lib/site";
  * precisa saber qual falta. Um "sem acesso" genérico deixaria os dois sem
  * saber o que fazer.
  */
-export default function SemLicenca({ modulo, temAlgumaLicenca }) {
+export default function SemLicenca({ modulo, temAlgumaLicenca, foraDoRevit }) {
   const planos = urlPlanos();
+
+  // Aberto no navegador em vez de dentro do Revit: aqui não há Python para
+  // responder qual é a licença, então ninguém passa. Dizer "sua conta não
+  // tem licença" seria mentira para quem tem — o que falta é o Revit.
+  if (foraDoRevit) {
+    return (
+      <div className="sem-licenca">
+        <h2>Abra pelo Revit</h2>
+        <p>
+          Esta área funciona dentro do Revit, pelo painel Fire Utils —
+          ela depende do modelo aberto e da sua licença, que só o plugin
+          consegue verificar.
+        </p>
+      </div>
+    );
+  }
+
   const titulo = modulo ? `${modulo} não está na sua assinatura` : "Assinatura necessária";
 
   const descricao = modulo
