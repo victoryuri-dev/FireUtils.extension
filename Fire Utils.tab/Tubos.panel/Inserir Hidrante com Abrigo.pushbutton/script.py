@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 __title__ = "Inserir Hidrante\ncom Abrigo"
 
-# Trava de licenca: encerra o script se a conta nao tiver o modulo.
+# Trava de licenca: Ferramentas de Tubos sao parte do FireUtils BIM.
 from licenca_guard import exigir
-exigir(u"hidrantes")
+exigir(u"pro")
 
 import math
 from Autodesk.Revit.DB import XYZ

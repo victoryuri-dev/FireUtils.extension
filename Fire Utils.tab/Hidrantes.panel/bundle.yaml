@@ -1,13 +1,6 @@
 title: Sistema de Hidrantes
-tooltip: Descricao do que o script faz
-author: Seu Nome
+tooltip: Mapeamento e dimensionamento hidráulico da rede
+author: Fire Utils
 layout:
   - Dimensionar Hidrantes
   - Mapear trechos
-  - Inserir Valvula
-  - Inserir Hidrante
-  - Inserir Hidrante por Nivel
-  - Inserir Hidrante com Abrigo
-  - Conectar Abrigo
-  - Conectar Abrigo (Preview)
-  - Inserir Alarme de Incendio

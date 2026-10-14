@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 __title__ = "Conectar\nTubo"
 
+# Trava de licenca: Ferramentas de Tubos sao parte do FireUtils BIM.
+from licenca_guard import exigir
+exigir(u"pro")
+
 from pyrevit import script
 from connect_pipe import run
 
