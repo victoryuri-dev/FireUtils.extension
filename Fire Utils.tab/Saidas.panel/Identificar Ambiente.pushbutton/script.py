@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 __title__ = "Identificar \npor Ambiente"
 
+# Trava de licenca: encerra o script se a conta nao tiver o modulo.
+from licenca_guard import exigir
+exigir(u"saidas")
+
 from pyrevit import revit, script, forms
 from projeto import exigir_projeto_e_estado
 from saidas.calc       import sincronizar_ambientes

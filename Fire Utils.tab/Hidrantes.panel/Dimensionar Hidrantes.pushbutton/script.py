@@ -26,6 +26,10 @@ família, como antes.
 """
 __title__ = "Dimensionar\nHidrantes"
 
+# Trava de licenca: encerra o script se a conta nao tiver o modulo.
+from licenca_guard import exigir
+exigir(u"hidrantes")
+
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")

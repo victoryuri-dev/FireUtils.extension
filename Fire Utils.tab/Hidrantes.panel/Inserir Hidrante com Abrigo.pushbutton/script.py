@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 __title__ = "Inserir Hidrante\ncom Abrigo"
 
+# Trava de licenca: encerra o script se a conta nao tiver o modulo.
+from licenca_guard import exigir
+exigir(u"hidrantes")
+
 import math
 from Autodesk.Revit.DB import XYZ
 from pyrevit import script, forms

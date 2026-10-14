@@ -32,6 +32,10 @@ H-01/H-02.
 """
 __title__ = "Mapear\ntrechos"
 
+# Trava de licenca: encerra o script se a conta nao tiver o modulo.
+from licenca_guard import exigir
+exigir(u"hidrantes")
+
 import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
