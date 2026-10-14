@@ -274,4 +274,11 @@ def posicionar_todos_abrigos(doc, uidoc, output):
                 inseridos += 1
             except Exception as e:
                 t.RollBack()
+                output.print_md(u"| {} | **falhou** — `{}` |".format(vid, str(e)))
                 erros += 1
+
+    forms.alert(
+        u"Abrigos inseridos: {}\nPulados (já existem): {}\nErros: {}".format(
+            inseridos, pulados, erros),
+        title=u"Fire Utils — Inserir Abrigos"
+    )

@@ -168,26 +168,27 @@ def _inserir_placa(doc, simbolo, equipamento, nivel, pt, elevacao_m):
     return inst
 
 
-def _sinalizar_tipo(doc, tipo, output):
+def _sinalizar_tipo(doc, tipo):
+    """Sinaliza um tipo e retorna a linha de resultado (sucesso ou
+    precondição não atendida) pro resumo final — ver sinalizar_equipamentos.
+    Erros inesperados (exceção dentro da Transaction) propagam pro
+    chamador em vez de virar linha de resumo — ver docstring dele."""
     familia = _familia_placa_carregada(doc, tipo.arquivo_slug)
     if familia is None:
-        output.print_md(
-            u"**{}** — a família da placa ainda não está no projeto. Abra "
+        return (
+            u"{} — a família da placa ainda não está no projeto. Abra "
             u"o FireUtils (dockpane) e carregue-a antes de "
             u"sinalizar este tipo.".format(tipo.rotulo))
-        return
 
     simbolo = _ativar_simbolo_placa(doc, familia)
     if simbolo is None:
-        output.print_md(u"**{}** — família carregada, mas nenhum tipo encontrado.".format(tipo.rotulo))
-        return
+        return u"{} — família carregada, mas nenhum tipo encontrado.".format(tipo.rotulo)
 
     nome_placa = familia.Name
 
     equipamentos = tipo.localizar(doc)
     if not equipamentos:
-        output.print_md(u"**{}** — nenhum equipamento encontrado no projeto.".format(tipo.rotulo))
-        return
+        return u"{} — nenhum equipamento encontrado no projeto.".format(tipo.rotulo)
 
     pontos_existentes = _pontos_placas_existentes(doc, nome_placa)
     tol_ft = _to_ft(TOL_DUPLICATA_M)
@@ -224,12 +225,10 @@ def _sinalizar_tipo(doc, tipo, output):
             t.Commit()
         except Exception as ex:
             t.RollBack()
-            output.print_md(u"**{}** — falhou: `{}`".format(tipo.rotulo, texto_erro(ex)))
-            return
+            raise Exception(u"{} — falhou: {}".format(tipo.rotulo, texto_erro(ex)))
 
-    output.print_md(
-        u"**{}** — inseridas: {} | já sinalizadas: {} | erros: {}".format(
-            tipo.rotulo, inseridas, puladas, erros))
+    return u"{} — inseridas: {} | já sinalizadas: {} | erros: {}".format(
+        tipo.rotulo, inseridas, puladas, erros)
 
 
 # ===========================================================================
@@ -242,5 +241,17 @@ def sinalizar_equipamentos(doc, uidoc, output):
     if not janela.confirmado:
         return
 
+    # Resultado de sucesso (ou precondição não atendida, ex.: família não
+    # carregada) vai pra um resumo numa janela com OK no final — não mais
+    # linha a linha no console — erro inesperado de verdade (exceção numa
+    # Transaction) ainda aparece no console (output), que é onde dá pra
+    # ver o traceback completo se precisar investigar.
+    linhas = []
     for tipo in janela.tipos_selecionados():
-        _sinalizar_tipo(doc, tipo, output)
+        try:
+            linhas.append(_sinalizar_tipo(doc, tipo))
+        except Exception as ex:
+            output.print_md(u"**{}**".format(texto_erro(ex)))
+
+    if linhas:
+        forms.alert(u"\n".join(linhas), title=u"Fire Utils — Sinalizar Equipamentos")

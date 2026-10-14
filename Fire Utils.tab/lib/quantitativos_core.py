@@ -152,49 +152,53 @@ class _JanelaQuantitativos(forms.WPFWindow):
 # ===========================================================================
 # HELPERS INTERNOS
 # ===========================================================================
-def _processar_medida(medida, doc, projeto_dir, output):
+def _processar_medida(medida, doc, projeto_dir):
+    """Processa uma medida e retorna a lista de linhas do relatório —
+    ver gravar_quantitativos. Nada é impresso no console aqui: sucesso e
+    falha (ex.: erro ao preparar parâmetros/gravar) são sempre parte do
+    mesmo relatório, mostrado no final numa janela com OK."""
+    linhas = []
     if medida.preparar:
         try:
             log = medida.preparar(doc)
             for nome, status in (log or []):
                 icone = u"✔" if status == u"criado" else u"–"
-                output.print_md(u"  {} `{}` → *{}*".format(icone, nome, status))
+                linhas.append(u"  {} {} -> {}".format(icone, nome, status))
         except Exception as e:
-            output.print_md(u"**Falhou ao preparar parâmetros:** `{}`".format(e))
-            return
+            linhas.append(u"Falhou ao preparar parâmetros: {}".format(e))
+            return linhas
 
     itens_brutos = medida.coletar(doc)
     if not itens_brutos:
-        output.print_md(medida.mensagem_vazia)
-        return
+        linhas.append(medida.mensagem_vazia)
+        return linhas
 
     itens = medida.agrupar(itens_brutos) if medida.agrupar else itens_brutos
 
     if medida.agrupar:
-        output.print_md(u"✔ {} instância(s) encontrada(s) — {} item(ns) após agregação.".format(
+        linhas.append(u"✔ {} instância(s) encontrada(s) — {} item(ns) após agregação.".format(
             len(itens_brutos), len(itens)))
     else:
-        output.print_md(u"✔ {} item(ns) encontrado(s).".format(len(itens)))
+        linhas.append(u"✔ {} item(ns) encontrado(s).".format(len(itens)))
 
     try:
         path, ok, motivo = medida.salvar(itens, projeto_dir)
     except Exception as e:
-        output.print_md(u"**Falhou ao gravar/enviar:** `{}`".format(e))
-        return
+        linhas.append(u"Falhou ao gravar/enviar: {}".format(e))
+        return linhas
 
-    output.print_md(u"✔ Dados gravados em `{}`".format(path))
+    linhas.append(u"✔ Dados gravados em {}".format(path))
     if ok:
-        output.print_md(u"✔ Enviado pro site.")
+        linhas.append(u"✔ Enviado pro site.")
     else:
         # Nunca é exceção (ver sync.enviar) — o caso mais comum é o
         # arquivo Revit ainda não estar vinculado a um projeto/estrutura
         # no Dashboard (dockpane). Reporta aqui porque antes disso era
         # silencioso: o firedata.json gravava certinho e ninguém percebia
         # que nada tinha chegado no site.
-        output.print_md(u"**⚠ Não enviado pro site:** {}".format(motivo))
+        linhas.append(u"⚠ Não enviado pro site: {}".format(motivo))
 
-    for it in itens:
-        output.print_md(u"- {}".format(medida.rotulo_item(it)))
+    return linhas
 
 
 # ===========================================================================
@@ -218,12 +222,13 @@ def gravar_quantitativos(doc, output):
     if not janela.confirmado:
         return
 
-    output.print_md(u"# Fire Utils – Gravar Quantitativos")
-
+    # Relatório inteiro (sucesso, vazio ou falha pontual por medida) vai
+    # pra uma janela com OK no final, em vez de linha a linha no console —
+    # cada medida já roda isolada (ver docstring do módulo), então mesmo
+    # uma falha pontual aqui é só mais uma linha do mesmo relatório.
+    blocos = []
     for medida in janela.medidas_selecionadas():
-        output.print_md(u"---")
-        output.print_md(u"### {}".format(medida.rotulo))
-        _processar_medida(medida, doc, projeto_dir, output)
+        linhas = _processar_medida(medida, doc, projeto_dir)
+        blocos.append(u"{}\n{}".format(medida.rotulo, u"\n".join(linhas)))
 
-    output.print_md(u"---")
-    output.print_md(u"### ✔ Concluído")
+    forms.alert(u"\n\n".join(blocos), title=u"Fire Utils — Gravar Quantitativos")
