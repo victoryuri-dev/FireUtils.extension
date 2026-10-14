@@ -171,6 +171,19 @@ export default function App() {
     return escutarMensagensDoHost((mensagem) => {
       if (!mensagem) return;
 
+      if (mensagem.type === BridgeMessageTypes.LICENCAS) {
+        // Resposta do Python ao registro da sessão. Fica no console porque é
+        // a única janela acessível de dentro do Revit — a saída do pyRevit
+        // some junto com o engine que a abriu.
+        const { modulos, erro } = mensagem.payload || {};
+        if (erro) {
+          console.warn("[licenças] falha:", erro);
+        } else {
+          console.info("[licenças] módulos liberados:", modulos);
+        }
+        return;
+      }
+
       if (mensagem.type === BridgeMessageTypes.PROJECT_LINK) {
         setVinculo(mensagem.payload || {});
         return;
