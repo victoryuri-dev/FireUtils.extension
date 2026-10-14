@@ -3451,3 +3451,202 @@
 .sidebar-item.bloqueada {
   opacity: 0.45;
 }
+
+/* Login — mesmo layout/estilo da tela de login do site (ETOS.FireUtils,
+   LoginPage.jsx/.css), variante estreita dela (@media max-width:700px
+   lá, onde a rede de módulos decorativa ao lado some e sobra só o
+   cartão centralizado) — a dockpane nunca é mais larga que isso. Cores
+   fixas (não var(--bg)/var(--text) do tema claro/escuro da dockpane):
+   mesma identidade sempre-escura que a página de login do site tem,
+   isolada da paleta clara/escura do resto da plataforma — só
+   var(--accent) é compartilhado, porque já vale o mesmo #C0152A nos
+   dois temas da dockpane. */
+.login-tela {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100vh;
+  padding: 18px;
+  background: #101014;
+}
+
+.login-cartao {
+  position: relative;
+  width: min(100%, 380px);
+  padding: 16px 32px;
+}
+
+.login-cartao-loader {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #17171c;
+}
+
+.login-titulo {
+  margin: 0 0 4px;
+  text-align: center;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: #f5f5f7;
+}
+
+.login-subtitulo {
+  margin: 0 0 20px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.52);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Label flutuante: centralizada dentro do input vazio, sobe pro canto
+   quando o campo tem foco ou já tem texto (:not(:placeholder-shown) só
+   funciona porque o input sempre tem placeholder=" ", um espaço — sem
+   isso o seletor nunca dispararia, já que um input sem placeholder
+   nenhum "não tem placeholder mostrado" o tempo todo). */
+.login-campo {
+  position: relative;
+}
+
+.login-campo label {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 13px;
+  margin: 0;
+  color: #aaaab2;
+  font-size: 13px;
+  line-height: 1;
+  transform: translateY(-50%);
+  pointer-events: none;
+  transition: top 0.18s ease, transform 0.18s ease, font-size 0.18s ease, color 0.18s ease;
+}
+
+.login-campo input {
+  width: 100%;
+  height: 50px;
+  padding: 8px 12px;
+  border: 1px solid #ffffff18;
+  border-radius: 5px;
+  background: #1b1b21;
+  color: #f5f5f7;
+  font-size: 13px;
+  outline: none;
+  box-shadow: none;
+  transition: padding 0.18s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-campo:has(input:focus) label,
+.login-campo:has(input:not(:placeholder-shown)) label {
+  top: 8px;
+  color: #8e8e98;
+  font-size: 9px;
+  transform: none;
+}
+
+.login-campo:has(input:focus) input,
+.login-campo:has(input:not(:placeholder-shown)) input {
+  padding: 19px 12px 6px;
+}
+
+.login-campo input:hover {
+  border-color: #ffffff2b;
+}
+
+.login-campo input:focus {
+  border-color: #ffffff45;
+  background: #202027;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(192, 21, 42, 0.13);
+}
+
+.login-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: rgba(245, 245, 247, 0.72);
+}
+
+.login-aviso .icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.login-aviso-erro {
+  background: rgba(192, 21, 42, 0.12);
+  border: 1px solid rgba(192, 21, 42, 0.35);
+}
+
+.login-aviso-erro .icon {
+  color: var(--accent);
+}
+
+.login-aviso-sucesso {
+  background: rgba(29, 158, 117, 0.12);
+  border: 1px solid rgba(29, 158, 117, 0.35);
+}
+
+.login-aviso-sucesso .icon {
+  color: #1d9e75;
+}
+
+.login-botao {
+  height: 44px;
+  margin-top: 2px;
+  border: 1px solid #fff;
+  border-radius: 5px;
+  background: #fff;
+  color: #101014;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-botao:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(192, 21, 42, 0.18);
+  transform: translateY(-1px);
+}
+
+.login-botao:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-alternar {
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(245, 245, 247, 0.52);
+}
+
+.login-alternar:hover {
+  color: #f5f5f7;
+}
+
+.login-alternar:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
