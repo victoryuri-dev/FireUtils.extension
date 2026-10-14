@@ -254,7 +254,7 @@ def _renovar_acesso(refresh_token):
     O Supabase rotaciona o refresh token a cada uso, então o novo precisa ser
     guardado — senão a próxima sessão tenta usar um token já gasto.
 
-    Devolve (access_token, erro).
+    Devolve (access_token, email, erro).
     """
     url = u"{}/auth/v1/token?grant_type=refresh_token".format(_SUPABASE_URL)
     corpo = json.dumps({u"refresh_token": refresh_token})
@@ -269,16 +269,16 @@ def _renovar_acesso(refresh_token):
         corpo,
     )
     if erro:
-        return None, erro
+        return None, None, erro
 
     try:
         dados = json.loads(texto)
     except Exception as ex:
-        return None, texto_erro(ex)
+        return None, None, texto_erro(ex)
 
     acesso = dados.get(u"access_token")
     if not acesso:
-        return None, u"resposta sem access_token"
+        return None, None, u"resposta sem access_token"
 
     # Sem identificar o usuário, uma licença no banco e um token de outra
     # conta dariam exatamente o mesmo sintoma.
@@ -291,7 +291,7 @@ def _renovar_acesso(refresh_token):
     if novo_refresh:
         salvar_sessao(novo_refresh)
 
-    return acesso, None
+    return acesso, usuario.get(u"email"), None
 
 
 def _buscar_licencas(access_token):
@@ -450,7 +450,7 @@ def verificar():
         _gravar_cache(set())
         return set(), u"nenhuma sessão: faça login no Carregador de Famílias"
 
-    acesso, erro = _renovar_acesso(refresh)
+    acesso, email, erro = _renovar_acesso(refresh)
     if erro:
         return _acesso_em_graca(erro)
 
@@ -459,7 +459,7 @@ def verificar():
         return _acesso_em_graca(erro)
 
     modulos = _modulos_validos(linhas)
-    _gravar_cache(modulos)
+    _gravar_cache(modulos, email)
     return modulos, None
 
 
