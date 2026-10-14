@@ -227,7 +227,7 @@ def _eixos_necessarios(P_start, P_final, d_ref):
     return necessarios
 
 
-def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref, P_start=None):
+def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref):
     """
     Alvo NOMINAL da conexão em pipe_ref — antes de qualquer redirecionamento
     por sobreposição (que só é decidido depois, já com a ordem escolhida —
@@ -240,12 +240,6 @@ def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref, P_start=Non
     "ponta" faz sentido — não há corpo pra abrir Tê — e o alvo é o
     conector livre mais próximo do clique, com d_ref = direção desse
     conector (a direção que um tubo conectado ali seguiria).
-
-    P_start (opcional, de onde a rota de pipe_desc parte) é repassado pra
-    _escolher_ponta_livre escolher a ponta geometricamente alcançável em
-    vez de só a mais perto do clique — ver docstring de
-    _escolher_ponta_livre. Sem P_start (ex.: _eixos_disponiveis, só pra
-    decidir quais botões de ordem mostrar), cai pra pt_click_ref.
     """
     if not isinstance(pipe_ref, Pipe):
         conn = _conector_livre_mais_proximo(pipe_ref, pt_click_ref)
@@ -259,8 +253,7 @@ def _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref, P_start=Non
     pt_B    = loc_ref.GetEndPoint(1)
     d_ref   = (pt_B - pt_A).Normalize()
     if modo_conexao_ref == u"ponta":
-        pt_aproximacao = P_start if P_start is not None else pt_click_ref
-        P_final = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, d_ref, pt_aproximacao)
+        P_final = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
     else:
         ref_proj = pt_click_ref if pt_click_ref is not None else pt_A
         P_final  = _projetar_segmento(ref_proj, pt_A, pt_B)
@@ -282,7 +275,7 @@ def _eixos_disponiveis(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, modo_co
         conn_desc = _conn_nearest(pipe_desc, pt_click_desc)
     P_start = conn_desc.Origin if conn_desc is not None else pipe_desc.Location.Curve.GetEndPoint(0)
     try:
-        P_final, d_ref = _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref, P_start)
+        P_final, d_ref = _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref)
     except _ConexaoError:
         return [u"z", u"par", u"perp"]
     return _eixos_necessarios(P_start, P_final, d_ref)
@@ -618,50 +611,6 @@ def _juntar(doc, c1, c2):
     return _elbow(doc, c1, c2)
 
 
-def _juntar_obrigatorio(doc, c1, c2, descricao):
-    """
-    Igual a _juntar, mas propaga _ConexaoError se não conseguir conectar
-    de jeito nenhum (nem ConnectTo, nem NewElbowFitting) — usado nas
-    junções internas da rota (_elbows_pend), que antes eram criadas sem
-    checar o retorno de _juntar: uma falha ali (ex.: tipo de tubo sem
-    joelho configurado nas Preferências de Roteamento) deixava dois
-    segmentos apenas encostados, sem conexão real, e a prévia mostrava
-    "tudo certo" mesmo assim — silenciosamente, sem nenhum aviso. Falhar
-    alto aqui garante que a rota nunca "termina com sucesso" deixando
-    tubos desconectados pelo caminho: a transação inteira é desfeita (ver
-    _ciclo_preview/_conectar) e o problema real fica visível pro usuário.
-    """
-    if not _juntar(doc, c1, c2):
-        raise _ConexaoError(
-            u"Falha ao conectar {} — verifique se o tipo de tubo tem "
-            u"joelho configurado nas Preferências de Roteamento.".format(descricao))
-
-
-def _msg_falha_ponta(c_ponta, conn_final):
-    """
-    Mensagem de erro pra quando a conexão na ponta de pipe_ref falha
-    (nem mesclagem nem joelho) — distingue o caso "direções iguais"
-    (c_ponta/conn_final apontando pro MESMO lado, dot ≈ +1) de qualquer
-    outra causa, já que esse caso específico não é sobre família/
-    Preferências de Roteamento: é a ÚNICA ponta livre de pipe_ref estar
-    do lado OPOSTO de onde a rota se aproxima — a tubulação precisaria
-    atravessar o corpo de pipe_ref (ou o que está conectado além da
-    outra ponta) pra alcançá-la, o que nenhuma combinação dos 3 eixos
-    (Z/Paralelo/Perpendicular) resolve sem contornar o obstáculo.
-    """
-    d1, d2 = _conn_dir(c_ponta), _conn_dir(conn_final)
-    if d1 is not None and d2 is not None and d1.DotProduct(d2) > 0.9:
-        return (
-            u"Falha ao conectar na ponta de pipe_ref — a única ponta livre "
-            u"disponível fica do lado oposto de onde a rota se aproxima; "
-            u"conectar ali exigiria atravessar o corpo de pipe_ref (ou o "
-            u"que está conectado na outra ponta). Tente uma ordem de eixos "
-            u"diferente, ou libere a outra ponta de pipe_ref.")
-    return (
-        u"Falha ao conectar na ponta de pipe_ref — verifique se o tipo de "
-        u"tubo tem joelho configurado nas Preferências de Roteamento.")
-
-
 def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pend):
     """
     Se c_ref_end (ponta de pipe_ref) e conn_final (conector do último tubo
@@ -700,31 +649,13 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
     conn_final. Por segurança (não travar a prévia inteira por causa só
     desta otimização), qualquer exceção aqui desfaz a extensão de
     pipe_ref já aplicada e cai pro joelho normal, em vez de propagar.
-
-    O gate de colinearidade usa abs(dot) — não só dot < -0.999 — porque
-    só a ÚNICA ponta livre de pipe_ref disponível pode ficar do lado
-    "errado" relativo a de onde a rota se aproxima (ex.: a outra ponta já
-    está conectada a outro trecho da rede): nesse caso conn_final aponta
-    pro MESMO lado que c_ref_end (dot ≈ +1, "mesma direção") em vez de
-    pro lado oposto (dot ≈ -1, "de frente um pro outro"). MAS, nesse caso
-    "mesma direção", a extensão só é válida se alvo cair ALÉM de
-    c_ref_end, continuando pipe_ref na mesma direção que ele já tinha —
-    ver checagem logo abaixo. Se alvo cair do lado de p_ref_fixo (porque
-    pipe_last, vindo do lado errado, na verdade atravessa/sobrepõe o
-    próprio corpo de pipe_ref no caminho até c_ref_end), "estender" pipe_ref
-    até lá na verdade o ENCOLHERIA pra um trecho curto do lado oposto —
-    sumindo com o tubo original visível no modelo. Aí a mesclagem não
-    serve (return False): nem ConnectTo nem NewElbowFitting conectam
-    direções iguais tampouco, então o chamador acaba propagando o erro —
-    rotear assim exigiria contornar o corpo de pipe_ref (mais do que 3
-    trechos retos), fora do que este roteador faz.
     """
     if not isinstance(pipe_ref, Pipe):
         # Fitting (joelho/tê/válvula) não é "esticável" — não tem
         # Location.Curve pra estender. Segue pro joelho normal.
         return False
     d1, d2 = _conn_dir(c_ref_end), _conn_dir(conn_final)
-    if d1 is None or d2 is None or abs(d1.DotProduct(d2)) <= 0.999:
+    if d1 is None or d2 is None or d1.DotProduct(d2) >= -0.999:
         return False
 
     pipe_last = conn_final.Owner
@@ -744,17 +675,6 @@ def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pe
 
         p_ref_fixo = _extremo_oposto(pipe_ref.Location.Curve, c_ref_end.Origin)
         alvo = conn_outro.Origin if conn_outro is not None else conn_final.Origin
-
-        # alvo tem que ficar ALÉM de c_ref_end (visto de p_ref_fixo) — só
-        # alongando pipe_ref na direção que ele já ia, nunca encolhendo
-        # pro lado oposto (ver docstring).
-        d_fixo_ref = c_ref_end.Origin - p_ref_fixo
-        L_fixo_ref = d_fixo_ref.GetLength()
-        if L_fixo_ref > TOL:
-            proj_alvo = (alvo - p_ref_fixo).DotProduct(d_fixo_ref.Normalize())
-            if proj_alvo < L_fixo_ref - TOL:
-                return False
-
         pipe_ref.Location.Curve = Line.CreateBound(p_ref_fixo, alvo)
         doc.Regenerate()
 
@@ -1497,34 +1417,12 @@ class _OutputMudo(object):
 _OUTPUT_MUDO = _OutputMudo()
 
 
-def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, d_ref, pt_aproximacao):
+def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref):
     """
-    Escolhe a ponta LIVRE (sem conexão) de pipe_ref pra conectar via
-    joelho/mesclagem.
-
-    pt_aproximacao é o ponto de onde a rota aborda essa ponta em linha
-    reta (o trecho final, paralelo ao eixo de pipe_ref) — P_start (ou
-    P_mid, já achatado nos outros eixos — ver chamada em
-    _ajustar_alvo_corpo_invertido). NÃO é o ponto clicado: uma ponta só é
-    alcançável assim se pt_aproximacao estiver do lado de FORA do corpo
-    de pipe_ref em relação a ela (antes de pt_A, ou além de pt_B) — o
-    conector de uma ponta livre aponta pra FORA do corpo, então só um
-    trecho vindo de fora encaixa de frente nele (direções opostas, dot ≈
-    -1); vindo de dentro do intervalo [pt_A, pt_B] (ex.: pt_aproximacao
-    mais perto do clique, mas do lado errado), o trecho final chegaria
-    com seu conector apontando pro MESMO lado do conector da ponta (dot ≈
-    +1) — nem ConnectTo nem NewElbowFitting conectam direções iguais (ver
-    _juntar/_mesclar_colinear), e o roteamento inteiro ficava sem conexão
-    na ponta mesmo com as duas livres.
-
-    Se as duas pontas estiverem livres:
-      - só uma é alcançável (lado certo) → essa, mesmo que mais longe.
-      - as duas são alcançáveis, ou nenhuma é (pt_aproximacao dentro do
-        intervalo — nenhum trecho reto alcança uma ponta sem atravessar
-        o corpo; esse caso pede modo "corpo" em vez de "ponta") → mais
-        próxima de pt_aproximacao, como antes.
-    Levanta _ConexaoError se nenhuma ponta estiver livre. Retorna o XYZ
-    da ponta escolhida.
+    Escolhe a ponta LIVRE (sem conexão) de pipe_ref pra conectar via joelho.
+    Se as duas pontas estiverem livres, usa a mais próxima do clique (ou de
+    pt_A, se não houver clique). Levanta _ConexaoError se nenhuma ponta
+    estiver livre. Retorna o XYZ da ponta escolhida.
     """
     c_a = _conn_near(pipe_ref, pt_A)
     c_b = _conn_near(pipe_ref, pt_B)
@@ -1532,15 +1430,7 @@ def _escolher_ponta_livre(pipe_ref, pt_A, pt_B, d_ref, pt_aproximacao):
     livre_b = c_b is not None and not c_b.IsConnected
 
     if livre_a and livre_b:
-        ref = pt_aproximacao if pt_aproximacao is not None else pt_A
-        L_ref        = pt_A.DistanceTo(pt_B)
-        t            = (ref - pt_A).DotProduct(d_ref)
-        alcancavel_a = t < TOL
-        alcancavel_b = t > L_ref - TOL
-        if alcancavel_a and not alcancavel_b:
-            return pt_A
-        if alcancavel_b and not alcancavel_a:
-            return pt_B
+        ref = pt_click_ref if pt_click_ref is not None else pt_A
         return pt_A if ref.DistanceTo(pt_A) < ref.DistanceTo(pt_B) else pt_B
     if livre_a:
         return pt_A
@@ -1576,7 +1466,7 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid):
     t_mid = (P_mid - pt_A).DotProduct(d_ref)
     if -TOL <= t_mid <= L_ref + TOL:
         return u"corpo", P_mid
-    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, d_ref, P_mid)
+    return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, P_mid)
 
 
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
@@ -1670,7 +1560,7 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         # pipe_ref curto: corpo inteiro "parecia" ponta).
         if modo_conexao_ref == u"ponta":
             clicou_ponta = True
-            pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, d_ref, P_start)
+            pt_endpoint  = _escolher_ponta_livre(pipe_ref, pt_A, pt_B, pt_click_ref)
         elif modo_conexao_ref == u"corpo":
             clicou_ponta = False
             pt_endpoint  = None
@@ -1889,18 +1779,15 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                     if not ok:
                         ok = _juntar(doc, c_ponta, conn_final)
                     if not ok:
-                        raise _ConexaoError(_msg_falha_ponta(c_ponta, conn_final))
+                        output.print_md(u"| Conexão na ponta | **falhou** |")
             else:
                 ok = _tee(doc, pipe_ref, P_final, conn_final)
                 if not ok:
-                    raise _ConexaoError(
-                        u"Falha ao criar o Tê — verifique se há família de "
-                        u"Tê carregada e configurada nas Preferências de "
-                        u"Roteamento do tipo de tubo.")
+                    output.print_md(u"| Tê | **falhou** — verifique se há família de tê carregada |")
 
             doc.Regenerate()
-            for i, (c1, c2) in enumerate(_elbows_pend):
-                _juntar_obrigatorio(doc, c1, c2, u"o trecho {} da rota".format(i + 1))
+            for c1, c2 in _elbows_pend:
+                _juntar(doc, c1, c2)
 
     else:
         doc.Regenerate()
@@ -1912,11 +1799,13 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             if not ok:
                 ok = _juntar(doc, c_ref_end, conn_final)
             if not ok:
-                raise _ConexaoError(_msg_falha_ponta(c_ref_end, conn_final))
+                output.print_md(
+                    u"| Conexão na ponta | **falhou** — "
+                    u"verifique se o endpoint de pipe_ref está livre |")
 
         doc.Regenerate()
-        for i, (c1, c2) in enumerate(_elbows_pend):
-            _juntar_obrigatorio(doc, c1, c2, u"o trecho {} da rota".format(i + 1))
+        for c1, c2 in _elbows_pend:
+            _juntar(doc, c1, c2)
 
 
 def _conectar(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
