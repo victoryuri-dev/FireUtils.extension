@@ -43,7 +43,7 @@ import niveis_bridge
 import licenca
 
 
-def _tratar_set_sessao(payload, postar_mensagem):
+def _tratar_set_sessao(payload, fila_acoes, postar_mensagem):
     """
     A dockpane acabou de autenticar e mandou a sessão do Supabase.
 
@@ -53,14 +53,22 @@ def _tratar_set_sessao(payload, postar_mensagem):
     Revit depois de fazer login.
 
     Roda em thread porque conversa com o servidor — na thread da interface,
-    a dockpane congelaria durante a chamada.
+    a dockpane congelaria durante a chamada. Por isso a resposta vai pela
+    fila: PostWebMessageAsJson só vale na thread da UI, e chamá-lo daqui
+    falha sem erro visível — a dockpane simplesmente nunca saberia que as
+    licenças mudaram.
     """
+    def responder(modulos, erro):
+        fila_acoes.enfileirar(
+            lambda uiapp: postar_mensagem(u"LICENCAS", {
+                u"modulos": sorted(modulos),
+                u"erro": erro,
+            })
+        )
+
     try:
         if not licenca.salvar_sessao(payload.get(u"refreshToken")):
-            postar_mensagem(u"LICENCAS", {
-                u"modulos": [],
-                u"erro": u"não foi possível guardar a sessão",
-            })
+            responder([], u"não foi possível guardar a sessão")
             return
 
         modulos, erro = licenca.verificar()
@@ -71,13 +79,10 @@ def _tratar_set_sessao(payload, postar_mensagem):
                 u", ".join(sorted(modulos)) if modulos else u"nenhuma"
             ))
 
-        postar_mensagem(u"LICENCAS", {
-            u"modulos": sorted(modulos),
-            u"erro": erro,
-        })
+        responder(modulos, erro)
     except Exception as ex:
         print_seguro(u"[ERRO] Falha ao registrar a sessão: {}".format(texto_erro(ex)))
-        postar_mensagem(u"LICENCAS", {u"modulos": [], u"erro": texto_erro(ex)})
+        responder([], texto_erro(ex))
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -289,7 +294,7 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     elif tipo == u"SET_SESSAO":
         threading.Thread(
             target=_tratar_set_sessao,
-            args=(payload, postar_mensagem),
+            args=(payload, fila_acoes, postar_mensagem),
         ).start()
     elif tipo == u"LIMPAR_SESSAO":
         # Logout na dockpane: sem sessão guardada, a próxima abertura do
