@@ -80,16 +80,15 @@ def _tratar_set_sessao(payload, fila_acoes, postar_mensagem):
             return
 
         modulos, erro = licenca.verificar()
-        if erro:
-            print_seguro(u"[AVISO] Licenças após o login: {}".format(erro))
-        else:
-            print_seguro(u"[OK] Licenças após o login: {}".format(
-                u", ".join(sorted(modulos)) if modulos else u"nenhuma"
-            ))
+        # Em arquivo, não print: a janela de saída do pyRevit abriria a cada
+        # login, inclusive quando dá tudo certo.
+        licenca.log(u"após o login: {}".format(
+            erro or (u", ".join(sorted(modulos)) if modulos else u"nenhuma licença")
+        ))
 
         responder(modulos, erro)
     except Exception as ex:
-        print_seguro(u"[ERRO] Falha ao registrar a sessão: {}".format(texto_erro(ex)))
+        licenca.log(u"falha ao registrar a sessão: {}".format(texto_erro(ex)))
         responder([], texto_erro(ex))
 
 

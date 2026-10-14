@@ -46,9 +46,12 @@ def _registrar_dockable_pane(nome_amigavel, importar_classe_painel):
         classe_painel = importar_classe_painel()
         if not forms.is_registered_dockable_panel(classe_painel):
             forms.register_dockable_panel(classe_painel, default_visible=False)
-            print(u"[OK] Dockable Pane '{}' registrado.".format(nome_amigavel))
+            # Log em arquivo, não print: sucesso não justifica abrir a janela
+            # de saída do pyRevit em toda abertura do Revit. O print do
+            # except abaixo continua, porque aí há o que mostrar.
+            _mlogger.info(u"Dockable Pane '{}' registrado.".format(nome_amigavel))
         else:
-            print(u"[OK] Dockable Pane '{}' já estava registrado.".format(nome_amigavel))
+            _mlogger.info(u"Dockable Pane '{}' já estava registrado.".format(nome_amigavel))
     except Exception:
         # _mlogger.exception manda só pro log em arquivo do pyRevit (fácil
         # de passar despercebido); o print força a abertura da output
@@ -74,12 +77,16 @@ def _verificar_licencas_em_background():
         try:
             import licenca
             modulos, erro = licenca.verificar()
+            # Só no arquivo de log: um print aqui abriria a janela de saída
+            # do pyRevit a cada abertura do Revit, mesmo quando está tudo
+            # certo. Quem precisa do detalhe abre
+            # %LOCALAPPDATA%\FireUtils\licenca.log.
             if erro:
-                print(u"[AVISO] Licenças: {}".format(erro))
-            elif modulos:
-                print(u"[OK] Licenças ativas: {}".format(u", ".join(sorted(modulos))))
+                licenca.log(u"startup: {}".format(erro))
             else:
-                print(u"[AVISO] Nenhuma licença ativa nesta conta.")
+                licenca.log(u"startup: {}".format(
+                    u", ".join(sorted(modulos)) if modulos else u"nenhuma licença ativa"
+                ))
         except Exception:
             _mlogger.exception(u"Falha ao verificar licenças")
 

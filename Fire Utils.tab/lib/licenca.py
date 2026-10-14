@@ -90,12 +90,10 @@ def _log(mensagem):
     perde. Como é justamente aí que o diagnóstico importa, tudo fica também
     em %LOCALAPPDATA%\\FireUtils\\licenca.log.
     """
+    # Sem print: no startup, qualquer saída abre a janela do pyRevit a cada
+    # abertura do Revit, mesmo quando está tudo certo. O arquivo guarda o
+    # mesmo conteúdo para quem precisar investigar.
     linha = u"{} {}".format(datetime.datetime.now().strftime(u"%H:%M:%S"), mensagem)
-
-    try:
-        print(u"[licenças] {}".format(mensagem))
-    except Exception:
-        pass
 
     try:
         with io.open(_arquivo_log(), u"a", encoding=u"utf-8") as arquivo:
