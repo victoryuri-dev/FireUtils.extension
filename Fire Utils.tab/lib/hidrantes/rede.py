@@ -296,19 +296,19 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
     mesmo cenário.
 
     Um galho que não termina em válvula (ramal morto, dreno, tubulação
-    auxiliar, ou uma quebra de verdade — conector desconectado) não é mais
-    ignorado em silêncio: o elemento onde o galho parou entra em
-    `pontas_abertas`, para o chamador mostrar ao usuário onde investigar
-    (ver mostrar_inconsistencias_mapeamento em resultado_ui.py).
+    auxiliar de teste de bomba etc.) é simplesmente ignorado aqui — esta
+    função só constrói e pontua rotas até válvulas de verdade, pra nunca
+    arriscar que um ramal irrelevante mude o ranking de "mais
+    desfavorável". A detecção de inconsistências é responsabilidade de
+    outra busca, direcionada por válvula (bfs_ate, válvula → bomba — ver
+    "Mapear Trechos"/script.py): só reporta um problema quando uma válvula
+    específica não acha a bomba, nunca por causa de um ramal que não leva
+    a hidrante nenhum.
 
-    Retorna (rotas, pontas_abertas):
-      rotas: lista de rotas; cada rota é uma lista de ElementId.Value
-        (get_id), de elem_ini até a válvula, ambos inclusive.
-      pontas_abertas: lista de ElementId.Value (get_id) dos elementos onde
-        um galho parou sem achar válvula.
+    Retorna rotas: lista de rotas; cada rota é uma lista de ElementId.Value
+    (get_id), de elem_ini até a válvula, ambos inclusive.
     """
     rotas = []
-    pontas_abertas = []
     visitados = set([eid_ini])
     pilha = [(elem_ini, [eid_ini])]
     while pilha:
@@ -320,7 +320,6 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
             continue
         if eh_equipamento(elem) and get_id(elem) != eid_ini:
             continue
-        avancou = False
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -330,11 +329,8 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
                     if vid not in visitados:
                         visitados.add(vid)
                         pilha.append((viz, caminho + [vid]))
-                        avancou = True
             except: continue
-        if not avancou:
-            pontas_abertas.append(get_id(elem))
-    return rotas, pontas_abertas
+    return rotas
 
 
 def mostrar_no_revit(uidoc, ids):

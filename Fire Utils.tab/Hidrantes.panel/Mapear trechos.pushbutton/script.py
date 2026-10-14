@@ -218,24 +218,59 @@ ids_succao = caminho_succao
 # ===========================================================================
 # 3 — Percorre a árvore de recalque até todas as válvulas de hidrante
 # ===========================================================================
-rotas, pontas_recalque = percorre_rotas_hidrantes(tubo_rec, eid_rec)
+# Constrói e pontua as rotas pela árvore bomba → válvulas, sem se preocupar
+# com ramais que não levam a hidrante nenhum (dreno, tubulação de teste de
+# bomba, cavalete de teste etc.) — esses nunca entram em `rotas`, então
+# nunca afetam o ranking de "mais desfavorável" (ver percorre_rotas_hidrantes).
+rotas = percorre_rotas_hidrantes(tubo_rec, eid_rec)
 
 ids_valvulas_alcancadas = set(rota[-1] for rota in rotas)
 valvulas_sem_rota = [v for v in todas_valvulas_hidrante(doc)
                      if get_id(v) not in ids_valvulas_alcancadas]
 
-itens_recalque = [
-    {u"trecho": u"Válvula sem rota", u"elemento": descricao_curta_elemento(v), u"eid": get_id(v)}
-    for v in valvulas_sem_rota
-]
-itens_recalque.extend(_itens_pontas(u"Recalque (Bomba → Válvulas)", pontas_recalque))
+# Inconsistência de recalque = busca à parte, DIRECIONADA por válvula
+# (válvula → bomba, bfs_ate — mesma função já usada na sucção, passo 2
+# acima), não mais uma varredura cega de toda ponta solta alcançável a
+# partir da bomba. Isso existe pra não confundir um ramal legítimo que não
+# leva a hidrante nenhum (ex.: tubo de teste de bomba com a ponta solta de
+# propósito, cavalete de teste) com uma quebra de verdade: antes, QUALQUER
+# ponta aberta alcançável a partir da bomba virava inconsistência, mesmo
+# sem nenhuma válvula depender dela. Agora só reporta um problema quando
+# uma válvula ESPECÍFICA não acha caminho até a bomba — só roda pras
+# válvulas que `percorre_rotas_hidrantes` já não alcançou (as demais já
+# têm rota confirmada, não precisam ser buscadas de novo).
+itens_recalque = []
+for _valvula in valvulas_sem_rota:
+    _eid_valvula = get_id(_valvula)
+    _caminho_valvula, _visitados_valvula = bfs_ate(_valvula, _eid_valvula, eid_rec)
+    if _caminho_valvula:
+        # A árvore (percorre_rotas_hidrantes) não passou por essa válvula,
+        # mas essa busca à parte achou caminho até a bomba mesmo assim —
+        # sinal de anel fechado na modelagem (um elemento compartilhado
+        # por dois galhos, onde o primeiro a chegar "rouba" o elemento do
+        # outro na travessia em árvore). Reportado à parte, sem entrar no
+        # ranking (que continua vindo só da árvore, pra nunca mudar por
+        # causa disso) — o RT decide se a modelagem deve ser corrigida.
+        itens_recalque.append({
+            u"trecho": u"Válvula sem rota — {}".format(descricao_curta_elemento(_valvula)),
+            u"elemento": u"Achada por busca à parte (possível anel fechado na rede — "
+                         u"revise a modelagem)",
+            u"eid": _eid_valvula,
+        })
+        continue
+    _pontas_valvula = get_pontas_abertas(doc, _visitados_valvula)
+    _origem = u"Recalque → {}".format(descricao_curta_elemento(_valvula))
+    if _pontas_valvula:
+        itens_recalque.extend(_itens_pontas(_origem, _pontas_valvula))
+    else:
+        itens_recalque.append({u"trecho": _origem, u"elemento": u"Sem rota até a bomba",
+                               u"eid": _eid_valvula})
 
 if not rotas:
-    # Mesmo padrão da sucção (passo 2 acima): itens_recalque já traz todas
-    # as válvulas sem rota (aqui, todas — nenhuma foi alcançada) e qualquer
-    # ponta aberta encontrada ao percorrer a árvore de recalque, pronto pra
-    # janela de inconsistências em vez de um alert genérico sem pistas de
-    # onde a tubulação está desconectada.
+    # itens_recalque já traz, pra cada válvula sem rota (aqui, todas —
+    # nenhuma foi alcançada pela árvore), os pontos achados pela busca à
+    # parte válvula → bomba, pronto pra janela de inconsistências em vez
+    # de um alert genérico sem pistas de onde a tubulação está desconectada.
     if itens_recalque:
         mostrar_inconsistencias_mapeamento(itens_recalque, bloqueante=True,
                                            fila_acoes=fila_acoes, ao_localizar=_ao_localizar)
