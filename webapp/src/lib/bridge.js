@@ -156,6 +156,29 @@
  *     gravado — quem recebe essa mensagem deve mandar
  *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado
  *     completo, em vez de esta mensagem carregar os dados duas vezes.
+ *
+ *   { type: "GRAVAR_QUANTITATIVOS" }
+ *     JS -> Python: dispara a coleta de TODAS as medidas de quantitativo
+ *     (Extintores, Sinalização de Emergência, Iluminação de Emergência)
+ *     do modelo Revit ativo, grava o firedata.json e envia pro site — sem
+ *     seleção nenhuma (sempre todas) e sem abrir nenhum outro painel (nem
+ *     janela WPF, nem o output window do pyRevit); mesmo botão único que
+ *     existia na faixa de opções do Revit, agora só na dockpane (ver
+ *     quantitativos_bridge.py).
+ *
+ *   { type: "QUANTITATIVOS_GRAVADOS", payload: { ok, erro?,
+ *     medidas?: [{ chave, rotulo, quantidade, enviado, motivo?, erro? }] } }
+ *     Python -> JS: resultado de um GRAVAR_QUANTITATIVOS. `ok: false` só
+ *     quando nem chegou a rodar (ex.: projeto não salvo) — `erro` traz o
+ *     motivo. Com `ok: true`, `medidas` sempre traz as 3 (mesmo as que não
+ *     encontraram nada ou falharam) — `quantidade` é o nº de itens
+ *     gravados; `enviado` é null quando não havia nada pra gravar (0
+ *     itens) ou a medida falhou antes de chegar no envio, `false` quando
+ *     gravou local mas não conseguiu enviar pro site (ver `motivo`), e
+ *     `true` quando gravou e enviou. `erro`, por medida, é só pra falha
+ *     ao preparar/coletar/gravar (parâmetro ausente, etc.) — vira uma
+ *     notificação (ver ToastStack.jsx), nunca interrompe as demais
+ *     medidas.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -173,6 +196,8 @@ export const BridgeMessageTypes = {
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
   DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",
   HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
+  GRAVAR_QUANTITATIVOS: "GRAVAR_QUANTITATIVOS",
+  QUANTITATIVOS_GRAVADOS: "QUANTITATIVOS_GRAVADOS",
 };
 
 function obterWebView() {

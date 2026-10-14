@@ -46,6 +46,7 @@ export default function App() {
   const [carregando, setCarregando] = useState(false);
   const [vinculo, setVinculo] = useState(undefined); // undefined = ainda não respondeu
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
+  const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const { toasts, adicionarToast, removerToast } = useToasts();
   const timeoutCarregamentoRef = useRef(null);
   // Espelha `catalogo` num ref só pra o listener da bridge (abaixo) poder
@@ -55,6 +56,12 @@ export default function App() {
   useEffect(() => {
     catalogoRef.current = catalogo;
   }, [catalogo]);
+
+  function gravarQuantitativos() {
+    if (gravandoQuantitativos) return;
+    setGravandoQuantitativos(true);
+    postToHost(BridgeMessageTypes.GRAVAR_QUANTITATIVOS, {});
+  }
 
   function pararCarregamento() {
     setCarregando(false);
@@ -145,6 +152,35 @@ export default function App() {
             ? { tipo: "sucesso", titulo: "Classificação aplicada", mensagem: valorSistema, duracaoMs: 6000 }
             : { tipo: "erro", titulo: "Não foi possível aplicar a classificação", mensagem: erro, duracaoMs: 9000 }
         );
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.QUANTITATIVOS_GRAVADOS) {
+        setGravandoQuantitativos(false);
+        const { ok, erro, medidas = [] } = mensagem.payload || {};
+        if (!ok) {
+          adicionarToast({
+            tipo: "erro",
+            titulo: "Não foi possível gravar quantitativos",
+            mensagem: erro,
+            duracaoMs: 9000,
+          });
+          return;
+        }
+        const comFalha = medidas.filter((m) => m.erro);
+        const resumo = medidas
+          .map((m) => {
+            if (m.erro) return `${m.rotulo}: falhou`;
+            if (m.enviado === false) return `${m.rotulo}: ${m.quantidade} (não enviado)`;
+            return `${m.rotulo}: ${m.quantidade}`;
+          })
+          .join(" • ");
+        adicionarToast({
+          tipo: comFalha.length > 0 ? "aviso" : "sucesso",
+          titulo: "Quantitativos gravados",
+          mensagem: resumo,
+          duracaoMs: 9000,
+        });
         return;
       }
 
@@ -305,6 +341,8 @@ export default function App() {
         projetoVinculado={!!vinculo?.projetoId}
         onDesconectar={() => postToHost(BridgeMessageTypes.DISCONNECT_PROJECT, {})}
         email={sessao?.user?.email}
+        onGravarQuantitativos={gravarQuantitativos}
+        gravandoQuantitativos={gravandoQuantitativos}
       />
 
       <div className="app">
