@@ -2,18 +2,27 @@
 """
 project_link_bridge.py — Fire Utils · lib/
 Processa as mensagens da bridge web (webapp/) relacionadas ao vínculo
-projeto/estrutura do Dashboard: GET_PROJECT_LINK, SET_PROJECT_LINK,
+projeto/estruturas do Dashboard: GET_PROJECT_LINK, SET_PROJECT_LINK,
 DISCONNECT_PROJECT e GET_DIMENSIONAMENTOS_STATUS — contrato documentado em
 webapp/README.md.
 
+Um arquivo Revit pode conter várias estruturas modeladas juntas — o
+vínculo deixou de ser "uma estrutura por documento" e virou "um CONJUNTO
+de estruturas por documento" (`estruturas`, lista de {id, nome}, em vez de
+um `estruturaId`/`estruturaNome` só). Esse conjunto não decide mais quem
+pertence a quem: é só a lista de opções que a dockpane oferece na
+ferramenta "Atribuir seleção à estrutura" (ver atribuir_estrutura_bridge.py)
+— cada elemento/ambiente carrega a sua própria estrutura no parâmetro
+"Estrutura" (ver estrutura_param.py), nunca herdada do vínculo. Hidrantes
+é a exceção: sistema único, compartilhado entre todas as estruturas do
+projeto, sem nenhuma mudança por essa migração.
+
 Substitui o antigo pushbutton "Dados do Projeto" (WPF/XAML, Fire
-Utils.tab/Projeto.panel — aposentado): a escolha do projeto/estrutura agora
-acontece direto no Dashboard React, consultando o Supabase com a sessão do
-usuário logado (RLS) — nada aqui fala com o Supabase. Este módulo só
-persiste o vínculo escolhido no firedata.json do documento aberto, no
-mesmo formato que o pushbutton antigo gravava (dados_projeto + sync), pra
-manter os módulos de hidrantes/saidas/extintores funcionando sem nenhuma
-mudança neles.
+Utils.tab/Projeto.panel — aposentado): a escolha do projeto/estruturas
+agora acontece direto no Dashboard React, consultando o Supabase com a
+sessão do usuário logado (RLS) — nada aqui fala com o Supabase. Este
+módulo só persiste o vínculo escolhido no firedata.json do documento
+aberto.
 
 Todas as funções aqui esperam rodar dentro de uma ação enfileirada via
 family_loader_events.criar_fila_acoes() (mesmo padrão do carregamento de
@@ -23,7 +32,7 @@ doc.PathName.
 
 import os
 
-from sync import config_sync, salvar_config_sync
+from sync import config_sync, salvar_config_sync, estruturas_vinculadas
 from projeto import salvar_dados_projeto, limpar_vinculo_projeto, carregar_cache
 from normas import get_estado
 from family_error_utils import texto_erro
@@ -52,16 +61,14 @@ def _estado_vinculo(projeto_dir):
             u"docSalvo": False,
             u"projetoId": None,
             u"projetoNome": None,
-            u"estruturaId": None,
-            u"estruturaNome": None,
+            u"estruturas": [],
         }
     sync = config_sync(projeto_dir)
     return {
         u"docSalvo": True,
         u"projetoId": sync.get(u"projetoId"),
         u"projetoNome": sync.get(u"projetoNome"),
-        u"estruturaId": sync.get(u"estruturaId"),
-        u"estruturaNome": sync.get(u"estruturaNome"),
+        u"estruturas": estruturas_vinculadas(projeto_dir),
     }
 
 
@@ -89,6 +96,11 @@ def tratar_set_project_link(uiapp, payload, postar_mensagem):
         })
         return
 
+    estruturas = payload.get(u"estruturas") or []
+    if not estruturas:
+        postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": False, u"erro": u"Selecione ao menos uma estrutura."})
+        return
+
     try:
         uf = payload.get(u"uf") or u""
         estado = get_estado(uf, projeto_dir) if uf else None
@@ -104,8 +116,7 @@ def tratar_set_project_link(uiapp, payload, postar_mensagem):
             projeto_dir,
             projetoId=payload.get(u"projetoId"),
             projetoNome=payload.get(u"projetoNome"),
-            estruturaId=payload.get(u"estruturaId"),
-            estruturaNome=payload.get(u"estruturaNome"),
+            estruturas=estruturas,
         )
     except Exception as ex:
         postar_mensagem(u"PROJECT_LINK_SAVED", {u"ok": False, u"erro": texto_erro(ex)})
@@ -126,21 +137,29 @@ def tratar_disconnect_project(uiapp, postar_mensagem):
     postar_mensagem(u"PROJECT_LINK", _estado_vinculo(projeto_dir))
 
 
-def tratar_get_dimensionamentos_status(uiapp, postar_mensagem):
+def tratar_get_dimensionamentos_status(uiapp, payload, postar_mensagem):
+    """`payload.estruturaId` é a estrutura sendo VISTA no momento no
+    Dashboard (um dos cartões — Hidrantes é o único que ignora isso, por
+    ser um sistema só pro projeto inteiro). Sem `estruturaId` (chamada
+    antiga, ou nenhuma estrutura ainda carregada), saída/níveis caem pra
+    "existe algo sincronizado, de qualquer estrutura?", só pra não quebrar
+    quem ainda não manda o parâmetro nenhum."""
     projeto_dir = _projeto_dir(uiapp)
     if projeto_dir is None:
         postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {u"hidrantes": False, u"saidaEmergencia": False, u"niveis": False})
         return
 
+    estrutura_id = (payload or {}).get(u"estruturaId")
     try:
         hidrantes_ok = hidrantes_calc.cache_existe(projeto_dir)
-        saida_ok = saidas_calc.carregar_cache_se_import(projeto_dir) is not None
+        saida_ok = saidas_calc.carregar_cache_se_import(projeto_dir, estrutura_id) is not None
         # "Correlacionado" quando já existe uma correlação Nível Revit <->
-        # Pavimento salva pra estrutura atualmente vinculada (ver
-        # niveis_bridge.py) — reaproveita esta mesma consulta de status em
-        # vez de um round-trip de bridge próprio só pra isso.
-        estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-        niveis_ok = bool(estrutura_id and (carregar_cache(projeto_dir).get(u"niveis_pavimentos") or {}).get(estrutura_id))
+        # Pavimento salva pra estrutura sendo vista (ver niveis_bridge.py).
+        niveis_pavimentos = carregar_cache(projeto_dir).get(u"niveis_pavimentos") or {}
+        if estrutura_id:
+            niveis_ok = bool(niveis_pavimentos.get(estrutura_id))
+        else:
+            niveis_ok = any(niveis_pavimentos.values())
     except Exception as ex:
         print(u"[AVISO] GET_DIMENSIONAMENTOS_STATUS falhou: {}".format(texto_erro(ex)))
         hidrantes_ok = False

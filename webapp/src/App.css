@@ -950,6 +950,23 @@
   padding: 3px 10px;
 }
 
+/* Arquivo com mais de uma estrutura vinculada (ver Dashboard.jsx) — a tag
+   vira um <select> pra trocar qual o Dashboard mostra agora, mesmo visual
+   da tag estática acima. */
+.projeto-estrutura-select {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .projeto-link-externo {
   display: inline-flex;
   color: var(--text-3);
@@ -1182,6 +1199,48 @@
   color: var(--accent);
 }
 
+/* Multi-seleção (SelecionarEstrutura.jsx) — um arquivo Revit pode conter
+   várias estruturas modeladas juntas, então a tela virou checkbox em vez
+   de "clique pra entrar". */
+.botao-estrutura {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.botao-estrutura-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border-2);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.botao-estrutura-check .icon {
+  width: 10px;
+  height: 10px;
+}
+
+.botao-estrutura-marcada {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.botao-estrutura-marcada .botao-estrutura-check {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg-2);
+}
+
+.botao-confirmar-estruturas {
+  margin-top: 18px;
+  align-self: flex-start;
+}
+
 /* Dashboard do projeto/estrutura ------------------------------------------ */
 /* Bento: cada cartão com a própria altura de conteúdo, empilhado logo
    abaixo do anterior na mesma coluna — display:grid (mesmo com
@@ -1359,6 +1418,39 @@
 
 .cartao-dimensionamento-clicavel:hover {
   border-color: var(--text-2);
+}
+
+/* "Atribuir seleção à estrutura" (DashboardEstrutura.jsx) — precisa de um
+   valor escolhido antes de agir, então ganha um <select> + botão em vez do
+   clique único dos outros cartões da grade. */
+.cartao-atribuir-estrutura {
+  flex-wrap: wrap;
+}
+
+.cartao-atribuir-estrutura-controles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.cartao-atribuir-estrutura-controles select {
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-1);
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  max-width: 140px;
+}
+
+.cartao-atribuir-estrutura-controles .botao {
+  height: 28px;
+  padding: 0 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* ══════════════════════════════════════════════════════════════════════

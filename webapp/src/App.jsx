@@ -88,6 +88,7 @@ export default function App() {
   const [modulosLiberados, setModulosLiberados] = useState(null);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
+  const [atribuindoEstrutura, setAtribuindoEstrutura] = useState(false);
   const { toasts, adicionarToast, removerToast } = useToasts();
   const timeoutCarregamentoRef = useRef(null);
   // Espelha `catalogo` num ref só pra o listener da bridge (abaixo) poder
@@ -112,6 +113,12 @@ export default function App() {
     if (gravandoQuantitativos) return;
     setGravandoQuantitativos(true);
     postToHost(BridgeMessageTypes.GRAVAR_QUANTITATIVOS, {});
+  }
+
+  function atribuirEstrutura(estruturaNome) {
+    if (atribuindoEstrutura || !estruturaNome) return;
+    setAtribuindoEstrutura(true);
+    postToHost(BridgeMessageTypes.ASSIGN_ESTRUTURA_SELECAO, { estruturaNome });
   }
 
   function pararCarregamento() {
@@ -168,7 +175,7 @@ export default function App() {
         console.warn(
           "[App] WebView2 não detectado — simulando vínculo vazio pra testar o Dashboard no navegador."
         );
-        setVinculo({ docSalvo: true, projetoId: null, projetoNome: null, estruturaId: null, estruturaNome: null });
+        setVinculo({ docSalvo: true, projetoId: null, projetoNome: null, estruturas: [] });
         // Idem para as licenças: sem Python, esperar a resposta deixaria as
         // abas em carregamento eterno.
         //
@@ -259,19 +266,49 @@ export default function App() {
           });
           return;
         }
+        // Uma linha por (medida, estrutura) — mais uma por grupo de itens
+        // sem Estrutura reconhecida (estruturaNome null, sem erro nem
+        // envio: ver quantitativos_core.py:salvar_todos).
         const comFalha = medidas.filter((m) => m.erro);
         const resumo = medidas
           .map((m) => {
-            if (m.erro) return `${m.rotulo}: falhou`;
-            if (m.enviado === false) return `${m.rotulo}: ${m.quantidade} (não enviado)`;
-            return `${m.rotulo}: ${m.quantidade}`;
+            const rotulo = m.estruturaNome ? `${m.rotulo} — ${m.estruturaNome}` : m.rotulo;
+            if (m.erro) return `${rotulo}: falhou (${m.erro})`;
+            if (m.naoReconhecidos?.length > 0) {
+              return `${m.rotulo}: Estrutura não reconhecida em algum item (${m.naoReconhecidos.join(", ")})`;
+            }
+            if (!m.estruturaNome) return null; // nada coletado pra essa medida
+            if (m.enviado === false) return `${rotulo}: ${m.quantidade} (não enviado — ${m.motivo})`;
+            return `${rotulo}: ${m.quantidade}`;
           })
+          .filter(Boolean)
           .join(" • ");
         adicionarToast({
           tipo: comFalha.length > 0 ? "aviso" : "sucesso",
           titulo: "Quantitativos gravados",
-          mensagem: resumo,
+          mensagem: resumo || "Nenhum item encontrado.",
           duracaoMs: 9000,
+        });
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.ESTRUTURA_ATRIBUIDA) {
+        setAtribuindoEstrutura(false);
+        const { ok, erro, estruturaNome, marcados, ignorados } = mensagem.payload || {};
+        if (!ok) {
+          adicionarToast({
+            tipo: "erro",
+            titulo: "Não foi possível atribuir a estrutura",
+            mensagem: erro,
+            duracaoMs: 9000,
+          });
+          return;
+        }
+        adicionarToast({
+          tipo: "sucesso",
+          titulo: `Estrutura "${estruturaNome}" atribuída`,
+          mensagem: `${marcados} elemento(s) marcado(s)${ignorados ? ` • ${ignorados} ignorado(s) (categoria sem o parâmetro)` : ""}`,
+          duracaoMs: 7000,
         });
         return;
       }
@@ -483,6 +520,8 @@ export default function App() {
             onAbrirHidrantes={() => setAbaAtual("hidrantes")}
             onGravarQuantitativos={gravarQuantitativos}
             gravandoQuantitativos={gravandoQuantitativos}
+            onAtribuirEstrutura={atribuirEstrutura}
+            atribuindoEstrutura={atribuindoEstrutura}
           />
           )
         ) : (

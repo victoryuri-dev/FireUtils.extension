@@ -17,7 +17,8 @@ from Autodesk.Revit.DB import (
 )
 
 from extintores.params import CATEGORIAS_EXTINTOR, PARAM_CAPACIDADE
-from sync import gravar_e_enviar, config_sync
+from estrutura_param import ler_estrutura
+from sync import gravar_e_enviar
 
 
 def _get_id_value(eid):
@@ -109,7 +110,7 @@ def coletar_itens(doc):
             continue
 
         itens.append({
-            u"estrutura":   _get_texto(elem, u"Estrutura"),
+            u"estruturaNome": ler_estrutura(elem),
             u"pavimento":   _get_pavimento(doc, elem),
             u"ambiente":    _get_texto(elem, u"Ambiente"),
             u"tipo":        _get_texto(elem, u"Tipo"),
@@ -121,9 +122,10 @@ def coletar_itens(doc):
     return itens
 
 
-def salvar_cache(itens, projeto_dir):
-    """Grava os itens de extintor na chave 'extintores' do firedata.json e
-    envia pro site — ver sync.gravar_e_enviar (compartilhado com as demais
-    medidas de quantitativo, ver quantitativos_core.py)."""
-    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-    return gravar_e_enviar(u"extintores", itens, projeto_dir, estruturaId=estrutura_id)
+def salvar_cache(itens, projeto_dir, estruturaId):
+    """Grava os itens de extintor (já de UMA estrutura — ver
+    quantitativos_core.py:salvar_todos, que agrupa por estrutura antes de
+    chamar isto, uma vez por grupo) na chave 'extintores' do firedata.json
+    e envia pro site — ver sync.gravar_e_enviar (compartilhado com as
+    demais medidas de quantitativo)."""
+    return gravar_e_enviar(u"extintores", itens, projeto_dir, estruturaId=estruturaId)

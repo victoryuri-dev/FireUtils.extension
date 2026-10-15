@@ -39,26 +39,36 @@
  *        existentes), deixando só as que falharam marcadas pra tentar de
  *        novo.
  *
- * Mensagens do Dashboard (vínculo projeto/estrutura — ver
+ * Mensagens do Dashboard (vínculo projeto/estruturas — ver
  * lib/projectData.js e project_link_bridge.py do lado Python):
+ *
+ * Um arquivo Revit pode conter várias estruturas modeladas juntas — o
+ * vínculo é com um CONJUNTO de estruturas (`estruturas`, lista de
+ * {id, nome}), não mais uma só. Esse conjunto não atribui nada sozinho:
+ * é só a lista de opções da ferramenta "Atribuir seleção à estrutura"
+ * (ver ASSIGN_ESTRUTURA_SELECAO abaixo) — cada família/ambiente carrega a
+ * própria estrutura no parâmetro Revit "Estrutura", nunca herdada do
+ * vínculo. Hidrantes é a exceção: sistema único, compartilhado entre
+ * todas as estruturas do projeto, sem relação nenhuma com isso.
  *
  *   { type: "GET_PROJECT_LINK" }
  *     JS -> Python: pede o vínculo salvo no firedata.json do documento
  *     Revit ativo (a busca de projetos/estruturas em si é direto no
  *     Supabase, do lado do React — isto só lê o que já foi vinculado).
  *
- *   { type: "PROJECT_LINK", payload: { docSalvo, projetoId, projetoNome, estruturaId, estruturaNome } }
+ *   { type: "PROJECT_LINK", payload: { docSalvo, projetoId, projetoNome, estruturas: [{id, nome}, ...] } }
  *     Python -> JS: resposta de GET_PROJECT_LINK (e também reenviada depois
  *     de um SET_PROJECT_LINK ou DISCONNECT_PROJECT bem-sucedido).
  *     `docSalvo: false` quando não há documento Revit aberto ou ele ainda
- *     não foi salvo em disco — nesse caso os demais campos vêm null e o
+ *     não foi salvo em disco — nesse caso os demais campos vêm null/[] e o
  *     Dashboard deve pedir pra salvar o projeto antes de vincular.
+ *     `estruturas: []` com `projetoId` preenchido é um vínculo de projeto
+ *     sem nenhuma estrutura escolhida ainda (tela "Selecione as estruturas").
  *
- *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturaId, estruturaNome, uf, areaConstruida } }
- *     JS -> Python: grava o vínculo escolhido (projeto + estrutura, já
- *     resolvidos no Supabase) no firedata.json do documento ativo — mesmo
- *     formato que o antigo pushbutton "Dados do Projeto" gravava, pra não
- *     quebrar os módulos de hidrantes/saidas/extintores.
+ *   { type: "SET_PROJECT_LINK", payload: { projetoId, projetoNome, estruturas: [{id, nome}, ...], uf, areaConstruida } }
+ *     JS -> Python: grava o vínculo escolhido (projeto + 1 ou mais
+ *     estruturas, já resolvidas no Supabase) no firedata.json do
+ *     documento ativo. `estruturas` não pode vir vazio.
  *
  *   { type: "PROJECT_LINK_SAVED", payload: { ok, erro? } }
  *     Python -> JS: resultado de um SET_PROJECT_LINK ou DISCONNECT_PROJECT
@@ -67,15 +77,33 @@
  *     seguida com o estado atualizado.
  *
  *   { type: "DISCONNECT_PROJECT" }
- *     JS -> Python: apaga o vínculo (projeto + estrutura) do documento
+ *     JS -> Python: apaga o vínculo (projeto + estruturas) do documento
  *     ativo — usado pelo botão "Desconectar projeto" da sidebar.
  *
- *   { type: "GET_DIMENSIONAMENTOS_STATUS" }
- *     JS -> Python: pede o status (feito/não feito) dos dimensionamentos
- *     já calculados localmente pra estrutura vinculada.
+ *   { type: "GET_DIMENSIONAMENTOS_STATUS", payload?: { estruturaId } }
+ *     JS -> Python: pede o status (feito/não feito) dos dimensionamentos já
+ *     calculados localmente. `estruturaId` é a estrutura sendo vista no
+ *     momento no Dashboard — escopa Saída de Emergência/Correlacionar
+ *     Níveis a ela; omitido, os dois caem pra "existe algo sincronizado, de
+ *     qualquer estrutura?". Hidrantes (`hidrantes`) nunca depende disso —
+ *     sistema único do projeto inteiro.
  *
- *   { type: "DIMENSIONAMENTOS_STATUS", payload: { hidrantes: boolean, saidaEmergencia: boolean } }
+ *   { type: "DIMENSIONAMENTOS_STATUS", payload: { hidrantes: boolean, saidaEmergencia: boolean, niveis: boolean } }
  *     Python -> JS: resposta de GET_DIMENSIONAMENTOS_STATUS.
+ *
+ *   { type: "ASSIGN_ESTRUTURA_SELECAO", payload: { estruturaNome } }
+ *     JS -> Python: escreve `estruturaNome` no parâmetro de instância
+ *     "Estrutura" de todos os elementos selecionados no momento no Revit
+ *     (seleção nativa — esta mensagem não manda a lista de elementos, só
+ *     o nome; quem decide o que está selecionado é o Revit). Categorias
+ *     sem o parâmetro (fora de Proteção contra Incêndio, Dispositivos de
+ *     Segurança, Luminárias e Ambientes) são ignoradas, não dá erro.
+ *     Botão "Atribuir seleção à estrutura" do Dashboard.
+ *
+ *   { type: "ESTRUTURA_ATRIBUIDA", payload: { ok, erro?, estruturaNome?, marcados?, ignorados? } }
+ *     Python -> JS: resultado de um ASSIGN_ESTRUTURA_SELECAO. `ok: false`
+ *     também quando nada foi selecionado no Revit, ou nenhum elemento
+ *     selecionado tinha o parâmetro (`erro` explica qual caso).
  *
  *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number,
  *     metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
@@ -160,25 +188,31 @@
  *   { type: "GRAVAR_QUANTITATIVOS" }
  *     JS -> Python: dispara a coleta de TODAS as medidas de quantitativo
  *     (Extintores, Sinalização de Emergência, Iluminação de Emergência)
- *     do modelo Revit ativo, grava o firedata.json e envia pro site — sem
- *     seleção nenhuma (sempre todas) e sem abrir nenhum outro painel (nem
- *     janela WPF, nem o output window do pyRevit); mesmo botão único que
- *     existia na faixa de opções do Revit, agora só na dockpane (ver
- *     quantitativos_bridge.py).
+ *     do modelo Revit ativo, separa os itens de cada uma pela estrutura do
+ *     parâmetro "Estrutura" (ver estrutura_param.py), grava o firedata.json
+ *     e envia pro site um lote por (medida, estrutura) — sem seleção
+ *     nenhuma (sempre todas as medidas) e sem abrir nenhum outro painel
+ *     (nem janela WPF, nem o output window do pyRevit).
  *
  *   { type: "QUANTITATIVOS_GRAVADOS", payload: { ok, erro?,
- *     medidas?: [{ chave, rotulo, quantidade, enviado, motivo?, erro? }] } }
+ *     medidas?: [{ chave, rotulo, estruturaNome, quantidade, enviado, motivo?,
+ *       erro?, naoReconhecidos?: string[] }] } }
  *     Python -> JS: resultado de um GRAVAR_QUANTITATIVOS. `ok: false` só
  *     quando nem chegou a rodar (ex.: projeto não salvo) — `erro` traz o
- *     motivo. Com `ok: true`, `medidas` sempre traz as 3 (mesmo as que não
- *     encontraram nada ou falharam) — `quantidade` é o nº de itens
- *     gravados; `enviado` é null quando não havia nada pra gravar (0
- *     itens) ou a medida falhou antes de chegar no envio, `false` quando
- *     gravou local mas não conseguiu enviar pro site (ver `motivo`), e
- *     `true` quando gravou e enviou. `erro`, por medida, é só pra falha
- *     ao preparar/coletar/gravar (parâmetro ausente, etc.) — vira uma
- *     notificação (ver ToastStack.jsx), nunca interrompe as demais
- *     medidas.
+ *     motivo. Com `ok: true`, `medidas` traz uma entrada POR ESTRUTURA
+ *     resolvida de cada medida (uma mesma `chave`/`rotulo` pode aparecer
+ *     várias vezes, uma por estrutura, se o modelo tiver mais de uma) —
+ *     `estruturaNome` identifica qual; `quantidade` é o nº de itens
+ *     gravados nela; `enviado` é null quando a medida falhou antes de
+ *     chegar no envio, `false` quando gravou local mas não conseguiu
+ *     enviar pro site (ver `motivo`), e `true` quando gravou e enviou.
+ *     Também pode vir uma entrada com `estruturaNome: null` e
+ *     `naoReconhecidos` preenchido — itens cujo parâmetro "Estrutura"
+ *     estava vazio ou não bateu com nenhuma estrutura do projeto, listados
+ *     por nome/texto cru pra ajudar a achar o quê corrigir; esses itens
+ *     NÃO são enviados. `erro`, por medida (ou por medida+estrutura), é só
+ *     pra falha ao preparar/coletar/gravar — vira uma notificação (ver
+ *     ToastStack.jsx), nunca interrompe as demais.
  *
  *   { type: "SELECIONAR_TRECHO_HIDRANTE", payload: { rota: number[] } }
  *     JS -> Python: seleciona e enquadra, na view ativa do Revit, todo o
@@ -238,6 +272,8 @@ export const BridgeMessageTypes = {
   HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
   GRAVAR_QUANTITATIVOS: "GRAVAR_QUANTITATIVOS",
   QUANTITATIVOS_GRAVADOS: "QUANTITATIVOS_GRAVADOS",
+  ASSIGN_ESTRUTURA_SELECAO: "ASSIGN_ESTRUTURA_SELECAO",
+  ESTRUTURA_ATRIBUIDA: "ESTRUTURA_ATRIBUIDA",
   SELECIONAR_TRECHO_HIDRANTE: "SELECIONAR_TRECHO_HIDRANTE",
   GET_REVIT_LEVELS: "GET_REVIT_LEVELS",
   REVIT_LEVELS: "REVIT_LEVELS",

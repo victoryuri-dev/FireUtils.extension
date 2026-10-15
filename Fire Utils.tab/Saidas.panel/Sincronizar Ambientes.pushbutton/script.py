@@ -23,7 +23,7 @@ exigir(u"saidas")
 
 from pyrevit import revit, script, forms
 from projeto import exigir_projeto_e_estado
-from saidas.calc       import sincronizar_ambientes
+from saidas.calc       import sincronizar_ambientes, resumo_texto
 from saidas.populacao  import garantir_parametros, puxar_populacao_do_site
 from saidas.rooms      import get_rooms_classificados
 
@@ -36,15 +36,17 @@ if not garantir_parametros():
 projeto_dir, sigla_estado, estado = exigir_projeto_e_estado(doc, forms, script)
 
 # 1) Revit -> Site: envia nome/grupo/área atuais.
-sincronizar_ambientes(get_rooms_classificados(doc), estado, projeto_dir)
+resultado_envio = sincronizar_ambientes(get_rooms_classificados(doc), estado, projeto_dir)
 
 # 2) Site -> Revit: puxa população/taxa populacional já calculadas lá.
 atualizados, nao_encontrados, erro_pop = puxar_populacao_do_site(doc, projeto_dir)
 
+mensagem = resumo_texto(resultado_envio)
+
 if erro_pop:
-    mensagem = u"Ambientes enviados pro site.\n[População não sincronizada: {}]".format(erro_pop)
+    mensagem += u"\n[População não sincronizada: {}]".format(erro_pop)
 else:
-    mensagem = u"{} ambiente(s) com população atualizada a partir do site.".format(atualizados)
+    mensagem += u"\n{} ambiente(s) com população atualizada a partir do site.".format(atualizados)
     if nao_encontrados:
         mensagem += (
             u"\n{} ambiente(s) do site não encontrados neste modelo "

@@ -6,6 +6,8 @@ from pyrevit import revit, DB, forms, script
 from Autodesk.Revit.DB import Architecture, FilteredElementCollector
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 
+from estrutura_param import ler_estrutura
+
 
 class FiltroAmbiente(ISelectionFilter):
     def AllowElement(self, element):
@@ -62,7 +64,7 @@ def get_rooms_classificados(doc):
     """Retorna todos os ambientes com área > 0 e o parâmetro 'Grupo'
     preenchido, já no formato pronto pra sincronizar com o site (ver
     saidas.calc.montar_payload_ambientes): dicts {nivel, nome, grupo,
-    area (m²), pop, uid}.
+    area (m²), pop, uid, estruturaNome}.
 
     `uid` é o Room.UniqueId do Revit — persiste mesmo se o ambiente for
     renomeado/renumerado (reclassificação) ou tiver a área alterada depois.
@@ -98,6 +100,7 @@ def get_rooms_classificados(doc):
                 u"area":  round(p_area.AsDouble() * 0.092903, 3) if p_area else 0.0,
                 u"pop":   int(p_pop.AsInteger()) if (p_pop and p_pop.HasValue) else 0,
                 u"uid":   room.UniqueId,
+                u"estruturaNome": ler_estrutura(room),
             })
         except Exception:
             continue
