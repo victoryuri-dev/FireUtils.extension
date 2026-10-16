@@ -1059,8 +1059,31 @@
   flex-shrink: 0;
 }
 
-.card-projeto-anel svg {
+/* Só o anel em si (o <svg> filho direto) gira -90°, para o progresso
+   começar no topo — o ícone de check é um <span class="icon"> com seu
+   próprio <svg> dentro, e um seletor "svg" sem o ">" também pegava ele,
+   deixando o check virado de lado. */
+.card-projeto-anel > svg {
   transform: rotate(-90deg);
+}
+
+@keyframes anel-enche {
+  from {
+    stroke-dashoffset: var(--anel-c);
+  }
+  to {
+    stroke-dashoffset: var(--anel-off);
+  }
+}
+
+.anel-progresso {
+  animation: anel-enche 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anel-progresso {
+    animation: none;
+  }
 }
 
 .card-projeto-anel .icon {

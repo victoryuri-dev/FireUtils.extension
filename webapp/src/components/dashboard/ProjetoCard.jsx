@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Icon from "../Icon";
 import flameIconSvg from "../../assets/icons/flame-icon.svg?raw";
 import stairIconSvg from "../../assets/icons/stair-icon.svg?raw";
@@ -22,14 +23,19 @@ function Chip({ tom = "neutral", icone, children }) {
 
 const COR_POR_TOM = { green: "#1D9E75", amber: "#c98a1a", red: "#C0152A" };
 
-function CompletudeAnel({ pct, tom }) {
+function CompletudeAnel({ pct, tom, replay }) {
   const raio = 9.5;
   const perimetro = 2 * Math.PI * raio;
+  const offset = perimetro * (1 - pct / 100);
   return (
     <span className="card-projeto-anel" style={{ color: COR_POR_TOM[tom] }} title={`Completude: ${pct}%`}>
       <svg width="20" height="20" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r={raio} fill="none" stroke="currentColor" strokeOpacity=".2" strokeWidth="1.5" />
+        {/* key={replay} força o React a remontar o círculo (em vez de só
+            atualizar o atributo), reiniciando a animação de preenchimento
+            a cada hover — mesmo truque do site (ver ProjetosPage.jsx). */}
         <circle
+          key={replay}
           cx="12"
           cy="12"
           r={raio}
@@ -38,7 +44,9 @@ function CompletudeAnel({ pct, tom }) {
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeDasharray={perimetro}
-          strokeDashoffset={perimetro * (1 - pct / 100)}
+          strokeDashoffset={offset}
+          className="anel-progresso"
+          style={{ "--anel-c": perimetro, "--anel-off": offset }}
         />
       </svg>
       {pct === 100 && <Icon svg={checkIconSvg} />}
@@ -52,10 +60,17 @@ function CompletudeAnel({ pct, tom }) {
  * com as datas de criação/edição. `projeto` é o resumo montado por
  * lib/projetoDados.js (resumoProjeto). */
 export default function ProjetoCard({ projeto, onClick }) {
+  const [replay, setReplay] = useState(0);
+
   return (
-    <button type="button" className="card-projeto" onClick={onClick}>
+    <button
+      type="button"
+      className="card-projeto"
+      onClick={onClick}
+      onMouseEnter={() => setReplay((n) => n + 1)}
+    >
       <div className="card-projeto-topo">
-        <CompletudeAnel pct={projeto.completude.pct} tom={projeto.completude.tom} />
+        <CompletudeAnel pct={projeto.completude.pct} tom={projeto.completude.tom} replay={replay} />
         <h3 className="card-projeto-nome">{projeto.nome}</h3>
       </div>
 
