@@ -23,11 +23,20 @@ estruturas do projeto buscada ao vivo (sync.buscar("listar_estruturas")),
 nunca por um cache local.
 
 Categorias cobertas — as mesmas que os quantitativos e a Saída de
-Emergência já coletam:
+Emergência já coletam, mais Dispositivos de Alarme de Incêndio (acionador/
+avisador do alarm_insert_core.py, que também precisam ser rastreados por
+estrutura mesmo não sendo hoje um quantitativo próprio):
   - Extintores            -> OST_FireProtection      (extintores/params.py)
   - Sinalização            -> OST_SecurityDevices      (sinalizacao/calc.py)
   - Iluminação de emergência -> OST_LightingFixtures  (iluminacao/calc.py)
   - Ambientes (Saída de Emergência) -> OST_Rooms       (saidas/rooms.py)
+  - Alarme de incêndio     -> OST_FireAlarmDevices   (alarm_insert_core.py)
+
+Ambientes merecem uma ressalva: num clique de seleção em planta, é comum
+acabar selecionando a TAG do ambiente (OST_RoomTags), não o Room em si —
+visualmente parecem a mesma coisa, mas são elementos diferentes e só o
+Room tem o parâmetro vinculado. atribuir_estrutura resolve isso sozinha
+(RoomTag -> seu Room), então tag ou room selecionado dá no mesmo.
 
 Mesmo padrão de criação/vínculo de shared parameter que hidrantes/params.py
 já usa (arquivo .txt compartilhado, grupo de definição, CategorySet) — só
@@ -64,7 +73,13 @@ CATEGORIAS_ESTRUTURA = [
     BuiltInCategory.OST_SecurityDevices,
     BuiltInCategory.OST_LightingFixtures,
     BuiltInCategory.OST_Rooms,
+    BuiltInCategory.OST_FireAlarmDevices,
 ]
+
+try:
+    from Autodesk.Revit.DB.Architecture import RoomTag as _RoomTag
+except ImportError:
+    _RoomTag = None
 
 
 def _get_or_create_shared_param_file(app, sp_path):
@@ -144,11 +159,27 @@ def create_estrutura_param(doc, sp_folder=None):
     return status
 
 
+def _resolver_room(elem):
+    """Uma RoomTag (a etiqueta/texto do ambiente, clicável em planta) não
+    é o Room — é outro elemento, da categoria OST_RoomTags, sem o
+    parâmetro "Estrutura" vinculado. Clicar na tag pra "selecionar o
+    ambiente" é o jeito mais comum de selecionar ambientes em planta, então
+    resolve pro Room de verdade antes de ler/gravar o parâmetro, senão a
+    seleção parece não ter efeito nenhum."""
+    if _RoomTag is not None and isinstance(elem, _RoomTag):
+        try:
+            return elem.Room or elem
+        except Exception:
+            return elem
+    return elem
+
+
 def ler_estrutura(elem):
     """Valor bruto (texto, como digitado/atribuído) do parâmetro
     "Estrutura" numa instância — None se o parâmetro não
     existir nela ou estiver vazio. Nunca resolve contra a lista de
     estruturas aqui (ver docstring do módulo) — só lê o texto cru."""
+    elem = _resolver_room(elem)
     try:
         p = elem.LookupParameter(P_ESTRUTURA)
     except Exception:
@@ -162,9 +193,10 @@ def ler_estrutura(elem):
 def atribuir_estrutura(doc, elementos, nome_estrutura):
     """Escreve `nome_estrutura` no parâmetro "Estrutura" de
     cada elemento em `elementos` que tiver esse parâmetro (criando-o antes,
-    se preciso) — elementos de categorias fora de CATEGORIAS_ESTRUTURA são
-    ignorados silenciosamente (não têm o parâmetro, LookupParameter sempre
-    None). Retorna (marcados, ignorados)."""
+    se preciso; RoomTag é resolvida pro seu Room — ver _resolver_room) —
+    elementos de categorias fora de CATEGORIAS_ESTRUTURA são ignorados
+    silenciosamente (não têm o parâmetro, LookupParameter sempre None).
+    Retorna (marcados, ignorados)."""
     create_estrutura_param(doc)
 
     t = Transaction(doc, u"Fire Utils - Atribuir estrutura")
@@ -173,6 +205,7 @@ def atribuir_estrutura(doc, elementos, nome_estrutura):
     ignorados = 0
     try:
         for elem in elementos:
+            elem = _resolver_room(elem)
             try:
                 p = elem.LookupParameter(P_ESTRUTURA)
             except Exception:

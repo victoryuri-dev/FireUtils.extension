@@ -57,7 +57,7 @@ def _processar(uiapp, payload, postar_mensagem):
         _erro(postar_mensagem, (
             u"Nenhum dos {} elemento(s) selecionado(s) tem o parâmetro Estrutura "
             u"(categorias aceitas: Proteção contra Incêndio, Dispositivos de "
-            u"Segurança, Luminárias, Ambientes)."
+            u"Segurança, Luminárias, Ambientes, Dispositivos de Alarme de Incêndio)."
         ).format(len(elementos)))
         return
 

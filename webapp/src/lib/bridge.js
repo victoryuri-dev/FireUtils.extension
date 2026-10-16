@@ -97,8 +97,10 @@
  *     (seleção nativa — esta mensagem não manda a lista de elementos, só
  *     o nome; quem decide o que está selecionado é o Revit). Categorias
  *     sem o parâmetro (fora de Proteção contra Incêndio, Dispositivos de
- *     Segurança, Luminárias e Ambientes) são ignoradas, não dá erro.
- *     Botão "Atribuir seleção à estrutura" do Dashboard.
+ *     Segurança, Luminárias, Ambientes e Dispositivos de Alarme de
+ *     Incêndio) são ignoradas, não dá erro. Selecionar a TAG de um
+ *     ambiente vale o mesmo que selecionar o ambiente (resolvido pro
+ *     Room por trás). Botão "Atribuir seleção à estrutura" do Dashboard.
  *
  *   { type: "ESTRUTURA_ATRIBUIDA", payload: { ok, erro?, estruturaNome?, marcados?, ignorados? } }
  *     Python -> JS: resultado de um ASSIGN_ESTRUTURA_SELECAO. `ok: false`
