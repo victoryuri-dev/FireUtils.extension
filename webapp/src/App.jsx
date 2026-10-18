@@ -7,6 +7,7 @@ import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
+import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
@@ -28,12 +29,14 @@ const TIMEOUT_CARREGAMENTO_MS = 30000;
 // -> "EXTINTOR"), conforme o mockup — categorias sem rótulo curto caem no
 // nome cheio do catálogo, só em maiúsculas.
 /**
- * Informa ao Python quem está logado, para ele poder verificar as licenças.
+ * Informa ao Python quem está logado.
  *
- * Vai só o refresh token: o access token expira em cerca de uma hora e não
- * serviria para o startup do Revit da próxima vez, que é justamente quando
- * o Python precisa resolver as licenças sem esta dockpane estar aberta. Do
- * lado de lá ele é guardado cifrado pelo DPAPI do Windows.
+ * O plugin atual não usa o refresh token: a licença é um token assinado que
+ * esta dockpane busca (ver LICENCAS, abaixo) e o Python confere offline. O
+ * SET_SESSAO só continua indo para as versões antigas do plugin, que ainda
+ * conferiam a licença na rede com o refresh token — o plugin novo o ignora e
+ * apenas responde com o estado da licença. Pode sair quando nenhum cliente
+ * estiver numa versão antiga.
  *
  * Sem sessão (logout, ou sessão expirada), manda limpar — assim cancelar o
  * login aqui também corta o acesso às ferramentas do Revit.
@@ -66,6 +69,9 @@ const DURACAO_TOAST_FAMILIA_MS = 3000;
 // estava. Sem lib de rotas: só a aba atual precisa sobreviver a um
 // reload (o estado interno do Dashboard — estrutura selecionada etc. —
 // já se reconstrói sozinho a partir do vínculo salvo no firedata.json).
+// Intervalo mínimo entre dois pedidos de token de licença ao servidor.
+const TOKEN_INTERVALO_MIN_MS = 5 * 60 * 1000;
+
 const ABAS_VALIDAS = ["biblioteca", "dashboard", "hidrantes", "saidas"];
 
 function lerAbaDaUrl() {
@@ -98,6 +104,19 @@ export default function App() {
   useEffect(() => {
     catalogoRef.current = catalogo;
   }, [catalogo]);
+  // Mesmo motivo do catalogoRef: o listener da bridge é criado uma vez só e
+  // precisa saber se há sessão agora, sem depender dela no useEffect.
+  const sessaoRef = useRef(undefined);
+  useEffect(() => {
+    sessaoRef.current = sessao;
+  }, [sessao]);
+  // Quando o token de licença foi pedido ao servidor pela última vez. Evita
+  // laço se o plugin recusar o token que acabou de receber (cada recusa
+  // dispara outra mensagem LICENCAS).
+  const tokenPedidoEmRef = useRef(0);
+  // Em que ponto está a obtenção do token: "idle", "buscando" (esperando o
+  // servidor) ou "enviado" (entregue ao Python, esperando a resposta dele).
+  const faseTokenRef = useRef("idle");
 
   // replaceState (não pushState): troca de aba não deve empilhar
   // histórico de navegação — não há botão "voltar" nessa UI, e um
@@ -207,7 +226,8 @@ export default function App() {
       if (!mensagem) return;
 
       if (mensagem.type === BridgeMessageTypes.LICENCAS) {
-        const { modulos, erro } = mensagem.payload || {};
+        const resumo = mensagem.payload || {};
+        const { modulos, erro } = resumo;
         if (erro) {
           // Também no console: é a única janela acessível de dentro do
           // Revit, já que a saída do pyRevit some com o engine que a abriu.
@@ -215,6 +235,62 @@ export default function App() {
         } else {
           console.info("[licenças] módulos liberados:", modulos);
         }
+
+        // O Python guarda um token assinado pelo servidor e o confere
+        // offline. Sem um válido (primeira vez neste computador, ou perto de
+        // vencer), busca um novo com a sessão daqui — é a renovação
+        // automática que mantém as ferramentas funcionando offline.
+        const precisa = precisaRenovarToken(resumo);
+        const semAcessoAinda = !modulos?.length;
+        const fase = faseTokenRef.current;
+
+        if (fase === "enviado") {
+          // Resposta do Python ao token que acabou de ser entregue.
+          faseTokenRef.current = "idle";
+          if (precisa) {
+            adicionarToast({
+              tipo: "erro",
+              titulo: "Não foi possível validar a licença",
+              mensagem: erro || "O plugin não aceitou a licença recebida do servidor.",
+              duracaoMs: 9000,
+            });
+          }
+        } else if (fase === "buscando") {
+          // Outra resposta chegou enquanto o servidor ainda é consultado.
+          // Quem não tem acesso continua em "carregando": mostrar "sem
+          // licença" agora seria um aviso falso para quem só ainda não
+          // ativou este computador.
+          if (semAcessoAinda) return;
+        } else if (
+          sessaoRef.current &&
+          precisa &&
+          Date.now() - tokenPedidoEmRef.current > TOKEN_INTERVALO_MIN_MS
+        ) {
+          tokenPedidoEmRef.current = Date.now();
+          faseTokenRef.current = "buscando";
+          buscarTokenDeLicenca().then((token) => {
+            if (token) {
+              // O Python responde de novo com LICENCAS, já com o token novo.
+              faseTokenRef.current = "enviado";
+              postToHost(BridgeMessageTypes.SET_LICENCA_TOKEN, { token });
+              return;
+            }
+            // Sem token novo vale o que o computador já tinha; quem não
+            // tinha nada fica sem acesso, e vale dizer por quê.
+            faseTokenRef.current = "idle";
+            setModulosLiberados(modulos || []);
+            if (semAcessoAinda) {
+              adicionarToast({
+                tipo: "erro",
+                titulo: "Não foi possível ativar a licença",
+                mensagem: "Confira a conexão com a internet e abra o painel de novo.",
+                duracaoMs: 9000,
+              });
+            }
+          });
+          if (semAcessoAinda) return;
+        }
+
         // Falha vira lista vazia, não null: null significa "ainda não sei" e
         // deixaria a tela em carregamento para sempre.
         setModulosLiberados(modulos || []);

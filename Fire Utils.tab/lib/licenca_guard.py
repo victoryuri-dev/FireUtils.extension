@@ -10,10 +10,10 @@ Uso, logo depois do __title__ do script:
 Sem licença, mostra o motivo e encerra o script — o código abaixo da
 chamada não roda.
 
-A consulta em si não vai à rede: licenca.tem_acesso() lê o resultado que a
-sessão já resolveu quando o Revit abriu. Só a primeira chamada de uma
-sessão ainda não verificada é que espera o servidor (ver
-licenca.garantir_verificado).
+A consulta não vai à rede: licenca.tem_acesso() confere a assinatura do
+token de licença guardado neste computador. Por isso as ferramentas de
+produtividade funcionam offline — o token é renovado pela dockpane, sempre
+que ela abre com internet.
 """
 
 import sys
@@ -42,19 +42,45 @@ def exigir(modulo):
     """
     Interrompe o script se a conta não puder usar este módulo.
 
-    Duas situações pedem respostas diferentes: quem nunca entrou precisa
-    fazer login, e quem entrou mas não contratou precisa contratar. Uma
-    mensagem genérica de "sem acesso" deixaria o primeiro caso parecendo
-    cobrança indevida.
+    Quatro situações pedem respostas diferentes — uma mensagem genérica de
+    "sem acesso" deixaria quem só precisa ativar parecendo cobrança indevida:
+    sem licença guardada (nunca ativou neste computador), licença vencida
+    (ficou muito tempo sem abrir o painel com internet), licença inválida e
+    conta que simplesmente não contratou o módulo.
     """
     if licenca.tem_acesso(modulo):
         return
 
-    if not licenca.esta_autenticado():
+    situacao, _payload, motivo = licenca.situacao()
+
+    if situacao == licenca.SIT_AUSENTE:
         forms.alert(
-            u"Entre na sua conta para usar esta ferramenta.\n\n"
-            u"Abra o Carregador de Famílias (aba Fire Utils → Biblioteca) "
-            u"e faça login. O acesso é liberado na hora, sem reiniciar o Revit.",
+            u"Ative a licença neste computador para usar esta ferramenta.\n\n"
+            u"Abra o painel Fire Utils (aba Fire Utils → Biblioteca), com "
+            u"internet, e entre na sua conta. O acesso é liberado na hora, "
+            u"sem reiniciar o Revit.",
+            title=u"Fire Utils",
+            warn_icon=True,
+        )
+        sys.exit()
+
+    if situacao == licenca.SIT_EXPIRADO:
+        forms.alert(
+            u"A licença guardada neste computador venceu.\n\n"
+            u"Ela se renova sozinha sempre que o painel Fire Utils abre com "
+            u"internet. Abra o painel (aba Fire Utils → Biblioteca) conectado "
+            u"e tente de novo.",
+            title=u"Fire Utils",
+            warn_icon=True,
+        )
+        sys.exit()
+
+    if situacao == licenca.SIT_INVALIDO:
+        forms.alert(
+            u"Não foi possível validar a licença deste computador "
+            u"({}).\n\n"
+            u"Abra o painel Fire Utils (aba Fire Utils → Biblioteca), com "
+            u"internet, e entre na sua conta para renová-la.".format(motivo),
             title=u"Fire Utils",
             warn_icon=True,
         )
@@ -64,15 +90,15 @@ def exigir(modulo):
     # errado para quem acabou de ler a página de preços, onde ele aparece
     # como o plano que inclui os demais.
     if modulo == licenca.MODULO_PRO:
-        motivo = u"Esta ferramenta é exclusiva do FireUtils PRO."
+        motivo_sem_acesso = u"Esta ferramenta é exclusiva do FireUtils PRO."
     else:
-        motivo = u"Esta conta não tem licença do módulo {}.".format(_nome(modulo))
+        motivo_sem_acesso = u"Esta conta não tem licença do módulo {}.".format(_nome(modulo))
 
     forms.alert(
         u"{}\n\n"
         u"Contrate em:\n{}\n\n"
-        u"Se você acabou de contratar, faça login novamente no Carregador "
-        u"de Famílias para atualizar o acesso.".format(motivo, _URL_PLANOS),
+        u"Se você acabou de contratar, abra o painel Fire Utils com internet "
+        u"para atualizar o acesso.".format(motivo_sem_acesso, _URL_PLANOS),
         title=u"Fire Utils",
         warn_icon=True,
     )

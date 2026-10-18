@@ -6,7 +6,8 @@
 .DESCRIPTION
     Rode no Windows, com o Inno Setup 6 instalado. O script:
 
-      1. Valida a URL da interface em fireutils.config.json;
+      1. Valida a URL da interface em fireutils.config.json e a chave publica
+         de licenca em lib\licenca.py;
       2. Copia para installer\payload apenas o que o cliente precisa;
       3. Chama o ISCC.exe, gerando installer\output\FireUtils-Setup-<versao>.exe
 
@@ -145,6 +146,35 @@ function Test-ConfigDaDockpane {
     Write-Host "    Interface: $url"
 }
 
+function Test-ChaveDeLicenca {
+    <#
+        O plugin confere a licenca com a chave PUBLICA embutida em
+        lib\licenca.py. Sem ela nenhum token confere e todas as ferramentas
+        ficam bloqueadas -- num instalador isso seria descoberto na maquina do
+        cliente, ja pago. A chave vem de scripts\gerar-chave-licenca.mjs
+        (repositorio ETOS.FireUtils).
+    #>
+    $arquivo = Join-Path $RepoRoot 'Fire Utils.tab\lib\licenca.py'
+
+    if (-not (Test-Path -LiteralPath $arquivo)) {
+        throw "Fire Utils.tab\lib\licenca.py nao existe."
+    }
+
+    $texto = Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8
+
+    foreach ($nome in '_CHAVE_PUBLICA_MODULO', '_CHAVE_PUBLICA_EXPOENTE') {
+        $padrao = '(?m)^' + $nome + '\s*=\s*u"[A-Za-z0-9+/=]{4,}"'
+        if ($texto -notmatch $padrao) {
+            throw ("$nome esta vazio em lib\licenca.py. Gere o par de chaves com " +
+                   "scripts\gerar-chave-licenca.mjs (repositorio ETOS.FireUtils), " +
+                   "guarde a privada no secret LICENCA_CHAVE_PRIVADA do Supabase e " +
+                   "cole a publica la. Sem isso as ferramentas ficam bloqueadas.")
+        }
+    }
+
+    Write-Host '    Chave publica de licenca: configurada'
+}
+
 function Test-ItensNovosNaRaiz {
     $contemplados = $IgnoradosNaRaiz + ($ItensDoPayload | ForEach-Object { $_.Origem.Split('\')[0] })
 
@@ -165,6 +195,9 @@ Write-Host "Fire Utils - build do instalador $versaoFinal" -ForegroundColor Gree
 
 Write-Passo 'Validando a configuracao da dockpane'
 Test-ConfigDaDockpane
+
+Write-Passo 'Conferindo a chave de licenca'
+Test-ChaveDeLicenca
 
 Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz

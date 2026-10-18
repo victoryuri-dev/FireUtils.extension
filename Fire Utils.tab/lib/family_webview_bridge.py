@@ -44,53 +44,20 @@ import niveis_bridge
 import licenca
 
 
-def _tratar_set_sessao(payload, fila_acoes, postar_mensagem):
+def _postar_licencas(postar_mensagem, erro=None):
     """
-    A dockpane acabou de autenticar e mandou a sessão do Supabase.
-
-    Guardar o refresh token é o que permite ao startup.py verificar a licença
-    nas próximas aberturas do Revit, antes de o painel existir. E verificar
-    agora libera as ferramentas na hora, sem o usuário ter que reiniciar o
-    Revit depois de fazer login.
-
-    Roda em thread porque conversa com o servidor — na thread da interface,
-    a dockpane congelaria durante a chamada. Por isso a resposta vai pela
-    fila: PostWebMessageAsJson só vale na thread da UI, e chamá-lo daqui
-    falha sem erro visível — a dockpane simplesmente nunca saberia que as
-    licenças mudaram.
+    Responde à dockpane com o que a licença guardada libera e se vale pedir
+    um token novo ao servidor (ver licenca.resumo_para_dockpane). Sem rede
+    aqui, então roda direto na thread da interface, de onde a mensagem
+    chegou.
     """
-    def responder(modulos, erro):
-        def postar(uiapp):
-            # Em arquivo, não só print: é o que diz se a fila realmente
-            # executou. Sem esta linha, "enfileirado" e "entregue" são
-            # indistinguíveis — e são causas diferentes.
-            licenca.log(u"entregando à dockpane: {}".format(
-                u", ".join(sorted(modulos)) if modulos else u"nenhum"
-            ))
-            postar_mensagem(u"LICENCAS", {
-                u"modulos": sorted(modulos),
-                u"erro": erro,
-            })
-
-        licenca.log(u"enfileirando resposta do login...")
-        fila_acoes.enfileirar(postar)
-
-    try:
-        if not licenca.salvar_sessao(payload.get(u"refreshToken")):
-            responder([], u"não foi possível guardar a sessão")
-            return
-
-        modulos, erro = licenca.verificar()
-        # Em arquivo, não print: a janela de saída do pyRevit abriria a cada
-        # login, inclusive quando dá tudo certo.
-        licenca.log(u"após o login: {}".format(
-            erro or (u", ".join(sorted(modulos)) if modulos else u"nenhuma licença")
-        ))
-
-        responder(modulos, erro)
-    except Exception as ex:
-        licenca.log(u"falha ao registrar a sessão: {}".format(texto_erro(ex)))
-        responder([], texto_erro(ex))
+    resumo = licenca.resumo_para_dockpane()
+    if erro:
+        resumo[u"erro"] = erro
+    licenca.log(u"entregando à dockpane: {}".format(
+        u", ".join(resumo[u"modulos"]) if resumo[u"modulos"] else u"nenhum"
+    ))
+    postar_mensagem(u"LICENCAS", resumo)
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -304,20 +271,25 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: niveis_bridge.tratar_set_niveis_correlacao(uiapp, payload, postar_mensagem)
         )
+    elif tipo == u"SET_LICENCA_TOKEN":
+        # Token assinado que a dockpane buscou no servidor com a sessão do
+        # usuário (Edge Function emitir-licenca). Só vai ao disco se a
+        # assinatura conferir.
+        ok, motivo = licenca.salvar_token(payload.get(u"token"))
+        _postar_licencas(postar_mensagem, None if ok else motivo)
     elif tipo == u"SET_SESSAO":
-        threading.Thread(
-            target=_tratar_set_sessao,
-            args=(payload, fila_acoes, postar_mensagem),
-        ).start()
+        # Mensagem das versões antigas da dockpane, que mandavam o refresh
+        # token para este lado conferir a licença na rede. O token assinado
+        # a substituiu: o refresh token não é mais guardado nem usado aqui
+        # (renová-lo girava o token que a dockpane usa). Responde só com o
+        # estado atual, para a dockpane decidir se pede um token novo.
+        _postar_licencas(postar_mensagem)
     elif tipo == u"LIMPAR_SESSAO":
-        # Logout na dockpane: sem sessão guardada, a próxima abertura do
-        # Revit já não libera ferramenta nenhuma.
+        # Logout na dockpane: sem licença guardada, as ferramentas de
+        # produtividade deixam de funcionar neste computador.
         licenca.esquecer_sessao()
-        postar_mensagem(u"LICENCAS", {u"modulos": [], u"erro": None})
+        _postar_licencas(postar_mensagem)
     elif tipo == u"GET_LICENCAS":
-        postar_mensagem(u"LICENCAS", {
-            u"modulos": sorted(licenca.modulos_liberados()),
-            u"erro": None,
-        })
+        _postar_licencas(postar_mensagem)
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))

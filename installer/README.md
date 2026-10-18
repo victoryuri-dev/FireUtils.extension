@@ -56,6 +56,9 @@ fora.
 
 ### Proteções do build
 
+- **Aborta** se `_CHAVE_PUBLICA_MODULO`/`_CHAVE_PUBLICA_EXPOENTE` estiverem
+  vazios em `Fire Utils.tab/lib/licenca.py`: sem a chave pública nenhum token
+  de licença confere e as ferramentas ficam bloqueadas no cliente.
 - **Aborta** se `fireutils.config.json` não existir, não for JSON válido,
   não tiver `webappUrl`, a URL não for `https://` ou apontar para
   `localhost` (configuração de desenvolvimento esquecida).
@@ -188,6 +191,40 @@ que volta (`lib/motor_nuvem.py`, `lib/hidrantes_dimensionar_bridge.py`).
 **Ordem de publicação:** primeiro `supabase functions deploy motor-hidrantes`
 (e os secrets, ver o README da function); só depois gere o instalador. Um
 plugin novo com a function ainda não publicada não dimensiona.
+
+## Licença assinada (ferramentas de produtividade offline)
+
+As ferramentas de produtividade funcionam sem internet porque a licença é um
+**token assinado pelo servidor** (`emitir-licenca`, no ETOS.FireUtils) que o
+plugin só consegue *conferir*:
+
+1. A dockpane, com a sessão do usuário, busca o token e o entrega ao Python
+   (`SET_LICENCA_TOKEN`). Ela pede um novo quando o computador não tem um
+   válido ou faltam menos de 7 dias para vencer — ou seja, a renovação é
+   automática sempre que o painel abre com internet.
+2. `lib/licenca.py` confere a assinatura com a chave pública embutida (RSA,
+   .NET nativo) e só então grava `%LOCALAPPDATA%\FireUtils\licenca.token`.
+3. Cada ferramenta confere o token na hora (`licenca_guard.exigir`), sem rede.
+
+Editar o arquivo ou trocar o módulo no payload invalida a assinatura. Quem
+edita o código Python para pular a conferência ainda consegue — por isso o
+dimensionamento exige licença no servidor a cada chamada, e o token só decide
+o que é offline. Validade padrão de 30 dias (`LICENCA_TTL_DIAS`): é o tempo
+máximo que uma licença cancelada ainda funciona para quem nunca abre o painel
+com internet.
+
+O plugin não guarda mais o refresh token da sessão: renová-lo girava o token
+que a dockpane também usa, e os dois podiam se derrubar.
+
+**Primeiro uso após atualizar o plugin:** não há token guardado ainda, então
+as ferramentas pedem para abrir o painel Fire Utils com internet uma vez.
+
+**Antes do primeiro instalador com este recurso** (ver
+`supabase/functions/emitir-licenca/README.md` no ETOS.FireUtils):
+`node scripts/gerar-chave-licenca.mjs`, guardar a chave privada no secret
+`LICENCA_CHAVE_PRIVADA` e num cofre de senhas, publicar a function e colar a
+chave pública em `lib/licenca.py`. Trocar a chave depois exige reinstalar o
+plugin em todos os clientes.
 
 ## Atualização pela dockpane (planejado, ainda não implementado)
 

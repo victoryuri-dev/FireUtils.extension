@@ -1,55 +1,66 @@
 # -*- coding: utf-8 -*-
 """
-licenca.py — quais módulos esta conta pode usar.
+licenca.py — quais módulos esta conta pode usar, SEM internet.
 
-A verificação acontece uma vez por sessão do Revit, não a cada clique: o
-startup.py chama `verificar()` ao carregar a extensão, e o resultado vale
-enquanto o Revit estiver aberto. Cada ferramenta consulta `tem_acesso()`,
-que só lê o que já foi decidido.
+A licença é um token assinado pelo servidor (Edge Function emitir-licenca,
+repositório ETOS.FireUtils): "esta conta, estes módulos, até estas datas,
+válido até tal dia". A dockpane o busca com a sessão do usuário e entrega ao
+Python pela bridge (SET_LICENCA_TOKEN); aqui ele é conferido com a chave
+pública embutida e guardado em %LOCALAPPDATA%\\FireUtils\\licenca.token.
 
-Quem autentica é a dockpane (React/Supabase). Ao fazer login ela manda a
-sessão para cá pela bridge (SET_SESSAO), e o refresh token fica guardado no
-disco — é o que permite verificar a licença no startup seguinte, antes de o
-painel ser aberto.
+Por que assim: até aqui o resultado da licença ficava num JSON comum, e
+editar o arquivo liberava tudo. A chave que assina só existe no servidor —
+este módulo só consegue CONFERIR uma assinatura, nunca produzir uma. Editar o
+arquivo (ou trocar o módulo no payload) invalida a assinatura. Quem edita o
+código para pular a conferência ainda consegue, por isso o que realmente vale
+(o dimensionamento) exige licença no servidor a cada chamada — este token só
+decide as ferramentas de produtividade, que funcionam offline.
 
-Módulos vêm de `public.licencas` no Supabase, os mesmos da página de preços:
-'hidrantes', 'saidas', 'memorial' e 'pro' (que inclui os três).
+Como não há rede aqui, cada ferramenta confere o token na hora (RSA, na casa
+de milissegundos). Também não há mais refresh token guardado no disco: a
+renovação do token é a dockpane, com a sessão dela, quem faz — sem girar o
+refresh token que ela mesma usa.
 
-Por que cache em arquivo e não em memória: o pyRevit roda o startup.py e o
-script.py de cada botão em engines IronPython separados, que reimportam este
-módulo do zero. Uma variável de módulo não sobreviveria de um clique para o
-outro. O arquivo guarda o PID do Revit junto, então o cache vale para esta
-sessão e não para a próxima.
+Módulos vêm de `public.licencas`, os mesmos da página de preços: 'hidrantes',
+'saidas', 'memorial' e 'pro' (que inclui os três).
+
+Formato do token: base64url(payload JSON) "." base64url(assinatura), com
+assinatura RSASSA-PKCS1-v1_5/SHA-256 sobre os bytes ASCII da primeira parte.
+Payload: {v, sub, email, iat, exp, mod: {módulo: "AAAA-MM-DD" | null}}.
 """
 
-import io
-import os
-import json
+import base64
 import datetime
+import io
+import json
+import os
+import time
 
 from family_error_utils import texto_erro
 
-_SUPABASE_URL = u"https://lngvagifcukglgdjildw.supabase.co"
-_ANON_KEY = (
-    u"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
-    u"eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxuZ3ZhZ2lmY3VrZ2xnZGppbGR3Iiwicm9sZSI6ImFub24i"
-    u"LCJpYXQiOjE3ODY3NDUwNzksImV4cCI6MjEwMjMyMTA3OX0."
-    u"hApUcA5wunyv21JdL8XAVVD1TnGU9oRvyew1uCIlZRw"
-)
+# Chave PÚBLICA que confere a assinatura do token (RSA 2048, em base64
+# padrão: módulo e expoente). Gerada por scripts/gerar-chave-licenca.mjs no
+# repositório ETOS.FireUtils — a parte privada fica só nos secrets do
+# Supabase. Sem estes valores nenhum token confere e as ferramentas ficam
+# bloqueadas; installer/build.ps1 recusa gerar o instalador assim.
+_CHAVE_PUBLICA_MODULO = u""
+_CHAVE_PUBLICA_EXPOENTE = u""
+
+_VERSAO_TOKEN = 1
 
 # Mesmos módulos do constraint em public.licencas e da página de preços.
 MODULO_PRO = u"pro"
 MODULOS = (u"hidrantes", u"saidas", u"memorial", MODULO_PRO)
 
-# Sem conseguir falar com o servidor, vale o último resultado conhecido por
-# este tanto de dias. Sem isso, uma queda de internet (ou o avião) tiraria a
-# ferramenta de quem pagou; com um prazo muito longo, desligar a rede viraria
-# a forma de usar sem licença.
-_DIAS_DE_GRACA = 7
+# Situações do token guardado.
+SIT_AUSENTE = u"ausente"      # nenhum token neste computador
+SIT_INVALIDO = u"invalido"    # assinatura não confere, formato ruim ou relógio errado
+SIT_EXPIRADO = u"expirado"    # assinatura ok, mas passou da validade offline
+SIT_VALIDO = u"valido"
 
-# Rede no startup atrasa a abertura do Revit — melhor desistir rápido e
-# cair na graça do cache do que segurar a tela de carregamento.
-_TIMEOUT_MS = 8000
+# Tolerância a um relógio do computador levemente atrasado em relação ao
+# servidor, na hora de conferir quando o token foi emitido.
+_TOLERANCIA_RELOGIO_S = 24 * 3600
 
 
 def _dir_dados():
@@ -64,12 +75,8 @@ def _dir_dados():
     return caminho
 
 
-def _arquivo_sessao():
-    return os.path.join(_dir_dados(), u"sessao.dat")
-
-
-def _arquivo_licencas():
-    return os.path.join(_dir_dados(), u"licencas.json")
+def _arquivo_token():
+    return os.path.join(_dir_dados(), u"licenca.token")
 
 
 def _arquivo_log():
@@ -77,24 +84,12 @@ def _arquivo_log():
 
 
 def log(mensagem):
-    """Mesma gravação de _log, para quem usa este módulo de fora."""
-    _log(mensagem)
-
-
-def _log(mensagem):
     """
-    Registra em arquivo além do print.
-
-    O print vai para a janela de saída do engine que chamou — no startup ela
-    aparece, mas durante o uso do painel ela já foi fechada, e a mensagem se
-    perde. Como é justamente aí que o diagnóstico importa, tudo fica também
-    em %LOCALAPPDATA%\\FireUtils\\licenca.log.
+    Registra em %LOCALAPPDATA%\\FireUtils\\licenca.log. Sem print: no startup,
+    qualquer saída abre a janela do pyRevit a cada abertura do Revit, mesmo
+    quando está tudo certo. O arquivo guarda o que for preciso investigar.
     """
-    # Sem print: no startup, qualquer saída abre a janela do pyRevit a cada
-    # abertura do Revit, mesmo quando está tudo certo. O arquivo guarda o
-    # mesmo conteúdo para quem precisar investigar.
     linha = u"{} {}".format(datetime.datetime.now().strftime(u"%H:%M:%S"), mensagem)
-
     try:
         with io.open(_arquivo_log(), u"a", encoding=u"utf-8") as arquivo:
             arquivo.write(linha + u"\n")
@@ -102,90 +97,151 @@ def _log(mensagem):
         pass
 
 
-def _pid_do_revit():
-    from System.Diagnostics import Process
-    return Process.GetCurrentProcess().Id
-
-
 # ---------------------------------------------------------------------------
-# Sessão — o refresh token, protegido pelo DPAPI do Windows
+# Conferência da assinatura
 # ---------------------------------------------------------------------------
 
-def _dpapi():
+def _base64url_decodificar(texto):
+    texto = str(texto)
+    return base64.urlsafe_b64decode(texto + "=" * (-len(texto) % 4))
+
+
+def _conferir_assinatura_dotnet(corpo_ascii, assinatura):
     """
-    (ProtectedData, escopo do usuário) do DPAPI do Windows.
-
-    ProtectedData mora em System.Security.dll, que o IronPython não
-    referencia por padrão — sem o AddReference, o import falha com
-    "Cannot import name ProtectedData".
+    RSA PKCS#1 v1.5 + SHA-256 pelo .NET (o mesmo do Revit; não precisa de
+    pacote nenhum). `corpo_ascii` é a primeira parte do token, como texto;
+    `assinatura`, os bytes já decodificados.
     """
     import clr
+    clr.AddReference(u"mscorlib")
+    from System import Array, Byte
+    from System.Security.Cryptography import RSACryptoServiceProvider
+    from System.Text import Encoding
+
+    rsa = RSACryptoServiceProvider()
     try:
-        clr.AddReference(u"System.Security")
-    except Exception:
-        # Já referenciado neste engine, ou nome diferente nesta versão do
-        # .NET: o import abaixo é quem decide se deu certo.
-        pass
-
-    from System.Security.Cryptography import ProtectedData, DataProtectionScope
-    return ProtectedData, DataProtectionScope.CurrentUser
-
-
-def salvar_sessao(refresh_token):
-    """
-    Guarda o refresh token para as próximas sessões do Revit.
-
-    É credencial de longa duração: quem a tiver entra na conta. Por isso vai
-    cifrada pelo DPAPI, amarrada ao usuário do Windows — copiar o arquivo
-    para outra máquina (ou outra conta) não serve de nada.
-    """
-    if not refresh_token:
-        _log(u"sessão recebida sem refresh token — login não registrado.")
-        return False
-
-    try:
-        from System.Text import Encoding
-        from System.IO import File
-
-        protegido_data, escopo = _dpapi()
-        protegido = protegido_data.Protect(
-            Encoding.UTF8.GetBytes(refresh_token), None, escopo
+        rsa.FromXmlString(
+            u"<RSAKeyValue><Modulus>{}</Modulus><Exponent>{}</Exponent></RSAKeyValue>".format(
+                _CHAVE_PUBLICA_MODULO, _CHAVE_PUBLICA_EXPOENTE
+            )
         )
-        File.WriteAllBytes(_arquivo_sessao(), protegido)
-        return True
+        return bool(rsa.VerifyData(
+            Encoding.ASCII.GetBytes(corpo_ascii),
+            u"SHA256",
+            Array[Byte](list(bytearray(assinatura))),
+        ))
+    finally:
+        rsa.Clear()
+
+
+# Indireção só para os testes poderem trocar a conferência por uma em Python
+# puro (o .NET não existe fora do Revit).
+_conferir_assinatura = _conferir_assinatura_dotnet
+
+
+def _hoje():
+    """
+    Data de hoje no fuso de Brasília, 'AAAA-MM-DD' — o mesmo critério de
+    tem_licenca() no Supabase. Sem isso, uma licença venceria três horas
+    antes da meia-noite local para quem está no Brasil.
+    """
+    return (datetime.datetime.utcnow() - datetime.timedelta(hours=3)).date().isoformat()
+
+
+def _analisar(token, agora_s=None):
+    """
+    Confere um token. Devolve (situação, payload, motivo): `payload` só vem
+    preenchido quando a assinatura confere (mesmo expirado, para a dockpane
+    saber de quem é e quando venceu); `motivo` explica uma situação ruim.
+    """
+    if not token:
+        return SIT_AUSENTE, None, u"nenhuma licença guardada neste computador"
+
+    if not _CHAVE_PUBLICA_MODULO or not _CHAVE_PUBLICA_EXPOENTE:
+        return SIT_INVALIDO, None, u"esta versão do plugin não tem a chave de licença configurada"
+
+    try:
+        corpo, assinatura_b64 = token.strip().split(u".")
+        assinatura = _base64url_decodificar(assinatura_b64)
+        if not _conferir_assinatura(corpo, assinatura):
+            return SIT_INVALIDO, None, u"a assinatura da licença não confere"
+        payload = json.loads(_base64url_decodificar(corpo).decode(u"utf-8"))
     except Exception as ex:
-        # Falhar em silêncio aqui deixaria o usuário logado na dockpane e
-        # barrado nas ferramentas, sem nenhuma pista do motivo.
-        _log(u"falha ao guardar a sessão: {}".format(texto_erro(ex)))
-        return False
+        return SIT_INVALIDO, None, u"licença ilegível: {}".format(texto_erro(ex))
+
+    if not isinstance(payload, dict) or payload.get(u"v") != _VERSAO_TOKEN \
+            or not isinstance(payload.get(u"mod"), dict):
+        return SIT_INVALIDO, None, u"formato de licença desconhecido"
+
+    agora = time.time() if agora_s is None else agora_s
+    try:
+        iat = float(payload[u"iat"])
+        exp = float(payload[u"exp"])
+    except Exception:
+        return SIT_INVALIDO, None, u"licença sem datas válidas"
+
+    if agora < iat - _TOLERANCIA_RELOGIO_S:
+        return SIT_INVALIDO, None, u"o relógio deste computador está atrasado em relação à licença"
+    if agora >= exp:
+        return SIT_EXPIRADO, payload, u"a licença guardada neste computador venceu"
+
+    return SIT_VALIDO, payload, None
 
 
-def _refresh_token_guardado():
-    caminho = _arquivo_sessao()
+def _ler_token():
+    caminho = _arquivo_token()
     if not os.path.isfile(caminho):
         return None
+    try:
+        with io.open(caminho, u"r", encoding=u"utf-8") as arquivo:
+            return arquivo.read().strip()
+    except Exception as ex:
+        log(u"não foi possível ler o token: {}".format(texto_erro(ex)))
+        return None
+
+
+def situacao():
+    """(situação, payload, motivo) do token guardado — ver _analisar."""
+    return _analisar(_ler_token())
+
+
+# ---------------------------------------------------------------------------
+# Guardar / esquecer
+# ---------------------------------------------------------------------------
+
+def salvar_token(token):
+    """
+    Confere e guarda o token que a dockpane recebeu do servidor. Só o que a
+    assinatura confirma é gravado — token adulterado nunca chega ao disco.
+    Devolve (ok, motivo).
+    """
+    sit, payload, motivo = _analisar(token)
+    if sit != SIT_VALIDO:
+        log(u"token recusado ({}): {}".format(sit, motivo))
+        return False, motivo
 
     try:
-        from System.Text import Encoding
-        from System.IO import File
-
-        protegido_data, escopo = _dpapi()
-        aberto = protegido_data.Unprotect(
-            File.ReadAllBytes(caminho), None, escopo
-        )
-        return Encoding.UTF8.GetString(aberto)
+        with io.open(_arquivo_token(), u"w", encoding=u"utf-8") as arquivo:
+            arquivo.write(token.strip())
     except Exception as ex:
-        # Arquivo de outra máquina, de outro usuário do Windows, ou
-        # corrompido: tratar como "não há sessão". O log distingue isso de
-        # uma falha de ambiente, que exigiria outra investigação.
-        _log(u"não foi possível ler a sessão guardada: {}".format(texto_erro(ex)))
-        return None
+        log(u"falha ao guardar o token: {}".format(texto_erro(ex)))
+        return False, u"não foi possível guardar a licença neste computador"
+
+    log(u"licença guardada para {}: {}".format(
+        payload.get(u"email") or payload.get(u"sub"),
+        u", ".join(sorted(payload[u"mod"])) if payload[u"mod"] else u"nenhum módulo",
+    ))
+    return True, None
 
 
 def esquecer_sessao():
-    """Logout: apaga sessão e licenças em cache."""
-    for caminho in (_arquivo_sessao(), _arquivo_licencas()):
+    """
+    Logout: apaga a licença guardada — e os arquivos que versões anteriores
+    deste plugin deixaram (sessão com refresh token e o JSON de licenças).
+    """
+    for nome in (u"licenca.token", u"sessao.dat", u"licencas.json"):
         try:
+            caminho = os.path.join(_dir_dados(), nome)
             if os.path.isfile(caminho):
                 os.remove(caminho)
         except Exception:
@@ -193,351 +249,49 @@ def esquecer_sessao():
 
 
 # ---------------------------------------------------------------------------
-# Supabase
-# ---------------------------------------------------------------------------
-
-def _requisitar(url, metodo, cabecalhos, corpo=None):
-    """
-    Requisição HTTP com o WebRequest do .NET — mesma abordagem de sync.py,
-    para não trazer dependência nova para o IronPython.
-
-    Devolve (texto_da_resposta, erro). Erro é None em caso de sucesso.
-    """
-    from System.Net import WebRequest, WebException, ServicePointManager, SecurityProtocolType
-    from System.IO import StreamReader
-    from System.Text import Encoding
-
-    try:
-        # Servidores modernos recusam TLS antigo, e o padrão do .NET em
-        # algumas instalações do Windows ainda é 1.0.
-        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12
-    except Exception:
-        pass
-
-    try:
-        req = WebRequest.Create(url)
-        req.Method = metodo
-        req.Timeout = _TIMEOUT_MS
-
-        for chave, valor in cabecalhos.items():
-            if chave.lower() == u"content-type":
-                req.ContentType = valor
-            else:
-                req.Headers.Add(chave, valor)
-
-        if corpo is not None:
-            dados = Encoding.UTF8.GetBytes(corpo)
-            req.ContentLength = dados.Length
-            fluxo = req.GetRequestStream()
-            try:
-                fluxo.Write(dados, 0, dados.Length)
-            finally:
-                fluxo.Close()
-
-        resposta = req.GetResponse()
-        try:
-            leitor = StreamReader(resposta.GetResponseStream(), Encoding.UTF8)
-            try:
-                return leitor.ReadToEnd(), None
-            finally:
-                leitor.Close()
-        finally:
-            resposta.Close()
-
-    except WebException as ex:
-        return None, texto_erro(ex)
-    except Exception as ex:
-        return None, texto_erro(ex)
-
-
-def _renovar_acesso(refresh_token):
-    """
-    Troca o refresh token por um access token novo.
-
-    O Supabase rotaciona o refresh token a cada uso, então o novo precisa ser
-    guardado — senão a próxima sessão tenta usar um token já gasto.
-
-    Devolve (access_token, email, erro).
-    """
-    url = u"{}/auth/v1/token?grant_type=refresh_token".format(_SUPABASE_URL)
-    corpo = json.dumps({u"refresh_token": refresh_token})
-
-    texto, erro = _requisitar(
-        url,
-        u"POST",
-        {
-            u"apikey": _ANON_KEY,
-            u"Content-Type": u"application/json",
-        },
-        corpo,
-    )
-    if erro:
-        return None, None, erro
-
-    try:
-        dados = json.loads(texto)
-    except Exception as ex:
-        return None, None, texto_erro(ex)
-
-    acesso = dados.get(u"access_token")
-    if not acesso:
-        return None, None, u"resposta sem access_token"
-
-    # Sem identificar o usuário, uma licença no banco e um token de outra
-    # conta dariam exatamente o mesmo sintoma.
-    usuario = dados.get(u"user") or {}
-    _log(u"sessão renovada para {} (id {})".format(
-        usuario.get(u"email") or u"?", usuario.get(u"id") or u"?"
-    ))
-
-    novo_refresh = dados.get(u"refresh_token")
-    if novo_refresh:
-        salvar_sessao(novo_refresh)
-
-    return acesso, usuario.get(u"email"), None
-
-
-def _buscar_licencas(access_token):
-    """
-    Lê as licenças da conta. A política licencas_select_proprio do Supabase
-    já limita o resultado ao próprio usuário — não há o que filtrar aqui.
-
-    Devolve (lista_de_linhas, erro).
-    """
-    url = u"{}/rest/v1/licencas?select=modulo,plano,situacao,inicio_em,expira_em".format(
-        _SUPABASE_URL
-    )
-
-    texto, erro = _requisitar(
-        url,
-        u"GET",
-        {
-            u"apikey": _ANON_KEY,
-            u"Authorization": u"Bearer " + access_token,
-        },
-    )
-    if erro:
-        return None, erro
-
-    # DIAGNÓSTICO TEMPORÁRIO — remover quando o licenciamento estabilizar.
-    # Grava a resposta inteira a cada verificação, o que é ruído depois de
-    # pronto: o arquivo de log só cresce (modo append, sem rotação). O que
-    # vale manter daqui é a distinção entre lista vazia de verdade e objeto
-    # de erro do PostgREST, que hoje terminam os dois como "nenhum módulo" —
-    # provavelmente como uma linha só, quando nenhum módulo for liberado.
-    _log(u"resposta de /licencas: {}".format((texto or u"")[:400]))
-
-    try:
-        return json.loads(texto), None
-    except Exception as ex:
-        return None, texto_erro(ex)
-
-
-# ---------------------------------------------------------------------------
 # Decisão de acesso
 # ---------------------------------------------------------------------------
 
-def _hoje():
-    """
-    Data de hoje no fuso de Brasília — o mesmo critério de tem_licenca() no
-    Supabase. Sem isso, uma licença venceria três horas antes da meia-noite
-    local para quem está no Brasil.
-    """
-    return (datetime.datetime.utcnow() - datetime.timedelta(hours=3)).date()
-
-
-def _licenca_vale(linha):
-    if linha.get(u"situacao") not in (u"ativa", u"teste"):
-        return False
-
-    expira = linha.get(u"expira_em")
-    if not expira:
-        return True  # sem data de término
-
-    try:
-        ano, mes, dia = [int(p) for p in expira.split(u"-")[:3]]
-        return datetime.date(ano, mes, dia) >= _hoje()
-    except Exception:
-        # Data ilegível: não dá para afirmar que está válida.
-        return False
-
-
-def _modulos_validos(linhas):
-    """
-    Módulos utilizáveis entre as linhas recebidas.
-
-    O log distingue dois vazios que levam ao mesmo resultado e pedem
-    investigações opostas: nenhuma linha (a conta não tem licença, ou a
-    requisição não foi autenticada e o PostgREST devolveu lista vazia em
-    silêncio) e linhas recusadas pelo filtro (situação ou validade).
-    """
-    linhas = linhas or []
-
-    if not linhas:
-        _log(u"o servidor não retornou nenhuma licença para esta conta.")
-        return set()
-
-    liberados = set()
-    recusadas = []
-
-    for linha in linhas:
-        if not isinstance(linha, dict):
-            _log(u"resposta inesperada do servidor: {!r}".format(linha))
-            continue
-
-        modulo = linha.get(u"modulo")
-        if _licenca_vale(linha):
-            if modulo:
-                liberados.add(modulo)
-        else:
-            recusadas.append(u"{} (situação={}, expira_em={})".format(
-                modulo, linha.get(u"situacao"), linha.get(u"expira_em")
-            ))
-
-    if recusadas:
-        _log(u"recusadas: {}".format(u"; ".join(recusadas)))
-
-    return liberados
-
-
-def _gravar_cache(modulos, email=None):
-    dados = {
-        u"pid": _pid_do_revit(),
-        u"verificado_em": datetime.datetime.utcnow().isoformat(),
-        u"modulos": sorted(modulos),
-        u"email": email,
-    }
-    try:
-        # json.dumps devolve str (bytes) no IronPython 2.7, e io.open em modo
-        # texto só aceita unicode — escrever direto levanta TypeError.
-        texto = json.dumps(dados, ensure_ascii=False)
-        if isinstance(texto, bytes):
-            texto = texto.decode(u"utf-8")
-
-        with io.open(_arquivo_licencas(), u"w", encoding=u"utf-8") as arquivo:
-            arquivo.write(texto)
-    except Exception as ex:
-        # Sem o cache, toda consulta de licença volta à rede e o resultado
-        # da sessão se perde entre um clique e outro.
-        _log(u"falha ao gravar o cache: {}".format(texto_erro(ex)))
-
-
-def _ler_cache():
-    caminho = _arquivo_licencas()
-    if not os.path.isfile(caminho):
-        return None
-    try:
-        with io.open(caminho, u"r", encoding=u"utf-8") as arquivo:
-            return json.loads(arquivo.read())
-    except Exception:
-        return None
-
-
-def _dias_desde(iso):
-    try:
-        quando = datetime.datetime.strptime(iso[:19], u"%Y-%m-%dT%H:%M:%S")
-        return (datetime.datetime.utcnow() - quando).days
-    except Exception:
-        return None
-
-
-def verificar():
-    """
-    Consulta o servidor e atualiza o cache da sessão.
-
-    Chamado pelo startup.py quando o Revit abre, e de novo quando a dockpane
-    faz login (daí o acesso valer na hora, sem reiniciar o Revit).
-
-    Devolve (modulos_liberados, erro). Com erro, `modulos_liberados` é o que
-    valia antes, dentro do prazo de graça.
-    """
-    refresh = _refresh_token_guardado()
-    if not refresh:
-        _gravar_cache(set())
-        return set(), u"nenhuma sessão: faça login no Carregador de Famílias"
-
-    acesso, email, erro = _renovar_acesso(refresh)
-    if erro:
-        return _acesso_em_graca(erro)
-
-    linhas, erro = _buscar_licencas(acesso)
-    if erro:
-        return _acesso_em_graca(erro)
-
-    modulos = _modulos_validos(linhas)
-    _gravar_cache(modulos, email)
-    return modulos, None
-
-
-def _acesso_em_graca(erro):
-    """
-    Sem resposta do servidor, vale o último resultado — por um tempo.
-    Passado o prazo, o acesso cai: do contrário bastaria ficar offline.
-    """
-    cache = _ler_cache()
-    if not cache:
-        return set(), erro
-
-    dias = _dias_desde(cache.get(u"verificado_em", u""))
-    if dias is None or dias > _DIAS_DE_GRACA:
-        return set(), u"{} (última verificação há muito tempo)".format(erro)
-
-    modulos = set(cache.get(u"modulos") or [])
-    _gravar_cache(modulos, cache.get(u"email"))
-    return modulos, None
-
-
-def _cache_desta_sessao():
-    """
-    Cache gravado pelo Revit que está rodando agora, ou None.
-
-    O PID é o que separa uma sessão da outra: cada abertura do Revit
-    revalida, que é o combinado de verificar uma vez por sessão em vez de a
-    cada clique.
-    """
-    cache = _ler_cache()
-    if not cache or cache.get(u"pid") != _pid_do_revit():
-        return None
-    return cache
-
-
 def modulos_liberados():
     """
-    O que esta sessão pode usar, sem ir à rede. Vazio se a sessão ainda não
-    foi verificada — use garantir_verificado() se precisar da resposta certa.
+    Módulos que o token guardado libera hoje: nele e dentro da data de
+    validade de cada um. Vazio se não há token válido.
     """
-    cache = _cache_desta_sessao()
-    return set(cache.get(u"modulos") or []) if cache else set()
+    sit, payload, _motivo = situacao()
+    if sit != SIT_VALIDO:
+        return set()
 
-
-def garantir_verificado():
-    """
-    Os módulos desta sessão, verificando agora se ainda não foi.
-
-    O startup.py dispara verificar() numa thread para não atrasar a abertura
-    do Revit. Quem clica numa ferramenta antes de essa thread terminar cairia
-    num cache vazio e seria barrado sem motivo — aqui a verificação acontece
-    na hora, de forma síncrona, e esse clique passa a esperar em vez de
-    receber um "sem licença" falso.
-    """
-    cache = _cache_desta_sessao()
-    if cache is not None:
-        return set(cache.get(u"modulos") or [])
-
-    modulos, _erro = verificar()
-    return modulos
+    hoje = _hoje()
+    return set(
+        modulo for modulo, ate in payload[u"mod"].items()
+        if ate is None or ate >= hoje
+    )
 
 
 def tem_acesso(modulo):
-    """
-    A conta pode usar este módulo nesta sessão? A licença PRO libera todos.
-
-    Quem contrata os três módulos avulsos recebe a linha 'pro' pela própria
-    assinatura — equivalências de plano são decididas lá, não aqui.
-    """
-    liberados = garantir_verificado()
+    """A conta pode usar este módulo? A licença PRO libera todos."""
+    liberados = modulos_liberados()
     return modulo in liberados or MODULO_PRO in liberados
 
 
 def esta_autenticado():
-    return _refresh_token_guardado() is not None
+    """Há uma licença com assinatura válida neste computador (mesmo vencida)?"""
+    sit, _payload, _motivo = situacao()
+    return sit in (SIT_VALIDO, SIT_EXPIRADO)
+
+
+def resumo_para_dockpane():
+    """
+    O que a dockpane precisa saber: os módulos e, para decidir se vale pedir
+    um token novo ao servidor, se este computador já tem um válido e até
+    quando. `suportaToken` avisa que este plugin entende SET_LICENCA_TOKEN —
+    um plugin antigo não manda o campo, e a dockpane não envia o token.
+    """
+    sit, payload, motivo = situacao()
+    return {
+        u"modulos": sorted(modulos_liberados()),
+        u"erro": None if sit in (SIT_VALIDO, SIT_AUSENTE, SIT_EXPIRADO) else motivo,
+        u"suportaToken": True,
+        u"tokenValido": sit == SIT_VALIDO,
+        u"tokenExpiraEm": int(payload[u"exp"]) if payload else None,
+    }

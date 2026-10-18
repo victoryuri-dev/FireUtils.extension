@@ -286,10 +286,19 @@ export const BridgeMessageTypes = {
   REVIT_LEVELS: "REVIT_LEVELS",
   SET_NIVEIS_CORRELACAO: "SET_NIVEIS_CORRELACAO",
   NIVEIS_CORRELACAO_SAVED: "NIVEIS_CORRELACAO_SAVED",
-  // Licenças: o Python precisa da sessão para verificar quais módulos a
-  // conta pode usar — inclusive no startup do Revit seguinte, antes de esta
-  // dockpane existir. Só o refresh token é enviado; o access token expira em
-  // uma hora e não serviria para isso.
+  // Licenças: o Python guarda um token assinado pelo servidor (Edge Function
+  // emitir-licenca) e o confere offline — é o que libera as ferramentas de
+  // produtividade sem internet.
+  //   SET_LICENCA_TOKEN { token }  JS -> Python: token buscado com a sessão
+  //     do usuário; só é gravado se a assinatura conferir.
+  //   LICENCAS { modulos, erro, suportaToken, tokenValido, tokenExpiraEm }
+  //     Python -> JS: o que a licença guardada libera. Com `suportaToken` e
+  //     sem token válido (ou perto de vencer), a dockpane busca um novo.
+  //   LIMPAR_SESSAO  JS -> Python: logout — apaga a licença guardada.
+  // SET_SESSAO (refresh token) é das versões antigas do plugin, que
+  // conferiam a licença na rede; o plugin atual o ignora. Pode sair daqui
+  // quando nenhum cliente estiver numa versão sem token assinado.
+  SET_LICENCA_TOKEN: "SET_LICENCA_TOKEN",
   SET_SESSAO: "SET_SESSAO",
   LIMPAR_SESSAO: "LIMPAR_SESSAO",
   GET_LICENCAS: "GET_LICENCAS",

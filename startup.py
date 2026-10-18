@@ -61,41 +61,6 @@ def _registrar_dockable_pane(nome_amigavel, importar_classe_painel):
         print(traceback.format_exc())
 
 
-def _verificar_licencas_em_background():
-    """
-    Resolve, uma vez por sessão do Revit, quais módulos esta conta pode usar.
-
-    Em thread porque conversa com o servidor: no fluxo principal, uma rede
-    lenta seguraria a abertura do Revit. Quem clicar numa ferramenta antes de
-    isto terminar não é prejudicado — licenca.tem_acesso() verifica na hora
-    se a sessão ainda não foi resolvida.
-
-    Falha aqui nunca derruba a extensão: sem resposta, licenca.verificar()
-    recai no último resultado conhecido, dentro do prazo de graça.
-    """
-    def _rodar():
-        try:
-            import licenca
-            modulos, erro = licenca.verificar()
-            # Só no arquivo de log: um print aqui abriria a janela de saída
-            # do pyRevit a cada abertura do Revit, mesmo quando está tudo
-            # certo. Quem precisa do detalhe abre
-            # %LOCALAPPDATA%\FireUtils\licenca.log.
-            if erro:
-                licenca.log(u"startup: {}".format(erro))
-            else:
-                licenca.log(u"startup: {}".format(
-                    u", ".join(sorted(modulos)) if modulos else u"nenhuma licença ativa"
-                ))
-        except Exception:
-            _mlogger.exception(u"Falha ao verificar licenças")
-
-    import threading
-    threading.Thread(target=_rodar).start()
-
-
-_verificar_licencas_em_background()
-
 _registrar_dockable_pane(
     u"Carregador de Famílias",
     lambda: __import__(
