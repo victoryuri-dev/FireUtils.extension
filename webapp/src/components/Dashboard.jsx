@@ -27,15 +27,22 @@ function comTimeout(promessa, ms, mensagem) {
 }
 
 /**
- * Orquestra o fluxo: Conectar um projeto -> (Selecione uma estrutura, se
- * houver mais de uma) -> Dashboard do projeto/estrutura. `vinculo` vem do
- * firedata.json do documento Revit ativo (ver lib/bridge.js e
+ * Orquestra o fluxo: Conectar um projeto -> (Selecione as estruturas, se
+ * nenhuma ainda vinculada) -> Dashboard de UMA estrutura por vez. `vinculo`
+ * vem do firedata.json do documento Revit ativo (ver lib/bridge.js e
  * project_link_bridge.py do lado Python) — a busca do projeto em si é
  * direto no Supabase (lib/projectData.js + lib/projetoDados.js), com a
  * sessão do usuário logado. `linha` guarda a linha crua da tabela
  * `projetos` (id/nome/dados/updated_at) já buscada — as telas derivam
  * dela via lib/projetoDados.js, sem chamada adicional ao trocar de
  * estrutura.
+ *
+ * Um arquivo Revit pode ter VÁRIAS estruturas vinculadas (`vinculo.estruturas`,
+ * ver bridge.js) — isso não atribui nada a nenhuma família/ambiente (ver
+ * docstring de project_link_bridge.py); é só o conjunto que a ferramenta
+ * "Atribuir seleção à estrutura" oferece, e a lista de abas pra navegar
+ * entre os dashboards de cada uma (`estado.estruturaId` escolhe qual tela
+ * aparece agora — troca local, não manda SET_PROJECT_LINK de novo).
  */
 export default function Dashboard({
   vinculo,
@@ -46,23 +53,22 @@ export default function Dashboard({
   onAbrirHidrantes,
   onGravarQuantitativos,
   gravandoQuantitativos,
+  onAtribuirEstrutura,
+  atribuindoEstrutura,
 }) {
   const [estado, setEstado] = useState(ESTADO_INICIAL);
 
-  function persistirVinculo(linha, estruturaId) {
-    const painel = dashboardEstrutura(linha, estruturaId);
-    if (!painel) return;
+  function persistirVinculo(linha, estruturasEscolhidas) {
     postToHost(BridgeMessageTypes.SET_PROJECT_LINK, {
       projetoId: linha.id,
       projetoNome: (linha.dados && linha.dados.nome) || linha.nome,
-      estruturaId: painel.id,
-      estruturaNome: painel.nome,
-      uf: painel.uf,
-      areaConstruida: painel.areaConstruida,
+      estruturas: estruturasEscolhidas.map((e) => ({ id: e.id, nome: e.nome })),
+      uf: linha.dados?.uf,
+      areaConstruida: linha.dados?.areaConstruidaTotal,
     });
   }
 
-  async function carregarProjeto(projetoId, estruturaIdEscolhida) {
+  async function carregarProjeto(projetoId, estruturaIdPreferida) {
     setEstado((s) => ({ ...s, carregando: true, erro: null }));
     try {
       const linha =
@@ -85,24 +91,24 @@ export default function Dashboard({
         return;
       }
 
-      // `estruturaIdEscolhida` pode vir do firedata.json (vínculo salvo de
-      // uma sessão anterior) — se a estrutura foi removida/recriada no
-      // site nesse meio tempo, o id salvo não bate mais com nenhuma das
-      // atuais. Sem essa checagem, `alvoId` virava esse id inválido e o
-      // Dashboard tentava renderizar com `estrutura: null`, travando a
-      // tela sem nenhum erro visível.
-      const escolhidaValida =
-        estruturaIdEscolhida && estruturas.some((e) => e.id === estruturaIdEscolhida) ? estruturaIdEscolhida : null;
-      const alvoId = escolhidaValida || (estruturas.length === 1 ? estruturas[0].id : null);
-      if (!alvoId) {
-        // Mais de uma estrutura e nenhuma escolhida (ou a vinculada não
-        // existe mais) — mostra a tela de seleção em vez de já cravar um
-        // vínculo inválido.
+      // Vínculo salvo de uma sessão anterior (vinculo.estruturas, ver
+      // Dashboard useEffect abaixo) pode ter estruturas que não existem
+      // mais (removidas/recriadas no site nesse meio tempo) — filtra só
+      // as que ainda batem.
+      const idsVinculados = new Set((vinculo?.estruturas || []).map((e) => e.id));
+      const vinculadasValidas = estruturas.filter((e) => idsVinculados.has(e.id));
+
+      if (vinculadasValidas.length === 0) {
+        // Nenhuma estrutura vinculada ainda (ou nenhuma válida) — mostra a
+        // tela de seleção em vez de já cravar um vínculo inválido/vazio.
         setEstado({ carregando: false, erro: null, linha, estruturaId: null });
         return;
       }
 
-      persistirVinculo(linha, alvoId);
+      const alvoId =
+        estruturaIdPreferida && vinculadasValidas.some((e) => e.id === estruturaIdPreferida)
+          ? estruturaIdPreferida
+          : vinculadasValidas[0].id;
       setEstado({ carregando: false, erro: null, linha, estruturaId: alvoId });
     } catch (ex) {
       console.error("[Dashboard] Falha ao carregar projeto/estrutura:", ex);
@@ -116,6 +122,11 @@ export default function Dashboard({
     }
   }
 
+  function confirmarEstruturas(linha, escolhidas) {
+    persistirVinculo(linha, escolhidas);
+    setEstado({ carregando: false, erro: null, linha, estruturaId: escolhidas[0].id });
+  }
+
   // Sincroniza com o vínculo salvo no documento Revit ativo — dispara ao
   // entrar na aba (vinculo já vem preenchido de uma sessão anterior) e
   // depois de desconectar (projetoId vira null, reseta o estado local).
@@ -127,19 +138,23 @@ export default function Dashboard({
       return;
     }
 
-    const jaCarregado =
-      estado.linha?.id === vinculo.projetoId && (!vinculo.estruturaId || estado.estruturaId === vinculo.estruturaId);
+    const estruturaAindaVinculada =
+      !estado.estruturaId || (vinculo.estruturas || []).some((e) => e.id === estado.estruturaId);
+    const jaCarregado = estado.linha?.id === vinculo.projetoId && estruturaAindaVinculada;
     if (jaCarregado || estado.carregando) return;
 
-    carregarProjeto(vinculo.projetoId, vinculo.estruturaId);
+    carregarProjeto(vinculo.projetoId, estado.estruturaId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vinculo]);
 
   // Status dos dimensionamentos locais — só faz sentido pedir depois que
-  // uma estrutura está de fato carregada na tela.
+  // uma estrutura está de fato carregada na tela. Saída de Emergência e
+  // Correlacionar Níveis ficam escopados à estrutura sendo vista agora
+  // (Hidrantes é sistema único do projeto, sempre geral — ver
+  // project_link_bridge.py).
   useEffect(() => {
     if (estado.estruturaId) {
-      postToHost(BridgeMessageTypes.GET_DIMENSIONAMENTOS_STATUS, {});
+      postToHost(BridgeMessageTypes.GET_DIMENSIONAMENTOS_STATUS, { estruturaId: estado.estruturaId });
     }
   }, [estado.estruturaId]);
 
@@ -184,19 +199,21 @@ export default function Dashboard({
       <SelecionarEstrutura
         projeto={estado.linha}
         estruturas={estruturasDoProjeto(estado.linha)}
-        onSelecionar={(estrutura) => carregarProjeto(estado.linha.id, estrutura.id)}
+        onConfirmar={(escolhidas) => confirmarEstruturas(estado.linha, escolhidas)}
       />
     );
   }
 
-  // A estrutura vinculada não pode mais ser trocada por aqui depois de
-  // escolhida — só desconectando o projeto inteiro (botão da sidebar) e
-  // conectando de novo. Por isso nem a lista de estruturas é passada pro
-  // DashboardEstrutura: sem ela, não tem como montar um seletor.
+  const estruturasVinculadas = (vinculo.estruturas || []).length > 0
+    ? vinculo.estruturas
+    : estruturasDoProjeto(estado.linha).filter((e) => e.id === estado.estruturaId);
+
   return (
     <DashboardEstrutura
       projeto={estado.linha}
       estrutura={dashboardEstrutura(estado.linha, estado.estruturaId)}
+      estruturasVinculadas={estruturasVinculadas}
+      onTrocarEstrutura={(estruturaId) => setEstado((s) => ({ ...s, estruturaId }))}
       dimensionamentos={dimensionamentos}
       adicionarToast={adicionarToast}
       modo={modo}
@@ -204,6 +221,8 @@ export default function Dashboard({
       onAbrirHidrantes={onAbrirHidrantes}
       onGravarQuantitativos={onGravarQuantitativos}
       gravandoQuantitativos={gravandoQuantitativos}
+      onAtribuirEstrutura={onAtribuirEstrutura}
+      atribuindoEstrutura={atribuindoEstrutura}
       // A tela de Saída de Emergência edita e persiste direto no Supabase
       // (ver AcessosDescargasView.jsx) — isso atualiza `estado.linha` aqui
       // pra manter uma única fonte de verdade (a mesma linha que o resto

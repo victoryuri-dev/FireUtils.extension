@@ -39,6 +39,7 @@ import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
 import quantitativos_bridge
+import atribuir_estrutura_bridge
 import niveis_bridge
 import licenca
 
@@ -263,7 +264,7 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         )
     elif tipo == u"GET_DIMENSIONAMENTOS_STATUS":
         fila_acoes.enfileirar(
-            lambda uiapp: project_link_bridge.tratar_get_dimensionamentos_status(uiapp, postar_mensagem)
+            lambda uiapp: project_link_bridge.tratar_get_dimensionamentos_status(uiapp, payload, postar_mensagem)
         )
     elif tipo == u"SET_HIDRANTES_CLASSIFICACAO":
         fila_acoes.enfileirar(
@@ -284,6 +285,11 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: quantitativos_bridge.tratar_gravar_quantitativos(
                 uiapp, fila_acoes, postar_mensagem)
+        )
+    elif tipo == u"ASSIGN_ESTRUTURA_SELECAO":
+        fila_acoes.enfileirar(
+            lambda uiapp: atribuir_estrutura_bridge.tratar_assign_estrutura_selecao(
+                uiapp, payload, postar_mensagem)
         )
     elif tipo == u"SELECIONAR_TRECHO_HIDRANTE":
         fila_acoes.enfileirar(

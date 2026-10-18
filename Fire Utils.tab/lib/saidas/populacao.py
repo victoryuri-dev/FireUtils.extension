@@ -7,7 +7,7 @@ import re
 import math
 from pyrevit import revit, DB, forms, script
 
-from sync import buscar, config_sync
+from sync import buscar, estruturas_vinculadas
 
 doc   = revit.doc
 uidoc = revit.uidoc
@@ -223,53 +223,62 @@ def set_occupancy(rooms, occupancy_value, estado):
 # casando por revitId/UniqueId.
 def puxar_populacao_do_site(doc, projeto_dir):
     """Busca em site-sync (ação 'populacao_ambientes') a População e a
-    Taxa Populacional já calculadas no site pra cada ambiente da estrutura
-    vinculada, e grava nos parâmetros correspondentes do Room (casado por
-    revitId/UniqueId — doc.GetElement aceita o UniqueId direto). Retorna
-    (atualizados, nao_encontrados, erro): `erro` é uma mensagem pronta pra
-    mostrar ao usuário (None em caso de sucesso); os contadores só fazem
-    sentido quando `erro` é None."""
-    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-    if not estrutura_id:
+    Taxa Populacional já calculadas no site pra cada ambiente de TODAS as
+    estruturas vinculadas a este arquivo (um arquivo Revit pode conter
+    várias — ver sync.estruturas_vinculadas), e grava nos parâmetros
+    correspondentes do Room (casado por revitId/UniqueId — doc.GetElement
+    aceita o UniqueId direto; cada estrutura só devolve os ambientes dela,
+    então não há colisão entre as buscas). Retorna (atualizados,
+    nao_encontrados, erro): `erro` só vem preenchido se TODAS as buscas
+    falharem (uma estrutura sem população ainda calculada no site não é
+    erro, só não atualiza nada pra ela); os contadores somam todas as
+    estruturas que responderam."""
+    estruturas = estruturas_vinculadas(projeto_dir)
+    if not estruturas:
         return 0, 0, u"Nenhuma estrutura vinculada a este arquivo Revit."
-
-    resultado, erro = buscar(u"populacao_ambientes", projeto_dir, estruturaId=estrutura_id)
-    if erro:
-        return 0, 0, erro
 
     atualizados = 0
     nao_encontrados = 0
+    erros = []
 
     with revit.Transaction(u"Atualizar População (Site)"):
-        for pav in (resultado or {}).get(u"pavimentos", []):
-            for amb in pav.get(u"ambientes", []):
-                revit_id = amb.get(u"revitId")
-                if not revit_id:
-                    continue
+        for estrutura in estruturas:
+            resultado, erro = buscar(u"populacao_ambientes", projeto_dir, estruturaId=estrutura.get(u"id"))
+            if erro:
+                erros.append(u"{}: {}".format(estrutura.get(u"nome") or u"?", erro))
+                continue
 
-                room = doc.GetElement(revit_id)
-                if not room:
-                    nao_encontrados += 1
-                    continue
+            for pav in (resultado or {}).get(u"pavimentos", []):
+                for amb in pav.get(u"ambientes", []):
+                    revit_id = amb.get(u"revitId")
+                    if not revit_id:
+                        continue
 
-                mudou = False
+                    room = doc.GetElement(revit_id)
+                    if not room:
+                        nao_encontrados += 1
+                        continue
 
-                nova_pop = amb.get(u"pop")
-                if nova_pop is not None:
-                    param_pop = room.LookupParameter(u"População")
-                    if param_pop and param_pop.AsInteger() != int(nova_pop):
-                        param_pop.Set(int(nova_pop))
+                    mudou = False
+
+                    nova_pop = amb.get(u"pop")
+                    if nova_pop is not None:
+                        param_pop = room.LookupParameter(u"População")
+                        if param_pop and param_pop.AsInteger() != int(nova_pop):
+                            param_pop.Set(int(nova_pop))
+                            mudou = True
+
+                    nova_taxa = amb.get(u"taxaObs") or u""
+                    param_taxa = room.LookupParameter(u"Taxa Populacional")
+                    if param_taxa and (param_taxa.AsString() or u"") != nova_taxa:
+                        param_taxa.Set(nova_taxa)
                         mudou = True
 
-                nova_taxa = amb.get(u"taxaObs") or u""
-                param_taxa = room.LookupParameter(u"Taxa Populacional")
-                if param_taxa and (param_taxa.AsString() or u"") != nova_taxa:
-                    param_taxa.Set(nova_taxa)
-                    mudou = True
+                    if mudou:
+                        atualizados += 1
 
-                if mudou:
-                    atualizados += 1
-
+    if erros and len(erros) == len(estruturas):
+        return 0, 0, u"; ".join(erros)
     return atualizados, nao_encontrados, None
 
 

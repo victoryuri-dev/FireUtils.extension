@@ -37,7 +37,8 @@ from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInCategory, ElementId, StorageType,
 )
 
-from sync import gravar_e_enviar, config_sync
+from estrutura_param import ler_estrutura
+from sync import gravar_e_enviar
 
 CATEGORIA_ILUMINACAO = BuiltInCategory.OST_LightingFixtures
 
@@ -159,16 +160,18 @@ def coletar_itens(doc):
             u"tipoBase":        tipo_base,
             u"fluxoLuminosoLm": _fluxo_numero(_get_texto(elem, PARAM_FLUXO)),
             u"tipoLampada":     _get_texto(elem, PARAM_LAMPADA).strip(),
+            u"estruturaNome":   ler_estrutura(elem),
         })
 
     return itens
 
 
 def agrupar_por_pavimento(itens):
-    """Agrega os itens brutos (um por instância, ver coletar_itens) em
-    {pavimento, tipoBase, fluxoLuminosoLm, tipoLampada, quantidade} — soma
-    as instâncias equivalentes (mesmo pavimento + tipo base + fluxo + tipo
-    de lâmpada)."""
+    """Agrega os itens brutos (um por instância, já de UMA estrutura — ver
+    quantitativos_core.py:salvar_todos, que agrupa por estrutura antes de
+    chamar isto) em {pavimento, tipoBase, fluxoLuminosoLm, tipoLampada,
+    quantidade} — soma as instâncias equivalentes (mesmo pavimento + tipo
+    base + fluxo + tipo de lâmpada)."""
     contagem = {}
     ordem = []
     for it in itens:
@@ -189,11 +192,9 @@ def agrupar_por_pavimento(itens):
     ]
 
 
-def salvar_cache(itens_agrupados, projeto_dir):
-    """Grava os itens de iluminação (já agregados por pavimento/tipo — ver
-    agrupar_por_pavimento) na chave 'iluminacao' do firedata.json e envia
-    pro site — ver sync.gravar_e_enviar (compartilhado com as demais
-    medidas de quantitativo, ver quantitativos_core.py), escopado pela
-    estrutura vinculada no plugin (ver sync.config_sync)."""
-    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-    return gravar_e_enviar(u"iluminacao", itens_agrupados, projeto_dir, estruturaId=estrutura_id)
+def salvar_cache(itens_agrupados, projeto_dir, estruturaId):
+    """Grava os itens de iluminação (já agregados por pavimento/tipo, de
+    UMA estrutura — ver agrupar_por_pavimento) na chave 'iluminacao' do
+    firedata.json e envia pro site — ver sync.gravar_e_enviar
+    (compartilhado com as demais medidas de quantitativo)."""
+    return gravar_e_enviar(u"iluminacao", itens_agrupados, projeto_dir, estruturaId=estruturaId)

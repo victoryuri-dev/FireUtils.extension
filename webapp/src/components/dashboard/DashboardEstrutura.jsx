@@ -228,9 +228,51 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotulo
   );
 }
 
+/** Seletor da estrutura a marcar na seleção atual do Revit + botão —
+ * precisa de um valor escolhido antes de poder agir, então não cabe no
+ * padrão de clique único dos outros cartões (CartaoDimensionamento). Lista
+ * só as estruturas vinculadas a este arquivo (`estruturasVinculadas`, ver
+ * Dashboard.jsx) — nunca escreve nada sozinho: só quando "Atribuir" é
+ * clicado. */
+function AtribuirEstruturaCartao({ estruturas, onAtribuir, atribuindo }) {
+  const [escolhidaId, setEscolhidaId] = useState(estruturas[0]?.id || "");
+
+  if (estruturas.length === 0) return null;
+
+  const estruturaEscolhida = estruturas.find((e) => e.id === escolhidaId);
+
+  return (
+    <div className="cartao-dimensionamento cartao-atribuir-estrutura">
+      <span className="cartao-dimensionamento-icone">
+        <Icon svg={saveIconSvg} />
+      </span>
+      <span className="cartao-dimensionamento-titulo">Atribuir seleção à estrutura</span>
+      <div className="cartao-atribuir-estrutura-controles">
+        <select value={escolhidaId} onChange={(e) => setEscolhidaId(e.target.value)} disabled={atribuindo}>
+          {estruturas.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.nome}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="botao accent"
+          disabled={atribuindo || !estruturaEscolhida}
+          onClick={() => onAtribuir(estruturaEscolhida.nome)}
+        >
+          {atribuindo ? "Atribuindo..." : "Atribuir"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardEstrutura({
   projeto,
   estrutura,
+  estruturasVinculadas = [],
+  onTrocarEstrutura,
   dimensionamentos,
   adicionarToast,
   onAtualizarProjeto,
@@ -239,6 +281,8 @@ export default function DashboardEstrutura({
   onAbrirHidrantes,
   onGravarQuantitativos,
   gravandoQuantitativos,
+  onAtribuirEstrutura,
+  atribuindoEstrutura,
 }) {
   // Normas de Extintores e Saída de Emergência pros cartões-resumo do
   // Dashboard (abaixo) — busca uma vez por UF, só no modo "dashboard" (as
@@ -310,7 +354,12 @@ export default function DashboardEstrutura({
 
   return (
     <div className="dashboard-tela">
-      <ProjetoCabecalho projeto={projeto} estrutura={estrutura} />
+      <ProjetoCabecalho
+        projeto={projeto}
+        estrutura={estrutura}
+        estruturasVinculadas={estruturasVinculadas}
+        onTrocarEstrutura={onTrocarEstrutura}
+      />
 
       <div className="grade-cartoes-info">
         <div className="cartao-info">
@@ -392,6 +441,11 @@ export default function DashboardEstrutura({
           carregando={gravandoQuantitativos}
           rotuloCarregando="Gravando..."
           onClick={onGravarQuantitativos}
+        />
+        <AtribuirEstruturaCartao
+          estruturas={estruturasVinculadas}
+          onAtribuir={onAtribuirEstrutura}
+          atribuindo={atribuindoEstrutura}
         />
       </div>
 

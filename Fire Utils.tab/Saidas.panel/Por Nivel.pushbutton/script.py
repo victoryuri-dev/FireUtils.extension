@@ -7,7 +7,7 @@ exigir(u"saidas")
 
 from pyrevit import revit, DB, script, forms
 from projeto import exigir_projeto_e_estado
-from saidas.calc       import sincronizar_ambientes
+from saidas.calc       import sincronizar_ambientes, resumo_texto
 from saidas.populacao  import garantir_parametros, set_occupancy
 from saidas.ocupacao   import occupancy_forms
 from saidas.rooms      import get_rooms_for_level, get_rooms_classificados
@@ -31,4 +31,5 @@ if not occupancy:
 
 if rooms:
     set_occupancy(rooms, occupancy, estado=estado)
-    sincronizar_ambientes(get_rooms_classificados(doc), estado, projeto_dir)
+    resultado = sincronizar_ambientes(get_rooms_classificados(doc), estado, projeto_dir)
+    forms.alert(resumo_texto(resultado), title=u"Identificar por Nível")

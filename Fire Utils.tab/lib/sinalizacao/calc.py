@@ -14,17 +14,20 @@ Uma instância é considerada placa de sinalização de emergência quando:
 escritório (parâmetro de Tipo definido na própria família) — diferente do
 fluxo de Extintores, nenhum parâmetro precisa ser criado/vinculado aqui.
 
-Granularidade só até estrutura (sem pavimento nem ambiente): cada arquivo
-Revit sincroniza os dados da estrutura vinculada no Dashboard (ver
-sync.config_sync) — o quantitativo já sai agregado por código de placa,
-somando todas as instâncias do modelo (ver agrupar_por_placa).
+Granularidade só até estrutura (sem pavimento nem ambiente): cada instância
+carrega a própria estrutura no parâmetro "Estrutura" (ver
+estrutura_param.py) — o quantitativo sai agregado por código de placa
+DENTRO de cada estrutura, nunca misturando instâncias de estruturas
+diferentes (ver quantitativos_core.py:salvar_todos, que separa por
+estrutura antes de chamar agrupar_por_placa).
 """
 
 from Autodesk.Revit.DB import (
     FilteredElementCollector, FamilyInstance, BuiltInCategory, StorageType,
 )
 
-from sync import gravar_e_enviar, config_sync
+from estrutura_param import ler_estrutura
+from sync import gravar_e_enviar
 
 CATEGORIA_SINALIZACAO = BuiltInCategory.OST_SecurityDevices
 PARAM_CODIGO_PLACA    = u"Código da Placa"
@@ -94,14 +97,16 @@ def coletar_itens(doc):
         if not codigo:
             continue
 
-        itens.append({u"tipoPlaca": codigo})
+        itens.append({u"tipoPlaca": codigo, u"estruturaNome": ler_estrutura(elem)})
 
     return itens
 
 
 def agrupar_por_placa(itens):
-    """Agrega os itens brutos (um por instância, ver coletar_itens) em
-    {tipoPlaca, quantidade} — soma as instâncias com o mesmo código."""
+    """Agrega os itens brutos (um por instância, já de UMA estrutura — ver
+    quantitativos_core.py:salvar_todos, que agrupa por estrutura antes de
+    chamar isto) em {tipoPlaca, quantidade} — soma as instâncias com o
+    mesmo código."""
     contagem = {}
     ordem = []
     for it in itens:
@@ -113,11 +118,9 @@ def agrupar_por_placa(itens):
     return [{u"tipoPlaca": codigo, u"quantidade": contagem[codigo]} for codigo in ordem]
 
 
-def salvar_cache(itens_agrupados, projeto_dir):
-    """Grava os itens de sinalização (já agregados por código — ver
-    agrupar_por_placa) na chave 'sinalizacao' do firedata.json e envia
-    pro site — ver sync.gravar_e_enviar (compartilhado com as demais
-    medidas de quantitativo, ver quantitativos_core.py), escopado pela
-    estrutura vinculada no plugin (ver sync.config_sync)."""
-    estrutura_id = config_sync(projeto_dir).get(u"estruturaId")
-    return gravar_e_enviar(u"sinalizacao", itens_agrupados, projeto_dir, estruturaId=estrutura_id)
+def salvar_cache(itens_agrupados, projeto_dir, estruturaId):
+    """Grava os itens de sinalização (já agregados por código, de UMA
+    estrutura — ver agrupar_por_placa) na chave 'sinalizacao' do
+    firedata.json e envia pro site — ver sync.gravar_e_enviar
+    (compartilhado com as demais medidas de quantitativo)."""
+    return gravar_e_enviar(u"sinalizacao", itens_agrupados, projeto_dir, estruturaId=estruturaId)

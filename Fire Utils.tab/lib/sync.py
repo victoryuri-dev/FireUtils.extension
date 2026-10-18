@@ -50,14 +50,31 @@ def _cache_path(projeto_dir):
 
 def config_sync(projeto_dir):
     """Retorna o dict salvo na chave 'sync' do firedata.json
-    (projetoId, estruturaId, estruturaNome, projetoNome), ou {} se não
-    houver nada."""
+    (projetoId, projetoNome, estruturas — lista de {id, nome}), ou {} se
+    não houver nada."""
     try:
         with io.open(_cache_path(projeto_dir), u"r", encoding=u"utf-8") as f:
             dados = json.loads(f.read())
         return dados.get(u"sync") or {}
     except Exception:
         return {}
+
+
+def estruturas_vinculadas(projeto_dir):
+    """[{id, nome}, ...] das estruturas vinculadas a este arquivo Revit —
+    um arquivo pode conter várias estruturas modeladas juntas (ver
+    project_link_bridge.py). Lê o formato novo ('estruturas', lista) e cai
+    pro antigo ('estruturaId'/'estruturaNome', um só) se for um
+    firedata.json de antes dessa mudança, sem precisar de migração: o
+    arquivo só é regravado no formato novo na próxima vez que
+    SET_PROJECT_LINK rodar."""
+    sync = config_sync(projeto_dir)
+    estruturas = sync.get(u"estruturas")
+    if isinstance(estruturas, list):
+        return estruturas
+    if sync.get(u"estruturaId"):
+        return [{u"id": sync.get(u"estruturaId"), u"nome": sync.get(u"estruturaNome")}]
+    return []
 
 
 def salvar_config_sync(projeto_dir, **campos):
@@ -78,15 +95,21 @@ def salvar_config_sync(projeto_dir, **campos):
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
 
-def gravar_e_enviar(medida, itens, projeto_dir, estruturaId=None):
-    """Grava `itens` na chave `medida` do firedata.json — mesclando com o
-    resto do arquivo, sem apagar outras medidas/config já gravadas — e
+def gravar_e_enviar(medida, itens, projeto_dir, estruturaId):
+    """Grava `itens` na chave `medida` do firedata.json, ANINHADO por
+    `estruturaId` (um projeto pode ter várias estruturas modeladas no
+    mesmo arquivo Revit — ver estrutura_param.py — cada uma com seu
+    próprio lote de itens; gravar achatado faria o lote de uma estrutura
+    apagar o da anterior a cada chamada) — mesclando com o resto do
+    arquivo, sem apagar outras medidas/estruturas/config já gravadas — e
     envia o mesmo payload pro site via enviar(), best-effort.
 
     Centraliza aqui o padrão ler-arquivo-inteiro→mesclar chave→regravar
     que cada `calc.py` de medida (extintores, sinalizacao, ...) repetia
     individualmente antes; use isso em vez de duplicar a lógica de
-    gravação em cada módulo novo.
+    gravação em cada módulo novo. `estruturaId` é obrigatório — nenhuma
+    das medidas que passam por aqui (extintores/sinalizacao/iluminacao)
+    é "geral" como hidrantes (ver enviar()).
 
     Retorna (path, ok, motivo) — path é o firedata.json gravado (a
     gravação local sempre acontece, mesmo se o envio falhar); ok/motivo
@@ -104,7 +127,11 @@ def gravar_e_enviar(medida, itens, projeto_dir, estruturaId=None):
     except Exception:
         dados = {}
 
-    dados[medida] = payload
+    por_estrutura = dados.get(medida) or {}
+    if not isinstance(por_estrutura, dict) or u"porEstrutura" not in por_estrutura:
+        por_estrutura = {u"porEstrutura": {}}
+    por_estrutura[u"porEstrutura"][estruturaId] = payload
+    dados[medida] = por_estrutura
     with io.open(path, u"w", encoding=u"utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
@@ -232,9 +259,13 @@ def enviar(medida, payload, projeto_dir, estruturaId=None):
 
     `estruturaId` é obrigatório pro site pra 'extintores', 'saidas_emergencia',
     'sinalizacao' e 'iluminacao' (o site resolve a estrutura por esse id, não
-    mais por nome) — passe o valor salvo em config_sync(projeto_dir). Pra
-    'hidrantes' não deve ser passado: é a única medida que fica geral,
-    compartilhada entre todas as estruturas do projeto.
+    mais por nome) — um arquivo Revit pode ter várias estruturas modeladas
+    juntas, então não existe mais "a" estrutura do documento pra ler de
+    config_sync: o id vem resolvido por item, contra o parâmetro "Estrutura"
+    de cada instância (ver estrutura_param.py e
+    quantitativos_core.py:salvar_todos). Pra 'hidrantes' não deve ser
+    passado: é a única medida que fica geral, compartilhada entre todas as
+    estruturas do projeto.
 
     Nunca lança exceção — qualquer falha (sem projeto vinculado, sem
     rede, timeout, erro do servidor, estruturaId desatualizado) é
