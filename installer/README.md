@@ -161,6 +161,40 @@ qual pasta é a cópia antiga do Fire Utils e qual é outra extensão que o
 cliente usa. A instrução no aviso é remover por
 **pyRevit > Settings > Custom Extension Directories**.
 
+## Atualização pela dockpane (planejado, ainda não implementado)
+
+A interface da dockpane já se atualiza sozinha (deploy no Vercel). A parte
+Python (`Fire Utils.tab/`, `startup.py`, DLLs do WebView2) só muda com um
+instalador novo, e o instalador exige o Revit fechado. A atualização pela
+dockpane reaproveita esse instalador em vez de trocar arquivos com o Revit
+aberto.
+
+Fluxo:
+
+1. Cada release publica o `FireUtils-Setup-X.Y.Z.exe` e um manifesto
+   (`{ "versao", "arquivo", "sha256", "hostMinVersion" }`) num bucket
+   **privado** do Supabase Storage. Privado: o acesso é por URL assinada de
+   curta duração, gerada para usuários autenticados (e com licença válida,
+   reaproveitando `licencas.js`/`licenca.py`), nunca por link público.
+2. O `installer/VERSION` entra no payload, para o plugin saber qual versão
+   está instalada.
+3. A dockpane compara a versão instalada com o manifesto e mostra um aviso
+   de atualização disponível.
+4. Ao clicar em atualizar, o Python baixa o `.exe` para a pasta temporária,
+   confere o `sha256` e abre um script auxiliar desvinculado do Revit. Esse
+   script espera o `Revit.exe` fechar e então roda o instalador com
+   `/SILENT`.
+
+Pontos a tratar na implementação:
+
+- **Web × Python:** como a web atualiza na hora e o Python não, a web deve
+  conferir `hostMinVersion` e bloquear a função (ou pedir a atualização)
+  quando o Python instalado for anterior ao que ela precisa.
+- **Assinatura do `.exe`:** obrigatória neste fluxo, já que o instalador é
+  executado automaticamente (ver "Antes de distribuir").
+- **Publicação:** `build.ps1` deve gerar o manifesto (com o `sha256`) e
+  enviar os dois arquivos ao bucket, para não depender de passo manual.
+
 ## Pendências de validação
 
 Já validado em Windows: o build compila e gera o `.exe` (~45 MB), e o ID do
