@@ -13,7 +13,7 @@ Node ou Python na máquina dele.
 | Node / npm | **Não precisa.** A interface da dockpane vem do servidor. |
 | Python / pip | **Não precisa.** O pyRevit traz o IronPython, e o código usa apenas a biblioteca padrão e o .NET. |
 | Git | **Não precisa.** Os arquivos vão embutidos no `.exe`. |
-| Internet | **Precisa**, para a dockpane. As demais ferramentas funcionam offline. |
+| Internet | **Precisa**, para a dockpane e para o dimensionamento (o cálculo roda no servidor). As ferramentas de produtividade — inserir, conectar, medir — funcionam offline. |
 
 A instalação é por usuário, em `%APPDATA%\pyRevit\Extensions\FireUtils.extension`,
 e por isso não pede privilégio de administrador. O Windows pode pedir
@@ -160,6 +160,34 @@ A remoção não é automática — o instalador não tem como saber com seguran
 qual pasta é a cópia antiga do Fire Utils e qual é outra extensão que o
 cliente usa. A instrução no aviso é remover por
 **pyRevit > Settings > Custom Extension Directories**.
+
+## Motor de cálculo na nuvem
+
+O dimensionamento não roda mais dentro do plugin: o código do plugin fica no
+computador do usuário, e quem o edita altera o resultado. O motor virou uma
+Edge Function do Supabase (`motor-hidrantes`, no repositório ETOS.FireUtils,
+`supabase/functions/`), e o plugin só lê o modelo do Revit, envia e grava o
+que volta (`lib/motor_nuvem.py`, `lib/hidrantes_dimensionar_bridge.py`).
+
+- **Fluxo:** a dockpane manda `DIMENSIONAR_HIDRANTES` com o access token da
+  sessão → o Python lê trechos, cotas e classificação (thread da API do Revit)
+  → a chamada ao motor vai numa thread de fundo, para uma conexão ruim não
+  congelar o Revit → o resultado é gravado no mesmo `firedata.json` de sempre.
+- **Norma:** o motor lê `normas_dados` sozinho. O plugin nunca envia Pmin,
+  vazão, coeficiente C nem tolerância — quem manda o próprio requisito
+  poderia "aprovar" um sistema que não atende.
+- **Sem internet:** o dimensionamento avisa e não calcula. A última resposta
+  continua visível (vem do `firedata.json`).
+- **O que ainda é local:** a perda de carga usada no ranking de "Mapear
+  Trechos" (`calc_j_trecho`), a classificação do sistema (Tabela 3, em JS na
+  dockpane) e os demais cálculos (saídas, extintores, sinalização, iluminação).
+  Migram para o mesmo motor nas próximas etapas.
+- **Botão "Dimensionar Hidrantes" da faixa de opções:** virou atalho que abre
+  a dockpane, porque quem autentica o pedido é a sessão dela.
+
+**Ordem de publicação:** primeiro `supabase functions deploy motor-hidrantes`
+(e os secrets, ver o README da function); só depois gere o instalador. Um
+plugin novo com a function ainda não publicada não dimensiona.
 
 ## Atualização pela dockpane (planejado, ainda não implementado)
 

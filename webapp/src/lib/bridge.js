@@ -167,21 +167,26 @@
  *     ("Dimensionamento da Bomba de Incêndio"), sem passar pelo Project
  *     Information do Revit.
  *
- *   { type: "DIMENSIONAR_HIDRANTES" }
- *     JS -> Python: roda o mesmo motor de cálculo do pushbutton
- *     "Dimensionar Hidrantes" (método da marcha HD01 → Ponto A → Descarga
- *     da Bomba → RTI — ver hidrantes_dimensionar_bridge.py), sem precisar
- *     voltar pro Revit pra clicar o botão. Precisa de classificação já
- *     aplicada (Etapa 1, "Aplicar no Revit") e de "Mapear Trechos" já
- *     executado alguma vez nesse projeto (cache de rotas).
+ *   { type: "DIMENSIONAR_HIDRANTES", payload: { accessToken } }
+ *     JS -> Python: dimensiona o sistema de hidrantes (método da marcha HD01
+ *     → Ponto A → Descarga da Bomba → RTI). O Python lê o modelo (trechos
+ *     por diâmetro, cotas, classificação — ver hidrantes_dimensionar_bridge.py)
+ *     e manda para o motor de cálculo na nuvem (Edge Function motor-hidrantes);
+ *     nenhuma fórmula roda no plugin. `accessToken` é o token da sessão do
+ *     Supabase, que o motor exige — a anon key não basta. Precisa de
+ *     classificação já aplicada (Etapa 1, "Aplicar no Revit"), de "Mapear
+ *     Trechos" já executado alguma vez nesse projeto (cache de rotas) e de
+ *     internet.
  *
- *   { type: "HIDRANTES_DIMENSIONAR_RESULTADO", payload: { ok, erro? } }
+ *   { type: "HIDRANTES_DIMENSIONAR_RESULTADO", payload: { ok, erro?, categoria? } }
  *     Python -> JS: resultado de um DIMENSIONAR_HIDRANTES. `erro` é texto
- *     pronto pra exibir (qual verificação normativa não atendeu, ou qual
- *     pré-requisito falta — classificação, mapeamento, elevação de algum
- *     ponto) — SEM o botão "Mostrar no Projeto" que o pushbutton mostra
- *     nesses casos (só faz sentido com o Revit em primeiro plano; quem
- *     precisar localizar o elemento ainda roda o pushbutton no Revit).
+ *     pronto pra exibir e `categoria` diz por que falhou, pra escolher o
+ *     título do aviso: "norma" (o motor rodou e o sistema não atende, ou os
+ *     dados não fecham), "requisito" (falta classificação, mapeamento ou a
+ *     elevação de algum ponto), "conexao" (sem internet), "sessao"
+ *     (expirada), "licenca" (módulo não contratado), "limite" (pedidos
+ *     demais) e "servidor". Quem precisar localizar o elemento problemático
+ *     usa SELECIONAR_TRECHO_HIDRANTE.
  *     Em caso de sucesso (`ok: true`), o cache de dimensionamento já foi
  *     gravado — quem recebe essa mensagem deve mandar
  *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado

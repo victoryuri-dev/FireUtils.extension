@@ -563,6 +563,35 @@ class PainelCarregadorFamiliasWeb(forms.WPFPanel):
 # ---------------------------------------------------------------------------
 # Entrada pública — chamada pelo botão da faixa de opções
 # ---------------------------------------------------------------------------
+def mostrar_painel(uiapp):
+    """
+    Garante o Carregador de Famílias visível (sem alternar): é o que botões
+    da faixa de opções que só remetem à dockpane usam — um clique a mais
+    com o painel já aberto não deve escondê-lo. Devolve True se o painel
+    ficou visível.
+    """
+    if not forms.is_registered_dockable_panel(PainelCarregadorFamiliasWeb) \
+            or uiapp.ActiveUIDocument is None:
+        # Mesmas mensagens (e mesma ordem de checagem) de alternar_painel.
+        alternar_painel(uiapp)
+        return False
+
+    try:
+        painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
+        if not painel.IsShown():
+            painel.Show()
+        return True
+    except Exception as ex:
+        forms.alert(
+            u"Não foi possível abrir o painel do Carregador de Famílias "
+            u"agora ({}).\n\nTente novamente; se persistir, reinicie o "
+            u"Revit.".format(texto_erro(ex)),
+            title=u"FireUtils",
+            warn_icon=True,
+        )
+        return False
+
+
 def alternar_painel(uiapp):
     """
     Mostra/esconde o Carregador de Famílias como Dockable Pane. Um novo

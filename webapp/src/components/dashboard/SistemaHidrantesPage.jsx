@@ -3,6 +3,7 @@ import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import { salvarComRetry } from "../../lib/projectData";
+import { supabase } from "../../lib/supabaseClient";
 import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../../lib/projetoDados";
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
@@ -11,6 +12,19 @@ import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
 import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
+
+// Título do aviso por categoria da falha (ver motor_nuvem.py): "norma" é o
+// motor ter rodado e o sistema não atender; as demais são o que impediu o
+// cálculo de acontecer.
+const TITULO_FALHA_DIMENSIONAMENTO = {
+  norma: "Dimensionamento não atendeu a norma",
+  requisito: "Falta um passo antes de dimensionar",
+  conexao: "Sem conexão com o servidor de cálculo",
+  sessao: "Sessão expirada",
+  licenca: "Módulo não contratado",
+  limite: "Muitos pedidos em sequência",
+  servidor: "Não foi possível dimensionar",
+};
 
 function fmt(n, casas = 2) {
   return typeof n === "number" && !Number.isNaN(n) ? n.toFixed(casas) : "—";
@@ -177,11 +191,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAR_RESULTADO) {
         setDimensionando(false);
-        const { ok, erro } = mensagem.payload || {};
+        const { ok, erro, categoria } = mensagem.payload || {};
         if (!ok) {
           adicionarToast?.({
             tipo: "erro",
-            titulo: "Dimensionamento não atendeu a norma",
+            titulo: TITULO_FALHA_DIMENSIONAMENTO[categoria] || TITULO_FALHA_DIMENSIONAMENTO.norma,
             mensagem: erro,
             duracaoMs: 15000,
           });
@@ -197,9 +211,15 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function dimensionar() {
+  // O cálculo roda no servidor, que só atende com a sessão do usuário. O
+  // token vai junto de cada pedido (e não guardado do lado do Revit) porque
+  // aqui o supabase-js já o mantém renovado.
+  async function dimensionar() {
     setDimensionando(true);
-    postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, {});
+    const { data } = (await supabase?.auth.getSession()) ?? {};
+    postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, {
+      accessToken: data?.session?.access_token ?? null,
+    });
   }
 
   // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site

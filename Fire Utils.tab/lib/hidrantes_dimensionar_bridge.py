@@ -1,52 +1,55 @@
 # -*- coding: utf-8 -*-
 """
 hidrantes_dimensionar_bridge.py — Fire Utils · lib/
-Processa DIMENSIONAR_HIDRANTES: roda o mesmo motor de cálculo do
-pushbutton "Dimensionar Hidrantes" (Hidrantes.panel/Dimensionar
-Hidrantes.pushbutton/script.py — método da marcha HD01 → Ponto A →
-Descarga da Bomba → RTI), disparado por um clique na dockpane em vez do
-botão do Revit — mesma fonte de verdade dos dois lados (hidrantes/calc.py,
-hidrantes/rede.py), sem reimplementar a matemática nem a leitura de
-conectores aqui.
+Processa DIMENSIONAR_HIDRANTES: lê o modelo do Revit (trechos por diâmetro,
+cotas, classificação do sistema) e manda para o motor de cálculo na nuvem
+(Edge Function motor-hidrantes, repositório ETOS.FireUtils). Aqui não há
+fórmula nenhuma — o método da marcha, a norma e as verificações normativas
+(equilíbrio hidráulico, velocidade, pressão/vazão no hidrante, sucção e
+NPSH) rodam no servidor; este módulo só extrai, envia e grava o que volta.
 
-Única diferença de verdade em relação ao pushbutton: quando alguma
-verificação normativa não atende (equilíbrio hidráulico, velocidade,
-pressão/vazão no hidrante), em vez de abrir uma janela WPF de bloqueio
-com botão "Mostrar no Projeto" (resultado_ui.py — só faz sentido rodando
-dentro do Revit, com a seleção de elementos ao vivo), devolve um erro em
-texto pra dockpane mostrar. Quem precisar localizar o elemento problemático
-ainda pode rodar o pushbutton no Revit, que continua com a janela
-completa — este bridge não o substitui, só oferece um atalho pro caminho
-feliz (classificação e mapeamento já ok, dimensionamento atende de
-primeira) sem sair da dockpane.
+Três etapas, cada uma no contexto certo (mesmo desenho de
+quantitativos_bridge.py):
+  1. Leitura do modelo — toca a API do Revit, roda aqui mesmo (estamos na
+     thread de API, chamados via fila_acoes pelo dispatcher).
+  2. Chamada ao motor — rede, de centenas de ms a vários segundos conforme a
+     internet. Numa thread de fundo: na thread de API, uma conexão ruim
+     congelaria o Revit inteiro.
+  3. Resposta à dockpane — reenfileirada na thread de API, porque
+     postar_mensagem só é seguro a partir dela (ver
+     family_loader_webview_forms.py:_postar_mensagem).
 
-Em caso de sucesso, grava exatamente o mesmo cache (firedata.json, chave
-"hidrantes") que o pushbutton grava — a dockpane só manda
-GET_HIDRANTES_DIMENSIONAMENTO de novo depois (ver
-hidrantes_dimensionamento_bridge.py) pra mostrar o resultado completo
-(HidrantesDimensionamento.jsx), sem duplicar nenhum formato de dado aqui.
+Autenticação: a dockpane manda o access token da sessão junto do pedido
+(payload["accessToken"]) — ver motor_nuvem.py para o porquê de não usar o
+refresh token guardado.
+
+Em caso de sucesso, grava o mesmo cache (firedata.json, chave "hidrantes")
+que sempre foi gravado — a dockpane manda GET_HIDRANTES_DIMENSIONAMENTO de
+novo depois (ver hidrantes_dimensionamento_bridge.py) pra mostrar o
+resultado completo (HidrantesDimensionamento.jsx), sem duplicar nenhum
+formato de dado aqui.
+
+Quando alguma verificação normativa não atende, o motor devolve o texto e a
+dockpane o mostra; quem precisar localizar o elemento problemático usa
+"Mostrar no Projeto" na própria dockpane (SELECIONAR_TRECHO_HIDRANTE).
 """
 
 import os
 import datetime
+import threading
 
 from Autodesk.Revit.DB import FilteredElementCollector, FamilyInstance, FlowDirectionType
 from Autodesk.Revit.DB.Plumbing import Pipe
 
 from projeto import carregar_dados_projeto
-from hidrantes.calc import (
-    calcular_rede, extrair_trecho, salvar_cache, carregar_cache,
-    METODO_VALVULA, METODOS_CALCULO, calc_j_trecho,
-    COMPRIMENTO_MIN_VERIF_VELOCIDADE_M,
-)
+from hidrantes.calc import extrair_trecho, salvar_cache, carregar_cache
 from hidrantes.rede import (
     get_id, to_element_id, get_diametro_no_trecho, get_comprimento, get_leq,
     get_nome, get_z, get_cota_conector, get_cota_rti, diagnostico_conectores,
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
-from hidrantes.norm_profiles import get_profile, req, opt, NormProfileError
 from hidrantes import succao as succao_calc
-from hidrantes import npshd as npshd_calc
+import motor_nuvem
 from family_error_utils import texto_erro
 
 PROJECT_INFO_PARAM = u"FireUtils - Tipo de Sistema de Hidrante"
@@ -54,8 +57,10 @@ P_IDENTIFICADOR    = u"FireUtils - Identificador"
 _TIPO_RESPOSTA      = u"HIDRANTES_DIMENSIONAR_RESULTADO"
 
 
-def _erro(postar_mensagem, mensagem):
-    postar_mensagem(_TIPO_RESPOSTA, {u"ok": False, u"erro": mensagem})
+def _erro(postar_mensagem, mensagem, categoria=u"requisito"):
+    """`categoria` decide o título do aviso na dockpane — ver motor_nuvem.py.
+    Aqui a padrão é "requisito": falta um passo antes de dimensionar."""
+    postar_mensagem(_TIPO_RESPOSTA, {u"ok": False, u"erro": mensagem, u"categoria": categoria})
 
 
 def _get_identificador(elem):
@@ -69,22 +74,7 @@ def _get_identificador(elem):
         return None
 
 
-def _resumo_falha_velocidade(nome_trecho, limite, falhas):
-    partes = [u"Velocidade acima do limite normativo em \"{}\" (limite {:.3f} m/s):".format(nome_trecho, limite)]
-    for s in falhas:
-        partes.append(u"- DN{} : {:.3f} m/s".format(int(round(s[u"d_mm"])), s[u"V"]))
-    return u"\n".join(partes)
-
-
-def _resumo_falha_hidrante(label, p, q, p_ref_desc, trecho_desc, pmin, qmin):
-    return (
-        u"{} não atende a norma em \"{}\":\n"
-        u"- {} obtida: {:.4f} mca (mínimo {:.2f} mca)\n"
-        u"- Vazão obtida: {:.2f} L/min (mínimo {:.2f} L/min)"
-    ).format(label, trecho_desc, p_ref_desc, p, pmin, q, qmin)
-
-
-def tratar_dimensionar_hidrantes(uiapp, postar_mensagem):
+def tratar_dimensionar_hidrantes(uiapp, payload, fila_acoes, postar_mensagem):
     # Sem esse try/except, qualquer exceção não prevista (ex.: algo que o
     # pushbutton nunca tropeçou porque sempre rodou com o Revit em primeiro
     # plano) subia até o ExternalEvent, que só loga no console do pyRevit —
@@ -92,12 +82,12 @@ def tratar_dimensionar_hidrantes(uiapp, postar_mensagem):
     # nenhuma mensagem de volta (mesmo motivo documentado em
     # project_link_bridge.py:tratar_get_project_link).
     try:
-        _processar(uiapp, postar_mensagem)
+        _processar(uiapp, payload, fila_acoes, postar_mensagem)
     except Exception as ex:
-        _erro(postar_mensagem, u"Falha inesperada ao dimensionar: {}".format(texto_erro(ex)))
+        _erro(postar_mensagem, u"Falha inesperada ao dimensionar: {}".format(texto_erro(ex)), u"servidor")
 
 
-def _processar(uiapp, postar_mensagem):
+def _processar(uiapp, payload, fila_acoes, postar_mensagem):
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None or not uidoc.Document.PathName:
         _erro(postar_mensagem, u"Salve o projeto Revit (.rvt) antes de dimensionar.")
@@ -107,65 +97,20 @@ def _processar(uiapp, postar_mensagem):
 
     dados_projeto = carregar_dados_projeto(projeto_dir) or {}
     sigla_estado = dados_projeto.get(u"uf") or u"MA"
-    try:
-        perfil = get_profile(sigla_estado, projeto_dir)
-    except NormProfileError as ex:
-        _erro(postar_mensagem, texto_erro(ex))
-        return
 
     # Etapa 1: tipo de sistema (classificação já aplicada no Project
-    # Information — ver hidrantes_classificacao_bridge.py).
+    # Information — ver hidrantes_classificacao_bridge.py). Quem interpreta
+    # "Tipo N Var. X" e busca os parâmetros dele na norma é o motor.
     param_sistema = doc.ProjectInformation.LookupParameter(PROJECT_INFO_PARAM)
     if not param_sistema or not param_sistema.AsString():
         _erro(postar_mensagem, u"Sistema de hidrantes ainda não classificado. Classifique na seção acima primeiro.")
         return
     valor_sistema = param_sistema.AsString()
 
-    try:
-        tipo_num = int(valor_sistema.split()[1])
-    except Exception:
-        _erro(postar_mensagem, u"Não foi possível interpretar o tipo classificado.")
-        return
-
-    variante_idx = 0
-    if u"Var." in valor_sistema:
-        try:
-            variante_idx = ord(valor_sistema.split(u"Var.")[1].strip()[0]) - 65
-        except Exception:
-            variante_idx = 0
-
-    try:
-        tipo_perfil = req(perfil, u"tipos").get(tipo_num)
-    except NormProfileError as ex:
-        _erro(postar_mensagem, texto_erro(ex))
-        return
-    if tipo_perfil is None:
-        _erro(postar_mensagem, u"O perfil normativo '{}' não define o Tipo {} de sistema de hidrante.".format(
-            perfil.get(u"norma"), tipo_num))
-        return
-
-    dados_sistema = dict(tipo_perfil[u"variantes"][variante_idx])
-    # A Tabela 2 pode vir da base central com esses valores como int — ver
-    # mesmo ajuste em "Dimensionar Hidrantes"/script.py.
-    for chave in (u"q_min", u"p_min", u"mang_dn", u"mang_comp", u"esguicho_dn"):
-        dados_sistema[chave] = float(dados_sistema[chave])
-
-    Qs_lmin = dados_sistema[u"q_min"]
-    Pmin = dados_sistema[u"p_min"]
-    try:
-        C_HW = req(perfil, u"hazen_c")[u"galvanizado"]
-    except NormProfileError as ex:
-        _erro(postar_mensagem, texto_erro(ex))
-        return
-
-    # Etapa 1b: método de cálculo (gravado junto da classificação).
+    # Etapa 1b: método de cálculo (gravado junto da classificação). Valor
+    # desconhecido o motor recusa; ausente, ele assume "Válvula do Hidrante".
     param_metodo = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
     metodo_calculo = param_metodo.AsString() if param_metodo else None
-    if metodo_calculo not in METODOS_CALCULO:
-        if metodo_calculo:
-            _erro(postar_mensagem, u"Método de cálculo desconhecido no projeto: '{}'. Classifique o sistema novamente.".format(metodo_calculo))
-            return
-        metodo_calculo = METODO_VALVULA
 
     # Etapa 2: elementos da rota — cache salvo por "Mapear Trechos".
     payload_rotas, erro_rotas = carregar_cache(projeto_dir, chave=u"rotas")
@@ -240,7 +185,8 @@ def _processar(uiapp, postar_mensagem):
 
     dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
-    # Etapa 4: extrair dados dos trechos (por diâmetro) e resolver a marcha.
+    # Etapa 4: extrair dados dos trechos (por diâmetro). O motor recalcula
+    # Ltotal e os totais de cada trecho — vai só o que o modelo informa.
     def _diametro_fn(chave_trecho):
         ids_no_trecho = set(get_id(e) for e in trechos_elems[chave_trecho])
         return lambda e, _ids=ids_no_trecho: get_diametro_no_trecho(e, _ids)
@@ -256,119 +202,59 @@ def _processar(uiapp, postar_mensagem):
         _erro(postar_mensagem, texto_erro(ex))
         return
 
-    try:
-        tolerancia_equilibrio_mca = req(perfil, u"tolerancia_equilibrio_mca")
-        v_max_tubo    = req(perfil, u"v_max_tubulacao")
-        v_max_suc_pos = req(perfil, u"v_max_succao_positiva")
-        v_max_suc_neg = req(perfil, u"v_max_succao_negativa")
-        norma_nome    = req(perfil, u"norma")
-    except NormProfileError as ex:
-        _erro(postar_mensagem, texto_erro(ex))
-        return
+    entrada = {
+        u"uf":            sigla_estado,
+        u"valor_sistema": valor_sistema,
+        u"metodo":        metodo_calculo,
+        u"trechos":       {k: v[u"segmentos"] for k, v in trechos_data.items()},
+        u"cotas":         cotas,
+        u"dados_succao":  dados_succao,
+    }
 
-    res = calcular_rede(trechos_data, Qs_lmin, Pmin, C_HW, cotas,
-                        tolerancia_equilibrio_mca,
-                        metodo=metodo_calculo,
-                        mang_dn_mm=dados_sistema[u"mang_dn"],
-                        mang_comp_m=dados_sistema[u"mang_comp"])
-
-    # Etapa 4a: equilíbrio hidráulico entre HD01/HD02 no Ponto A.
-    if not res[u"equilibrio"][u"convergiu"]:
-        eq = res[u"equilibrio"]
-        _erro(postar_mensagem, (
-            u"O equilíbrio hidráulico entre HD01 e HD02 não convergiu "
-            u"(diferença de {:.4f} mca, limite {:.2f} mca — {}). Revise o "
-            u"traçado/diâmetro da rede entre os dois ramais."
-        ).format(eq.get(u"erro", 0.0), eq.get(u"tolerancia", tolerancia_equilibrio_mca), norma_nome))
-        return
-
-    # Condição de sucção + NPSH (quando negativa).
-    verif_succao = succao_calc.verificar_condicao_succao(
-        cota_rti=cotas[u"z_rti"],
-        cota_succao_bomba=cotas[u"z_succao"],
-        q_nominal_lmin=res[u"Qt"],
-        fator_vazao_npsh=opt(perfil, u"npshd_fator_vazao", succao_calc.FATOR_VAZAO_NPSH),
-    )
-    succao = verif_succao[u"succao_simples"]
-
-    verif_npshd = None
-    erro_npshd = None
-    j_succao_npsh = None
-    if verif_succao is not None and verif_succao[u"exige_npsh"]:
-        q_npsh = verif_succao[u"vazao_npsh_lmin"]
-        j_succao_npsh = calc_j_trecho(trechos_data[u"t1"], q_npsh, C_HW, u"Sucção — vazão majorada (NPSH)")
-        try:
-            verif_npshd = npshd_calc.calcular_npshd(
-                altitude_m=(dados_succao[u"altitude_m"] if dados_succao[u"altitude_m"] is not None else npshd_calc.ALTITUDE_PADRAO),
-                temperatura_c=(dados_succao[u"temperatura_c"] if dados_succao[u"temperatura_c"] is not None else npshd_calc.TEMPERATURA_PADRAO),
-                hs_abs_m=verif_succao[u"hs_abs"],
-                hf_s_mca=j_succao_npsh[u"J"],
-            )
-        except ValueError as ex:
-            erro_npshd = texto_erro(ex)
-
-    v_max_succao = v_max_suc_pos if succao == u"positiva" else v_max_suc_neg
-
-    if res[u"esguicho"]:
-        p_hd01_ref = res[u"esg"][u"hd01"][u"P_esg"]
-        p_hd02_ref = res[u"esg"][u"hd02"][u"P_esg"]
-        p_ref_desc = u"pressão no esguicho"
-    else:
-        p_hd01_ref = res[u"P_hd01"]
-        p_hd02_ref = res[u"P_hd02"]
-        p_ref_desc = u"pressão na válvula"
-
-    # Etapa 5 — verificações normativas: para no primeiro ponto que não
-    # atender, igual ao pushbutton (ver docstring do módulo pro porquê de
-    # não ter mais o "Mostrar no Projeto" aqui).
-    def _falha_velocidade(j, limite, nome_trecho, comprimento_min=None):
-        segmentos = j[u"segmentos"]
-        if comprimento_min is not None:
-            segmentos = [s for s in segmentos if s[u"L"] >= comprimento_min]
-        falhas = [s for s in segmentos if s[u"V"] > limite + 1e-9]
-        if not falhas:
-            return None
-        return _resumo_falha_velocidade(nome_trecho, limite, falhas)
-
-    def _falha_hidrante(label, p, q, trecho_desc):
-        if p >= float(Pmin) - 0.01 and q >= float(Qs_lmin) - 0.01:
-            return None
-        return _resumo_falha_hidrante(label, p, q, p_ref_desc, trecho_desc, Pmin, Qs_lmin)
-
-    falhas_normativas = (
-        _falha_velocidade(res[u"j"][u"t3"], v_max_tubo, u"Ponto A → HD01"),
-        _falha_hidrante(u"HD01", p_hd01_ref, res[u"Q_hd01"], u"Ponto A → HD01"),
-        _falha_velocidade(res[u"j"][u"t4"], v_max_tubo, u"Ponto A → HD02"),
-        _falha_hidrante(u"HD02", p_hd02_ref, res[u"Q_hd02"], u"Ponto A → HD02"),
-        _falha_velocidade(res[u"j"][u"t2"], v_max_tubo, u"Bomba → Ponto A (recalque)", COMPRIMENTO_MIN_VERIF_VELOCIDADE_M),
-        _falha_velocidade(res[u"j"][u"t1"], v_max_succao, u"Sucção (RTI → Bomba)", COMPRIMENTO_MIN_VERIF_VELOCIDADE_M),
-    )
-    for falha in falhas_normativas:
-        if falha:
-            _erro(postar_mensagem, falha)
-            return
-
-    # Etapa 6 — salvar cache (sincroniza com o site e alimenta
-    # HidrantesDimensionamento.jsx — mesmo formato que o pushbutton grava).
-    timestamp = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
-    payload_hid = {
-        u"res":              res,
-        u"dados_sistema":    dados_sistema,
-        u"valor_sistema":    valor_sistema,
-        u"metodo":           metodo_calculo,
-        u"cotas":            cotas,
-        u"succao":           succao,
-        u"verif_succao":     verif_succao,
-        u"dados_succao":     dados_succao,
-        u"verif_npshd":      verif_npshd,
-        u"erro_npshd":       erro_npshd,
-        u"j_succao_npsh":    j_succao_npsh,
-        u"C_HW":             C_HW,
-        u"uf":               perfil.get(u"_uf_efetiva"),
-        u"timestamp":        timestamp,
-        u"_nome_projeto":    doc.Title,
+    # O que só existe deste lado e entra no cache junto do resultado.
+    complemento_local = {
+        u"_nome_projeto":     doc.Title,
         u"ranking_hidrantes": payload_rotas.get(u"ranking"),
     }
-    salvar_cache(payload_hid, projeto_dir)
 
-    postar_mensagem(_TIPO_RESPOSTA, {u"ok": True})
+    access_token = (payload or {}).get(u"accessToken")
+
+    threading.Thread(
+        target=_calcular_em_background,
+        args=(entrada, access_token, complemento_local, projeto_dir, fila_acoes, postar_mensagem),
+    ).start()
+
+
+def _calcular_em_background(entrada, access_token, complemento_local, projeto_dir,
+                            fila_acoes, postar_mensagem):
+    """
+    Etapas 2 e 3: chama o motor, grava o cache e responde à dockpane. Qualquer
+    exceção vira uma resposta de erro — sem isso a dockpane ficaria em
+    "Dimensionando..." para sempre (thread de fundo não tem quem a capture).
+    """
+    try:
+        resposta = motor_nuvem.dimensionar_hidrantes(entrada, access_token)
+
+        if resposta.get(u"ok"):
+            # Mesmo formato que o pushbutton sempre gravou (e que a dockpane
+            # e o site leem) — o motor devolve o resultado no formato dele, e
+            # aqui entra só o que é local.
+            payload_hid = dict(resposta[u"resultado"])
+            payload_hid[u"timestamp"] = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
+            payload_hid.update(complemento_local)
+            salvar_cache(payload_hid, projeto_dir)
+            mensagem = {u"ok": True}
+        else:
+            mensagem = {
+                u"ok": False,
+                u"erro": resposta.get(u"erro"),
+                u"categoria": resposta.get(u"categoria") or u"norma",
+            }
+    except Exception as ex:
+        mensagem = {
+            u"ok": False,
+            u"erro": u"Falha inesperada ao dimensionar: {}".format(texto_erro(ex)),
+            u"categoria": u"servidor",
+        }
+
+    fila_acoes.enfileirar(lambda uiapp: postar_mensagem(_TIPO_RESPOSTA, mensagem))

@@ -279,7 +279,7 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     elif tipo == u"DIMENSIONAR_HIDRANTES":
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_dimensionar_bridge.tratar_dimensionar_hidrantes(
-                uiapp, postar_mensagem)
+                uiapp, payload, fila_acoes, postar_mensagem)
         )
     elif tipo == u"GRAVAR_QUANTITATIVOS":
         fila_acoes.enfileirar(
