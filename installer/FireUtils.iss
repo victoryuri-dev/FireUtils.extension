@@ -327,9 +327,10 @@ begin
   if not DirExists(DadosLocais) then
     Exit;
 
+  { Linha de codigo nao pode comecar com # : o ISPP a leria como diretiva. }
   if UninstallSilent or
-     (MsgBox('Remover também a licença e os dados locais do Fire Utils deste computador?' +
-             #13#10#13#10 + 'Escolha Não se for reinstalar depois.' + #13#10 + DadosLocais,
+     (MsgBox('Remover também a licença e os dados locais do Fire Utils deste computador?' + #13#10#13#10 +
+             'Escolha Não se for reinstalar depois.' + #13#10 + DadosLocais,
              mbConfirmation, MB_YESNO) = IDYES) then
     DelTree(DadosLocais, True, True, True);
 end;
