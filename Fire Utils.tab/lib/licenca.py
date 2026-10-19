@@ -196,6 +196,17 @@ def esquecer_sessao():
 # Supabase
 # ---------------------------------------------------------------------------
 
+def requisitar(url, metodo, cabecalhos, corpo=None):
+    """
+    Infraestrutura HTTP compartilhada — atualizacao.py também usa.
+
+    Mora aqui por ora para não mover código que acabou de estabilizar. Se
+    um terceiro módulo precisar, vale extrair isto e o log para um módulo
+    próprio, já que nenhum dos dois tem a ver com licença.
+    """
+    return _requisitar(url, metodo, cabecalhos, corpo)
+
+
 def _requisitar(url, metodo, cabecalhos, corpo=None):
     """
     Requisição HTTP com o WebRequest do .NET — mesma abordagem de sync.py,
