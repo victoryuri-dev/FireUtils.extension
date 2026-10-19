@@ -204,21 +204,22 @@ begin
     Exit;
 
   { Linha de codigo nao pode comecar com [ : o compilador a leria como
-    cabecalho de secao. Por isso a lista de botoes vai numa variavel. }
+    cabecalho de secao. Por isso a lista de botoes vai numa variavel.
+    Sim/Nao/Cancelar, na ordem em que o Inno espera os rotulos. }
   SetArrayLength(Botoes, 3);
-  Botoes[0] := 'Instalar esta versão (atualizar)';
-  Botoes[1] := 'Desinstalar o Fire Utils';
+  Botoes[0] := 'Atualizar' + #13#10 + 'Instala esta versão por cima da atual.';
+  Botoes[1] := 'Desinstalar' + #13#10 + 'Remove o Fire Utils deste computador.';
   Botoes[2] := 'Cancelar';
 
   Escolha := TaskDialogMsgBox('O Fire Utils já está instalado',
-    'O que você quer fazer?', mbConfirmation, 0, Botoes, 0);
+    'O que você quer fazer?', mbConfirmation, MB_YESNOCANCEL, Botoes, 0);
 
-  if Escolha = 1001 then
+  if Escolha = IDNO then
   begin
     Exec(Desinstalador, '', '', SW_SHOW, ewWaitUntilTerminated, CodigoSaida);
     Result := False;
   end
-  else if Escolha <> 1000 then
+  else if Escolha <> IDYES then
     Result := False;
 end;
 
