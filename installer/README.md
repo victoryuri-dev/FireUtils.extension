@@ -360,7 +360,7 @@ com Revit e sem pyRevit.
 
 ## Desinstalar
 
-O instalador gera o desinstalador do Inno. Ele aparece em **Menu Iniciar > Fire
+O instalador gera o desinstalador do Inno. Rodar o instalador de novo, com o plugin já instalado, oferece "Desinstalar". Ele aparece em **Menu Iniciar > Fire
 Utils > Desinstalar o Fire Utils** e em Configurações > Aplicativos. Recusa
 rodar com o Revit aberto, apaga a pasta da extensão e pergunta se remove também
 `%LOCALAPPDATA%\FireUtils` (licença, logs e perfil do WebView2, que guarda o

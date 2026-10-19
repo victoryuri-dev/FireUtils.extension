@@ -131,6 +131,8 @@ const
   DEPS_OK               = 0;
   DEPS_SEM_PYREVIT      = 1;
   URL_PYREVIT_RELEASES  = 'https://github.com/pyrevitlabs/pyRevit/releases/latest';
+  { Chave onde o Inno registra a instalacao: AppId + "_is1". }
+  CHAVE_DESINSTALAR     = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{8B4F2E91-7C3D-4A56-9E18-2D5F6A0B3C74}_is1';
 
 { Procura qualquer instalacao do Revit para avisar cedo o usuario que
   instalou o plugin na maquina errada. Nao bloqueia: alguem pode estar
@@ -177,9 +179,50 @@ begin
   end;
 end;
 
-function InitializeSetup(): Boolean;
+{ Caminho do desinstalador da instalacao existente, ou '' se nao ha. }
+function DesinstaladorExistente(): String;
+begin
+  Result := '';
+  if not RegQueryStringValue(HKCU, CHAVE_DESINSTALAR, 'UninstallString', Result) then
+    if not RegQueryStringValue(HKLM, CHAVE_DESINSTALAR, 'UninstallString', Result) then
+      Result := '';
+  Result := RemoveQuotes(Result);
+end;
+
+{ Ja instalado: deixa escolher entre atualizar e desinstalar. Devolve False
+  quando o instalador deve fechar (desinstalou ou cancelou). }
+function EscolherAtualizarOuDesinstalar(): Boolean;
+var
+  Desinstalador: String;
+  Escolha, CodigoSaida: Integer;
 begin
   Result := True;
+
+  Desinstalador := DesinstaladorExistente();
+  if (Desinstalador = '') or not FileExists(Desinstalador) then
+    Exit;
+
+  Escolha := TaskDialogMsgBox(
+    'O Fire Utils já está instalado',
+    'O que você quer fazer?',
+    mbConfirmation, 0,
+    ['Instalar esta versão (atualizar)', 'Desinstalar o Fire Utils', 'Cancelar'],
+    0);
+
+  if Escolha = 1001 then
+  begin
+    Exec(Desinstalador, '', '', SW_SHOW, ewWaitUntilTerminated, CodigoSaida);
+    Result := False;
+  end
+  else if Escolha <> 1000 then
+    Result := False;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := EscolherAtualizarOuDesinstalar();
+  if not Result then
+    Exit;
 
   if TemCaminhoDeExtensaoCustomizado() then
   begin
