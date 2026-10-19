@@ -106,6 +106,11 @@ Type: filesandordirs; Name: "{app}\Fire Utils.tab"
 ; Resíduo de versões que ainda embutiam o build do frontend.
 Type: filesandordirs; Name: "{app}\webapp"
 
+[Icons]
+; Atalho no Menu Iniciar (do usuario): o desinstalador tambem aparece em
+; Configuracoes > Aplicativos, mas la ninguem o procura.
+Name: "{autoprograms}\{#AppName}\Desinstalar o {#AppName}"; Filename: "{uninstallexe}"
+
 [UninstallDelete]
 ; Remove o que o plugin gera em tempo de execucao (.pyc, caches) e que
 ; portanto nao esta na lista de arquivos instalados.
@@ -286,4 +291,45 @@ begin
               'Detalhes em: ' + ExpandConstant('{%TEMP}') + '\FireUtils-install.log';
     Exit;
   end;
+end;
+
+{ Desinstalar com o Revit aberto falharia no meio: as DLLs do WebView2 ficam
+  em uso (mesmo motivo do PrepareToInstall). }
+function InitializeUninstall(): Boolean;
+begin
+  Result := True;
+
+  while RevitEstaRodando() do
+  begin
+    if MsgBox('O Autodesk Revit está aberto.' + #13#10#13#10 +
+              'Feche o Revit para desinstalar o Fire Utils — alguns arquivos ' +
+              'do plugin ficam em uso enquanto ele está rodando.' + #13#10#13#10 +
+              'Depois de fechar, clique em Repetir.',
+              mbError, MB_RETRYCANCEL) = IDCANCEL then
+    begin
+      Result := False;
+      Exit;
+    end;
+  end;
+end;
+
+{ Dados do usuario fora da pasta da extensao: licenca, logs e o perfil do
+  WebView2 (inclui o login da dockpane). Perguntar antes de apagar, porque quem
+  desinstala para reinstalar quer manter; na desinstalacao silenciosa apaga. }
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DadosLocais: String;
+begin
+  if CurUninstallStep <> usPostUninstall then
+    Exit;
+
+  DadosLocais := ExpandConstant('{localappdata}\FireUtils');
+  if not DirExists(DadosLocais) then
+    Exit;
+
+  if UninstallSilent or
+     (MsgBox('Remover também a licença e os dados locais do Fire Utils deste computador?' +
+             #13#10#13#10 + 'Escolha Não se for reinstalar depois.' + #13#10 + DadosLocais,
+             mbConfirmation, MB_YESNO) = IDYES) then
+    DelTree(DadosLocais, True, True, True);
 end;

@@ -357,3 +357,11 @@ Falta confirmar antes da primeira distribuição:
 
 O teste mínimo antes de mandar para um cliente é uma máquina virtual limpa,
 com Revit e sem pyRevit.
+
+## Desinstalar
+
+O instalador gera o desinstalador do Inno. Ele aparece em **Menu Iniciar > Fire
+Utils > Desinstalar o Fire Utils** e em Configurações > Aplicativos. Recusa
+rodar com o Revit aberto, apaga a pasta da extensão e pergunta se remove também
+`%LOCALAPPDATA%\FireUtils` (licença, logs e perfil do WebView2, que guarda o
+login). Em desinstalação silenciosa (`/SILENT`) esses dados são removidos.
