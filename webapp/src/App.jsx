@@ -7,6 +7,10 @@ import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
+import AvisoAtualizacao from "./components/AvisoAtualizacao";
+import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
+import { avaliarVersao } from "./lib/versoes";
+import { buscarManifesto, abrirDownloadDoInstalador } from "./lib/atualizacao";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -79,6 +83,19 @@ function lerAbaDaUrl() {
   return ABAS_VALIDAS.includes(aba) ? aba : "biblioteca";
 }
 
+// Qual versão nova o usuário dispensou ("Depois"): o aviso só volta quando sair
+// outra. localStorage pode estar indisponível — nesse caso o aviso só reaparece
+// a cada abertura, o que é aceitável.
+const CHAVE_AVISO_DISPENSADO = "fireutils.atualizacaoDispensada";
+
+function lerAvisoDispensado() {
+  try {
+    return window.localStorage.getItem(CHAVE_AVISO_DISPENSADO);
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
   const [abaAtual, setAbaAtual] = useState(lerAbaDaUrl);
@@ -92,6 +109,12 @@ export default function App() {
   // sessão do Revit. null = ainda não respondeu (não é o mesmo que "nenhum":
   // tratar os dois igual faria a tela piscar um bloqueio indevido).
   const [modulosLiberados, setModulosLiberados] = useState(null);
+  // Versão do plugin instalado, informada junto das licenças: undefined = o
+  // Python ainda não respondeu; null = plugin antigo, que não informa versão.
+  const [versaoPlugin, setVersaoPlugin] = useState(undefined);
+  const [manifesto, setManifesto] = useState(null); // última versão publicada
+  const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
+  const [baixandoAtualizacao, setBaixandoAtualizacao] = useState(false);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const [atribuindoEstrutura, setAtribuindoEstrutura] = useState(false);
@@ -208,6 +231,43 @@ export default function App() {
     }
   }, [sessao]);
 
+  // Manifesto da última versão publicada, para avisar de atualização. Só dentro
+  // do Revit: no navegador comum não há plugin instalado para comparar.
+  const logado = !!sessao;
+  useEffect(() => {
+    if (!logado || !estaDentroDoWebView2()) return;
+    buscarManifesto().then(setManifesto);
+  }, [logado]);
+
+  const avaliacaoVersao = useMemo(
+    () => avaliarVersao({ instalada: versaoPlugin, manifesto }),
+    [versaoPlugin, manifesto]
+  );
+
+  async function baixarAtualizacao() {
+    setBaixandoAtualizacao(true);
+    const ok = await abrirDownloadDoInstalador(manifesto);
+    setBaixandoAtualizacao(false);
+    if (!ok) {
+      adicionarToast({
+        tipo: "erro",
+        titulo: "Não foi possível abrir o download",
+        mensagem: "Confira a internet e tente de novo.",
+        duracaoMs: 7000,
+      });
+    }
+  }
+
+  function dispensarAviso() {
+    const versao = avaliacaoVersao.versaoNova;
+    setAvisoDispensado(versao);
+    try {
+      window.localStorage.setItem(CHAVE_AVISO_DISPENSADO, versao);
+    } catch {
+      // sem localStorage: vale só até fechar o painel
+    }
+  }
+
   // IMPORTANTE: este listener assina o canal de mensagens do WebView2 (uma
   // vez só, no mount) e NUNCA deve depender de estado que muda logo depois
   // do boot (como `catalogo`, que só carrega depois do login). Um
@@ -228,6 +288,7 @@ export default function App() {
       if (mensagem.type === BridgeMessageTypes.LICENCAS) {
         const resumo = mensagem.payload || {};
         const { modulos, erro } = resumo;
+        setVersaoPlugin(resumo.versaoPlugin ?? null);
         if (erro) {
           // Também no console: é a única janela acessível de dentro do
           // Revit, já que a saída do pyRevit some com o engine que a abriu.
@@ -563,6 +624,22 @@ export default function App() {
       />
 
       <div className="app">
+        {avaliacaoVersao.estado === "obrigatoria" ? (
+          <AtualizacaoNecessaria
+            versaoNova={avaliacaoVersao.versaoNova}
+            baixando={baixandoAtualizacao}
+            onBaixar={baixarAtualizacao}
+          />
+        ) : (
+        <>
+        {avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova && (
+          <AvisoAtualizacao
+            versaoNova={avaliacaoVersao.versaoNova}
+            baixando={baixandoAtualizacao}
+            onBaixar={baixarAtualizacao}
+            onDispensar={dispensarAviso}
+          />
+        )}
         {abaAtual === "dashboard" || abaAtual === "saidas" || abaAtual === "hidrantes" ? (
           modulosLiberados === null ? (
             // Ainda sem resposta do Python: esperar, em vez de piscar um
@@ -687,6 +764,8 @@ export default function App() {
               </div>
             )}
           </>
+        )}
+        </>
         )}
       </div>
     </div>

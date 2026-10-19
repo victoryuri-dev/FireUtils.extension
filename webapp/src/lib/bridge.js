@@ -291,9 +291,13 @@ export const BridgeMessageTypes = {
   // produtividade sem internet.
   //   SET_LICENCA_TOKEN { token }  JS -> Python: token buscado com a sessão
   //     do usuário; só é gravado se a assinatura conferir.
-  //   LICENCAS { modulos, erro, suportaToken, tokenValido, tokenExpiraEm }
+  //   LICENCAS { modulos, erro, suportaToken, tokenValido, tokenExpiraEm,
+  //              versaoPlugin }
   //     Python -> JS: o que a licença guardada libera. Com `suportaToken` e
   //     sem token válido (ou perto de vencer), a dockpane busca um novo.
+  //     `versaoPlugin` é a versão do plugin instalado ("dev" fora do
+  //     instalador); plugins antigos não mandam o campo. A dockpane compara
+  //     com o manifesto da última versão publicada (lib/atualizacao.js).
   //   LIMPAR_SESSAO  JS -> Python: logout — apaga a licença guardada.
   // SET_SESSAO (refresh token) é das versões antigas do plugin, que
   // conferiam a licença na rede; o plugin atual o ignora. Pode sair daqui

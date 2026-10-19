@@ -239,6 +239,12 @@ foreach ($item in $ItensDoPayload) {
     Write-Host "    + $($item.Origem)"
 }
 
+# A versao instalada: o plugin a le (lib\plugin_versao.py) e a dockpane a compara
+# com a ultima publicada para avisar de atualizacao. Fica na raiz da extensao.
+# WriteAllText grava UTF-8 sem BOM (o Set-Content do Windows PowerShell poe um).
+[System.IO.File]::WriteAllText((Join-Path $PayloadDir 'VERSION'), $versaoFinal)
+Write-Host "    + VERSION ($versaoFinal)"
+
 # Poda a biblioteca de familias: entra apenas o que o Python abre do disco.
 $libPayload = Join-Path $PayloadDir 'Fire Utils.tab\lib\family_library'
 

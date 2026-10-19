@@ -37,6 +37,7 @@ import os
 import time
 
 from family_error_utils import texto_erro
+import plugin_versao
 
 # Chave PÚBLICA que confere a assinatura do token (RSA 2048, em base64
 # padrão: módulo e expoente). Gerada por scripts/gerar-chave-licenca.mjs no
@@ -294,4 +295,8 @@ def resumo_para_dockpane():
         u"suportaToken": True,
         u"tokenValido": sit == SIT_VALIDO,
         u"tokenExpiraEm": int(payload[u"exp"]) if payload else None,
+        # Versão do plugin instalado (ver plugin_versao.py): vai junto porque
+        # um plugin antigo simplesmente não manda o campo, e a dockpane o
+        # trata como "anterior a qualquer versão publicada".
+        u"versaoPlugin": plugin_versao.versao_instalada(),
     }

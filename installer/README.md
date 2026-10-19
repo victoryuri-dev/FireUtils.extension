@@ -84,8 +84,45 @@ Sem assinatura digital, o SmartScreen mostra "editor desconhecido" e um
 botão de "Executar assim mesmo" escondido atrás de "Mais informações".
 Para um produto pago isso custa caro em confiança e em chamados de suporte.
 
-É preciso um certificado de Code Signing (OV ou EV) de uma autoridade
-certificadora. Depois de obtê-lo, assine com `signtool.exe`.
+**1. Obter o certificado.** É um certificado de *Code Signing*, emitido por uma
+autoridade certificadora (Sectigo, DigiCert, SSL.com, GlobalSign, Certum e
+outras) ou por um serviço de assinatura em nuvem. Para a empresa, a CA valida
+o CNPJ e o responsável — leva de alguns dias a algumas semanas, então peça
+antes de precisar. Desde 2023 as regras do setor exigem que a chave privada
+fique em hardware (token USB) ou num serviço em nuvem: você não recebe um
+`.pfx` para guardar. Confirme preços e prazos atuais com as CAs.
+
+- **OV:** mais barato. A reputação no SmartScreen se constrói aos poucos, e
+  nos primeiros downloads ainda pode aparecer um aviso.
+- **EV:** mais caro e com validação mais rigorosa. Já deu reputação imediata no
+  SmartScreen, mas as regras mudam — não conte com isso.
+- Certificado **autoassinado** não resolve: não tira o aviso do cliente.
+
+**2. Assinar.** Instale o Windows SDK (traz o `signtool.exe`) e, com o token
+conectado (ou o serviço em nuvem configurado), rode:
+
+```powershell
+signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /n "Nome da empresa no certificado" installer\output\FireUtils-Setup-2.1.0.exe
+```
+
+`/tr` e `/td` carimbam a data: a assinatura continua válida depois que o
+certificado vence. Não omita. O token pede o PIN; serviços em nuvem têm a
+própria ferramenta de login (veja a documentação da CA).
+
+**3. Conferir.**
+
+```powershell
+signtool verify /pa /v installer\output\FireUtils-Setup-2.1.0.exe
+```
+
+Deve terminar em "Successfully verified". Também aparece em botão direito →
+Propriedades → Assinaturas Digitais.
+
+**4. Ordem importa.** Assinar muda o arquivo: gere o `sha256` do manifesto
+(ver "Aviso de atualização") **depois** de assinar, e assine todo `.exe` que for
+distribuído — um instalador sem assinatura reintroduz o aviso. Mais adiante dá
+para assinar de dentro do Inno Setup (diretiva `SignTool`), o que assina
+também o desinstalador.
 
 ## Arquivos
 
@@ -231,39 +268,63 @@ as ferramentas pedem para abrir o painel Fire Utils com internet uma vez.
 chave pública em `lib/licenca.py`. Trocar a chave depois exige reinstalar o
 plugin em todos os clientes.
 
-## Atualização pela dockpane (planejado, ainda não implementado)
+## Aviso de atualização pela dockpane
 
-A interface da dockpane já se atualiza sozinha (deploy no Vercel). A parte
+A interface da dockpane já se atualiza sozinha (deploy no Vercel); a parte
 Python (`Fire Utils.tab/`, `startup.py`, DLLs do WebView2) só muda com um
-instalador novo, e o instalador exige o Revit fechado. A atualização pela
-dockpane reaproveita esse instalador em vez de trocar arquivos com o Revit
-aberto.
+instalador novo, e ele exige o Revit fechado. Como as duas podem ficar
+desencontradas, o plugin conhece a própria versão e a dockpane avisa.
 
-Fluxo:
+**Implementado (a base):**
 
-1. Cada release publica o `FireUtils-Setup-X.Y.Z.exe` e um manifesto
-   (`{ "versao", "arquivo", "sha256", "hostMinVersion" }`) num bucket
-   **privado** do Supabase Storage. Privado: o acesso é por URL assinada de
-   curta duração, gerada para usuários autenticados (e com licença válida,
-   reaproveitando `licencas.js`/`licenca.py`), nunca por link público.
-2. O `installer/VERSION` entra no payload, para o plugin saber qual versão
-   está instalada.
-3. A dockpane compara a versão instalada com o manifesto e mostra um aviso
-   de atualização disponível.
-4. Ao clicar em atualizar, o Python baixa o `.exe` para a pasta temporária,
-   confere o `sha256` e abre um script auxiliar desvinculado do Revit. Esse
-   script espera o `Revit.exe` fechar e então roda o instalador com
-   `/SILENT`.
+- `build.ps1` grava a versão (`-Version`, ou `installer/VERSION`) em
+  `VERSION`, na raiz da extensão instalada. `lib/plugin_versao.py` a lê; sem o
+  arquivo (clone de desenvolvimento) a versão é `dev` e ninguém é avisado.
+- O Python informa a versão junto da mensagem `LICENCAS` (campo
+  `versaoPlugin`). Plugin antigo não manda o campo, e a dockpane o trata como
+  anterior a qualquer versão publicada.
+- A dockpane lê `manifest.json` do bucket **privado** `plugin-releases` do
+  Supabase (só contas com licença leem; ver a migração
+  `20261019120000_create_plugin_releases_bucket.sql` no ETOS.FireUtils) e
+  compara:
+  - **versão nova disponível:** faixa no topo com **Baixar** (abre o `.exe` no
+    navegador, por link assinado de 10 minutos) e **Depois** (some até sair
+    outra versão);
+  - **abaixo da `hostMinVersion`:** a dockpane troca o conteúdo por
+    "Atualize o plugin", porque esta interface não funciona direito com um
+    plugin tão antigo.
+  Sem manifesto, sem internet ou sem licença: nenhum aviso, sem erro.
 
-Pontos a tratar na implementação:
+**Publicar uma versão** (manual por enquanto):
 
-- **Web × Python:** como a web atualiza na hora e o Python não, a web deve
-  conferir `hostMinVersion` e bloquear a função (ou pedir a atualização)
-  quando o Python instalado for anterior ao que ela precisa.
-- **Assinatura do `.exe`:** obrigatória neste fluxo, já que o instalador é
-  executado automaticamente (ver "Antes de distribuir").
-- **Publicação:** `build.ps1` deve gerar o manifesto (com o `sha256`) e
-  enviar os dois arquivos ao bucket, para não depender de passo manual.
+1. Aumente `installer/VERSION` e rode `.\build.ps1`. Assine o `.exe` (ver
+   "Antes de distribuir").
+2. Calcule o hash **do arquivo já assinado** (assinar muda o arquivo):
+   `Get-FileHash installer\output\FireUtils-Setup-2.1.0.exe -Algorithm SHA256`
+3. Crie o `manifest.json`:
+   ```json
+   {
+     "versao": "2.1.0",
+     "hostMinVersion": "2.0.0",
+     "arquivo": "FireUtils-Setup-2.1.0.exe",
+     "sha256": "<hash do passo 2>",
+     "notas": "O que mudou, em uma linha."
+   }
+   ```
+4. No painel do Supabase, em Storage → `plugin-releases`, envie o `.exe` e
+   substitua o `manifest.json`. Quem tem o plugin instalado vê o aviso na
+   próxima vez que abrir a dockpane.
+
+`hostMinVersion` é a **menor versão do plugin que a interface atual aceita**.
+Só a aumente quando uma interface nova depender de algo que os plugins antigos
+não têm (por exemplo, uma mensagem nova da bridge): quem estiver abaixo perde
+o acesso até atualizar. Na dúvida, deixe igual à versão mais antiga em campo.
+
+**Ainda não implementado:** baixar e instalar sem sair do painel — o Python
+baixaria o `.exe`, conferiria o `sha256` do manifesto e abriria um script
+auxiliar desvinculado do Revit, que espera o `Revit.exe` fechar e roda o
+instalador com `/SILENT`. Exige `.exe` assinado. Enquanto isso, o cliente
+baixa e roda o instalador com o Revit fechado.
 
 ## Pendências de validação
 

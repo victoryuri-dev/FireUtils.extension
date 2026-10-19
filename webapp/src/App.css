@@ -3523,6 +3523,10 @@
   gap: 12px;
   padding: 60px 32px;
   max-width: 420px;
+  /* Sem largura própria, num pai flex em coluna o bloco ficava do tamanho do
+     texto e vazava para fora do painel quando ele estava estreito. */
+  width: 100%;
+  box-sizing: border-box;
   margin: 0 auto;
 }
 
@@ -3764,4 +3768,60 @@
 .login-alternar:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+/* Aviso de versão nova do plugin (ver AvisoAtualizacao.jsx). flex-shrink: 0
+   porque .app é uma coluna flex, e itens com overflow podem encolher a zero. */
+.aviso-atualizacao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-2, var(--text-1));
+}
+
+.aviso-atualizacao-texto {
+  flex: 1;
+  min-width: 0;
+}
+
+.aviso-atualizacao-botao,
+.aviso-atualizacao-dispensar,
+button.sem-licenca-botao {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.aviso-atualizacao-botao {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--white, #fff);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.aviso-atualizacao-dispensar {
+  padding: 5px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.aviso-atualizacao-botao:disabled,
+button.sem-licenca-botao:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.sem-licenca-botao {
+  border: 0;
 }
