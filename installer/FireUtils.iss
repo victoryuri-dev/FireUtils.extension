@@ -194,6 +194,7 @@ end;
 function EscolherAtualizarOuDesinstalar(): Boolean;
 var
   Desinstalador: String;
+  Botoes: TArrayOfString;
   Escolha, CodigoSaida: Integer;
 begin
   Result := True;
@@ -202,12 +203,15 @@ begin
   if (Desinstalador = '') or not FileExists(Desinstalador) then
     Exit;
 
-  Escolha := TaskDialogMsgBox(
-    'O Fire Utils já está instalado',
-    'O que você quer fazer?',
-    mbConfirmation, 0,
-    ['Instalar esta versão (atualizar)', 'Desinstalar o Fire Utils', 'Cancelar'],
-    0);
+  { Linha de codigo nao pode comecar com [ : o compilador a leria como
+    cabecalho de secao. Por isso a lista de botoes vai numa variavel. }
+  SetArrayLength(Botoes, 3);
+  Botoes[0] := 'Instalar esta versão (atualizar)';
+  Botoes[1] := 'Desinstalar o Fire Utils';
+  Botoes[2] := 'Cancelar';
+
+  Escolha := TaskDialogMsgBox('O Fire Utils já está instalado',
+    'O que você quer fazer?', mbConfirmation, 0, Botoes, 0);
 
   if Escolha = 1001 then
   begin
