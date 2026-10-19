@@ -10,7 +10,7 @@ import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
 import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
-import configuracoesIconSvg from "../assets/icons/config-icon.svg?raw";
+import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
 import temaClaroIconSvg from "../assets/icons/theme-light-icon.svg?raw";
 import temaEscuroIconSvg from "../assets/icons/theme-dark-icon.svg?raw";
@@ -39,6 +39,7 @@ export default function Sidebar({
   onDesconectar,
   email,
   modulosLiberados,
+  atualizacao,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -117,9 +118,20 @@ export default function Sidebar({
             title={tema === "dark" ? "Tema claro" : "Tema escuro"}
           />
         </button>
-        <button type="button" className="sidebar-item sidebar-item-neutro" disabled title="Configurações (em breve)">
-          <Icon svg={configuracoesIconSvg} title="Configurações" />
-        </button>
+        {atualizacao && (
+          // Só existe quando há versão nova publicada (App.jsx). Diferente
+          // da faixa de aviso, "Depois" não a esconde: o ícone fica como
+          // lembrete discreto até o plugin ser atualizado.
+          <button
+            type="button"
+            className="sidebar-item sidebar-item-atualizacao"
+            disabled={atualizacao.baixando}
+            onClick={atualizacao.onBaixar}
+            title={`Nova versão ${atualizacao.versaoNova} disponível — clique para baixar`}
+          >
+            <Icon svg={downloadIconSvg} title="Baixar atualização" />
+          </button>
+        )}
         {projetoVinculado && (
           <button
             type="button"

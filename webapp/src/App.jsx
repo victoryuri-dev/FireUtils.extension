@@ -621,6 +621,15 @@ export default function App() {
         }}
         email={sessao?.user?.email}
         modulosLiberados={modulosLiberados}
+        atualizacao={
+          avaliacaoVersao.estado === "disponivel" || avaliacaoVersao.estado === "obrigatoria"
+            ? {
+                versaoNova: avaliacaoVersao.versaoNova,
+                baixando: baixandoAtualizacao,
+                onBaixar: baixarAtualizacao,
+              }
+            : null
+        }
       />
 
       <div className="app">

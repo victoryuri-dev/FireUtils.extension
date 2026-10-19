@@ -324,14 +324,32 @@
   cursor: default;
 }
 
-/* Configurações — cinza por padrão, branco no hover (diferente dos demais
-   ícones da sidebar, que já são brancos). */
-.sidebar-item-neutro {
-  color: var(--sidebar-icon-neutro);
+/* Atualização disponível — vermelho da marca, com um ponto pulsando para
+   chamar atenção sem abrir nada na frente do usuário. */
+.sidebar-item-atualizacao {
+  position: relative;
+  color: var(--accent);
 }
 
-.sidebar-item-neutro:hover {
-  color: var(--sidebar-icon);
+.sidebar-item-atualizacao::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: sidebar-atualizacao-pulso 1.8s ease-out infinite;
+}
+
+.sidebar-item-atualizacao:disabled {
+  opacity: 0.6;
+}
+
+@keyframes sidebar-atualizacao-pulso {
+  0% { box-shadow: 0 0 0 0 rgba(192, 21, 42, 0.55); }
+  70%, 100% { box-shadow: 0 0 0 7px rgba(192, 21, 42, 0); }
 }
 
 /* Avatar de perfil — sempre um círculo branco sólido, ícone escuro. */
