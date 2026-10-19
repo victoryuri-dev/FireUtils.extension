@@ -283,48 +283,47 @@ desencontradas, o plugin conhece a própria versão e a dockpane avisa.
 - O Python informa a versão junto da mensagem `LICENCAS` (campo
   `versaoPlugin`). Plugin antigo não manda o campo, e a dockpane o trata como
   anterior a qualquer versão publicada.
-- A dockpane lê `manifest.json` do bucket **privado** `plugin-releases` do
-  Supabase (só contas com licença leem; ver a migração
-  `20261019120000_create_plugin_releases_bucket.sql` no ETOS.FireUtils) e
-  compara:
+- A dockpane lista o bucket **privado** `plugin-releases` do Supabase (só
+  contas com licença leem; ver a migração
+  `20261019120000_create_plugin_releases_bucket.sql` no ETOS.FireUtils), pega a
+  maior versão entre os arquivos `FireUtils-Setup-X.Y.Z.exe` e compara:
   - **versão nova disponível:** faixa no topo com **Baixar** (abre o `.exe` no
     navegador, por link assinado de 10 minutos) e **Depois** (some até sair
     outra versão);
-  - **abaixo da `hostMinVersion`:** a dockpane troca o conteúdo por
-    "Atualize o plugin", porque esta interface não funciona direito com um
-    plugin tão antigo.
-  Sem manifesto, sem internet ou sem licença: nenhum aviso, sem erro.
+  - **abaixo de `PLUGIN_MINIMO`:** a dockpane troca o conteúdo por "Atualize o
+    plugin", porque esta interface não funciona direito com um plugin tão
+    antigo.
+  Bucket vazio, sem internet ou sem licença: nenhum aviso, sem erro. Só vale o
+  nome exato `FireUtils-Setup-X.Y.Z.exe`: qualquer outro arquivo (um
+  `...-teste.exe`, um `manifest.json` antigo) é ignorado.
 
-**Publicar uma versão** (manual por enquanto):
+**Publicar uma versão** — o trabalho é só construir, assinar e subir:
 
-1. Aumente `installer/VERSION` e rode `.\build.ps1`. Assine o `.exe` (ver
-   "Antes de distribuir").
-2. Calcule o hash **do arquivo já assinado** (assinar muda o arquivo):
-   `Get-FileHash installer\output\FireUtils-Setup-2.1.0.exe -Algorithm SHA256`
-3. Crie o `manifest.json`:
-   ```json
-   {
-     "versao": "2.1.0",
-     "hostMinVersion": "2.0.0",
-     "arquivo": "FireUtils-Setup-2.1.0.exe",
-     "sha256": "<hash do passo 2>",
-     "notas": "O que mudou, em uma linha."
-   }
-   ```
-4. No painel do Supabase, em Storage → `plugin-releases`, envie o `.exe` e
-   substitua o `manifest.json`. Quem tem o plugin instalado vê o aviso na
-   próxima vez que abrir a dockpane.
+1. Aumente `installer/VERSION`, faça commit e rode `.\build.ps1`. O `.exe` sai
+   com a versão no nome (`FireUtils-Setup-2.1.0.exe`) e o plugin instalado
+   informa a mesma versão.
+2. Assine o `.exe` (ver "Antes de distribuir").
+3. No painel do Supabase, em Storage → `plugin-releases`, envie o `.exe`
+   **sem renomear**: o nome é a fonte da versão. Quem tem o plugin instalado vê
+   o aviso na próxima vez que abrir a dockpane.
 
-`hostMinVersion` é a **menor versão do plugin que a interface atual aceita**.
-Só a aumente quando uma interface nova depender de algo que os plugins antigos
-não têm (por exemplo, uma mensagem nova da bridge): quem estiver abaixo perde
-o acesso até atualizar. Na dúvida, deixe igual à versão mais antiga em campo.
+Pode deixar as versões antigas no bucket (servem para reinstalar se uma nova
+der problema); só a de maior número é oferecida.
+
+`PLUGIN_MINIMO` (em `webapp/src/lib/versoes.js`) é a **menor versão do plugin
+que a interface atual aceita**; hoje é `null` (qualquer uma serve). Só a
+aumente, no mesmo deploy da interface que passa a exigir algo do plugin (por
+exemplo, uma mensagem nova da bridge), depois que o plugin novo já estiver
+publicado e os clientes tiveram tempo de atualizar: quem estiver abaixo perde o
+acesso até atualizar.
 
 **Ainda não implementado:** baixar e instalar sem sair do painel — o Python
-baixaria o `.exe`, conferiria o `sha256` do manifesto e abriria um script
+baixaria o `.exe`, conferiria o `sha256` e abriria um script
 auxiliar desvinculado do Revit, que espera o `Revit.exe` fechar e roda o
 instalador com `/SILENT`. Exige `.exe` assinado. Enquanto isso, o cliente
-baixa e roda o instalador com o Revit fechado.
+baixa e roda o instalador com o Revit fechado. Esse fluxo vai precisar de um
+`sha256` publicado à parte (hoje não há manifesto) — por exemplo, um arquivo ao
+lado do `.exe` no bucket.
 
 ## Pendências de validação
 

@@ -10,7 +10,7 @@ import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao } from "./lib/versoes";
-import { buscarManifesto, abrirDownloadDoInstalador } from "./lib/atualizacao";
+import { buscarUltimaVersaoPublicada, abrirDownloadDoInstalador } from "./lib/atualizacao";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -112,7 +112,7 @@ export default function App() {
   // Versão do plugin instalado, informada junto das licenças: undefined = o
   // Python ainda não respondeu; null = plugin antigo, que não informa versão.
   const [versaoPlugin, setVersaoPlugin] = useState(undefined);
-  const [manifesto, setManifesto] = useState(null); // última versão publicada
+  const [versaoPublicada, setVersaoPublicada] = useState(null); // { versao, arquivo }
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
   const [baixandoAtualizacao, setBaixandoAtualizacao] = useState(false);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
@@ -231,22 +231,22 @@ export default function App() {
     }
   }, [sessao]);
 
-  // Manifesto da última versão publicada, para avisar de atualização. Só dentro
-  // do Revit: no navegador comum não há plugin instalado para comparar.
+  // Última versão publicada, para avisar de atualização. Só dentro do Revit:
+  // no navegador comum não há plugin instalado para comparar.
   const logado = !!sessao;
   useEffect(() => {
     if (!logado || !estaDentroDoWebView2()) return;
-    buscarManifesto().then(setManifesto);
+    buscarUltimaVersaoPublicada().then(setVersaoPublicada);
   }, [logado]);
 
   const avaliacaoVersao = useMemo(
-    () => avaliarVersao({ instalada: versaoPlugin, manifesto }),
-    [versaoPlugin, manifesto]
+    () => avaliarVersao({ instalada: versaoPlugin, publicada: versaoPublicada }),
+    [versaoPlugin, versaoPublicada]
   );
 
   async function baixarAtualizacao() {
     setBaixandoAtualizacao(true);
-    const ok = await abrirDownloadDoInstalador(manifesto);
+    const ok = await abrirDownloadDoInstalador(versaoPublicada);
     setBaixandoAtualizacao(false);
     if (!ok) {
       adicionarToast({

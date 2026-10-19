@@ -297,7 +297,7 @@ export const BridgeMessageTypes = {
   //     sem token válido (ou perto de vencer), a dockpane busca um novo.
   //     `versaoPlugin` é a versão do plugin instalado ("dev" fora do
   //     instalador); plugins antigos não mandam o campo. A dockpane compara
-  //     com o manifesto da última versão publicada (lib/atualizacao.js).
+  //     com a última versão publicada no Storage (lib/atualizacao.js).
   //   LIMPAR_SESSAO  JS -> Python: logout — apaga a licença guardada.
   // SET_SESSAO (refresh token) é das versões antigas do plugin, que
   // conferiam a licença na rede; o plugin atual o ignora. Pode sair daqui

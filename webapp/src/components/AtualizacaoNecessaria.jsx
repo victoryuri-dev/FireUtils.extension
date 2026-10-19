@@ -1,6 +1,6 @@
 /**
  * Ocupa o lugar do conteúdo quando o plugin instalado é mais antigo do que
- * esta interface aceita (hostMinVersion do manifesto). Sem isso, as funções
+ * esta interface aceita (PLUGIN_MINIMO, em lib/versoes.js). Sem isso, as funções
  * que dependem do Revit falhariam sem explicação.
  */
 export default function AtualizacaoNecessaria({ versaoNova, baixando, onBaixar }) {
