@@ -41,6 +41,7 @@ import hidrantes_dimensionar_bridge
 import quantitativos_bridge
 import niveis_bridge
 import licenca
+import atualizacao
 
 
 def _tratar_set_sessao(payload, fila_acoes, postar_mensagem):
@@ -90,6 +91,51 @@ def _tratar_set_sessao(payload, fila_acoes, postar_mensagem):
     except Exception as ex:
         licenca.log(u"falha ao registrar a sessão: {}".format(texto_erro(ex)))
         responder([], texto_erro(ex))
+
+
+def _tratar_get_atualizacao(fila_acoes, postar_mensagem):
+    """
+    A dockpane perguntou se há versão nova.
+
+    Em thread e com resposta pela fila pelo mesmo motivo de SET_SESSAO:
+    a consulta vai à rede, e PostWebMessageAsJson só funciona na thread
+    da interface.
+    """
+    try:
+        situacao = atualizacao.verificar()
+    except Exception as ex:
+        licenca.log(u"atualização: falha ao verificar ({})".format(texto_erro(ex)))
+        situacao = {
+            u"instalada": None,
+            u"disponivel": None,
+            u"temAtualizacao": False,
+            u"notas": None,
+            u"erro": texto_erro(ex),
+        }
+
+    # O sha256 é detalhe de instalação; a interface não tem o que fazer com ele.
+    situacao.pop(u"sha256", None)
+    fila_acoes.enfileirar(lambda uiapp: postar_mensagem(u"ATUALIZACAO", situacao))
+
+
+def _tratar_aplicar_atualizacao(fila_acoes, postar_mensagem):
+    """
+    O usuário confirmou a atualização na faixa da dockpane.
+
+    Baixar e trocar arquivos leva segundos; na thread da interface o painel
+    congelaria no meio da troca, parecendo travado justamente quando não se
+    deve mexer em nada.
+    """
+    try:
+        ok, erro = atualizacao.aplicar()
+    except Exception as ex:
+        ok, erro = False, texto_erro(ex)
+        licenca.log(u"atualização: exceção ao aplicar ({})".format(erro))
+
+    fila_acoes.enfileirar(lambda uiapp: postar_mensagem(u"ATUALIZACAO_RESULTADO", {
+        u"ok": ok,
+        u"erro": erro,
+    }))
 
 
 def _montar_entrada(item_familia, caminho_local):
@@ -308,6 +354,16 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         # Revit já não libera ferramenta nenhuma.
         licenca.esquecer_sessao()
         postar_mensagem(u"LICENCAS", {u"modulos": [], u"erro": None})
+    elif tipo == u"GET_ATUALIZACAO":
+        threading.Thread(
+            target=_tratar_get_atualizacao,
+            args=(fila_acoes, postar_mensagem),
+        ).start()
+    elif tipo == u"APLICAR_ATUALIZACAO":
+        threading.Thread(
+            target=_tratar_aplicar_atualizacao,
+            args=(fila_acoes, postar_mensagem),
+        ).start()
     elif tipo == u"GET_LICENCAS":
         postar_mensagem(u"LICENCAS", {
             u"modulos": sorted(licenca.modulos_liberados()),

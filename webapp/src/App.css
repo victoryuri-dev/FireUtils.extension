@@ -3451,3 +3451,70 @@
 .sidebar-item.bloqueada {
   opacity: 0.45;
 }
+
+/* Faixa de atualização do plugin (ver components/FaixaAtualizacao.jsx) ----
+   Fica junto das notificações, no canto superior direito, mas não some
+   sozinha como um toast: é uma pergunta esperando resposta. */
+.faixa-atualizacao {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  animation: toast-entrada 0.18s ease-out;
+}
+
+.faixa-atualizacao-titulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.faixa-atualizacao p {
+  font-size: 11px;
+  color: var(--text-2);
+  margin: 4px 0 0;
+  overflow-wrap: break-word;
+}
+
+.faixa-atualizacao-notas {
+  white-space: pre-line;
+}
+
+.faixa-atualizacao-acoes {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.faixa-atualizacao-botao,
+.faixa-atualizacao-secundario {
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.faixa-atualizacao-botao {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--white, #fff);
+}
+
+.faixa-atualizacao-secundario {
+  background: transparent;
+  border: 1px solid var(--border-2);
+  color: var(--text-2);
+}
+
+.faixa-atualizacao-botao:hover {
+  filter: brightness(1.1);
+}
+
+.faixa-atualizacao-secundario:hover {
+  color: var(--text);
+}

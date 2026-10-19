@@ -7,6 +7,7 @@ import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
+import FaixaAtualizacao from "./components/FaixaAtualizacao";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
@@ -86,6 +87,9 @@ export default function App() {
   // sessão do Revit. null = ainda não respondeu (não é o mesmo que "nenhum":
   // tratar os dois igual faria a tela piscar um bloqueio indevido).
   const [modulosLiberados, setModulosLiberados] = useState(null);
+  // Versão nova dos scripts do Revit, quando houver. null = nada a mostrar
+  // (sem resposta ainda, já atualizado, ou o usuário dispensou a faixa).
+  const [atualizacao, setAtualizacao] = useState(null);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const { toasts, adicionarToast, removerToast } = useToasts();
@@ -159,6 +163,9 @@ export default function App() {
         // numa sessão em que o login aconteceu antes não dispararia nada —
         // aqui o estado é recuperado do que o Python já resolveu.
         postToHost(BridgeMessageTypes.GET_LICENCAS, {});
+        // Atualização não depende de licença: correção de bug chega para
+        // todo mundo que tem o plugin instalado.
+        postToHost(BridgeMessageTypes.GET_ATUALIZACAO, {});
       } else {
         // Fora do WebView2 (ex.: `npm run dev` no navegador comum) não há
         // Python do outro lado pra responder GET_PROJECT_LINK — sem isso o
@@ -211,6 +218,29 @@ export default function App() {
         // Falha vira lista vazia, não null: null significa "ainda não sei" e
         // deixaria a tela em carregamento para sempre.
         setModulosLiberados(modulos || []);
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.ATUALIZACAO) {
+        const { temAtualizacao, instalada, disponivel, notas, erro } = mensagem.payload || {};
+        if (erro) {
+          // Sem alerta na tela: não conseguir consultar (rede fora, por
+          // exemplo) não é problema do usuário — ele segue trabalhando na
+          // versão que tem.
+          console.warn("[atualização] falha ao consultar:", erro);
+          return;
+        }
+        if (temAtualizacao) {
+          setAtualizacao({ instalada, disponivel, notas, estado: "disponivel", erro: null });
+        }
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.ATUALIZACAO_RESULTADO) {
+        const { ok, erro } = mensagem.payload || {};
+        setAtualizacao((atual) =>
+          atual && { ...atual, estado: ok ? "concluida" : "erro", erro: erro || null }
+        );
         return;
       }
 
@@ -425,6 +455,14 @@ export default function App() {
             <span className="loading-spinner" />
           </div>
         )}
+        <FaixaAtualizacao
+          situacao={atualizacao}
+          onAtualizar={() => {
+            setAtualizacao((atual) => atual && { ...atual, estado: "aplicando", erro: null });
+            postToHost(BridgeMessageTypes.APLICAR_ATUALIZACAO, {});
+          }}
+          onDispensar={() => setAtualizacao(null)}
+        />
         <ToastStack toasts={toasts} onDismiss={removerToast} />
       </div>
       <Sidebar

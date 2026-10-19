@@ -219,6 +219,27 @@
  *
  *   { type: "NIVEIS_CORRELACAO_SAVED", payload: { ok, erro? } }
  *     Python -> JS: resultado de um SET_NIVEIS_CORRELACAO.
+ *
+ * Atualização do plugin (ver atualizacao.py do lado Python):
+ *
+ *   { type: "GET_ATUALIZACAO" }
+ *     JS -> Python: pergunta se há versão publicada mais nova que a
+ *     instalada. Esta interface vem do servidor e já está sempre atualizada;
+ *     o que precisa de atualização são os scripts dentro do Revit.
+ *
+ *   { type: "ATUALIZACAO", payload: { instalada, disponivel, temAtualizacao, notas, erro } }
+ *     Python -> JS: resposta de GET_ATUALIZACAO. `erro` preenchido (rede
+ *     fora, por exemplo) não é para virar alerta: sem resposta, a faixa
+ *     simplesmente não aparece.
+ *
+ *   { type: "APLICAR_ATUALIZACAO" }
+ *     JS -> Python: o usuário confirmou. Baixa o pacote, confere o checksum
+ *     e substitui os scripts. Nunca é automático — a confirmação é o clique.
+ *
+ *   { type: "ATUALIZACAO_RESULTADO", payload: { ok, erro? } }
+ *     Python -> JS: resultado de um APLICAR_ATUALIZACAO. Com `ok: true`, os
+ *     arquivos novos já estão no disco, mas esta sessão do Revit continua
+ *     rodando os módulos antigos da memória — é preciso reiniciar o Revit.
  */
 export const BridgeMessageTypes = {
   LOAD_FAMILIES: "LOAD_FAMILIES",
@@ -251,6 +272,12 @@ export const BridgeMessageTypes = {
   LIMPAR_SESSAO: "LIMPAR_SESSAO",
   GET_LICENCAS: "GET_LICENCAS",
   LICENCAS: "LICENCAS",
+  // Atualização dos scripts instalados no Revit (a interface em si vem do
+  // servidor e não passa por aqui).
+  GET_ATUALIZACAO: "GET_ATUALIZACAO",
+  ATUALIZACAO: "ATUALIZACAO",
+  APLICAR_ATUALIZACAO: "APLICAR_ATUALIZACAO",
+  ATUALIZACAO_RESULTADO: "ATUALIZACAO_RESULTADO",
 };
 
 function obterWebView() {

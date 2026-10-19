@@ -29,7 +29,7 @@ instalador novo.
 **Quase toda a biblioteca de famílias.** O acervo vive no Supabase e a
 dockpane baixa sob demanda; `garantir_familia_no_projeto()` só verifica se a
 família já está no documento, sem carregar do disco. Vão no payload apenas
-as famílias listadas em `$FamiliasNecessarias` no `build.ps1` — hoje só a
+as famílias listadas em `$FamiliasNecessarias` no `scripts/montar-payload.ps1` — hoje só a
 `Valvula para Hidrante.rfa`, a única que o Python abre com `LoadFamily`.
 
 Isso leva o instalador de ~45 MB para poucos MB. A pasta continua no
@@ -44,15 +44,46 @@ Precisa de Windows com [Inno Setup 6](https://jrsoftware.org/isdl.php).
 
 ```powershell
 cd installer
-.\build.ps1 -Version 1.0.0
+.\build.ps1
 ```
 
-Sem `-Version`, o script usa o conteúdo de `installer/VERSION`.
+A versão vem de `versao.json`, na raiz do repositório — o mesmo arquivo que
+vai no payload e que o atualizador da dockpane lê para saber o que está
+instalado. Bump no `versao.json` é o que define a versão do instalador;
+`-Version 2.1.0` só confere se o arquivo já foi atualizado, e aborta se não.
 
-O `build.ps1` recria `installer/payload/` do zero a cada execução — nunca
-edite nada lá dentro. Ele copia apenas `Fire Utils.tab/`, `startup.py` e
-`fireutils.config.json`; `installer/`, `migration/` e `webapp/` ficam de
-fora.
+O payload é montado por `scripts/montar-payload.ps1`, que recria
+`installer/payload/` do zero a cada execução — nunca edite nada lá dentro.
+Ele copia apenas `Fire Utils.tab/`, `startup.py`, `fireutils.config.json` e
+`versao.json`; `installer/`, `migration/` e `webapp/` ficam de fora.
+
+## Publicando uma atualização para quem já instalou
+
+A dockpane verifica, ao abrir, se há versão mais nova publicada, e oferece
+atualizar (ver `Fire Utils.tab/lib/atualizacao.py`). Para publicar:
+
+```powershell
+cd installer
+.\publicar.ps1 -Notas "O que mudou, em uma linha."
+```
+
+Isso gera em `installer/output/publicacao/` o `fireutils-<versao>.zip` (o
+mesmo payload, sem as DLLs do WebView2) e o `versao.json` com o checksum.
+Suba os dois pelo painel do Supabase, em
+**Storage > plugin-assets > atualizacao**, **o zip primeiro**: o
+`versao.json` é o que anuncia a versão nova, e anunciá-la antes de o pacote
+existir faz todo cliente com a dockpane aberta tentar baixar um arquivo que
+ainda não está lá.
+
+As DLLs do WebView2 ficam de fora porque o atualizador nunca as substitui:
+estão carregadas no processo do Revit, e o Windows não deixa sobrescrever
+DLL em uso. Elas mudam só quando o SDK muda — e aí a distribuição é um
+instalador novo, não uma atualização.
+
+O script não fala com o Supabase de propósito: subir exigiria a
+`service_role` key em disco (a `anon` não escreve no bucket), e uma chave
+com poder de escrever em tudo não vale a economia de dois arrastares de
+arquivo.
 
 ### Proteções do build
 
@@ -89,15 +120,22 @@ certificadora. Depois de obtê-lo, assine com `signtool.exe`.
 ```
 installer/
 ├── build.ps1              Monta o payload e chama o compilador
+├── publicar.ps1           Gera o pacote de atualização da dockpane
 ├── FireUtils.iss          Script do Inno Setup (UI, cópia, desinstalador)
-├── VERSION                Versão padrão quando -Version não é passado
 ├── scripts/
+│   ├── montar-payload.ps1 Define e monta o que vai para o cliente
 │   ├── ensure-deps.ps1    Detecta e instala pyRevit + WebView2
 │   └── gerar-imagens.ps1  Converte a logo em ícone e imagens do assistente
 ├── assets/                Ícone e .bmp gerados (fora do git)
 ├── payload/               Gerado pelo build (fora do git)
-└── output/                .exe gerado (fora do git)
+└── output/                .exe e pacote de atualização (fora do git)
 ```
+
+O `montar-payload.ps1` é compartilhado pelos dois caminhos de distribuição
+de propósito: o atualizador substitui, arquivo por arquivo, o que o
+instalador deixou no disco. Se cada um tivesse a sua lista, atualizar
+deixaria a instalação diferente de uma instalação nova — e o bug apareceria
+só em quem atualizou.
 
 ### Identidade visual
 

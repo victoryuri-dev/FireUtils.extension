@@ -64,6 +64,11 @@ def _dir_dados():
     return caminho
 
 
+def dir_dados():
+    """Mesma pasta de _dir_dados, para quem usa este módulo de fora."""
+    return _dir_dados()
+
+
 def _arquivo_sessao():
     return os.path.join(_dir_dados(), u"sessao.dat")
 

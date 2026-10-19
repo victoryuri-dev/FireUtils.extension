@@ -121,6 +121,25 @@ interface para ficar para trás.
 As demais ferramentas (hidrantes, saídas, tubos) são Python local e
 continuam funcionando sem internet; só a dockpane depende de conexão.
 
+### Atualizando os scripts do Revit
+
+O Python instalado na máquina do cliente, ao contrário da interface, fica
+onde foi instalado. Por isso a dockpane, ao abrir, pergunta ao host
+(`GET_ATUALIZACAO`) se há versão publicada mais nova que a instalada e, se
+houver, mostra a faixa de `components/FaixaAtualizacao.jsx`.
+
+Atualizar nunca é automático: a faixa pede confirmação, porque a troca
+mexe em arquivos no disco do usuário. Confirmada, o Python baixa o pacote,
+confere o checksum, faz backup, substitui os scripts e pede que o Revit
+seja reiniciado — os módulos desta sessão já estão carregados na memória.
+
+Atualização não exige licença: correção de bug chega para todo mundo que
+tem o plugin. A licença controla o uso das ferramentas, não o direito de
+receber a versão corrigida.
+
+Quem publica é o `installer/publicar.ps1` (ver `installer/README.md`); a
+mecânica do lado Python está em `Fire Utils.tab/lib/atualizacao.py`.
+
 ## Contrato da ponte JS ↔ Python (Fase 3/4)
 
 Em `src/lib/bridge.js`. JS → Python chega via `WebMessageReceived`; Python →
