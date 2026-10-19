@@ -129,38 +129,49 @@ também o desinstalador.
 ```
 installer/
 ├── build.ps1              Monta o payload e chama o compilador
-├── FireUtils.iss          Script do Inno Setup (UI, cópia, desinstalador)
+├── FireUtils.iss          Script do Inno Setup (UI, textos, cópia, desinstalador)
 ├── VERSION                Versão padrão quando -Version não é passado
 ├── scripts/
-│   ├── ensure-deps.ps1    Detecta e instala pyRevit + WebView2
-│   └── gerar-imagens.ps1  Converte a logo em ícone e imagens do assistente
-├── assets/                Ícone e .bmp gerados (fora do git)
+│   └── ensure-deps.ps1    Detecta e instala pyRevit + WebView2
+├── branding/              Ícone e imagens do assistente (versionados)
+│   ├── gerar_imagens.py   Ferramenta que desenha tudo (não é usada no build)
+│   └── fonts/             Space Grotesk (licença OFL), só para desenhar as imagens
 ├── payload/               Gerado pelo build (fora do git)
 └── output/                .exe gerado (fora do git)
 ```
 
 ### Identidade visual
 
-O Inno Setup não aceita PNG: exige `.ico` para o ícone e `.bmp` para as
-imagens do assistente. O `gerar-imagens.ps1` faz essa conversão a partir de
-`Fire Utils.tab/lib/assets/fireutils-logo-h.png`, usando o `System.Drawing`
-do .NET — sem dependência para instalar.
+O assistente segue a identidade da dockpane: fundo escuro, vermelho da marca,
+Space Grotesk. A tela de boas-vindas e a de conclusão mostram a lateral escura
+com a logo (o nome em branco, que no desenho antigo ficava cinza-escuro e quase
+sumia); as telas internas levam o símbolo num ícone escuro no canto superior
+direito. O ícone do instalador e do desinstalador segue o mesmo desenho.
 
-O `build.ps1` o executa sozinho quando os arquivos ainda não existem. Depois
-de trocar a logo, regere com:
+O Inno Setup não aceita PNG: exige `.ico` e `.bmp`. As imagens são
+**versionadas em `installer/branding/`**, então o build não precisa de Python
+nem de navegador. O Inno escolhe, dentre uma imagem por escala de DPI
+(100 a 250%), a que mais se aproxima do tamanho necessário na tela; com um
+tamanho só o resto sairia borrado.
 
-```powershell
-.\scripts\gerar-imagens.ps1 -Forcar
+Para mudar o desenho (textos da lateral, cores, logo), edite
+`branding/gerar_imagens.py` e regere:
+
+```bash
+pip install pillow playwright
+python installer/branding/gerar_imagens.py
 ```
 
-Dois detalhes que o script resolve: o ícone sai com sete resoluções (16 a
-256 px), porque o Windows escolhe conforme o contexto e um tamanho único
-fica borrado; e as imagens do assistente levam fundo escuro, porque o nome
-na logo é branco e sumiria sobre o fundo claro padrão.
+O script precisa de um Chromium (o do Playwright, ou o caminho em
+`CHROMIUM=...`) e desenha cada imagem no tamanho exato, a partir da logo em
+`Fire Utils.tab/lib/assets/fireutils-logo-h.png`. Com `--previa <pasta>` ele
+também grava PNGs para conferir o resultado a olho. Depois, faça commit dos
+`.bmp` e do `.ico` gerados.
 
-O símbolo do ícone é recortado detectando os pixels vermelhos da marca, em
-vez de uma região fixa — assim o script continua correto se a logo for
-redesenhada com outras proporções.
+Os textos das telas (boas-vindas, conclusão) ficam em `[Messages]`, no
+`FireUtils.iss`. A tela de conclusão sempre usou a mensagem
+`FinishedLabelNoIcons`, e não `FinishedLabel`, porque o instalador não cria
+atalhos: era essa a chave que precisava ser sobrescrita para o aviso aparecer.
 
 ### Por que não usamos o CLI do pyRevit
 

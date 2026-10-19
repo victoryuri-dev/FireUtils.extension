@@ -47,12 +47,23 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 
-; Geradas por scripts\gerar-imagens.ps1 a partir da logo do repositório
-; (build.ps1 chama sozinho quando faltam). O desinstalador herda o ícone do
-; SetupIconFile, então não precisa de UninstallDisplayIcon.
-SetupIconFile=assets\fireutils.ico
-WizardImageFile=assets\wizard-large.bmp
-WizardSmallImageFile=assets\wizard-small.bmp
+; Janela 15% maior que a padrão: o assistente do Inno é apertado, e a
+; identidade visual pede respiro. As imagens abaixo são escolhidas já nessa
+; escala.
+WizardSizePercent=115
+
+; A tela de boas-vindas vem desligada por padrão. É nela que a lateral escura
+; com a marca aparece em tamanho cheio (a tela de conclusão usa a mesma imagem).
+DisableWelcomePage=no
+
+; Desenhadas por branding\gerar_imagens.py, na identidade da dockpane, e
+; versionadas em branding\ (o build não precisa de Python). Uma imagem por
+; escala de DPI: o Inno escolhe a que mais se aproxima do tamanho necessário na
+; tela, e com um tamanho só o resto sairia borrado. O desinstalador herda o
+; ícone do SetupIconFile, então não precisa de UninstallDisplayIcon.
+SetupIconFile=branding\fireutils.ico
+WizardImageFile=branding\wizard-large-100.bmp,branding\wizard-large-125.bmp,branding\wizard-large-150.bmp,branding\wizard-large-200.bmp,branding\wizard-large-250.bmp
+WizardSmallImageFile=branding\wizard-small-100.bmp,branding\wizard-small-125.bmp,branding\wizard-small-150.bmp,branding\wizard-small-200.bmp,branding\wizard-small-250.bmp
 
 ; Sem diretiva de arquitetura de proposito: a instalacao so copia arquivos
 ; para %APPDATA%, sem tocar em Program Files nem no registro, entao nada
@@ -88,7 +99,13 @@ Type: filesandordirs; Name: "{app}\webapp"
 Type: filesandordirs; Name: "{app}"
 
 [Messages]
-brazilianportuguese.FinishedLabel=A instalação do [name] foi concluída.%n%nReinicie o Revit para que a aba Fire Utils apareça na faixa de opções.
+; Sem [Icons], o Inno mostra FinishedLabelNoIcons e não FinishedLabel — por isso
+; o aviso de reiniciar o Revit nunca aparecia. Os dois levam o mesmo texto.
+brazilianportuguese.WelcomeLabel1=Instalar o [name]
+brazilianportuguese.WelcomeLabel2=Este assistente instala o [name/ver] no Revit deste computador, em poucos passos.%n%nAntes de continuar, feche o Revit.%n%nO Fire Utils usa o pyRevit e o WebView2. Se algum deles estiver faltando, o instalador baixa e instala (precisa de internet).
+brazilianportuguese.FinishedHeadingLabel=Instalação concluída
+brazilianportuguese.FinishedLabel=O [name] foi instalado.%n%nPara começar:%n1. Abra o Revit (se ele estava aberto, reinicie).%n2. Abra o painel Fire Utils (aba Fire Utils > Biblioteca) e entre na sua conta.%n3. Com internet, a licença é ativada na hora.
+brazilianportuguese.FinishedLabelNoIcons=O [name] foi instalado.%n%nPara começar:%n1. Abra o Revit (se ele estava aberto, reinicie).%n2. Abra o painel Fire Utils (aba Fire Utils > Biblioteca) e entre na sua conta.%n3. Com internet, a licença é ativada na hora.
 
 [Code]
 

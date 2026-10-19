@@ -39,9 +39,9 @@ webapp/dist/
 webapp/node_modules/
 
 # Instalador: payload/ é remontado a cada build, output/ guarda o .exe
-# gerado (dezenas de MB) e assets/ são o ícone e as imagens do assistente,
-# derivados da logo por scripts/gerar-imagens.ps1. Nenhum dos três entra no
-# repositório.
+# gerado (dezenas de MB) e assets/ é legado: versões antigas geravam ali o
+# ícone e as imagens do assistente, que agora são versionados em branding/.
+# Nenhum dos três entra no repositório.
 installer/payload/
 installer/output/
 installer/assets/

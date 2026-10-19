@@ -175,6 +175,30 @@ function Test-ChaveDeLicenca {
     Write-Host '    Chave publica de licenca: configurada'
 }
 
+function Test-Branding {
+    <#
+        O icone e as imagens do assistente sao versionados em installer\branding
+        (desenhados por branding\gerar_imagens.py). Sem eles o ISCC falha com
+        uma mensagem pouco clara.
+    #>
+    $pasta = Join-Path $InstallerDir 'branding'
+
+    $esperados = @('fireutils.ico')
+    foreach ($escala in 100, 125, 150, 200, 250) {
+        $esperados += "wizard-large-$escala.bmp"
+        $esperados += "wizard-small-$escala.bmp"
+    }
+
+    foreach ($nome in $esperados) {
+        if (-not (Test-Path -LiteralPath (Join-Path $pasta $nome))) {
+            throw ("Imagem do instalador nao encontrada: branding\$nome. " +
+                   "Rode installer\branding\gerar_imagens.py (ver o README).")
+        }
+    }
+
+    Write-Host '    OK'
+}
+
 function Test-ItensNovosNaRaiz {
     $contemplados = $IgnoradosNaRaiz + ($ItensDoPayload | ForEach-Object { $_.Origem.Split('\')[0] })
 
@@ -203,13 +227,8 @@ Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz
 Write-Host '    OK'
 
-Write-Passo 'Preparando icone e imagens do assistente'
-# Sem checar $LASTEXITCODE: ele so e definido por programa externo, e um
-# script PowerShell que termina normalmente o deixa indefinido -- o que sob
-# Set-StrictMode vira erro ao ler. O script auxiliar tambem roda com
-# $ErrorActionPreference = 'Stop', entao qualquer falha la ja chega aqui
-# como excecao e aborta o build.
-& (Join-Path $PSScriptRoot 'scripts\gerar-imagens.ps1')
+Write-Passo 'Conferindo o icone e as imagens do assistente'
+Test-Branding
 
 Write-Passo 'Montando o payload'
 if (Test-Path -LiteralPath $PayloadDir) {
