@@ -6,6 +6,8 @@
    botão da sidebar (hooks/useTema.js) — essa é a cópia fiel do tema
    `@theme` (padrão, claro) de lá. */
 :root {
+  --font-titulo: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-corpo: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
   --bg: #101014;
   --bg-2: #17171c;
   --bg-3: #1d1e24;
@@ -97,8 +99,9 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-corpo);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
   transition: background .2s, color .2s;
 }
 

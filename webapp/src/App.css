@@ -1041,7 +1041,7 @@
   border-radius: 8px;
   padding: 16px;
   color: var(--cp-ink);
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-family: var(--font-corpo);
   box-shadow: var(--shadow-sm);
   transition: background 0.15s, border-color 0.15s;
 }
@@ -2774,7 +2774,8 @@
 }
 
 .hid-ponto-operacao-valor {
-  font-family: monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
   font-size: 19px;
   font-weight: 700;
   color: var(--accent);
@@ -2940,7 +2941,8 @@
   display: flex;
   align-items: baseline;
   gap: 5px;
-  font-family: monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
   font-size: 14px;
   font-weight: 700;
   color: var(--text);
@@ -3095,7 +3097,7 @@
 .hiddim-cor-normal { color: var(--text); }
 
 .hiddim-bold { font-weight: 700; }
-.hiddim-mono { font-family: "SF Mono", "Consolas", "Liberation Mono", monospace; }
+.hiddim-mono { font-family: var(--font-corpo); font-variant-numeric: tabular-nums; }
 
 .hiddim-td-vazio {
   color: var(--text-3);
@@ -3108,7 +3110,8 @@
   gap: 4px;
   padding: 3px 8px;
   border-radius: 4px;
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: 11px;
   border: 1px solid;
@@ -3270,7 +3273,8 @@
 .hiddim-stat-hint {
   font-size: 9px;
   color: var(--text-3);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -3308,7 +3312,8 @@
   border-radius: 4px;
   background: var(--bg-2);
   border: 1px solid var(--border);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
 }
 
 .hiddim-id-badge-red { color: var(--accent); }
@@ -3345,7 +3350,8 @@
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -3380,7 +3386,8 @@
   font-size: 18px;
   font-weight: 700;
   color: var(--accent);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Perdas de Carga por Trecho */
@@ -3396,7 +3403,8 @@
   background: var(--bg-2);
   border: 1px solid var(--border);
   color: var(--text-3);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
 }
 
 .hiddim-trecho-label {
@@ -3438,7 +3446,8 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--text);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -3452,7 +3461,8 @@
 
 .hiddim-segmento-tubo strong {
   color: var(--text);
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
 }
 
 .hiddim-segmento-acessorios {
@@ -3490,7 +3500,8 @@
 }
 
 .hiddim-ministat-val {
-  font-family: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
 }
 
 .hiddim-ministat-primario {
@@ -3824,4 +3835,31 @@ button.sem-licenca-botao:disabled {
 
 button.sem-licenca-botao {
   border: 0;
+}
+
+/* Tipografia: Space Grotesk em títulos e subtítulos; Inter no corpo de texto e
+   nos valores numéricos (herdada do body, ver index.css; os números ganham
+   algarismos tabulares para colunas alinhadas). Qualquer classe nova de
+   título/subtítulo entra nesta lista. */
+h1, h2, h3, h4, h5, h6,
+.cartao-dimensionamento-titulo,
+.cartao-info-grupo-titulo,
+.dashboard-subtitulo,
+.hid-bomba-cartao-titulo,
+.hid-espec-titulo,
+.hiddim-secao-titulo,
+.hiddim-segmento-acessorios-titulo,
+.login-subtitulo,
+.login-titulo,
+.niveis-coluna-titulo,
+.niveis-modal-titulo,
+.se-modal-titulo,
+.se-secao-titulo,
+.se-secao-titulo-linha,
+.secao-titulo,
+.secao-titulo-linha,
+.toast-titulo,
+.card-projeto-nome,
+.cartao .nome {
+  font-family: var(--font-titulo);
 }
