@@ -40,7 +40,12 @@ removeu um `.rfa` que o código ainda carrega — corrija nos dois lugares.
 
 ## Gerando o instalador
 
-Precisa de Windows com [Inno Setup 6](https://jrsoftware.org/isdl.php).
+Precisa de Windows com [Inno Setup 6](https://jrsoftware.org/isdl.php). Use a
+**versão 6.7 ou mais nova**: é ela que permite o assistente inteiro escuro
+(`WizardStyle=modern dark` + `WizardBackColor`, no início do `FireUtils.iss`).
+Na 6.6 sai o tema escuro nativo, com o fundo cinza-azulado padrão do Inno; antes
+da 6.6 o assistente fica claro. O arquivo escolhe sozinho conforme a versão do
+compilador, então compilar numa versão antiga não quebra — só perde o visual.
 
 ```powershell
 cd installer

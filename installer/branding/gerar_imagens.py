@@ -128,8 +128,8 @@ def html_grande(logo_uri: str) -> str:
 
 
 def html_pequena() -> str:
-    # O cabeçalho das telas internas é branco: o desenho é um "ícone de app"
-    # escuro com cantos arredondados sobre branco.
+    # O assistente é todo escuro (WizardBackColor=#0d0d11 no .iss): o desenho
+    # é um "ícone de app" com cantos arredondados sobre essa mesma cor.
     css = f"""
 .q {{ position: absolute; inset: calc(var(--u) * 2.6); border-radius: calc(var(--u) * 11);
   background:
@@ -138,7 +138,7 @@ def html_pequena() -> str:
   display: flex; align-items: center; justify-content: center; }}
 .q svg {{ height: 50%; color: var(--accent); margin-left: calc(var(--u) * -.6); }}
 """
-    return base_html(css, f'<div class="q">{SIMBOLO}</div>', 55, "#ffffff")
+    return base_html(css, f'<div class="q">{SIMBOLO}</div>', 55, "#0d0d11")
 
 
 def html_icone() -> str:

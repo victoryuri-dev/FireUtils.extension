@@ -45,7 +45,20 @@ OutputDir=output
 OutputBaseFilename=FireUtils-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
-WizardStyle=modern
+#if Ver >= EncodeVer(6,7,0)
+  ; Tela inteira escura, da cor do fundo das imagens (#0d0d11): barra de
+  ; titulo, paginas e controles. WizardBackColor deixa os paineis
+  ; transparentes; hidebevels tira as linhas claras que separam cabecalho e
+  ; rodape.
+  WizardStyle=modern dark windows11 includetitlebar hidebevels
+  WizardBackColor=#0d0d11
+#elif Ver >= EncodeVer(6,6,0)
+  ; Inno 6.6: tema escuro nativo, mas sem escolher a cor do fundo.
+  WizardStyle=modern dark includetitlebar
+#else
+  ; Inno anterior ao 6.6 nao tem tema escuro: assistente claro padrao.
+  WizardStyle=modern
+#endif
 
 ; Janela 15% maior que a padrão: o assistente do Inno é apertado, e a
 ; identidade visual pede respiro. As imagens abaixo são escolhidas já nessa
