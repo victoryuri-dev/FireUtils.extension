@@ -10,7 +10,7 @@ import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao } from "./lib/versoes";
-import { buscarUltimaVersaoPublicada, abrirDownloadDoInstalador } from "./lib/atualizacao";
+import { buscarUltimaVersaoPublicada, abrirPerfilNoSite } from "./lib/atualizacao";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -114,7 +114,6 @@ export default function App() {
   const [versaoPlugin, setVersaoPlugin] = useState(undefined);
   const [versaoPublicada, setVersaoPublicada] = useState(null); // { versao, arquivo }
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
-  const [baixandoAtualizacao, setBaixandoAtualizacao] = useState(false);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const [atribuindoEstrutura, setAtribuindoEstrutura] = useState(false);
@@ -244,19 +243,8 @@ export default function App() {
     [versaoPlugin, versaoPublicada]
   );
 
-  async function baixarAtualizacao() {
-    setBaixandoAtualizacao(true);
-    const ok = await abrirDownloadDoInstalador(versaoPublicada);
-    setBaixandoAtualizacao(false);
-    if (!ok) {
-      adicionarToast({
-        tipo: "erro",
-        titulo: "Não foi possível abrir o download",
-        mensagem: "Confira a internet e tente de novo.",
-        duracaoMs: 7000,
-      });
-    }
-  }
+  // Leva ao perfil no site, onde está o botão de baixar o plugin.
+  const baixarAtualizacao = abrirPerfilNoSite;
 
   function dispensarAviso() {
     const versao = avaliacaoVersao.versaoNova;
@@ -625,7 +613,6 @@ export default function App() {
           avaliacaoVersao.estado === "disponivel" || avaliacaoVersao.estado === "obrigatoria"
             ? {
                 versaoNova: avaliacaoVersao.versaoNova,
-                baixando: baixandoAtualizacao,
                 onBaixar: baixarAtualizacao,
               }
             : null
@@ -636,7 +623,6 @@ export default function App() {
         {avaliacaoVersao.estado === "obrigatoria" ? (
           <AtualizacaoNecessaria
             versaoNova={avaliacaoVersao.versaoNova}
-            baixando={baixandoAtualizacao}
             onBaixar={baixarAtualizacao}
           />
         ) : (
@@ -644,7 +630,6 @@ export default function App() {
         {avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova && (
           <AvisoAtualizacao
             versaoNova={avaliacaoVersao.versaoNova}
-            baixando={baixandoAtualizacao}
             onBaixar={baixarAtualizacao}
             onDispensar={dispensarAviso}
           />

@@ -125,9 +125,8 @@ export default function Sidebar({
           <button
             type="button"
             className="sidebar-item sidebar-item-atualizacao"
-            disabled={atualizacao.baixando}
             onClick={atualizacao.onBaixar}
-            title={`Nova versão ${atualizacao.versaoNova} disponível — clique para baixar`}
+            title={`Nova versão ${atualizacao.versaoNova} disponível — abre o seu perfil no site para baixar`}
           >
             <Icon svg={downloadIconSvg} title="Baixar atualização" />
           </button>

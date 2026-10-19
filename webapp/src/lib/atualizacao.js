@@ -6,9 +6,6 @@ import { escolherUltimaVersao } from "./versoes";
 // publicada é só o instalador lá dentro, com o nome que o build.ps1 gera.
 const BUCKET = "plugin-releases";
 
-// Validade do link de download — o suficiente para o navegador começar.
-const VALIDADE_LINK_S = 600;
-
 /**
  * A última versão publicada: a maior entre os `FireUtils-Setup-X.Y.Z.exe` do
  * bucket. Devolve `{ versao, arquivo }` ou null. Nunca lança: bucket vazio,
@@ -29,22 +26,17 @@ export async function buscarUltimaVersaoPublicada() {
   }
 }
 
+// O instalador não é mais baixado direto da dockpane: o perfil no site tem a
+// seção "Ferramentas disponíveis" com o botão "Baixar plugin" (gera o link do
+// bucket privado com a sessão da conta) e mostra as licenças.
+export const URL_PERFIL_NO_SITE = "https://fireutils.vercel.app/perfil";
+
 /**
- * Abre o download do instalador no navegador do sistema. O WebView2 da
- * dockpane manda qualquer janela nova para o navegador padrão
+ * Abre o perfil no navegador do sistema. O WebView2 da dockpane manda
+ * qualquer janela nova para o navegador padrão
  * (family_loader_webview_forms.py:_ao_pedir_nova_janela), então um
- * window.open basta. Devolve false se não deu para gerar o link.
+ * window.open basta.
  */
-export async function abrirDownloadDoInstalador(publicada) {
-  if (!supabase || typeof publicada?.arquivo !== "string") return false;
-  try {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(publicada.arquivo, VALIDADE_LINK_S, { download: publicada.arquivo });
-    if (error || !data?.signedUrl) return false;
-    window.open(data.signedUrl, "_blank");
-    return true;
-  } catch {
-    return false;
-  }
+export function abrirPerfilNoSite() {
+  window.open(URL_PERFIL_NO_SITE, "_blank");
 }

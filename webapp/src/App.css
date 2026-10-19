@@ -343,10 +343,6 @@
   animation: sidebar-atualizacao-pulso 1.8s ease-out infinite;
 }
 
-.sidebar-item-atualizacao:disabled {
-  opacity: 0.6;
-}
-
 @keyframes sidebar-atualizacao-pulso {
   0% { box-shadow: 0 0 0 0 rgba(192, 21, 42, 0.55); }
   70%, 100% { box-shadow: 0 0 0 7px rgba(192, 21, 42, 0); }
