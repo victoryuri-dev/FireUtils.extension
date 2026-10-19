@@ -190,7 +190,11 @@ que volta (`lib/motor_nuvem.py`, `lib/hidrantes_dimensionar_bridge.py`).
   lá (aba Sistema de Hidrantes). "Mapear trechos" continua na faixa.
 
 **Ordem de publicação:** primeiro `supabase functions deploy motor-hidrantes`
-(e os secrets, ver o README da function); só depois gere o instalador. Um
+(e os secrets, ver o README da function); só depois gere o instalador.
+Em produção, mantenha `EXIGIR_LICENCA=true` (`supabase secrets set
+EXIGIR_LICENCA=true`, e republique a function, porque ela lê o valor ao
+iniciar): sem ele o motor atende qualquer usuário logado, com ou sem licença.
+Antes de ligar, liste as contas sem licença válida e conceda o que faltar. Um
 plugin novo com a function ainda não publicada não dimensiona.
 
 ## Licença assinada (ferramentas de produtividade offline)
