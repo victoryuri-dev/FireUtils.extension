@@ -336,7 +336,7 @@ def percorre_rotas_hidrantes(elem_ini, eid_ini):
 def mostrar_no_revit(uidoc, ids):
     """Seleciona os elementos cujo ElementId (int) está em `ids`, SEM
     trocar a view ativa — callback do botão "Mostrar no Projeto" das
-    janelas de resultado/bloqueio (resultado_ui.py) e do botão
+    resultados/bloqueios da dockpane e do botão
     "Localizar" da dockpane (hidrantes_dimensionamento_bridge.py). Chamar
     só depois que a janela WPF (ShowDialog) já fechou: a API do Revit não
     é reentrante, não dá pra chamar de dentro do Click de uma janela

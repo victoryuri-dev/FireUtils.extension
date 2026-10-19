@@ -10,6 +10,7 @@ import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
 import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
+import HidrantesMapeamento, { TITULO_FALHA_MAPEAMENTO } from "./HidrantesMapeamento";
 import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
@@ -122,6 +123,13 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const [salvandoPotencia, setSalvandoPotencia] = useState(false);
   const [aplicando, setAplicando] = useState(false);
   const [dimensionando, setDimensionando] = useState(false);
+  // Mapeamento da rede (ex-botão "Mapear trechos"): o usuário clica nos
+  // elementos no Revit; `instrucao` é o passo atual vindo do Python.
+  const [mapeando, setMapeando] = useState(false);
+  const [instrucaoMapeamento, setInstrucaoMapeamento] = useState("");
+  const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
+  const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
+  const [trechosMapeados, setTrechosMapeados] = useState(null);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
   // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
@@ -189,6 +197,47 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         return;
       }
 
+      if (mensagem.type === BridgeMessageTypes.HIDRANTES_MAPEAR_PROGRESSO) {
+        setInstrucaoMapeamento(mensagem.payload?.instrucao || "");
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.HIDRANTES_MAPEAR_RESULTADO) {
+        setMapeando(false);
+        const p = mensagem.payload || {};
+        if (p.ok && p.pendente) {
+          setInconsistenciaMapeamento(null);
+          setMapeamentoPendente(p);
+          return;
+        }
+        setMapeamentoPendente(null);
+        if (p.ok) {
+          setInconsistenciaMapeamento(null);
+          setTrechosMapeados(p.trechos || []);
+          adicionarToast?.({
+            tipo: "sucesso",
+            titulo: "Rede mapeada",
+            mensagem: p.ignorados
+              ? `${p.ignorados} inconsistência(s) ignorada(s). Se já dimensionou, dimensione de novo.`
+              : "Se já dimensionou, dimensione de novo para refletir o novo mapeamento.",
+            duracaoMs: 7000,
+          });
+          return;
+        }
+        if (p.categoria === "cancelado") return;
+        if (p.categoria === "inconsistencia") {
+          setInconsistenciaMapeamento({ erro: p.erro, itens: p.itens || [] });
+          return;
+        }
+        adicionarToast?.({
+          tipo: "erro",
+          titulo: TITULO_FALHA_MAPEAMENTO[p.categoria] || TITULO_FALHA_MAPEAMENTO.servidor,
+          mensagem: p.erro,
+          duracaoMs: 12000,
+        });
+        return;
+      }
+
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAR_RESULTADO) {
         setDimensionando(false);
         const { ok, erro, categoria } = mensagem.payload || {};
@@ -214,6 +263,21 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // O cálculo roda no servidor, que só atende com a sessão do usuário. O
   // token vai junto de cada pedido (e não guardado do lado do Revit) porque
   // aqui o supabase-js já o mantém renovado.
+  function mapear() {
+    setMapeando(true);
+    setInstrucaoMapeamento("");
+    setMapeamentoPendente(null);
+    setInconsistenciaMapeamento(null);
+    postToHost(BridgeMessageTypes.MAPEAR_TRECHOS, {});
+  }
+
+  function continuarMapeamento() {
+    setMapeando(true);
+    setInstrucaoMapeamento("Gravando o mapeamento…");
+    setMapeamentoPendente(null);
+    postToHost(BridgeMessageTypes.CONTINUAR_MAPEAMENTO, {});
+  }
+
   async function dimensionar() {
     setDimensionando(true);
     const { data } = (await supabase?.auth.getSession()) ?? {};
@@ -559,6 +623,15 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {etapa === 1 && resposta?.ok && (
         <>
+          <HidrantesMapeamento
+            mapeando={mapeando}
+            instrucao={instrucaoMapeamento}
+            pendente={mapeamentoPendente}
+            inconsistencia={inconsistenciaMapeamento}
+            trechos={trechosMapeados ?? resposta.mapeamento}
+            onMapear={mapear}
+            onContinuar={continuarMapeamento}
+          />
           <div className="se-pagina-header" style={{ marginBottom: 14 }}>
             <p className="dashboard-subtitulo" style={{ margin: 0 }}>
               Resultados calculados a partir da classificação do sistema.
@@ -567,14 +640,14 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               type="button"
               className="se-botao se-botao-accent se-pagina-header-botao"
               onClick={dimensionar}
-              disabled={dimensionando}
+              disabled={dimensionando || mapeando}
             >
               {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
             </button>
           </div>
           {!dimensionamento ? (
             <p className="vazio">
-              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
+              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Mapeie a rede e clique em "Dimensionar Hidrantes" acima.'}
             </p>
           ) : (
             <HidrantesDimensionamento d={dimensionamento} limites={limites} />

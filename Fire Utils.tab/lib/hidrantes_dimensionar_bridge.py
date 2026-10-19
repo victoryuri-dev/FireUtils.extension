@@ -132,7 +132,7 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
     todos_elems_rota = [e for lst in trechos_elems.values() for e in lst] + [ponto_a_elem]
     if any(e is None for e in todos_elems_rota):
         _erro(postar_mensagem, u"Um ou mais elementos do mapeamento não existem mais no projeto "
-                                u"(modelo alterado desde o último mapeamento). Execute 'Mapear Trechos' novamente.")
+                                u"(modelo alterado desde o último mapeamento). Mapeie os trechos novamente na dockpane.")
         return
 
     hid_map = {
@@ -148,7 +148,7 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
 
     faltando = [nome for nome in (u"RTI", u"Bomba") if nome not in ident_map]
     if faltando:
-        _erro(postar_mensagem, u"Elementos não encontrados: {}. Execute 'Mapear Trechos' primeiro.".format(
+        _erro(postar_mensagem, u"Elementos não encontrados: {}. Mapeie os trechos na dockpane primeiro.".format(
             u", ".join(faltando)))
         return
 

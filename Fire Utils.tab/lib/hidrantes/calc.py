@@ -139,7 +139,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     Recebe as funções helper como parâmetro para manter este módulo sem
     imports Revit. get_id_fn é opcional (deve devolver um int, o
     ElementId do tubo) — habilita o botão "Mostrar no Projeto" das
-    janelas de bloqueio (resultado_ui.py), selecionando exatamente os
+    mensagens de bloqueio da dockpane, selecionando exatamente os
     tubos do diâmetro que reprovou. Retorna:
         {
           "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos", "ids",
@@ -222,7 +222,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
 
 _MENSAGENS_ERRO_CACHE = {
     u"hidrantes": u"Nenhum dimensionamento encontrado.\nDimensione o sistema na aba 'Sistema de Hidrantes' do painel Fire Utils primeiro.",
-    u"rotas":     u"Nenhum mapeamento de rotas encontrado.\nExecute 'Mapear Trechos' primeiro.",
+    u"rotas":     u"Nenhum mapeamento de rotas encontrado.\nMapeie os trechos na aba 'Sistema de Hidrantes' do painel Fire Utils primeiro.",
 }
 
 

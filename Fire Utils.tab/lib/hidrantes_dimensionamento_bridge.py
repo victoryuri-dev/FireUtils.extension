@@ -105,6 +105,11 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
     # state.hidrantes.dimensionamento, repassado sem reduzir.
     cache, erro_cache = hidrantes_calc.carregar_cache(projeto_dir)
 
+    # Resumo do último "Mapear trechos" (nome, ElementId e perda de cada
+    # trecho), para a dockpane mostrar o mapeamento mesmo depois de reabrir.
+    rotas, _erro_rotas = hidrantes_calc.carregar_cache(projeto_dir, chave=u"rotas")
+    mapeamento = (rotas or {}).get(u"resumo")
+
     try:
         limites = {
             u"vMaxTubulacao":      req(perfil, u"v_max_tubulacao"),
@@ -120,6 +125,7 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
         u"classificacao": classificacao,
         u"norma": perfil.get(u"norma"),
         u"limites": limites,
+        u"mapeamento": mapeamento,
         u"dimensionamento": cache,
         u"erroDimensionamento": None if cache else erro_cache,
     })
@@ -132,13 +138,13 @@ def tratar_selecionar_trecho_hidrante(uiapp, payload):
     HidrantesDimensionamento.jsx) — seleciona e enquadra, na view ativa do
     Revit, todo o trecho (Bomba -> válvula) daquele hidrante.
     `payload["rota"]` é a lista de ElementId (int) de um item de
-    `ranking_hidrantes` (gravada por "Mapear Trechos"/script.py, repassada
+    `ranking_hidrantes` (gravada por hidrantes_mapear_bridge.py, repassada
     sem reduzir pelo cache de "Dimensionar Hidrantes" — ver
     tratar_get_hidrantes_dimensionamento acima). Fire-and-forget: não manda
     nada de volta pro React — sucesso já é visível no Revit, e
     mostrar_no_revit mostra seu próprio alerta nativo em caso de falha
-    (mesmo padrão dos botões "Localizar"/"Mostrar no Projeto" das janelas
-    WPF do pushbutton "Mapear Trechos" — ver hidrantes/resultado_ui.py).
+    (mesmo botão "Localizar" usado nas inconsistências e nos trechos do
+    mapeamento — ver hidrantes_mapear_bridge.py).
     """
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None:

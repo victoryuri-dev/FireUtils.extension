@@ -145,6 +145,7 @@
  *     norma?: string,
  *     limites?: { vMaxTubulacao, vMaxSuccaoPositiva, vMaxSuccaoNegativa },
  *     dimensionamento?: object | null,
+ *     mapeamento?: [{ nome, eids: number[], perda }] | null,
  *     erroDimensionamento?: string | null } }
  *     `classificacao` não inclui `rti` — quem quiser mostrar RTI lê direto
  *     do Supabase (dadosHidrantes(projeto).rti, ver lib/projetoDados.js),
@@ -167,6 +168,44 @@
  *     ("Dimensionamento da Bomba de Incêndio"), sem passar pelo Project
  *     Information do Revit.
  *
+ *   { type: "MAPEAR_TRECHOS" }
+ *     JS -> Python: mapeia a rede de hidrantes (ex-botão "Mapear trechos" da
+ *     faixa — ver hidrantes_mapear_bridge.py). O usuário clica, NO REVIT, na
+ *     RTI e na bomba (e, se o Revit não achar sozinho, nos tubos de saída da
+ *     RTI e de entrada/saída da bomba); Esc cancela. A dockpane continua
+ *     visível e recebe os passos em HIDRANTES_MAPEAR_PROGRESSO. Exige a
+ *     classificação já aplicada. Não usa internet.
+ *
+ *   { type: "HIDRANTES_MAPEAR_PROGRESSO", payload: { instrucao } }
+ *     Python -> JS: o que o usuário deve fazer no Revit agora ("Clique na
+ *     bomba de incêndio…") ou o que o plugin está fazendo ("Percorrendo a
+ *     rede…"). Várias por mapeamento.
+ *
+ *   { type: "HIDRANTES_MAPEAR_RESULTADO", payload: { ok, ... } }
+ *     Python -> JS: fim (ou pausa) de um MAPEAR_TRECHOS/CONTINUAR_MAPEAMENTO.
+ *       { ok: true, trechos: [{ nome, eids: number[], perda }], ignorados }
+ *         mapeado e gravado; `trechos` é a sucção e a rota de cada hidrante,
+ *         do mais ao menos desfavorável; `eids` alimenta o "Localizar"
+ *         (SELECIONAR_TRECHO_HIDRANTE); `ignorados` é o nº de inconsistências
+ *         que o usuário mandou ignorar.
+ *       { ok: true, pendente: true, grave: boolean,
+ *         itens: [{ trecho, elemento, eids }] }
+ *         achou inconsistências na recalque que NÃO impedem o mapeamento
+ *         (ramal sem hidrante, ponta solta, possível anel fechado): fica
+ *         esperando CONTINUAR_MAPEAMENTO (ignorar) ou um novo MAPEAR_TRECHOS
+ *         (corrigiu o modelo). `grave`: alguma válvula ficou sem rota.
+ *       { ok: false, categoria: "inconsistencia", erro, itens }
+ *         a rede não fecha (sucção sem chegar na bomba, nenhuma válvula
+ *         alcançada): nada foi gravado.
+ *       { ok: false, categoria, erro }
+ *         outra falha: "requisito" (falta classificação, projeto salvo…),
+ *         "norma", "licenca", "servidor", ou "cancelado" (Esc no Revit).
+ *
+ *   { type: "CONTINUAR_MAPEAMENTO" }
+ *     JS -> Python: o usuário decidiu ignorar as inconsistências pendentes de
+ *     um HIDRANTES_MAPEAR_RESULTADO `pendente`; grava e responde com
+ *     HIDRANTES_MAPEAR_RESULTADO.
+ *
  *   { type: "DIMENSIONAR_HIDRANTES", payload: { accessToken } }
  *     JS -> Python: dimensiona o sistema de hidrantes (método da marcha HD01
  *     → Ponto A → Descarga da Bomba → RTI). O Python lê o modelo (trechos
@@ -175,7 +214,7 @@
  *     nenhuma fórmula roda no plugin. `accessToken` é o token da sessão do
  *     Supabase, que o motor exige — a anon key não basta. Precisa de
  *     classificação já aplicada (Etapa 1, "Aplicar no Revit"), de "Mapear
- *     Trechos" já executado alguma vez nesse projeto (cache de rotas) e de
+ *     trechos" já executado alguma vez nesse projeto (cache de rotas) e de
  *     internet.
  *
  *   { type: "HIDRANTES_DIMENSIONAR_RESULTADO", payload: { ok, erro?, categoria? } }
@@ -275,6 +314,10 @@ export const BridgeMessageTypes = {
   HIDRANTES_CLASSIFICACAO_SAVED: "HIDRANTES_CLASSIFICACAO_SAVED",
   GET_HIDRANTES_DIMENSIONAMENTO: "GET_HIDRANTES_DIMENSIONAMENTO",
   HIDRANTES_DIMENSIONAMENTO: "HIDRANTES_DIMENSIONAMENTO",
+  MAPEAR_TRECHOS: "MAPEAR_TRECHOS",
+  CONTINUAR_MAPEAMENTO: "CONTINUAR_MAPEAMENTO",
+  HIDRANTES_MAPEAR_PROGRESSO: "HIDRANTES_MAPEAR_PROGRESSO",
+  HIDRANTES_MAPEAR_RESULTADO: "HIDRANTES_MAPEAR_RESULTADO",
   DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",
   HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
   GRAVAR_QUANTITATIVOS: "GRAVAR_QUANTITATIVOS",
