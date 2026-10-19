@@ -251,6 +251,10 @@
   height: 38px;
   color: white;
   margin: 0px 0 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 
 /* Sem isso, o <span class="icon"> (Icon.jsx) não tinha tamanho explícito

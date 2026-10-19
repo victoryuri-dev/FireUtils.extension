@@ -32,6 +32,10 @@ const ITENS_NAV = [
 // pausa parada do loop (que não fazem sentido num hover único).
 const DURACAO_LOGO_HOVER_MS = 1380;
 
+// A logo abre a plataforma no navegador do sistema: o WebView2 manda qualquer
+// janela nova para o navegador padrão (family_loader_webview_forms.py).
+const URL_PLATAFORMA = "https://fireutils.vercel.app/projetos";
+
 export default function Sidebar({
   abaAtual,
   onSelecionarAba,
@@ -71,13 +75,19 @@ export default function Sidebar({
 
   return (
     <nav className="sidebar">
-      <div className="sidebar-logo" onMouseEnter={aoPassarMouseNaLogo}>
+      <button
+        type="button"
+        className="sidebar-logo"
+        onMouseEnter={aoPassarMouseNaLogo}
+        onClick={() => window.open(URL_PLATAFORMA, "_blank")}
+        title="Abrir o Fire Utils no navegador"
+      >
         {logoAnimando ? (
           <Loader size={38} className="sidebar-logo-loader" />
         ) : (
           <Icon svg={logoSvg} title="Fire Utils" />
         )}
-      </div>
+      </button>
 
       <div className="sidebar-nav">
         {ITENS_NAV.map((item) => {
