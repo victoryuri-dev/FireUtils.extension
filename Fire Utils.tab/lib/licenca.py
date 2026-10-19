@@ -44,8 +44,8 @@ import plugin_versao
 # repositório ETOS.FireUtils — a parte privada fica só nos secrets do
 # Supabase. Sem estes valores nenhum token confere e as ferramentas ficam
 # bloqueadas; installer/build.ps1 recusa gerar o instalador assim.
-_CHAVE_PUBLICA_MODULO = u""
-_CHAVE_PUBLICA_EXPOENTE = u""
+_CHAVE_PUBLICA_MODULO = u"tEbT2j5FOX9shT29xcYb2Q97S2YuydfqFAgedPXB3J72PJ682CzOpzkvbv6Zq97ZehKpBdGw/Gfk2WcGv+2oOY1l50ZRWA1aRMM5GCH6TL6hEFb4TudtLS/vO0rBSDuq97Dxh6sSsFvE+rstXP6hMsGkXbfAPX2Ui8jvrpbyroF2BsEh6T7Bjnkcbx8ctUs+rqq4MdTsmut0mJ4DK9uUcI64HlINy/50SF34uK0Kzdt4EfhFO6UvWJc0ZLqvOlpQe9/3ozKevVy5dr6ul+Cm06/jCr+lFudRMYa2GSGssTDECH+eBSIFohP77fyBbowBZivktXL4KBR+xH0lPLnUtw=="
+_CHAVE_PUBLICA_EXPOENTE = u"AQAB"
 
 _VERSAO_TOKEN = 1
 
