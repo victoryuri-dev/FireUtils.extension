@@ -185,8 +185,9 @@ que volta (`lib/motor_nuvem.py`, `lib/hidrantes_dimensionar_bridge.py`).
   Trechos" (`calc_j_trecho`), a classificação do sistema (Tabela 3, em JS na
   dockpane) e os demais cálculos (saídas, extintores, sinalização, iluminação).
   Migram para o mesmo motor nas próximas etapas.
-- **Botão "Dimensionar Hidrantes" da faixa de opções:** virou atalho que abre
-  a dockpane, porque quem autentica o pedido é a sessão dela.
+- **Botão "Dimensionar Hidrantes" da faixa de opções:** removido. Quem
+  autentica o pedido é a sessão da dockpane, então o dimensionamento só existe
+  lá (aba Sistema de Hidrantes). "Mapear trechos" continua na faixa.
 
 **Ordem de publicação:** primeiro `supabase functions deploy motor-hidrantes`
 (e os secrets, ver o README da function); só depois gere o instalador. Um

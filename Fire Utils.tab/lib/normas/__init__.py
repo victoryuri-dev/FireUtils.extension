@@ -63,7 +63,7 @@ _CHAVES_HIDRANTES = (
 # como int, e o IronPython 2.7 do Revit (diferente do CPython) lança
 # ValueError em "{:.1f}".format(x) quando x é int — normalizadas pra
 # float no merge abaixo, mesmo motivo/consertos já feitos pra Tabela 2 em
-# hidrantes/sistema.py e "Dimensionar Hidrantes"/script.py.
+# hidrantes/sistema.py.
 _CHAVES_HIDRANTES_NUMERICAS = (
     u"v_max_tubulacao", u"v_max_succao_positiva", u"v_max_succao_negativa",
     u"tolerancia_equilibrio_mca", u"npshd_fator_vazao", u"hidrantes_simultaneos",

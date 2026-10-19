@@ -1,6 +1,5 @@
 title: Sistema de Hidrantes
-tooltip: Mapeamento e dimensionamento hidráulico da rede
+tooltip: Mapeamento dos trechos da rede de hidrantes (o dimensionamento é feito no painel Fire Utils)
 author: Fire Utils
 layout:
-  - Dimensionar Hidrantes
   - Mapear trechos

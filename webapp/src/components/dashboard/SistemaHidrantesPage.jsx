@@ -541,7 +541,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               )}
 
               <p className="hid-nota-aviso">
-                Sempre que trocar o sistema, execute "Dimensionar Hidrantes" novamente no Revit.
+                Sempre que trocar o sistema, clique em "Dimensionar" novamente.
               </p>
             </>
           )}
@@ -574,7 +574,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           </div>
           {!dimensionamento ? (
             <p className="vazio">
-              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima (ou execute o pushbutton no Revit).'}
+              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
             </p>
           ) : (
             <HidrantesDimensionamento d={dimensionamento} limites={limites} />

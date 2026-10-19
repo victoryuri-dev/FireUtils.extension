@@ -91,7 +91,7 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
     # de classificação na dockpane (Tipo/RTI/Esguicho/Mangueira/Expedições/
     # Vazão/Pressão/Método/Coef. C) fica completo mesmo que o dimensionamento
     # hidráulico ainda não tenha rodado nesta sessão. Mesma leitura/fallback
-    # que "Dimensionar Hidrantes"/script.py faz pro parâmetro de método.
+    # que hidrantes_dimensionar_bridge.py faz pro parâmetro de método.
     _param_metodo = doc.ProjectInformation.LookupParameter(PROJECT_INFO_METODO_PARAM)
     metodo = _param_metodo.AsString() if _param_metodo else None
     if metodo not in METODOS_CALCULO:
@@ -101,7 +101,7 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
 
     # Cache cru de "Dimensionar Hidrantes" (res, dados_sistema, valor_sistema,
     # metodo, C_HW, succao, ranking_hidrantes, cotas... — ver payload_hid em
-    # "Dimensionar Hidrantes"/script.py) — mesmo formato que o site lê de
+    # hidrantes_dimensionar_bridge.py) — mesmo formato que o site lê de
     # state.hidrantes.dimensionamento, repassado sem reduzir.
     cache, erro_cache = hidrantes_calc.carregar_cache(projeto_dir)
 

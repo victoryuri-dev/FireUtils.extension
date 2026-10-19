@@ -221,7 +221,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
 # ===========================================================================
 
 _MENSAGENS_ERRO_CACHE = {
-    u"hidrantes": u"Nenhum dimensionamento encontrado.\nExecute 'Dimensionar Hidrantes' primeiro.",
+    u"hidrantes": u"Nenhum dimensionamento encontrado.\nDimensione o sistema na aba 'Sistema de Hidrantes' do painel Fire Utils primeiro.",
     u"rotas":     u"Nenhum mapeamento de rotas encontrado.\nExecute 'Mapear Trechos' primeiro.",
 }
 
