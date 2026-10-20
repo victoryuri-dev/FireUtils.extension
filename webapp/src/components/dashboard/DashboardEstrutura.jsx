@@ -413,8 +413,8 @@ export default function DashboardEstrutura({
         <CartaoSaidaEmergenciaResumo norma={seNorma} projeto={projeto} estrutura={estrutura} />
       </div>
 
+      <p className="dashboard-subtitulo">Dimensionamentos</p>
       <div className="grade-dimensionamentos">
-        <p className="dashboard-subtitulo">Dimensionamentos</p><br/>
         <CartaoDimensionamento
           titulo="Sistema de Hidrantes"
           iconeSvg={hydrantIconSvg}

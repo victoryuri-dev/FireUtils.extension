@@ -1387,9 +1387,7 @@
 }
 
 .grade-dimensionamentos {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  columns: 215.5px 2;
 }
 
 .cartao-dimensionamento {
@@ -1400,6 +1398,8 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
 .cartao-dimensionamento-icone {
@@ -1451,14 +1451,14 @@
 /* Dimensionamento clicável (ex.: "Saída de Emergência") ------------------- */
 .cartao-dimensionamento-clicavel {
   cursor: pointer;
-  border: 1px solid transparent;
   text-align: left;
   font-family: inherit;
   width: 100%;
+  transition: .1s;
 }
 
 .cartao-dimensionamento-clicavel:hover {
-  border-color: var(--text-2);
+  background-color: var(--bg-1);
 }
 
 /* "Atribuir seleção à estrutura" (DashboardEstrutura.jsx) — precisa de um
