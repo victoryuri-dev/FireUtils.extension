@@ -25,20 +25,20 @@ export default function ProjetoCabecalho({ projeto, estrutura, estruturasVincula
 
   return (
     <div className="projeto-cabecalho">
-      <div className="projeto-cabecalho-linha">
         {projeto.id && (
           <span className="projeto-codigo">
             <Icon svg={linkIconSvg} />
             {projeto.id}
           </span>
         )}
-        <span className="projeto-status-salvo">
-          <Icon svg={checkIconSvg} />
-          Salvo
-        </span>
-      </div>
       <h2 className="projeto-nome">
-        {projeto.nome}
+        <div className="projeto-cabecalho-linha">
+          {projeto.nome}
+          <span className="projeto-status-salvo">
+            <Icon svg={checkIconSvg} />
+            Salvo
+          </span>
+        </div>
         {podeTrocar ? (
           <select
             className="projeto-estrutura-select"

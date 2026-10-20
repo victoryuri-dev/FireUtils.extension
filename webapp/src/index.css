@@ -108,6 +108,21 @@ button {
   cursor: pointer;
 }
 
+.btn-primary{
+    background: var(--accent);
+    color: #fff;
+    border-radius: 5px;
+    border: none;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    transition: background .18s, transform .18s, box-shadow .18s;
+    display: inline-flex;
+}
+
 /* Ícones SVG inline (ver components/Icon.jsx) — cor controlada via `color`
    porque os arquivos fonte usam fill="currentColor"/stroke="currentColor". */
 .icon {

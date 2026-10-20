@@ -42,8 +42,19 @@ export default function ConectarProjeto({ onSelecionar }) {
   return (
     <div className="dashboard-tela">
       <div className="dashboard-cabecalho-secao">
-        <Icon svg={linkIconSvg} />
-        <h2>Conectar um projeto</h2>
+        <div className="dashboard-cabecalho-secao">
+          <Icon svg={linkIconSvg} />
+          <h2>Conectar um projeto</h2>
+        </div>
+        <a href="https://fireutils.vercel.app/projetos" target="blank">
+          <button class="btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus inline-block align-middle shrink-0" aria-hidden="true">
+            <path d="M5 12h14"></path>
+            <path d="M12 5v14"></path>
+            </svg> 
+            Criar novo projeto
+          </button>
+        </a>
       </div>
 
       <div className="busca-linha">

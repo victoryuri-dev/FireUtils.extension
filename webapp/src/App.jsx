@@ -695,14 +695,13 @@ export default function App() {
                 <p className="vazio">Carregando catálogo...</p>
               ) : (
                 <>
-                  <p className="categorias-rotulo">Categorias</p>
                   <CategoryPills
                     categorias={catalogo.categories}
                     todasIconKey={catalogo.todas_icon_key}
                     categoriaAtual={categoriaAtual}
                     onSelect={setCategoriaAtual}
                   />
-
+                <div>
                   <div className="secao-titulo-linha">
                     <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
                     {selecionadas.size > 0 && (
@@ -732,6 +731,7 @@ export default function App() {
                       ))}
                     </div>
                   )}
+                </div>
                 </>
               )}
             </div>
