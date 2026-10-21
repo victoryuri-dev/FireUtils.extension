@@ -26,7 +26,27 @@ export async function buscarUltimaVersaoPublicada() {
   }
 }
 
-// O instalador não é mais baixado direto da dockpane: o perfil no site tem a
+/**
+ * Links temporários do instalador e do hash (`<instalador>.sha256`, ao lado
+ * dele no bucket) para o Python baixar — é ele quem baixa, confere e instala
+ * (plugin_atualizacao.py). null se não deu para gerar.
+ */
+export async function gerarLinksDaAtualizacao(publicada) {
+  if (!supabase || typeof publicada?.arquivo !== "string") return null;
+  try {
+    const bucket = supabase.storage.from(BUCKET);
+    const [instalador, hash] = await Promise.all([
+      bucket.createSignedUrl(publicada.arquivo, 1800),
+      bucket.createSignedUrl(`${publicada.arquivo}.sha256`, 1800),
+    ]);
+    if (!instalador.data?.signedUrl || !hash.data?.signedUrl) return null;
+    return { urlInstalador: instalador.data.signedUrl, urlHash: hash.data.signedUrl };
+  } catch {
+    return null;
+  }
+}
+
+// Sem o instalar-pela-dockpane (plugin antigo), o caminho é o site: o perfil no site tem a
 // seção "Ferramentas disponíveis" com o botão "Baixar plugin" (gera o link do
 // bucket privado com a sessão da conta) e mostra as licenças.
 export const URL_PERFIL_NO_SITE = "https://fireutils.vercel.app/perfil";

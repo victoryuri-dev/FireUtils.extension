@@ -293,6 +293,9 @@ def resumo_para_dockpane():
         u"modulos": sorted(modulos_liberados()),
         u"erro": None if sit in (SIT_VALIDO, SIT_AUSENTE, SIT_EXPIRADO) else motivo,
         u"suportaToken": True,
+        # Este plugin entende INSTALAR_ATUALIZACAO (plugin_atualizacao.py): um
+        # plugin antigo não manda o campo, e a dockpane cai no link do perfil.
+        u"suportaAtualizacao": True,
         u"tokenValido": sit == SIT_VALIDO,
         u"tokenExpiraEm": int(payload[u"exp"]) if payload else None,
         # Versão do plugin instalado (ver plugin_versao.py): vai junto porque

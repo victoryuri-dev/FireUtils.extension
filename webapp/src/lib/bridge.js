@@ -231,6 +231,25 @@
  *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado
  *     completo, em vez de esta mensagem carregar os dados duas vezes.
  *
+ *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash } }
+ *     JS -> Python: baixa, confere e instala uma versão nova do plugin
+ *     (plugin_atualizacao.py). Os links são URLs assinadas do bucket privado
+ *     `plugin-releases` (instalador e `<instalador>.sha256`), geradas aqui com
+ *     a sessão do usuário. O Python NÃO confia no pedido: só aceita esse
+ *     bucket/projeto, a versão tem de ser maior que a instalada, o SHA-256
+ *     precisa bater e a assinatura digital precisa ser do publicador fixado
+ *     no plugin. Só enviar se LICENCAS trouxe `suportaAtualizacao`.
+ *
+ *   { type: "ATUALIZACAO_PROGRESSO", payload: { etapa: "baixando" | "verificando",
+ *     percentual?: number } }
+ *     Python -> JS: andamento do INSTALAR_ATUALIZACAO.
+ *
+ *   { type: "ATUALIZACAO_RESULTADO", payload: { ok, estado?, versao?, erro? } }
+ *     Python -> JS: fim do INSTALAR_ATUALIZACAO. `estado`: "agendada" (o plugin
+ *     instala quando o Revit fechar) ou "manual" (instalação automática
+ *     desligada, instalador baixado e conferido: o usuário o executa; ver
+ *     _PUBLICADOR_ASSINATURA em plugin_atualizacao.py). `erro` é texto pronto.
+ *
  *   { type: "GRAVAR_QUANTITATIVOS" }
  *     JS -> Python: dispara a coleta de TODAS as medidas de quantitativo
  *     (Extintores, Sinalização de Emergência, Iluminação de Emergência)
@@ -318,6 +337,9 @@ export const BridgeMessageTypes = {
   CONTINUAR_MAPEAMENTO: "CONTINUAR_MAPEAMENTO",
   HIDRANTES_MAPEAR_PROGRESSO: "HIDRANTES_MAPEAR_PROGRESSO",
   HIDRANTES_MAPEAR_RESULTADO: "HIDRANTES_MAPEAR_RESULTADO",
+  INSTALAR_ATUALIZACAO: "INSTALAR_ATUALIZACAO",
+  ATUALIZACAO_PROGRESSO: "ATUALIZACAO_PROGRESSO",
+  ATUALIZACAO_RESULTADO: "ATUALIZACAO_RESULTADO",
   DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",
   HIDRANTES_DIMENSIONAR_RESULTADO: "HIDRANTES_DIMENSIONAR_RESULTADO",
   GRAVAR_QUANTITATIVOS: "GRAVAR_QUANTITATIVOS",

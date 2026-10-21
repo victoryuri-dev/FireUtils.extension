@@ -304,9 +304,9 @@ desencontradas, o plugin conhece a própria versão e a dockpane avisa.
   contas com licença leem; ver a migração
   `20261019120000_create_plugin_releases_bucket.sql` no ETOS.FireUtils), pega a
   maior versão entre os arquivos `FireUtils-Setup-X.Y.Z.exe` e compara:
-  - **versão nova disponível:** faixa no topo com **Baixar** (abre o `.exe` no
-    navegador, por link assinado de 10 minutos) e **Depois** (some até sair
-    outra versão);
+  - **versão nova disponível:** faixa no topo com **Atualizar** (ver "Atualizar
+    pela dockpane" abaixo) e **Depois** (some até sair outra versão), mais o
+    ícone de download na barra lateral;
   - **abaixo de `PLUGIN_MINIMO`:** a dockpane troca o conteúdo por "Atualize o
     plugin", porque esta interface não funciona direito com um plugin tão
     antigo.
@@ -320,8 +320,9 @@ desencontradas, o plugin conhece a própria versão e a dockpane avisa.
    com a versão no nome (`FireUtils-Setup-2.1.0.exe`) e o plugin instalado
    informa a mesma versão.
 2. Assine o `.exe` (ver "Antes de distribuir").
-3. No painel do Supabase, em Storage → `plugin-releases`, envie o `.exe`
-   **sem renomear**: o nome é a fonte da versão. Quem tem o plugin instalado vê
+3. Gere o `.sha256` do `.exe` assinado (ver "Atualizar pela dockpane") e, no
+   painel do Supabase, em Storage → `plugin-releases`, envie o `.sha256` e
+   depois o `.exe`, **sem renomear**: o nome é a fonte da versão. Quem tem o plugin instalado vê
    o aviso na próxima vez que abrir a dockpane.
 
 Pode deixar as versões antigas no bucket (servem para reinstalar se uma nova
@@ -334,13 +335,59 @@ exemplo, uma mensagem nova da bridge), depois que o plugin novo já estiver
 publicado e os clientes tiveram tempo de atualizar: quem estiver abaixo perde o
 acesso até atualizar.
 
-**Ainda não implementado:** baixar e instalar sem sair do painel — o Python
-baixaria o `.exe`, conferiria o `sha256` e abriria um script
-auxiliar desvinculado do Revit, que espera o `Revit.exe` fechar e roda o
-instalador com `/SILENT`. Exige `.exe` assinado. Enquanto isso, o cliente
-baixa e roda o instalador com o Revit fechado. Esse fluxo vai precisar de um
-`sha256` publicado à parte (hoje não há manifesto) — por exemplo, um arquivo ao
-lado do `.exe` no bucket.
+### Atualizar pela dockpane (baixar e instalar)
+
+O botão **Atualizar** da faixa, da tela "Atualize o plugin" e o ícone de download
+da barra lateral pedem ao plugin que baixe e instale a versão nova
+(`lib/plugin_atualizacao.py`). Plugin antigo, sem esse suporte (o campo
+`suportaAtualizacao` da mensagem `LICENCAS`), cai no link do perfil no site.
+
+Isto **executa um programa baixado da internet**, então o plugin não confia no
+pedido da dockpane e confere três coisas antes de rodar qualquer coisa:
+
+1. **Origem:** só link assinado do bucket `plugin-releases` deste projeto
+   Supabase, para `FireUtils-Setup-X.Y.Z.exe` de versão **maior** que a
+   instalada (nunca volta versão).
+2. **Integridade:** o SHA-256 do arquivo precisa bater com o `.sha256`
+   publicado ao lado dele.
+3. **Autenticidade:** a assinatura digital (Authenticode) precisa ser válida e o
+   nome do assinante (CN do certificado) precisa ser o `_PUBLICADOR_ASSINATURA`,
+   fixado em `lib/plugin_atualizacao.py` como a chave pública de licença. É isto
+   que protege contra alguém que invada o bucket e troque o instalador junto
+   com o `.sha256`.
+
+**Enquanto `_PUBLICADOR_ASSINATURA` estiver vazio** (instalador ainda não
+assinado), a instalação automática fica **desligada**: o plugin baixa e confere
+o hash, mas só abre a pasta com o instalador; o usuário decide executar. O
+`build.ps1` avisa quando está vazio. Para ligar: assine o instalador, copie o
+nome do assinante (`(Get-AuthenticodeSignature .\FireUtils-Setup-X.exe).SignerCertificate.Subject`,
+o valor depois de `CN=`), preencha a constante e gere uma versão nova — a
+primeira com a chave já ligada precisa ser instalada na mão.
+
+**Como instala:** o instalador não roda com o Revit aberto. Um script
+(`lib/atualizar_plugin.ps1`, copiado para `%LOCALAPPDATA%\FireUtils\atualizacao`
+porque o instalador apaga a pasta da extensão) roda em segundo plano, espera
+todo `Revit.exe` fechar, confere hash e assinatura **de novo** e executa o
+instalador com `/SILENT /SUPPRESSMSGBOXES /NORESTART /NOCLOSEAPPLICATIONS`. O
+usuário só precisa fechar o Revit; a dockpane diz isso ("será instalada quando
+você fechar o Revit"). Log em `%LOCALAPPDATA%\FireUtils\atualizacao.log`. Se o
+script morrer antes (logoff, por exemplo), a dockpane oferece de novo na
+próxima abertura. Em modo silencioso o instalador não mostra a pergunta
+"atualizar ou desinstalar" e recusa se o Revit foi reaberto no intervalo.
+
+**Publicar uma versão, agora com o hash:** depois de assinar o `.exe`, gere o
+`.sha256` **do arquivo já assinado** (assinar muda o hash) e suba os dois, com o
+mesmo nome-base:
+
+```powershell
+$exe = ".\output\FireUtils-Setup-2.1.0.exe"
+(Get-FileHash -Algorithm SHA256 $exe).Hash.ToLower() | Set-Content -NoNewline "$exe.sha256"
+```
+
+Envie `FireUtils-Setup-2.1.0.exe` e `FireUtils-Setup-2.1.0.exe.sha256` ao bucket
+`plugin-releases`. Sem o `.sha256`, a atualização pela dockpane falha com
+"arquivo de conferência" e o usuário usa o perfil no site. A dockpane só
+oferece a versão quando o `.exe` existe; suba o `.sha256` **antes** dele.
 
 ## Pendências de validação
 

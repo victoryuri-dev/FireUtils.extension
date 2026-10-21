@@ -39,6 +39,7 @@ import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
 import hidrantes_mapear_bridge
+import plugin_atualizacao
 import quantitativos_bridge
 import atribuir_estrutura_bridge
 import niveis_bridge
@@ -257,6 +258,12 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
     elif tipo == u"CONTINUAR_MAPEAMENTO":
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_mapear_bridge.tratar_continuar_mapeamento(
+                uiapp, payload, fila_acoes, postar_mensagem)
+        )
+    elif tipo == u"INSTALAR_ATUALIZACAO":
+        # Baixa, confere e instala uma versão nova do plugin (plugin_atualizacao.py).
+        fila_acoes.enfileirar(
+            lambda uiapp: plugin_atualizacao.tratar_instalar_atualizacao(
                 uiapp, payload, fila_acoes, postar_mensagem)
         )
     elif tipo == u"GRAVAR_QUANTITATIVOS":

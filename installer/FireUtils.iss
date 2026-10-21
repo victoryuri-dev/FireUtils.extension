@@ -199,6 +199,11 @@ var
 begin
   Result := True;
 
+  { Atualizacao pela dockpane roda em /SILENT (ver lib\atualizar_plugin.ps1):
+    nao ha ninguem para escolher, e a resposta so pode ser "atualizar". }
+  if WizardSilent then
+    Exit;
+
   Desinstalador := DesinstaladorExistente();
   if (Desinstalador = '') or not FileExists(Desinstalador) then
     Exit;
@@ -288,6 +293,15 @@ var
   CodigoSaida: Integer;
 begin
   Result := '';
+
+  { Silencioso (atualizacao pela dockpane): nao ha quem clique em Repetir. O
+    script que dispara o instalador so o chama com o Revit fechado, entao isto
+    so acontece se ele foi reaberto no intervalo. }
+  if WizardSilent and RevitEstaRodando() then
+  begin
+    Result := 'O Revit foi aberto durante a atualização. Feche o Revit e execute o instalador novamente.';
+    Exit;
+  end;
 
   while RevitEstaRodando() do
   begin

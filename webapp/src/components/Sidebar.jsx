@@ -4,6 +4,7 @@ import Loader from "./Loader";
 import { supabase } from "../lib/supabaseClient";
 import { abaLiberada } from "../lib/licencas";
 import { useTema } from "../hooks/useTema";
+import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
@@ -135,8 +136,13 @@ export default function Sidebar({
           <button
             type="button"
             className="sidebar-item sidebar-item-atualizacao"
+            disabled={emAndamento(atualizacao.estado)}
             onClick={atualizacao.onBaixar}
-            title={`Nova versão ${atualizacao.versaoNova} disponível — abre o seu perfil no site para baixar`}
+            title={
+              atualizacao.estado?.fase
+                ? textoDoEstado(atualizacao.estado)
+                : `Nova versão ${atualizacao.versaoNova} disponível — clique para atualizar`
+            }
           >
             <Icon svg={downloadIconSvg} title="Baixar atualização" />
           </button>

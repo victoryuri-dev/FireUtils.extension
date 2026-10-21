@@ -10,7 +10,8 @@ import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao } from "./lib/versoes";
-import { buscarUltimaVersaoPublicada, abrirPerfilNoSite } from "./lib/atualizacao";
+import { buscarUltimaVersaoPublicada, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
+import { emAndamento, estadoDaMensagem } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -113,6 +114,10 @@ export default function App() {
   // Python ainda não respondeu; null = plugin antigo, que não informa versão.
   const [versaoPlugin, setVersaoPlugin] = useState(undefined);
   const [versaoPublicada, setVersaoPublicada] = useState(null); // { versao, arquivo }
+  // O plugin instalado sabe baixar e instalar atualizações (informado junto
+  // das licenças); sem isso o botão leva ao perfil no site.
+  const [suportaAtualizacao, setSuportaAtualizacao] = useState(false);
+  const [estadoAtualizacao, setEstadoAtualizacao] = useState(null);
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
@@ -243,8 +248,27 @@ export default function App() {
     [versaoPlugin, versaoPublicada]
   );
 
-  // Leva ao perfil no site, onde está o botão de baixar o plugin.
-  const baixarAtualizacao = abrirPerfilNoSite;
+  // O Python baixa, confere e instala (plugin_atualizacao.py) — com a sessão
+  // daqui só se geram os links do bucket privado. Plugin sem esse suporte, ou
+  // sem conseguir os links, cai no perfil do site.
+  async function baixarAtualizacao() {
+    if (emAndamento(estadoAtualizacao) || estadoAtualizacao?.fase === "agendada") return;
+    if (!suportaAtualizacao || !versaoPublicada) {
+      abrirPerfilNoSite();
+      return;
+    }
+    setEstadoAtualizacao({ fase: "preparando" });
+    const links = await gerarLinksDaAtualizacao(versaoPublicada);
+    if (!links) {
+      setEstadoAtualizacao({ fase: "erro", erro: "Não foi possível gerar o link de download. Confira a internet." });
+      return;
+    }
+    postToHost(BridgeMessageTypes.INSTALAR_ATUALIZACAO, {
+      versao: versaoPublicada.versao,
+      arquivo: versaoPublicada.arquivo,
+      ...links,
+    });
+  }
 
   function dispensarAviso() {
     const versao = avaliacaoVersao.versaoNova;
@@ -273,10 +297,19 @@ export default function App() {
     return escutarMensagensDoHost((mensagem) => {
       if (!mensagem) return;
 
+      if (
+        mensagem.type === BridgeMessageTypes.ATUALIZACAO_PROGRESSO ||
+        mensagem.type === BridgeMessageTypes.ATUALIZACAO_RESULTADO
+      ) {
+        setEstadoAtualizacao(estadoDaMensagem(mensagem.type, mensagem.payload));
+        return;
+      }
+
       if (mensagem.type === BridgeMessageTypes.LICENCAS) {
         const resumo = mensagem.payload || {};
         const { modulos, erro } = resumo;
         setVersaoPlugin(resumo.versaoPlugin ?? null);
+        setSuportaAtualizacao(resumo.suportaAtualizacao === true);
         if (erro) {
           // Também no console: é a única janela acessível de dentro do
           // Revit, já que a saída do pyRevit some com o engine que a abriu.
@@ -613,6 +646,7 @@ export default function App() {
           avaliacaoVersao.estado === "disponivel" || avaliacaoVersao.estado === "obrigatoria"
             ? {
                 versaoNova: avaliacaoVersao.versaoNova,
+                estado: estadoAtualizacao,
                 onBaixar: baixarAtualizacao,
               }
             : null
@@ -623,6 +657,7 @@ export default function App() {
         {avaliacaoVersao.estado === "obrigatoria" ? (
           <AtualizacaoNecessaria
             versaoNova={avaliacaoVersao.versaoNova}
+            estado={estadoAtualizacao}
             onBaixar={baixarAtualizacao}
           />
         ) : (
@@ -630,6 +665,7 @@ export default function App() {
         {avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova && (
           <AvisoAtualizacao
             versaoNova={avaliacaoVersao.versaoNova}
+            estado={estadoAtualizacao}
             onBaixar={baixarAtualizacao}
             onDispensar={dispensarAviso}
           />

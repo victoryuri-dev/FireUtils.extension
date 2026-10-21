@@ -335,6 +335,10 @@
   color: var(--accent);
 }
 
+.sidebar-item-atualizacao:disabled {
+  opacity: 0.6;
+}
+
 .sidebar-item-atualizacao::after {
   content: "";
   position: absolute;

@@ -175,6 +175,26 @@ function Test-ChaveDeLicenca {
     Write-Host '    Chave publica de licenca: configurada'
 }
 
+function Test-PublicadorDaAssinatura {
+    <#
+        A atualizacao automatica pela dockpane (lib\plugin_atualizacao.py)
+        so executa um instalador baixado se a assinatura digital dele for do
+        publicador fixado la. Vazio nao impede o build: so deixa a
+        atualizacao automatica desligada (o plugin baixa o instalador e abre
+        a pasta, e o usuario decide executar).
+    #>
+    $arquivo = Join-Path $RepoRoot 'Fire Utils.tab\lib\plugin_atualizacao.py'
+    $texto = Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8
+
+    if ($texto -match '(?m)^_PUBLICADOR_ASSINATURA\s*=\s*u"[^"]+"') {
+        Write-Host '    Publicador da assinatura: configurado (atualizacao automatica ligada)'
+    } else {
+        Write-Warning ('_PUBLICADOR_ASSINATURA vazio em lib\plugin_atualizacao.py: a atualizacao ' +
+                       'pela dockpane NAO instala sozinha (so baixa e abre a pasta). Assine o ' +
+                       'instalador e preencha o CN do certificado para ligar.')
+    }
+}
+
 function Test-Branding {
     <#
         O icone e as imagens do assistente sao versionados em installer\branding
@@ -222,6 +242,7 @@ Test-ConfigDaDockpane
 
 Write-Passo 'Conferindo a chave de licenca'
 Test-ChaveDeLicenca
+Test-PublicadorDaAssinatura
 
 Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz
