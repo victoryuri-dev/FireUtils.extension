@@ -5,7 +5,7 @@ no fim, o certificado de assinatura). Nada disto foi executado pelo assistente:
 o código foi escrito e a sintaxe conferida, mas o build, o Revit e o Windows
 nunca rodaram a versão 3.1.0.
 
-O que entra na 3.1.0 (desde a 3.0.0):
+O que entra na 3.1.0 (desde a 3.0.1):
 
 - **Mapear trechos** passa a ser feito pela dockpane (o botão da faixa saiu).
 - **Ferramentas de ocupação** (identificar por ambiente/nível/todos, sincronizar)
@@ -84,7 +84,7 @@ $exe = ".\output\FireUtils-Setup-3.1.0.exe"
 
 No painel do Supabase → Storage → `plugin-releases`, envie **primeiro** o
 `.sha256`, **depois** o `.exe`, sem renomear. **Não suba o 3.1.0 no bucket antes
-dos testes da Parte 2**: quem estiver na 3.0.0 passaria a ver o aviso.
+dos testes da Parte 2**: quem estiver na 3.0.1 passaria a ver o aviso.
 
 ### 1.5 Fechar a versão
 
@@ -123,7 +123,7 @@ modelada) para os demais. Contas: uma **com licença PRO** e uma **sem licença*
 
 | # | Passo | Esperado |
 |---|---|---|
-| B1 | Num PC com a **3.0.0**, rodar o instalador 3.1.0 | Aparece "O Fire Utils já está instalado" com Atualizar / Desinstalar / Cancelar |
+| B1 | Num PC com a **3.0.1**, rodar o instalador 3.1.0 | Aparece "O Fire Utils já está instalado" com Atualizar / Desinstalar / Cancelar |
 | B2 | Escolher Atualizar (com o Revit aberto) | Avisa para fechar o Revit; "Repetir" só avança com ele fechado |
 | B3 | Concluir e abrir o Revit | Continua logado, licença intacta, painel Saídas e Hidrantes **sumiram** (sem sobras de botão) |
 | B4 | Rodar o instalador de novo e escolher **Desinstalar** | Abre o desinstalador; exige Revit fechado; pergunta se remove licença e dados |
@@ -177,7 +177,7 @@ Projeto Revit com RTI, bomba e ao menos 2 válvulas de hidrante, sistema já cla
 
 | # | Passo | Esperado |
 |---|---|---|
-| F1 | Tubos: Conectar Abrigo, Conectar Tubulação, Inserir Hidrante (3 variações) | Funcionam como na 3.0.0 |
+| F1 | Tubos: Conectar Abrigo, Conectar Tubulação, Inserir Hidrante (3 variações) | Funcionam como na 3.0.1 |
 | F2 | Produtividade: Inserir Alarme, Sinalizar Equipamentos | Idem |
 | F3 | Ferramentas de Linha: Comprimento de linha | Idem |
 
