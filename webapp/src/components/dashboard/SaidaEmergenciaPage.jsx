@@ -10,6 +10,7 @@ import { aplicarAcaoSaida, idAmbienteSE } from "../../lib/seReducer";
 import { salvarComRetry } from "../../lib/projectData";
 import { useProjetoChannel } from "../../lib/useProjetoChannel";
 import AcessosDescargasView, { StatCol } from "./AcessosDescargasView";
+import SaidasFerramentas from "./SaidasFerramentas";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 
 // ── Importação "Buscar do Revit" ────────────────────────────────────────
@@ -239,6 +240,8 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         />
       ) : (
         <>
+          <SaidasFerramentas onConcluido={handleBuscarRevit} />
+
           <p className="dashboard-subtitulo">Pavimentos</p>
 
           {erro ? (

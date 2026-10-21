@@ -46,7 +46,7 @@ def montar_payload_ambientes(rooms_data, estado):
                  sincronizar_ambientes, que separa por estrutura antes de
                  chamar isto) — ver saidas.rooms.get_rooms_classificados().
     estado     : não usado aqui (mantido só pra não mudar a assinatura nos
-                 4 chamadores — ver Saidas.panel/*.pushbutton) — Revit não
+                 chamadores — ver saidas_ocupacao_bridge.py) — Revit não
                  decide mais população: só empurra Nome/Grupo/Área pro
                  site, que é quem calcula (área x taxa, ou o valor manual/
                  assento fixo cadastrado por lá) e manda de volta a
@@ -161,8 +161,8 @@ def sincronizar_ambientes(rooms_data, estado, projeto_dir):
     "Estrutura", resolvido contra a lista ao vivo do projeto), monta o
     payload (montar_payload_ambientes) e grava+sincroniza
     (salvar_cache_se_import) um lote por estrutura — chamado ao final de
-    qualquer fluxo de identificação de ambientes (Identificar Ambiente /
-    Por Nível / Todos / Sincronizar Ambientes).
+    qualquer fluxo de identificação de ambientes (identificar por ambiente /
+    por nível / todos / sincronizar — saidas_ocupacao_bridge.py).
 
     Retorna {"porEstrutura": [{"estruturaNome", "quantidade"}, ...],
     "naoReconhecidos": [nome, ...], "erro": str|None} — pra quem chamou
@@ -208,7 +208,7 @@ def sincronizar_ambientes(rooms_data, estado, projeto_dir):
 def resumo_texto(resultado):
     """Formata o retorno de sincronizar_ambientes numa linha por estrutura
     (+ aviso de não reconhecidos), pronto pra um forms.alert — usado pelos
-    4 pushbuttons de Saidas.panel."""
+    a dockpane (saidas_ocupacao_bridge.py)."""
     if resultado.get(u"erro"):
         return resultado[u"erro"]
 

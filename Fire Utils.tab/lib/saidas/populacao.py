@@ -9,9 +9,14 @@ from pyrevit import revit, DB, forms, script
 
 from sync import buscar, estruturas_vinculadas
 
-doc   = revit.doc
-uidoc = revit.uidoc
-app   = doc.Application
+# Sem doc/app globais: este módulo é importado uma vez, num processo que fica
+# aberto (a dockpane), e um `doc = revit.doc` aqui congelaria o documento
+# (ou None, se o Revit abriu sem projeto). Cada função recebe o documento
+# ativo de quem chama; sem ele, cai no `revit.doc` do momento da chamada.
+
+
+def _documento(doc):
+    return doc if doc is not None else revit.doc
 
 
 def population_calc(area, rate):
@@ -98,8 +103,10 @@ PARAMETROS = [
 ]
 
 
-def garantir_parametros():
+def garantir_parametros(doc=None):
     """Garante que os parâmetros Fire Utils existem no projeto Revit. Retorna bool."""
+    doc = _documento(doc)
+    app = doc.Application
     _garantir_arquivo_shared_params()
 
     app.SharedParametersFilename = SHARED_PARAM_FILE
@@ -120,7 +127,7 @@ def garantir_parametros():
             print(u"  [ERRO] Não foi possível criar '{}'.".format(nome))
             return False
 
-        ok = _vincular_parametro_ao_projeto(definicao)
+        ok = _vincular_parametro_ao_projeto(definicao, doc)
         if not ok:
             print(u"  [ERRO] Não foi possível vincular '{}'.".format(nome))
             return False
@@ -132,7 +139,7 @@ def garantir_parametros():
 # FUNÇÃO PRINCIPAL — grava ocupação, taxa e população
 # ============================================================
 
-def set_occupancy(rooms, occupancy_value, estado):
+def set_occupancy(rooms, occupancy_value, estado, doc=None):
     """
     Grava ocupação, taxa populacional e população nos ambientes informados.
 
@@ -140,6 +147,8 @@ def set_occupancy(rooms, occupancy_value, estado):
              são lidos de estado["tabela"] e estado["ocupacoes"].
              Se None, usa o banco fixo IT 11 CBMSP (fallback).
     """
+    doc = _documento(doc)
+
     # ------------------------------------------------------------------
     # Resolver taxa, grupo e uso a partir do estado
     # ------------------------------------------------------------------
@@ -161,7 +170,7 @@ def set_occupancy(rooms, occupancy_value, estado):
     # Gravar parâmetros nos ambientes
     # ------------------------------------------------------------------
     contadores = {}  # nivel_id -> próximo número disponível pra `ocupacao`
-    with revit.Transaction(u"Definir Ocupação"):
+    with revit.Transaction(u"Definir Ocupação", doc=doc):
         for room in rooms:
             area = math.ceil(
                 room.get_Parameter(DB.BuiltInParameter.ROOM_AREA).AsDouble() * 0.092903
@@ -241,7 +250,7 @@ def puxar_populacao_do_site(doc, projeto_dir):
     nao_encontrados = 0
     erros = []
 
-    with revit.Transaction(u"Atualizar População (Site)"):
+    with revit.Transaction(u"Atualizar População (Site)", doc=doc):
         for estrutura in estruturas:
             resultado, erro = buscar(u"populacao_ambientes", projeto_dir, estruturaId=estrutura.get(u"id"))
             if erro:
@@ -286,7 +295,8 @@ def puxar_populacao_do_site(doc, projeto_dir):
 # FUNÇÕES AUXILIARES — parâmetros compartilhados
 # ============================================================
 
-def _parametro_existe_no_projeto(nome):
+def _parametro_existe_no_projeto(nome, doc=None):
+    doc = _documento(doc)
     iterator = doc.ParameterBindings.ForwardIterator()
     while iterator.MoveNext():
         if iterator.Key.Name == nome:
@@ -344,7 +354,9 @@ def _get_ou_criar_definicao(grupo, nome_param, tipo_param):
     return definicao
 
 
-def _vincular_parametro_ao_projeto(definicao):
+def _vincular_parametro_ao_projeto(definicao, doc=None):
+    doc = _documento(doc)
+    app = doc.Application
     try:
         categorias = app.Create.NewCategorySet()
         cat_rooms  = doc.Settings.Categories.get_Item(DB.BuiltInCategory.OST_Rooms)
@@ -357,7 +369,7 @@ def _vincular_parametro_ao_projeto(definicao):
         except AttributeError:
             grupo_revit = DB.BuiltInParameterGroup.PG_DATA
 
-        with revit.Transaction(u"Criar Parâmetro Fire Utils"):
+        with revit.Transaction(u"Criar Parâmetro Fire Utils", doc=doc):
             doc.ParameterBindings.Insert(definicao, binding, grupo_revit)
 
         return True

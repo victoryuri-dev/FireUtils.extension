@@ -3885,3 +3885,105 @@ h1, h2, h3, h4, h5, h6,
 .cartao .nome {
   font-family: var(--font-titulo);
 }
+
+/* Ferramentas de ocupação (SaidasFerramentas.jsx) ----------------------------- */
+.saidas-andamento {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.saidas-resultado {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.saidas-resultado-erro {
+  border-color: var(--accent);
+}
+
+.saidas-resultado p {
+  margin: 0 0 4px;
+}
+
+.saidas-resultado-linhas {
+  white-space: pre-line;
+}
+
+.saidas-ocup-campos {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.saidas-ocup-rotulo,
+.saidas-ocup-notas > span,
+.saidas-ocup-caps span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.saidas-ocup-info {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.saidas-ocup-taxa {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.saidas-ocup-caps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.saidas-ocup-caps strong {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.saidas-ocup-notas p {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.saidas-ocup-niveis {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.saidas-ocup-nivel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+

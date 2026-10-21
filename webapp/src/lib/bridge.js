@@ -231,6 +231,37 @@
  *     GET_HIDRANTES_DIMENSIONAMENTO em seguida pra buscar o resultado
  *     completo, em vez de esta mensagem carregar os dados duas vezes.
  *
+ *   { type: "GET_SAIDAS_OPCOES" }
+ *     JS -> Python: pede as ocupações da norma do estado e os níveis do modelo
+ *     (saidas_ocupacao_bridge.py), para montar o seletor das ferramentas de
+ *     ocupação da página Saídas de Emergência.
+ *
+ *   { type: "SAIDAS_OPCOES", payload: { ok, erro?, estadoNome?, niveis?: string[],
+ *     grupos?: [{ uso, itens: [{ codigo, descricao, taxa, ad, er, pt, notas: string[] }] }] } }
+ *     Python -> JS: resposta do GET_SAIDAS_OPCOES.
+ *
+ *   { type: "IDENTIFICAR_AMBIENTES", payload: { modo: "selecao" | "niveis" | "todos",
+ *     ocupacao: string, niveis?: string[] } }
+ *     JS -> Python: grava a ocupação (Grupo, Taxa Populacional, População) nos
+ *     ambientes escolhidos e envia ao site. "selecao": o usuário clica nos
+ *     ambientes no Revit; "niveis": os dos níveis em `niveis` (nomes); "todos":
+ *     os que ainda não têm Grupo. Substitui os 3 botões "Identificar..." da faixa.
+ *
+ *   { type: "SINCRONIZAR_AMBIENTES" }
+ *     JS -> Python: Revit -> site (nome/grupo/área) e site -> Revit (população e
+ *     taxa). Substitui o botão "Sincronizar Ambientes" da faixa.
+ *
+ *   { type: "SAIDAS_AMBIENTES_PROGRESSO", payload: { instrucao } }
+ *     Python -> JS: o que o usuário deve fazer no Revit (ex.: "Selecione os
+ *     ambientes...").
+ *
+ *   { type: "SAIDAS_AMBIENTES_RESULTADO", payload: { ok, acao: "identificar" | "sincronizar",
+ *     erro?, ambientes?, resumo?, erroEnvio?, populacaoManual?: string[],
+ *     populacao?: { atualizados, naoEncontrados, erro } } }
+ *     Python -> JS: fim de IDENTIFICAR_AMBIENTES/SINCRONIZAR_AMBIENTES. `resumo`
+ *     é o texto por estrutura do envio ao site; `erroEnvio` preenchido = o Revit
+ *     foi atualizado mas o site não recebeu.
+ *
  *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash } }
  *     JS -> Python: baixa, confere e instala uma versão nova do plugin
  *     (plugin_atualizacao.py). Os links são URLs assinadas do bucket privado
@@ -337,6 +368,12 @@ export const BridgeMessageTypes = {
   CONTINUAR_MAPEAMENTO: "CONTINUAR_MAPEAMENTO",
   HIDRANTES_MAPEAR_PROGRESSO: "HIDRANTES_MAPEAR_PROGRESSO",
   HIDRANTES_MAPEAR_RESULTADO: "HIDRANTES_MAPEAR_RESULTADO",
+  GET_SAIDAS_OPCOES: "GET_SAIDAS_OPCOES",
+  SAIDAS_OPCOES: "SAIDAS_OPCOES",
+  IDENTIFICAR_AMBIENTES: "IDENTIFICAR_AMBIENTES",
+  SINCRONIZAR_AMBIENTES: "SINCRONIZAR_AMBIENTES",
+  SAIDAS_AMBIENTES_PROGRESSO: "SAIDAS_AMBIENTES_PROGRESSO",
+  SAIDAS_AMBIENTES_RESULTADO: "SAIDAS_AMBIENTES_RESULTADO",
   INSTALAR_ATUALIZACAO: "INSTALAR_ATUALIZACAO",
   ATUALIZACAO_PROGRESSO: "ATUALIZACAO_PROGRESSO",
   ATUALIZACAO_RESULTADO: "ATUALIZACAO_RESULTADO",
