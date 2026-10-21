@@ -511,10 +511,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       {etapa === 1 && (
       <div className="hid-secao">
         <Cartao titulo="Classificação do Sistema">
-          <p className="hiddim-cartao-desc">
-            Cruzamento área construída × ocupação, conforme Tabela 3 {resposta?.norma ? `da ${resposta.norma}` : "da norma"}.
-          </p>
-
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
               Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
@@ -524,15 +520,14 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
             <>
               <div className="hiddim-stat-grid hiddim-stat-grid-2">
                 <div className="hiddim-stat-box hiddim-stat-box-left">
-                  <div className="hiddim-stat-label">Área Total Construída (estruturas selecionadas acima)</div>
+                  <div className="hiddim-stat-label">Área Total Construída</div>
                   <div className="hiddim-stat-val hiddim-stat-val-grande">
                     {estrutura?.areaConstruida != null ? `${fmtNum(estrutura.areaConstruida, 2, "0")} m²` : "—"}
                   </div>
                 </div>
                 <div className="hiddim-stat-box hiddim-stat-box-left">
                   <div className="hiddim-stat-label-linha">
-                    <span className="hiddim-stat-label">Ocupação usada na classificação</span>
-                    {sugestao.coluna != null && <span className="hiddim-stat-hint">coluna {sugestao.coluna} da Tabela 3</span>}
+                    <span className="hiddim-stat-label">Divisão para classificação</span>
                   </div>
                   <div className="hiddim-stat-val hiddim-stat-val-grande">{sugestao.divisao || "—"}</div>
                 </div>
@@ -540,7 +535,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
               {sugestao.opcoes.length > 1 && (
                 <div style={{ marginTop: 14, marginBottom: 14 }}>
-                  <p className="hiddim-campo-label">A norma permite dois sistemas para esta ocupação — escolha qual adotar</p>
+                  <p className="hiddim-campo-label">A norma permite dois sistemas para esta ocupação, escolha qual adotar</p>
                   <div className="hid-pills-linha" style={{ marginTop: 6 }}>
                     {sugestao.opcoes.map((op) => (
                       <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
@@ -634,7 +629,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           />
           <div className="se-pagina-header" style={{ marginBottom: 14 }}>
             <p className="dashboard-subtitulo" style={{ margin: 0 }}>
-              Resultados calculados a partir da classificação do sistema.
+              Resultados do dimensionamento.
             </p>
             <button
               type="button"

@@ -25,12 +25,14 @@ export default function ProjetoCabecalho({ projeto, estrutura, estruturasVincula
 
   return (
     <div className="projeto-cabecalho">
+      <div className="projeto-cabecalho-linha">
         {projeto.id && (
           <span className="projeto-codigo">
             <Icon svg={linkIconSvg} />
             {projeto.id}
           </span>
         )}
+      </div>
       <h2 className="projeto-nome">
         <div className="projeto-cabecalho-linha">
           {projeto.nome}
