@@ -259,8 +259,8 @@ export default function App() {
     }
     setEstadoAtualizacao({ fase: "preparando" });
     const links = await gerarLinksDaAtualizacao(versaoPublicada);
-    if (!links) {
-      setEstadoAtualizacao({ fase: "erro", erro: "Não foi possível gerar o link de download. Confira a internet." });
+    if (links.erro) {
+      setEstadoAtualizacao({ fase: "erro", erro: links.erro });
       return;
     }
     postToHost(BridgeMessageTypes.INSTALAR_ATUALIZACAO, {

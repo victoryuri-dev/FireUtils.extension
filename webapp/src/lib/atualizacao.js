@@ -29,20 +29,31 @@ export async function buscarUltimaVersaoPublicada() {
 /**
  * Links temporários do instalador e do hash (`<instalador>.sha256`, ao lado
  * dele no bucket) para o Python baixar — é ele quem baixa, confere e instala
- * (plugin_atualizacao.py). null se não deu para gerar.
+ * (plugin_atualizacao.py). Devolve `{ urlInstalador, urlHash }` ou `{ erro }`.
  */
 export async function gerarLinksDaAtualizacao(publicada) {
-  if (!supabase || typeof publicada?.arquivo !== "string") return null;
+  if (!supabase || typeof publicada?.arquivo !== "string") {
+    return { erro: "Não foi possível gerar o link de download." };
+  }
   try {
     const bucket = supabase.storage.from(BUCKET);
     const [instalador, hash] = await Promise.all([
       bucket.createSignedUrl(publicada.arquivo, 1800),
       bucket.createSignedUrl(`${publicada.arquivo}.sha256`, 1800),
     ]);
-    if (!instalador.data?.signedUrl || !hash.data?.signedUrl) return null;
+    // Diz QUAL arquivo falhou: o mais comum é a versão ter sido publicada sem
+    // o .sha256 ao lado (a atualização pela dockpane exige os dois).
+    if (!instalador.data?.signedUrl) {
+      console.warn("[atualização] instalador:", instalador.error?.message);
+      return { erro: `Não foi possível gerar o link de ${publicada.arquivo}. Confira se ele está no bucket e se a conta tem licença.` };
+    }
+    if (!hash.data?.signedUrl) {
+      console.warn("[atualização] hash:", hash.error?.message);
+      return { erro: `Falta o arquivo de conferência ${publicada.arquivo}.sha256 no bucket (ele precisa ficar ao lado do instalador).` };
+    }
     return { urlInstalador: instalador.data.signedUrl, urlHash: hash.data.signedUrl };
-  } catch {
-    return null;
+  } catch (ex) {
+    return { erro: `Falha ao preparar o download: ${ex?.message || ex}` };
   }
 }
 
