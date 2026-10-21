@@ -9,7 +9,7 @@ import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
 export default function AvisoAtualizacao({ versaoNova, estado, onBaixar, onDispensar }) {
   const fase = estado?.fase;
   const ocupado = emAndamento(estado);
-  const concluido = fase === "agendada" || fase === "manual";
+  const concluido = ["agendada", "manual", "aplicada"].includes(fase);
 
   return (
     <div className="aviso-atualizacao" role="status">

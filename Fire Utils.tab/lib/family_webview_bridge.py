@@ -40,6 +40,7 @@ import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
 import hidrantes_mapear_bridge
 import plugin_atualizacao
+import plugin_pacote
 import saidas_ocupacao_bridge
 import quantitativos_bridge
 import atribuir_estrutura_bridge
@@ -274,6 +275,12 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: saidas_ocupacao_bridge.tratar_sincronizar_ambientes(
                 uiapp, fila_acoes, postar_mensagem)
+        )
+    elif tipo == u"INSTALAR_PACOTE":
+        # Atualização rápida: só o código Python, por pacote assinado.
+        fila_acoes.enfileirar(
+            lambda uiapp: plugin_pacote.tratar_instalar_pacote(
+                uiapp, payload, fila_acoes, postar_mensagem)
         )
     elif tipo == u"INSTALAR_ATUALIZACAO":
         # Baixa, confere e instala uma versão nova do plugin (plugin_atualizacao.py).

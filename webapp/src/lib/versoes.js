@@ -38,6 +38,48 @@ export function escolherUltimaVersao(nomes) {
   return melhor;
 }
 
+// Pacote de atualização rápida (só código Python): o nome traz a menor versão de
+// INSTALADOR que o aceita, para decidir sem baixar nada (ver plugin_pacote.py).
+const NOME_DO_PACOTE = /^FireUtils-Pacote-(\d+(?:\.\d+){0,3})-base-(\d+(?:\.\d+){0,3})\.zip$/;
+
+/**
+ * A atualização a oferecer: a maior versão entre o último instalador e o último
+ * PACOTE que serve a esta instalação (versão maior que a instalada, base de
+ * instalador compatível, assinatura `.sig` presente, e plugin que sabe aplicar
+ * pacotes). Empate: o pacote, que não exige fechar o Revit.
+ *
+ * @param nomes  nomes dos arquivos do bucket
+ * @param instalada  versão instalada ("dev" ou inválida: só instalador)
+ * @param base  versão do instalador de base (cai em `instalada` se faltar)
+ * @param suportaPacote  o plugin instalado aplica pacotes
+ * @returns {{tipo: "instalador"|"pacote", versao, arquivo, base?}|null}
+ */
+export function escolherAtualizacao(nomes, { instalada, base, suportaPacote }) {
+  const instalador = escolherUltimaVersao(nomes);
+  const candidatos = [];
+  if (instalador) candidatos.push({ tipo: "instalador", ...instalador });
+
+  if (suportaPacote && versaoValida(instalada)) {
+    const baseEfetiva = versaoValida(base) ? base : instalada;
+    for (const nome of nomes) {
+      const achou = NOME_DO_PACOTE.exec(nome);
+      if (!achou) continue;
+      const [, versao, baseMinima] = achou;
+      if (compararVersoes(versao, instalada) <= 0) continue;
+      if (compararVersoes(baseMinima, baseEfetiva) > 0) continue;
+      if (!nomes.includes(`${nome}.sig`)) continue;
+      candidatos.push({ tipo: "pacote", versao, arquivo: nome, base: baseMinima });
+    }
+  }
+
+  let melhor = null;
+  for (const c of candidatos) {
+    const cmp = melhor ? compararVersoes(c.versao, melhor.versao) : 1;
+    if (cmp > 0 || (cmp === 0 && c.tipo === "pacote")) melhor = c;
+  }
+  return melhor;
+}
+
 // O que o plugin responde quando roda direto do repositório (sem VERSION do
 // instalador): é ambiente de desenvolvimento, não há o que atualizar.
 export const VERSAO_DEV = "dev";

@@ -226,6 +226,28 @@ renomeie uma cópia assinada ou use uma 3.1.1 de teste) no bucket, com o `.sha25
 - [ ] `.sha256` e `.exe` no bucket, nessa ordem.
 - [ ] Tag no git. `PLUGIN_MINIMO` continua `null` até os clientes migrarem.
 
+### J. Atualização rápida por pacote (só Python)
+
+Preparação, uma vez: `.\scripts\gerar-chave-pacote.ps1`, colar a chave pública em
+`lib\plugin_pacote.py`, **gerar e instalar um instalador novo** (3.2.0, por
+exemplo; ele leva a chave pública e o arquivo `BASE`). Faça backup offline da
+chave privada. O guia completo está no `README.md` ("Atualização rápida por pacote").
+
+| # | Passo | Esperado |
+|---|---|---|
+| J1 | `.\publicar-pacote.ps1 -Versao 3.2.1 -BaseMinima 3.2.0` (mude um texto qualquer em Python antes) | Gera `.zip` e `.zip.sig`; imprime "Pacote: ... arquivos" |
+| J2 | Subir o `.sig` e depois o `.zip` no bucket | — |
+| J3 | Abrir a dockpane (instalador 3.2.0 instalado) | Faixa/ícone "Nova versão 3.2.1" |
+| J4 | Atualizar | Progresso (baixando, conferindo, aplicando); toast "Atualização instalada. Reinicie o Revit"; a faixa mostra o mesmo texto |
+| J5 | Reiniciar o Revit | `VERSION` = 3.2.1, a mudança aparece, aviso some; `BASE` continua 3.2.0 |
+| J6 | Pacote sem o `.sig` no bucket | Pacote ignorado (nada oferecido); só o instalador, se houver |
+| J7 | Pacote com `-BaseMinima` maior que o instalador do PC | Não é oferecido |
+| J8 | Alterar 1 byte do `.zip` no bucket e tentar | "A assinatura do pacote não confere"; nada aplicado |
+| J9 | Pacote assinado com **outra chave** | Mesma recusa |
+| J10 | Remover um arquivo `.py` do repositório, publicar pacote novo | Depois da atualização o arquivo some da extensão |
+| J11 | Pasta `lib\webview2_runtime` e `lib\family_library` | Intactas depois de qualquer pacote |
+| J12 | Com internet cortada no meio do download | Erro tratado; `VERSION` não mudou |
+
 ## Riscos conhecidos (peça atenção ao testar)
 
 1. `.iss`: o código de atualização silenciosa (`WizardSilent`) e a pergunta
@@ -235,5 +257,12 @@ renomeie uma cópia assinada ou use uma 3.1.1 de teste) no bucket, com o `.sha25
    se comportar diferente do esperado no Revit.
 3. Script de atualização em segundo plano: se o Windows encerrar a sessão antes
    de ele rodar, a dockpane oferece de novo na próxima abertura (G9).
+5. **Pacote:** a aplicação sobrescreve arquivos com o Revit aberto e recarrega o
+   pyRevit; esse recarregamento (`sessionmgr.load_session()`) nunca rodou aqui e
+   pode se comportar diferente: se travar o Revit, desligue com
+   `_RECARREGAR_PYREVIT = False` em `lib\plugin_pacote.py` (a dockpane já pede
+   para reiniciar o Revit de qualquer forma). Sem versão anterior guardada: uma
+   falha no meio da cópia deixa arquivos misturados até o pacote seguinte (a
+   dockpane tenta de novo, pois `VERSION` só muda no final).
 4. Instalação **troca** a pasta da extensão: se interromper no meio, rode o
    instalador de novo.

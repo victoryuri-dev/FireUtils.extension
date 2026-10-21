@@ -281,6 +281,14 @@ def esta_autenticado():
     return sit in (SIT_VALIDO, SIT_EXPIRADO)
 
 
+def plugin_pacote_ligado():
+    try:
+        import plugin_pacote
+        return plugin_pacote.pacote_ligado()
+    except Exception:
+        return False
+
+
 def resumo_para_dockpane():
     """
     O que a dockpane precisa saber: os módulos e, para decidir se vale pedir
@@ -296,6 +304,10 @@ def resumo_para_dockpane():
         # Este plugin entende INSTALAR_ATUALIZACAO (plugin_atualizacao.py): um
         # plugin antigo não manda o campo, e a dockpane cai no link do perfil.
         u"suportaAtualizacao": True,
+        # Atualização rápida por pacote (plugin_pacote.py) e a versão do
+        # instalador de base, que decide se um pacote serve.
+        u"suportaPacote": plugin_pacote_ligado(),
+        u"baseInstalador": plugin_versao.base_instalada(),
         u"tokenValido": sit == SIT_VALIDO,
         u"tokenExpiraEm": int(payload[u"exp"]) if payload else None,
         # Versão do plugin instalado (ver plugin_versao.py): vai junto porque

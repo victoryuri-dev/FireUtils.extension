@@ -1,5 +1,4 @@
 import { supabase } from "./supabaseClient";
-import { escolherUltimaVersao } from "./versoes";
 
 // Bucket PRIVADO: só contas com licença lêem (política em
 // supabase/migrations/*plugin_releases* no ETOS.FireUtils). Cada versão
@@ -7,11 +6,12 @@ import { escolherUltimaVersao } from "./versoes";
 const BUCKET = "plugin-releases";
 
 /**
- * A última versão publicada: a maior entre os `FireUtils-Setup-X.Y.Z.exe` do
- * bucket. Devolve `{ versao, arquivo }` ou null. Nunca lança: bucket vazio,
- * sem licença ou sem internet significam só "sem aviso de atualização".
+ * Os nomes de arquivo do bucket (instaladores e pacotes). A escolha da versão a
+ * oferecer é de `escolherAtualizacao` (versoes.js), que também precisa da versão
+ * instalada. null se não deu para listar: bucket sem acesso (conta sem licença)
+ * ou sem internet significam só "sem aviso de atualização".
  */
-export async function buscarUltimaVersaoPublicada() {
+export async function listarArquivosPublicados() {
   if (!supabase) return null;
   try {
     const { data, error } = await supabase.storage.from(BUCKET).list("", { limit: 1000 });
@@ -19,7 +19,7 @@ export async function buscarUltimaVersaoPublicada() {
       console.info("[atualização] não foi possível listar as versões:", error?.message || "vazio");
       return null;
     }
-    return escolherUltimaVersao(data.map((item) => item.name));
+    return data.map((item) => item.name);
   } catch (ex) {
     console.info("[atualização] falha ao listar as versões:", ex?.message || ex);
     return null;
@@ -35,23 +35,28 @@ export async function gerarLinksDaAtualizacao(publicada) {
   if (!supabase || typeof publicada?.arquivo !== "string") {
     return { erro: "Não foi possível gerar o link de download." };
   }
+  // Pacote: o arquivo de conferência é a assinatura (.sig); instalador: o hash.
+  const pacote = publicada.tipo === "pacote";
+  const conferencia = `${publicada.arquivo}${pacote ? ".sig" : ".sha256"}`;
   try {
     const bucket = supabase.storage.from(BUCKET);
-    const [instalador, hash] = await Promise.all([
+    const [principal, confere] = await Promise.all([
       bucket.createSignedUrl(publicada.arquivo, 1800),
-      bucket.createSignedUrl(`${publicada.arquivo}.sha256`, 1800),
+      bucket.createSignedUrl(conferencia, 1800),
     ]);
     // Diz QUAL arquivo falhou: o mais comum é a versão ter sido publicada sem
-    // o .sha256 ao lado (a atualização pela dockpane exige os dois).
-    if (!instalador.data?.signedUrl) {
-      console.warn("[atualização] instalador:", instalador.error?.message);
+    // o arquivo de conferência ao lado (a atualização pela dockpane exige os dois).
+    if (!principal.data?.signedUrl) {
+      console.warn("[atualização] arquivo:", principal.error?.message);
       return { erro: `Não foi possível gerar o link de ${publicada.arquivo}. Confira se ele está no bucket e se a conta tem licença.` };
     }
-    if (!hash.data?.signedUrl) {
-      console.warn("[atualização] hash:", hash.error?.message);
-      return { erro: `Falta o arquivo de conferência ${publicada.arquivo}.sha256 no bucket (ele precisa ficar ao lado do instalador).` };
+    if (!confere.data?.signedUrl) {
+      console.warn("[atualização] conferência:", confere.error?.message);
+      return { erro: `Falta o arquivo de conferência ${conferencia} no bucket (ele precisa ficar ao lado do arquivo).` };
     }
-    return { urlInstalador: instalador.data.signedUrl, urlHash: hash.data.signedUrl };
+    return pacote
+      ? { urlPacote: principal.data.signedUrl, urlAssinatura: confere.data.signedUrl }
+      : { urlInstalador: principal.data.signedUrl, urlHash: confere.data.signedUrl };
   } catch (ex) {
     return { erro: `Falha ao preparar o download: ${ex?.message || ex}` };
   }

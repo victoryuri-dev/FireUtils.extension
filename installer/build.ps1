@@ -195,6 +195,24 @@ function Test-PublicadorDaAssinatura {
     }
 }
 
+function Test-ChaveDePacote {
+    <#
+        A atualizacao rapida por pacote (lib\plugin_pacote.py) so aceita pacotes
+        assinados com a chave cuja parte publica esta la. Vazio nao impede o
+        build: so deixa a atualizacao por pacote desligada.
+    #>
+    $arquivo = Join-Path $RepoRoot 'Fire Utils.tab\lib\plugin_pacote.py'
+    $texto = Get-Content -LiteralPath $arquivo -Raw -Encoding UTF8
+
+    if ($texto -match '(?m)^_CHAVE_PACOTE_MODULO\s*=\s*u"[A-Za-z0-9+/=]{4,}"') {
+        Write-Host '    Chave publica de pacote: configurada (atualizacao rapida ligada)'
+    } else {
+        Write-Warning ('_CHAVE_PACOTE_MODULO vazio em lib\plugin_pacote.py: a atualizacao rapida ' +
+                       'por pacote fica DESLIGADA. Rode installer\scripts\gerar-chave-pacote.ps1 ' +
+                       'e cole a chave publica la.')
+    }
+}
+
 function Test-Branding {
     <#
         O icone e as imagens do assistente sao versionados em installer\branding
@@ -243,6 +261,7 @@ Test-ConfigDaDockpane
 Write-Passo 'Conferindo a chave de licenca'
 Test-ChaveDeLicenca
 Test-PublicadorDaAssinatura
+Test-ChaveDePacote
 
 Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz
@@ -284,6 +303,10 @@ foreach ($item in $ItensDoPayload) {
 # WriteAllText grava UTF-8 sem BOM (o Set-Content do Windows PowerShell poe um).
 [System.IO.File]::WriteAllText((Join-Path $PayloadDir 'VERSION'), $versaoFinal)
 Write-Host "    + VERSION ($versaoFinal)"
+# BASE: a versao do INSTALADOR. Pacotes de atualizacao rapida mudam VERSION mas
+# nunca BASE; e ela que diz se um pacote serve (lib\plugin_versao.py).
+[System.IO.File]::WriteAllText((Join-Path $PayloadDir 'BASE'), $versaoFinal)
+Write-Host "    + BASE ($versaoFinal)"
 
 # Poda a biblioteca de familias: entra apenas o que o Python abre do disco.
 $libPayload = Join-Path $PayloadDir 'Fire Utils.tab\lib\family_library'

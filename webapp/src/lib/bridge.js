@@ -271,12 +271,21 @@
  *     precisa bater e a assinatura digital precisa ser do publicador fixado
  *     no plugin. Só enviar se LICENCAS trouxe `suportaAtualizacao`.
  *
- *   { type: "ATUALIZACAO_PROGRESSO", payload: { etapa: "baixando" | "verificando",
+ *   { type: "INSTALAR_PACOTE", payload: { versao, arquivo, urlPacote, urlAssinatura } }
+ *     JS -> Python: atualização RÁPIDA (só código Python; plugin_pacote.py). O
+ *     pacote é um .zip assinado com a chave do desenvolvedor
+ *     (FireUtils-Pacote-<versão>-base-<instalador>.zip + .zip.sig no bucket
+ *     plugin-releases); o Python confere a assinatura, extrai com regras
+ *     estritas, copia por cima da extensão com o Revit aberto e recarrega o
+ *     pyRevit. Só enviar se LICENCAS trouxe `suportaPacote`. O resultado é
+ *     ATUALIZACAO_RESULTADO com estado "aplicada": é preciso reiniciar o Revit.
+ *
+ *   { type: "ATUALIZACAO_PROGRESSO", payload: { etapa: "baixando" | "verificando" | "aplicando",
  *     percentual?: number } }
  *     Python -> JS: andamento do INSTALAR_ATUALIZACAO.
  *
  *   { type: "ATUALIZACAO_RESULTADO", payload: { ok, estado?, versao?, erro? } }
- *     Python -> JS: fim do INSTALAR_ATUALIZACAO. `estado`: "agendada" (o plugin
+ *     Python -> JS: fim do INSTALAR_ATUALIZACAO. `estado`: "aplicada" (pacote aplicado, reiniciar o Revit), "agendada" (o plugin
  *     instala quando o Revit fechar) ou "manual" (instalação automática
  *     desligada, instalador baixado e conferido: o usuário o executa; ver
  *     _PUBLICADOR_ASSINATURA em plugin_atualizacao.py). `erro` é texto pronto.
@@ -375,6 +384,7 @@ export const BridgeMessageTypes = {
   SAIDAS_AMBIENTES_PROGRESSO: "SAIDAS_AMBIENTES_PROGRESSO",
   SAIDAS_AMBIENTES_RESULTADO: "SAIDAS_AMBIENTES_RESULTADO",
   INSTALAR_ATUALIZACAO: "INSTALAR_ATUALIZACAO",
+  INSTALAR_PACOTE: "INSTALAR_PACOTE",
   ATUALIZACAO_PROGRESSO: "ATUALIZACAO_PROGRESSO",
   ATUALIZACAO_RESULTADO: "ATUALIZACAO_RESULTADO",
   DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",

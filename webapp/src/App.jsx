@@ -9,8 +9,8 @@ import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
-import { avaliarVersao } from "./lib/versoes";
-import { buscarUltimaVersaoPublicada, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
+import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
+import { listarArquivosPublicados, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
 import { emAndamento, estadoDaMensagem } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
@@ -113,7 +113,10 @@ export default function App() {
   // Versão do plugin instalado, informada junto das licenças: undefined = o
   // Python ainda não respondeu; null = plugin antigo, que não informa versão.
   const [versaoPlugin, setVersaoPlugin] = useState(undefined);
-  const [versaoPublicada, setVersaoPublicada] = useState(null); // { versao, arquivo }
+  const [arquivosPublicados, setArquivosPublicados] = useState(null); // nomes no bucket
+  // Versão do instalador de base e se o plugin aplica pacotes (ver LICENCAS).
+  const [baseInstalador, setBaseInstalador] = useState(null);
+  const [suportaPacote, setSuportaPacote] = useState(false);
   // O plugin instalado sabe baixar e instalar atualizações (informado junto
   // das licenças); sem isso o botão leva ao perfil no site.
   const [suportaAtualizacao, setSuportaAtualizacao] = useState(false);
@@ -240,8 +243,22 @@ export default function App() {
   const logado = !!sessao;
   useEffect(() => {
     if (!logado || !estaDentroDoWebView2()) return;
-    buscarUltimaVersaoPublicada().then(setVersaoPublicada);
+    listarArquivosPublicados().then(setArquivosPublicados);
   }, [logado]);
+
+  // A atualização a oferecer: pacote rápido (só Python) se servir a esta
+  // instalação, senão o instalador. { tipo, versao, arquivo } ou null.
+  const versaoPublicada = useMemo(
+    () =>
+      arquivosPublicados && versaoPlugin !== undefined
+        ? escolherAtualizacao(arquivosPublicados, {
+            instalada: versaoPlugin,
+            base: baseInstalador,
+            suportaPacote,
+          })
+        : null,
+    [arquivosPublicados, versaoPlugin, baseInstalador, suportaPacote]
+  );
 
   const avaliacaoVersao = useMemo(
     () => avaliarVersao({ instalada: versaoPlugin, publicada: versaoPublicada }),
@@ -252,7 +269,7 @@ export default function App() {
   // daqui só se geram os links do bucket privado. Plugin sem esse suporte, ou
   // sem conseguir os links, cai no perfil do site.
   async function baixarAtualizacao() {
-    if (emAndamento(estadoAtualizacao) || estadoAtualizacao?.fase === "agendada") return;
+    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada"].includes(estadoAtualizacao?.fase)) return;
     if (!suportaAtualizacao || !versaoPublicada) {
       abrirPerfilNoSite();
       return;
@@ -263,11 +280,12 @@ export default function App() {
       setEstadoAtualizacao({ fase: "erro", erro: links.erro });
       return;
     }
-    postToHost(BridgeMessageTypes.INSTALAR_ATUALIZACAO, {
-      versao: versaoPublicada.versao,
-      arquivo: versaoPublicada.arquivo,
-      ...links,
-    });
+    postToHost(
+      versaoPublicada.tipo === "pacote"
+        ? BridgeMessageTypes.INSTALAR_PACOTE
+        : BridgeMessageTypes.INSTALAR_ATUALIZACAO,
+      { versao: versaoPublicada.versao, arquivo: versaoPublicada.arquivo, ...links }
+    );
   }
 
   function dispensarAviso() {
@@ -301,7 +319,18 @@ export default function App() {
         mensagem.type === BridgeMessageTypes.ATUALIZACAO_PROGRESSO ||
         mensagem.type === BridgeMessageTypes.ATUALIZACAO_RESULTADO
       ) {
-        setEstadoAtualizacao(estadoDaMensagem(mensagem.type, mensagem.payload));
+        const novo = estadoDaMensagem(mensagem.type, mensagem.payload);
+        setEstadoAtualizacao(novo);
+        if (novo?.fase === "aplicada") {
+          // Pacote instalado com o Revit aberto: o Python já carregado só muda
+          // depois de reiniciar, e a pessoa precisa saber.
+          adicionarToast({
+            tipo: "sucesso",
+            titulo: "Atualização instalada",
+            mensagem: "Reinicie o Revit para concluir a atualização.",
+            duracaoMs: 20000,
+          });
+        }
         return;
       }
 
@@ -310,6 +339,8 @@ export default function App() {
         const { modulos, erro } = resumo;
         setVersaoPlugin(resumo.versaoPlugin ?? null);
         setSuportaAtualizacao(resumo.suportaAtualizacao === true);
+        setSuportaPacote(resumo.suportaPacote === true);
+        setBaseInstalador(resumo.baseInstalador ?? null);
         if (erro) {
           // Também no console: é a única janela acessível de dentro do
           // Revit, já que a saída do pyRevit some com o engine que a abriu.
@@ -662,7 +693,7 @@ export default function App() {
           />
         ) : (
         <>
-        {avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova && (
+        {avaliacaoVersao.estado === "disponivel" && (avisoDispensado !== avaliacaoVersao.versaoNova || estadoAtualizacao?.fase) && (
           <AvisoAtualizacao
             versaoNova={avaliacaoVersao.versaoNova}
             estado={estadoAtualizacao}

@@ -8,7 +8,7 @@ import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
 export default function AtualizacaoNecessaria({ versaoNova, estado, onBaixar }) {
   const fase = estado?.fase;
   const ocupado = emAndamento(estado);
-  const concluido = fase === "agendada" || fase === "manual";
+  const concluido = ["agendada", "manual", "aplicada"].includes(fase);
   return (
     <div className="sem-licenca">
       <h2>Atualize o plugin do Fire Utils</h2>

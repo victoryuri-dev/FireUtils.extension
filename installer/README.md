@@ -389,6 +389,57 @@ Envie `FireUtils-Setup-2.1.0.exe` e `FireUtils-Setup-2.1.0.exe.sha256` ao bucket
 "arquivo de conferência" e o usuário usa o perfil no site. A dockpane só
 oferece a versão quando o `.exe` existe; suba o `.sha256` **antes** dele.
 
+### Atualização rápida por pacote (só Python, sem instalador)
+
+Para mudanças só de código Python (novos bridges, ferramentas, XAML, YAML,
+imagens) não precisa de instalador: um **pacote** assinado atualiza o plugin
+com o Revit aberto (`lib/plugin_pacote.py`).
+
+- **O que o pacote leva:** `Fire Utils.tab` (`.py .xaml .yaml .json .png .svg
+  .ico .txt .md .ps1`) e o manifesto `pacote.json`. **Nunca** leva DLLs
+  (`lib/webview2_runtime`), as famílias (`lib/family_library`) nem o `startup.py`.
+  Mudou algum desses, dependências, ou qualquer coisa fora disso: gere um
+  **instalador**.
+- **Confiança sem certificado do Windows:** o `.zip` é assinado com uma chave
+  RSA **sua**, e a pública está embutida no plugin (`_CHAVE_PACOTE_*`). A privada
+  fica só no seu computador, **fora do Git, do Supabase e do Vercel**; quem a
+  tiver publica atualizações que todos aceitam. É outra chave, diferente da licença.
+- **Aplicação:** o plugin baixa, confere a assinatura, extrai com regras estritas
+  (só dentro de `Fire Utils.tab/`, só essas extensões, sem `..`), copia por cima
+  da extensão, apaga os arquivos de código que saíram da versão e grava `VERSION`
+  **por último** (se falhar no meio, `VERSION` não muda e a dockpane oferece de
+  novo). **Não guarda versão anterior**: a correção de um pacote ruim é o pacote
+  seguinte. Depois recarrega o pyRevit (melhor esforço) e a dockpane mostra
+  "Atualização instalada. Reinicie o Revit para concluir." (o Python já carregado
+  só muda ao reiniciar).
+- **`BASE` e `baseMinima`:** o instalador grava `BASE` (sua versão), que pacotes
+  não alteram. Cada pacote declara no nome a menor base que o aceita
+  (`FireUtils-Pacote-3.2.0-base-3.1.0.zip`) e o plugin recusa se a base for menor.
+
+**Uma vez só (preparar):**
+
+```powershell
+cd installer
+.\scripts\gerar-chave-pacote.ps1      # grava a privada em %USERPROFILE%; imprime a publica
+```
+Cole as 2 linhas impressas em `_CHAVE_PACOTE_MODULO` e `_CHAVE_PACOTE_EXPOENTE`
+(`lib/plugin_pacote.py`), faça backup OFFLINE da chave privada e gere um
+**instalador** novo (ele leva a chave pública). Só depois os pacotes valem.
+
+**A cada atualização só de Python:**
+
+```powershell
+cd installer
+.\publicar-pacote.ps1 -Versao 3.2.0 -BaseMinima 3.1.0
+```
+Gera `output\FireUtils-Pacote-3.2.0-base-3.1.0.zip` e `...zip.sig`. Suba os dois no
+bucket `plugin-releases` (o `.sig` primeiro). `-BaseMinima` é a versão do
+instalador que ficou nos clientes (em geral, a do último instalador). A versão do
+pacote precisa ser **maior** que a instalada e não pode repetir.
+
+A dockpane oferece a atualização de maior versão: se um pacote serve, ele; senão o
+instalador. Empate: o pacote.
+
 ## Pendências de validação
 
 Já validado em Windows: o build compila e gera o `.exe` (~45 MB), e o ID do

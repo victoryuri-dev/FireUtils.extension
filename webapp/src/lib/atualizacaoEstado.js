@@ -1,11 +1,12 @@
 /**
  * Estado da atualização do plugin feita pela dockpane (plugin_atualizacao.py).
  * `fase`: null (parado) | "preparando" | "baixando" | "verificando" |
+ *         "aplicando" | "aplicada" (pacote instalado; falta reiniciar o Revit) |
  *         "agendada" (instala quando o Revit fechar) | "manual" (baixado e
  *         conferido; o usuário executa) | "erro".
  */
 
-export const EM_ANDAMENTO = ["preparando", "baixando", "verificando"];
+export const EM_ANDAMENTO = ["preparando", "baixando", "verificando", "aplicando"];
 
 export function emAndamento(estado) {
   return EM_ANDAMENTO.includes(estado?.fase);
@@ -22,6 +23,10 @@ export function textoDoEstado(estado) {
         : "Baixando a atualização…";
     case "verificando":
       return "Conferindo o arquivo baixado…";
+    case "aplicando":
+      return "Aplicando a atualização…";
+    case "aplicada":
+      return "Atualização instalada. Reinicie o Revit para concluir.";
     case "agendada":
       return "Atualização pronta. Ela será instalada quando você fechar o Revit.";
     case "manual":
@@ -37,11 +42,12 @@ export function textoDoEstado(estado) {
 export function estadoDaMensagem(tipo, payload) {
   const p = payload || {};
   if (tipo === "ATUALIZACAO_PROGRESSO") {
-    return { fase: p.etapa === "verificando" ? "verificando" : "baixando", percentual: p.percentual ?? null };
+    const fase = ["verificando", "aplicando"].includes(p.etapa) ? p.etapa : "baixando";
+    return { fase, percentual: p.percentual ?? null };
   }
   if (tipo === "ATUALIZACAO_RESULTADO") {
     return p.ok
-      ? { fase: p.estado === "agendada" ? "agendada" : "manual", versao: p.versao }
+      ? { fase: ["agendada", "aplicada"].includes(p.estado) ? p.estado : "manual", versao: p.versao }
       : { fase: "erro", erro: p.erro };
   }
   return null;
