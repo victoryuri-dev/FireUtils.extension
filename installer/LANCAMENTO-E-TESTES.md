@@ -75,6 +75,13 @@ Para **ligar a atualização automática**:
 
 ### 1.4 Publicar no bucket `plugin-releases`
 
+O `.\build.ps1` já gera **os dois arquivos de uma vez**:
+`FireUtils-Setup-X.Y.Z.exe` e `FireUtils-Setup-X.Y.Z.exe.sha256`. Sem assinatura,
+é só subir os dois (o `.sha256` primeiro). Se **assinar** o `.exe` depois, rode
+`.\gerar-hash.ps1` para refazer o hash do arquivo assinado.
+
+(O trecho abaixo é o comando manual equivalente.)
+
 Depois de assinar, gere o hash **do arquivo já assinado**:
 
 ```powershell

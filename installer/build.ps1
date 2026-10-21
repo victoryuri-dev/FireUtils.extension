@@ -361,8 +361,16 @@ if ($LASTEXITCODE -ne 0) {
 $instalador = Join-Path $OutputDir "FireUtils-Setup-$versaoFinal.exe"
 $tamanhoInstalador = [math]::Round((Get-Item -LiteralPath $instalador).Length / 1MB, 1)
 
+# O .sha256 que a dockpane exige ao lado do .exe no bucket (atualizacao pelo
+# plugin). Ele e do arquivo COMO ESTA AGORA: se voce assinar o .exe depois, a
+# assinatura muda o arquivo e o hash precisa ser gerado de novo (.\gerar-hash.ps1).
+$hashArquivo = "$instalador.sha256"
+$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $instalador).Hash.ToLower()
+[System.IO.File]::WriteAllText($hashArquivo, $hash)
+
 Write-Host ''
 Write-Host "Instalador gerado: $instalador ($tamanhoInstalador MB)" -ForegroundColor Green
+Write-Host "Hash gerado:       $hashArquivo" -ForegroundColor Green
 Write-Host ''
 Write-Host 'Antes de enviar ao cliente, assine digitalmente o executavel --' -ForegroundColor Yellow
 Write-Host 'sem assinatura o SmartScreen exibe um alerta de editor desconhecido.' -ForegroundColor Yellow
