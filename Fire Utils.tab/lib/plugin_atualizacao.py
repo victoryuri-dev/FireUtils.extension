@@ -367,11 +367,50 @@ def _executar(dados, fila_acoes, postar_mensagem):
     os.rename(parcial, destino)
 
     if not instalacao_automatica_ligada():
-        _mostrar_na_pasta(destino)
-        return {u"ok": True, u"estado": u"manual", u"versao": dados[u"versao"], u"pasta": pasta}
+        # Sem instalação automática quem executa é o usuário, então o arquivo
+        # vai para onde ele procura: a pasta Downloads (já conferido).
+        final = _mover_para_downloads(destino)
+        _mostrar_na_pasta(final)
+        return {u"ok": True, u"estado": u"manual", u"versao": dados[u"versao"],
+                u"pasta": os.path.dirname(final)}
 
     _agendar_instalacao(pasta, destino, esperado)
     return {u"ok": True, u"estado": u"agendada", u"versao": dados[u"versao"]}
+
+
+def _pasta_downloads():
+    """A pasta Downloads do usuário (respeita redirecionamento, ex.: OneDrive
+    ou outro disco); None se não for possível descobrir."""
+    try:
+        from Microsoft.Win32 import Registry
+        # GUID da pasta conhecida "Downloads". O valor pode ser expansível
+        # (%USERPROFILE%\Downloads); GetValue já o expande.
+        caminho = Registry.GetValue(
+            u"HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+            u"{374DE290-123F-4565-9164-39C4925E467B}", None)
+        if caminho and os.path.isdir(caminho):
+            return caminho
+    except Exception:
+        pass
+    from System import Environment as DotNetEnvironment
+    padrao = os.path.join(
+        DotNetEnvironment.GetFolderPath(DotNetEnvironment.SpecialFolder.UserProfile), u"Downloads")
+    return padrao if os.path.isdir(padrao) else None
+
+
+def _mover_para_downloads(arquivo):
+    """Move o instalador conferido para Downloads. Se não achar a pasta ou
+    falhar, deixa onde está (nunca perde o arquivo). Devolve o caminho final."""
+    pasta = _pasta_downloads()
+    if not pasta:
+        return arquivo
+    destino = os.path.join(pasta, os.path.basename(arquivo))
+    try:
+        shutil.copyfile(arquivo, destino)
+        os.remove(arquivo)
+        return destino
+    except Exception:
+        return arquivo
 
 
 def _mostrar_na_pasta(arquivo):

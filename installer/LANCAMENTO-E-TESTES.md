@@ -190,7 +190,7 @@ renomeie uma cópia assinada ou use uma 3.1.1 de teste) no bucket, com o `.sha25
 |---|---|---|
 | G1 | Abrir a dockpane | Faixa "Nova versão disponível" e ícone de download vermelho na barra lateral |
 | G2 | "Depois" na faixa | Faixa some; **o ícone continua** |
-| G3 | Clicar em Atualizar, **certificado ainda não configurado** | Mostra progresso de download, conferência, e abre a pasta com o instalador; texto "feche o Revit e execute" |
+| G3 | Clicar em Atualizar, **certificado ainda não configurado** | Mostra progresso de download, conferência, e abre a pasta **Downloads** com o instalador; texto "feche o Revit e execute" |
 | G4 | Apagar o `.sha256` do bucket e tentar | Erro claro de arquivo de conferência; nada executa |
 | G5 | Trocar o `.exe` do bucket por outro arquivo com o mesmo nome (hash diferente) | Erro de hash; arquivo descartado |
 | G6 | Subir um `.exe` **de versão menor/igual** | Não é oferecido |
