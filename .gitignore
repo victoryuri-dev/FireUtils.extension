@@ -45,3 +45,6 @@ webapp/node_modules/
 installer/payload/
 installer/output/
 installer/assets/
+
+# Estado local do Supabase CLI (projeto vinculado, versão): não versionar.
+supabase/.temp/
