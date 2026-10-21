@@ -215,7 +215,7 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
   }
 
   return (
-    <div className="se-pagina">
+    <div className="se-pagina se-pagina-saidas">
       <div className="se-pagina-header">
         <span className="se-pagina-icone">
           <Icon svg={exitIconSvg} />
@@ -242,7 +242,7 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         <>
           <SaidasFerramentas onConcluido={handleBuscarRevit} />
 
-          <p className="dashboard-subtitulo">Pavimentos</p>
+          <p className="dashboard-subtitulo se-secao-titulo-pagina">Pavimentos</p>
 
           {erro ? (
             <p className="vazio">{erro}</p>

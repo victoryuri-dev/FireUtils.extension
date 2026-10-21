@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
-import pencilIconSvg from "../../assets/icons/pencil-icon.svg?raw";
-import stairIconSvg from "../../assets/icons/stair-icon.svg?raw";
-import dashboardIconSvg from "../../assets/icons/dashboard-icon.svg?raw";
-import linkIconSvg from "../../assets/icons/link-icon.svg?raw";
+import ocupacaoIconSvg from "../../assets/icons/ocupacao-icon.svg?raw";
+import porNivelIconSvg from "../../assets/icons/pornivel-icon.svg?raw";
+import todosIconSvg from "../../assets/icons/todos-icon.svg?raw";
+import sincronizarIconSvg from "../../assets/icons/sincronizar-ambiente-icon.svg?raw";
 
 // As quatro ferramentas de ocupação e população, ex-painel "Saídas" da faixa
 // do Revit (ver saidas_ocupacao_bridge.py). Trocam dados com o site, então só
@@ -17,21 +17,21 @@ const FERRAMENTAS = [
     modo: "selecao",
     titulo: "Identificar por ambiente",
     ajuda: "Você clica nos ambientes no Revit.",
-    icone: pencilIconSvg,
+    icone: ocupacaoIconSvg,
     pedeNiveis: false,
   },
   {
     modo: "niveis",
     titulo: "Identificar por nível",
     ajuda: "Todos os ambientes dos níveis que você escolher.",
-    icone: stairIconSvg,
+    icone: porNivelIconSvg,
     pedeNiveis: true,
   },
   {
     modo: "todos",
     titulo: "Identificar todos sem ocupação",
     ajuda: "Todos os ambientes que ainda não têm ocupação.",
-    icone: dashboardIconSvg,
+    icone: todosIconSvg,
     pedeNiveis: false,
   },
 ];
@@ -260,9 +260,9 @@ export default function SaidasFerramentas({ onConcluido }) {
   const ocupado = !!executando;
 
   return (
-    <>
-      <p className="dashboard-subtitulo">Ocupação e população</p>
-      <div className="grade-dimensionamentos">
+    <section className="saidas-secao">
+      <p className="dashboard-subtitulo se-secao-titulo-pagina">Ocupação e população</p>
+      <div className="saidas-grade">
         {FERRAMENTAS.map((f) => (
           <Cartao
             key={f.modo}
@@ -275,7 +275,7 @@ export default function SaidasFerramentas({ onConcluido }) {
         ))}
         <Cartao
           titulo="Sincronizar ambientes"
-          icone={linkIconSvg}
+          icone={sincronizarIconSvg}
           onClick={sincronizar}
           desabilitado={ocupado}
           ocupado={executando?.acao === "sincronizar"}
@@ -298,6 +298,6 @@ export default function SaidasFerramentas({ onConcluido }) {
           onConfirmar={confirmar}
         />
       )}
-    </>
+    </section>
   );
 }

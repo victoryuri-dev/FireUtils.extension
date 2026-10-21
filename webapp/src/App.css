@@ -3987,3 +3987,36 @@ h1, h2, h3, h4, h5, h6,
   color: var(--text);
 }
 
+/* Respiro da página Saídas de Emergência: três blocos (cabeçalho, ferramentas e
+   pavimentos) separados por um espaço fixo, títulos de seção afastados do que
+   vem abaixo e botões em grade com espaço entre si. */
+.se-pagina-saidas > .se-pagina-header {
+  margin-bottom: 32px;
+}
+
+.se-pagina-saidas .se-secao-titulo-pagina {
+  margin: 0 2px 14px;
+}
+
+.saidas-secao {
+  margin-bottom: 32px;
+}
+
+.saidas-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.saidas-secao .hid-aviso,
+.saidas-secao .saidas-resultado {
+  margin: 14px 0 0;
+}
+
+
+/* Ícones de duas cores (ocupacao/pornivel/todos/sincronizar): o vermelho da
+   marca vem fixo no arquivo; a parte clara e o recorte seguem o tema, senão
+   somem sobre fundo claro. */
+.duo-claro { fill: var(--text); }
+.duo-claro-traco { stroke: var(--text); }
+.duo-fundo { fill: var(--bg-2); }
