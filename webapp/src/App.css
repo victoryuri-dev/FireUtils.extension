@@ -449,7 +449,6 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
 }
 
 .header h1 {
@@ -472,7 +471,8 @@
   /* cancela o padding-right do .app pra empurrar o scroll até a borda da
      tela; os 6px que sobram são só o respiro antes da barra fina abaixo. */
   margin-right: -20px;
-  padding-right: 6px;
+  padding-right: 20px;
+  gap: 25px;
   display: flex;
   flex-direction: column;
   scrollbar-width: thin;
@@ -503,14 +503,14 @@
   gap: 12px;
   background: var(--pill-bg);
   border-radius: 4px;
-  height: 40px;
+  min-height: 40px;
   padding: 0 16px;
-  margin-bottom: 18px;
   border: solid 1px var(--border-2);
   transition: .3s;
   position: sticky;
   top: 0;
   z-index: 5;
+  box-shadow: var(--bg) 0px 20px 0px 0px;
 }
 
 .search-bar .icone {
@@ -537,7 +537,6 @@
 .categorias-rotulo {
   font-size: 12px;
   color: var(--text-2);
-  margin: 0 0 10px;
 }
 
 /* Carrossel de 2 linhas: [seta] [trilho rolável] [seta]. O trilho
@@ -551,7 +550,6 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 18px;
   /* Mesmo motivo do flex-shrink em .pills abaixo: item de um flex
      column (.biblioteca-scroll) com filho de overflow non-visible
      podia encolher até sumir. */
@@ -663,7 +661,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .secao-titulo {
@@ -862,6 +860,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 25px;
   overflow-y: auto;
   padding-right: 6px;
   animation: surgir 0.2s;
@@ -891,8 +890,8 @@
 .dashboard-cabecalho-secao {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 16px;
 }
 
 .dashboard-cabecalho-secao .icon {
@@ -914,19 +913,21 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-2);
-  margin: 4px 0 14px;
+  margin: 0px 2px 0px;
 }
 
 /* Cabeçalho de projeto (código + status + nome + link externo) ---------- */
-.projeto-cabecalho {
-  margin-bottom: 18px;
-}
 
 .projeto-cabecalho-linha {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   margin-bottom: 4px;
+}
+
+.projeto-codigo{
+  margin-bottom: 6px;
+  opacity: .5;
 }
 
 .projeto-codigo,
@@ -951,6 +952,7 @@
 .projeto-nome {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   font-size: 20px;
   font-weight: 700;
@@ -969,7 +971,7 @@
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 5px 20px;
 }
 
 /* Arquivo com mais de uma estrutura vinculada (ver Dashboard.jsx) — a tag
@@ -984,7 +986,7 @@
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 3px 10px;
+  padding: 5px 10px;
   font-family: inherit;
   cursor: pointer;
 }
@@ -1007,7 +1009,6 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 18px;
 }
 
 .busca-linha .search-bar {
@@ -1028,7 +1029,7 @@
    disponível. */
 .grade-projetos {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill,minmax(220px,1fr));
   gap: 12px;
 }
 
@@ -1304,7 +1305,6 @@
      Famílias, ver .grade). */
   columns: 215.5px 2;
   column-gap: 12px;
-  margin-bottom: 22px;
 }
 
 .cartao-info {
@@ -1391,9 +1391,7 @@
 }
 
 .grade-dimensionamentos {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  columns: 215.5px 2;
 }
 
 .cartao-dimensionamento {
@@ -1404,6 +1402,8 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 12px 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
 }
 
 .cartao-dimensionamento-icone {
@@ -1455,14 +1455,14 @@
 /* Dimensionamento clicável (ex.: "Saída de Emergência") ------------------- */
 .cartao-dimensionamento-clicavel {
   cursor: pointer;
-  border: 1px solid transparent;
   text-align: left;
   font-family: inherit;
   width: 100%;
+  transition: .1s;
 }
 
 .cartao-dimensionamento-clicavel:hover {
-  border-color: var(--text-2);
+  background-color: var(--bg-1);
 }
 
 /* "Atribuir seleção à estrutura" (DashboardEstrutura.jsx) — precisa de um
