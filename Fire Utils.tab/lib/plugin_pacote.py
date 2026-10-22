@@ -54,8 +54,8 @@ import plugin_versao
 # Chave PÚBLICA que confere a assinatura dos pacotes (RSA 2048, base64: módulo e
 # expoente). Gerada por installer/scripts/gerar-chave-pacote.ps1. Vazio = a
 # atualização por pacote está desligada (nada confere).
-_CHAVE_PACOTE_MODULO = u""
-_CHAVE_PACOTE_EXPOENTE = u""
+_CHAVE_PACOTE_MODULO = u"t97/r4Hwg6bvS+XN7k+rpO4KfgOee9xbnHjef7MP1a+pPXqgBXTpRfR5AS5emzRDPvx38BMxotY5yT5BCgY+nmPJSMvIqdCF9Y8SsLWeyYPJJPCCeAbCuSU8DevKFLBOwqP1XxAZI2MrkVsB2jBMVI3P38Wf3QsHh/0pFbyV3+z9UFBxy39vIoZvG7CkXR7nnmRhgTTAH0KNlAYvo345A7VL5AyEZbK4uIhTQl3LbX1e2rRFYX71m3p7/+SdIFxzc8lNbfFmyhkwIP1BSDnqyLCXezjKfDDnozH2/wmeE2PquCLBlsKPRyz0Uf4fuyAupWAr4z17IyzcusqMEWFBJQ=="
+_CHAVE_PACOTE_EXPOENTE = u"AQAB"
 
 # O prefixo do pacote no bucket: FireUtils-Pacote-<versão>-base-<instalador>.zip
 # (e o .zip.sig ao lado). A base no nome deixa a dockpane decidir sem baixar.
