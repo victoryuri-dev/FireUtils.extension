@@ -9,6 +9,7 @@ import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import ConfirmarAtualizacao from "./components/ConfirmarAtualizacao";
+import AtualizacoesPage from "./components/AtualizacoesPage";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarArquivosPublicados, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
@@ -697,7 +698,7 @@ export default function App() {
             ? {
                 versaoNova: avaliacaoVersao.versaoNova,
                 estado: estadoAtualizacao,
-                onBaixar: pedirAtualizacao,
+                onAbrir: () => setAbaAtual("atualizacoes"),
               }
             : null
         }
@@ -728,11 +729,18 @@ export default function App() {
           <AvisoAtualizacao
             versaoNova={avaliacaoVersao.versaoNova}
             estado={estadoAtualizacao}
-            onBaixar={pedirAtualizacao}
+            onBaixar={() => setAbaAtual("atualizacoes")}
             onDispensar={dispensarAviso}
           />
         )}
-        {abaAtual === "dashboard" || abaAtual === "saidas" || abaAtual === "hidrantes" ? (
+        {abaAtual === "atualizacoes" ? (
+          <AtualizacoesPage
+            instalada={versaoPlugin}
+            atualizacao={avaliacaoVersao.estado === "disponivel" ? versaoPublicada : null}
+            estado={estadoAtualizacao}
+            onAtualizar={pedirAtualizacao}
+          />
+        ) : abaAtual === "dashboard" || abaAtual === "saidas" || abaAtual === "hidrantes" ? (
           modulosLiberados === null ? (
             // Ainda sem resposta do Python: esperar, em vez de piscar um
             // bloqueio que pode nem se confirmar.

@@ -25,7 +25,7 @@ export default function AvisoAtualizacao({ versaoNova, estado, onBaixar, onDispe
       </span>
       {!ocupado && !concluido && (
         <button type="button" className="aviso-atualizacao-botao" onClick={onBaixar}>
-          {fase === "erro" ? "Tentar de novo" : "Atualizar"}
+          {fase === "erro" ? "Ver detalhes" : "Ver novidades"}
         </button>
       )}
       {!ocupado && (

@@ -4165,3 +4165,162 @@ h1, h2, h3, h4, h5, h6,
   gap: 8px;
 }
 
+
+/* Página Atualizações (AtualizacoesPage.jsx) --------------------------------- */
+.atualizacoes-pagina .se-pagina-header {
+  margin-bottom: 28px;
+}
+
+.atualizacoes-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+  padding: 16px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.atualizacoes-versoes {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.atualizacoes-versoes strong {
+  display: block;
+  font-family: var(--font-titulo);
+  font-size: 20px;
+  color: var(--text);
+}
+
+.atualizacoes-nova {
+  color: var(--accent);
+}
+
+.atualizacoes-rotulo {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.atualizacoes-seta {
+  color: var(--text-3);
+}
+
+.atualizacoes-acao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.atualizacoes-acao .se-botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.atualizacoes-acao .se-botao .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.atualizacoes-estado {
+  margin: 0;
+  max-width: 260px;
+  text-align: right;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.atualizacoes-estado.erro {
+  color: var(--accent);
+}
+
+.atualizacoes-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.atualizacoes-nota {
+  padding: 16px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.atualizacoes-nota header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.atualizacoes-nota h2 {
+  margin: 0;
+  font-family: var(--font-titulo);
+  font-size: 17px;
+  color: var(--text);
+}
+
+.atualizacoes-data {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.atualizacoes-titulo-nota {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.atualizacoes-nota ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.atualizacoes-nota li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.atualizacoes-tag {
+  flex-shrink: 0;
+  min-width: 62px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--pill-bg);
+  color: var(--text-2);
+}
+
+.atualizacoes-tag-novo {
+  background: var(--accent);
+  color: #fff;
+}
+
+.atualizacoes-tag-correcao {
+  color: var(--amber);
+}
