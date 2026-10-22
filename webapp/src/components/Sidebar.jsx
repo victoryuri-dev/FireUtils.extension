@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { abaLiberada } from "../lib/licencas";
 import { useTema } from "../hooks/useTema";
 import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
+import { textoDaVersao } from "../lib/textoDaVersao";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
@@ -45,6 +46,8 @@ export default function Sidebar({
   email,
   modulosLiberados,
   atualizacao,
+  versaoPlugin,
+  baseInstalador,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -169,6 +172,10 @@ export default function Sidebar({
           {menuAberto && (
             <div className="avatar-popover">
               <p className="avatar-popover-email">{email}</p>
+              <p className="avatar-popover-versao" title="Versão do plugin instalado">
+                <Icon svg={logoSvg} />
+                <span>Fire Utils {textoDaVersao(versaoPlugin, baseInstalador)}</span>
+              </p>
               <button type="button" className="avatar-popover-sair" onClick={sair}>
                 <Icon svg={exitIconSvg} />
                 Sair
