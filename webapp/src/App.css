@@ -4069,6 +4069,9 @@ h1, h2, h3, h4, h5, h6,
   display: flex;
   align-items: stretch;
   gap: 10px;
+  /* Fundo sólido: sem ele a lista de famílias aparece entre a busca e o botão
+     (e acima/abaixo) ao rolar. A sombra estende o fundo para baixo. */
+  background: var(--bg);
   box-shadow: var(--bg) 0px 20px 0px 0px;
 }
 
