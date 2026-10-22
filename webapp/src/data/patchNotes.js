@@ -12,18 +12,11 @@
  */
 export const PATCH_NOTES = [
   {
-    versao: "3.1.3",
-    data: "2026-10-30",
-    titulo: "As funções de ocupação agora estão dentro do Painel.",
-    itens: [
-      { tipo: "Saídas de Emergência", texto: "Por questões de segurança e melhor sincronização Revit-Servidor os botões Identificar por ambiente, Identificar por nível, Identificar todos sem ocupação e Sincronizar ambientes  foram alocados na DockPane." },
-    ],
-  },
-  {
     versao: "3.1.2",
     data: "2026-10-30",
     titulo: "Autoatualização",
     itens: [
+      { tipo: "Saídas de Emergência", texto: "Por questões de segurança e melhor sincronização Revit-Servidor os botões Identificar por ambiente, Identificar por nível, Identificar todos sem ocupação e Sincronizar ambientes  foram alocados na DockPane." },
       { tipo: "Atualização sem Instalador", texto: "As atualizações a partir dessa versão serão feitas dentro do próprio painel, dispensando a necessidade de baixar novos instaladores." },
     ],
   },
