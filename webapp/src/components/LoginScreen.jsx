@@ -2,6 +2,7 @@ import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import Icon from "./Icon";
 import Loader from "./Loader";
+import RodapeVersao from "./RodapeVersao";
 import checkIconSvg from "../assets/icons/check-icon.svg?raw";
 import xIconSvg from "../assets/icons/x-icon.svg?raw";
 
@@ -16,7 +17,7 @@ import xIconSvg from "../assets/icons/x-icon.svg?raw";
  * plataforma (ver comentário "landing possui identidade escura
  * própria" em index.css lá).
  */
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen({ onLogin, versaoPlugin, baseInstalador }) {
   const [modo, setModo] = useState("entrar"); // "entrar" | "cadastro"
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -35,6 +36,7 @@ export default function LoginScreen({ onLogin }) {
             (veja webapp/.env.example) e reinicie o `npm run dev`.
           </p>
         </div>
+        <RodapeVersao versao={versaoPlugin} base={baseInstalador} />
       </div>
     );
   }
@@ -135,6 +137,7 @@ export default function LoginScreen({ onLogin }) {
           {entrando ? "Não tem conta? Criar uma" : "Já tem conta? Entrar"}
         </button>
       </div>
+      <RodapeVersao versao={versaoPlugin} base={baseInstalador} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { supabase, criarSignedUrlFamilia } from "./lib/supabaseClient";
 import { fetchCatalog } from "./lib/catalog";
 import { postToHost, escutarMensagensDoHost, estaDentroDoWebView2, BridgeMessageTypes } from "./lib/bridge";
 import LoginScreen from "./components/LoginScreen";
+import RodapeVersao from "./components/RodapeVersao";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
@@ -639,7 +640,7 @@ export default function App() {
     return null; // verificando sessão — evita "piscar" a tela de login
   }
   if (!sessao) {
-    return <LoginScreen onLogin={setSessao} />;
+    return <LoginScreen onLogin={setSessao} versaoPlugin={versaoPlugin} baseInstalador={baseInstalador} />;
   }
 
   return (
@@ -828,6 +829,7 @@ export default function App() {
         )}
         </>
         )}
+        <RodapeVersao versao={versaoPlugin} base={baseInstalador} />
       </div>
     </div>
   );

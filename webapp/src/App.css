@@ -3614,6 +3614,7 @@
    var(--accent) é compartilhado, porque já vale o mesmo #C0152A nos
    dois temas da dockpane. */
 .login-tela {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4020,3 +4021,38 @@ h1, h2, h3, h4, h5, h6,
 .duo-claro { fill: var(--text); }
 .duo-claro-traco { stroke: var(--text); }
 .duo-fundo { fill: var(--bg-2); }
+
+/* Rodapé com a versão do plugin (RodapeVersao.jsx), em todas as páginas. */
+.rodape-versao {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-3);
+  user-select: text;
+}
+
+.rodape-versao .icon {
+  width: 9px;
+  height: 11px;
+  color: var(--text); /* branco no tema escuro; escuro no claro, onde branco sumiria */
+  opacity: 0.85;
+}
+
+.rodape-versao .icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* No login (fundo sempre escuro) o rodapé fica colado embaixo. */
+.login-tela > .rodape-versao {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  padding: 0;
+}
