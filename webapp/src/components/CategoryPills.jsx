@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { publicAssetUrl } from "../lib/supabaseClient";
 import Icon from "./Icon";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
@@ -81,6 +81,27 @@ function Pill({ categoria, categoriaAtual, onSelect }) {
 export default function CategoryPills({ categorias, todasIconKey, categoriaAtual, onSelect }) {
   const itens = [{ id: TODAS_ID, name: "Todas", icon_key: todasIconKey }, ...categorias];
   const trilhoRef = useRef(null);
+  // Cada seta só existe quando há categoria escondida daquele lado.
+  const [escondido, setEscondido] = useState({ esquerda: false, direita: false });
+
+  const medir = useCallback(() => {
+    const el = trilhoRef.current;
+    if (!el) return;
+    const esquerda = el.scrollLeft > 1;
+    const direita = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setEscondido((atual) =>
+      atual.esquerda === esquerda && atual.direita === direita ? atual : { esquerda, direita }
+    );
+  }, []);
+
+  useEffect(() => {
+    medir();
+    const el = trilhoRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [medir, categorias]);
 
   // Duas linhas flex empilhadas (cada botão larga só o que o próprio
   // texto pede) dentro do mesmo trilho rolável — ao contrário de um
@@ -98,10 +119,12 @@ export default function CategoryPills({ categorias, todasIconKey, categoriaAtual
 
   return (
     <div className="pills-carrossel">
-      <button type="button" className="pills-seta" onClick={() => rolar(-PASSO_ROLAGEM_PX)} aria-label="Categorias anteriores">
-        <Icon svg={chevronRightIconSvg} />
-      </button>
-      <div className="pills" ref={trilhoRef}>
+      {escondido.esquerda && (
+        <button type="button" className="pills-seta pills-seta-esquerda" onClick={() => rolar(-PASSO_ROLAGEM_PX)} aria-label="Categorias anteriores">
+          <Icon svg={chevronRightIconSvg} />
+        </button>
+      )}
+      <div className="pills" ref={trilhoRef} onScroll={medir}>
         <div className="pills-linha">
           {linha1.map((categoria) => (
             <Pill key={categoria.id} categoria={categoria} categoriaAtual={categoriaAtual} onSelect={onSelect} />
@@ -113,9 +136,11 @@ export default function CategoryPills({ categorias, todasIconKey, categoriaAtual
           ))}
         </div>
       </div>
-      <button type="button" className="pills-seta pills-seta-direita" onClick={() => rolar(PASSO_ROLAGEM_PX)} aria-label="Próximas categorias">
-        <Icon svg={chevronRightIconSvg} />
-      </button>
+      {escondido.direita && (
+        <button type="button" className="pills-seta pills-seta-direita" onClick={() => rolar(PASSO_ROLAGEM_PX)} aria-label="Próximas categorias">
+          <Icon svg={chevronRightIconSvg} />
+        </button>
+      )}
     </div>
   );
 }

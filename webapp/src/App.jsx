@@ -23,6 +23,7 @@ import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
 import checkIconSvg from "./assets/icons/check-icon.svg?raw";
 import xIconSvg from "./assets/icons/x-icon.svg?raw";
 import searchIconSvg from "./assets/icons/search-icon.svg?raw";
+import filterIconSvg from "./assets/icons/filter-icon.svg?raw";
 import libraryIconSvg from "./assets/icons/library-icon.svg?raw";
 
 // Tempo máximo esperando o LOAD_RESULT antes de desistir do indicador de
@@ -103,6 +104,8 @@ export default function App() {
   const [catalogo, setCatalogo] = useState(null);
   const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
   const [busca, setBusca] = useState("");
+  // Categorias (pills) começam recolhidas: o botão de filtro ao lado da busca as abre.
+  const [categoriasAbertas, setCategoriasAbertas] = useState(false);
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [carregando, setCarregando] = useState(false);
   const [vinculo, setVinculo] = useState(undefined); // undefined = ainda não respondeu
@@ -750,26 +753,42 @@ export default function App() {
                 <h1>Biblioteca de Famílias</h1>
               </header>
 
-              <div className="search-bar">
-                <Icon svg={searchIconSvg} className="icone" />
-                <input
-                  type="text"
-                  placeholder="Que equipamento você procura?"
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                />
+              <div className="busca-biblioteca">
+                <div className="search-bar">
+                  <Icon svg={searchIconSvg} className="icone" />
+                  <input
+                    type="text"
+                    placeholder="Que equipamento você procura?"
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className={`botao-filtro ${categoriasAbertas ? "aberto" : ""} ${
+                    categoriaAtual !== TODAS_ID ? "com-filtro" : ""
+                  }`}
+                  onClick={() => setCategoriasAbertas((v) => !v)}
+                  aria-expanded={categoriasAbertas}
+                  aria-label="Filtrar por categoria"
+                  title="Filtrar por categoria"
+                >
+                  <Icon svg={filterIconSvg} />
+                </button>
               </div>
 
               {!catalogo ? (
                 <p className="vazio">Carregando catálogo...</p>
               ) : (
                 <>
-                  <CategoryPills
-                    categorias={catalogo.categories}
-                    todasIconKey={catalogo.todas_icon_key}
-                    categoriaAtual={categoriaAtual}
-                    onSelect={setCategoriaAtual}
-                  />
+                  {categoriasAbertas && (
+                    <CategoryPills
+                      categorias={catalogo.categories}
+                      todasIconKey={catalogo.todas_icon_key}
+                      categoriaAtual={categoriaAtual}
+                      onSelect={setCategoriaAtual}
+                    />
+                  )}
                 <div>
                   <div className="secao-titulo-linha">
                     <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
