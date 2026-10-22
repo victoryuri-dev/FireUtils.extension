@@ -12,15 +12,12 @@
  */
 export const PATCH_NOTES = [
   {
-    versao: "3.2.0",
-    data: "2026-10-23",
-    titulo: "Mais ferramentas na dockpane e atualização sem instalador",
+    versao: "3.1.3",
+    data: "2026-10-30",
+    titulo: "As funções de ocupação agora estão dentro do Painel.",
     itens: [
-      { tipo: "novo", texto: "Mapear trechos agora é feito direto na dockpane (Sistema de Hidrantes)." },
-      { tipo: "novo", texto: "Ferramentas de ocupação e população na página Saídas de Emergência: identificar por ambiente, por nível, todos e sincronizar." },
-      { tipo: "novo", texto: "Atualizações rápidas, só de código, sem precisar rodar o instalador." },
-      { tipo: "melhoria", texto: "Instalador com visual novo, tema escuro e opção de desinstalar." },
-      { tipo: "melhoria", texto: "Biblioteca de famílias: filtro por categoria recolhido por padrão." },
+      { tipo: "Saídas de Emergência", texto: "Por questões de segurança e melhor sincronização Revit-Servidor os botões Identificar por ambiente, Identificar por nível, Identificar todos sem ocupação e Sincronizar ambientes  foram alocados na DockPane." },
+      { tipo: "Atualização sem Instalador", texto: "As atualizações a partir dessa versão serão feitas dentro do próprio painel, dispensando a necessidade de baixar novos instaladores." },
     ],
   },
 ];
