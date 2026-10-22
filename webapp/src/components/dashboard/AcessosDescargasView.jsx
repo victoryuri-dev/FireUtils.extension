@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, pointerWithin } from "@dnd-kit/core";
 import Icon from "../Icon";
 import { AmbienteForm, fmtM } from "./seShared";
@@ -477,6 +477,24 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
   // Barra de seleção em dois estados: ações (mover/apagar/cancelar) e, depois de
   // clicar em mover, só o destino + confirmar + X (volta para as ações).
   const [modoMover, setModoMover] = useState(false);
+  // Largura da barra: acompanha o conteúdo (fit-content) e, como "auto" não
+  // anima, é medida e aplicada em px — daí a transição suave ao trocar de modo.
+  const conteudoBarraRef = useRef(null);
+  const [larguraBarra, setLarguraBarra] = useState(null);
+  const temSelecao = selecionados.size > 0;
+  useLayoutEffect(() => {
+    const el = conteudoBarraRef.current;
+    if (!el) {
+      setLarguraBarra(null);
+      return undefined;
+    }
+    const medir = () => setLarguraBarra(el.offsetWidth);
+    medir();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observador = new ResizeObserver(medir);
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, [temSelecao, modoMover]);
   const toggleSelecaoAmbiente = (id) =>
     setSelecionados((prev) => {
       const next = new Set(prev);
@@ -683,7 +701,8 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
           é a ancestral rolável), fica sempre visível enquanto houver
           ambientes selecionados. */}
       {selecionados.size > 0 && (
-        <div className="se-selecao-barra">
+        <div className="se-selecao-barra" style={larguraBarra ? { width: larguraBarra + 34 } : undefined}>
+          <div className="se-selecao-conteudo" ref={conteudoBarraRef}>
           <span className="se-selecao-contagem">
             {selecionados.size} ambiente{selecionados.size > 1 ? "s" : ""} selecionado{selecionados.size > 1 ? "s" : ""}
           </span>
@@ -723,6 +742,7 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
               </button>
             </div>
           )}
+          </div>
         </div>
       )}
 
