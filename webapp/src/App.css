@@ -4118,3 +4118,50 @@ h1, h2, h3, h4, h5, h6,
   border-radius: 50%;
   background: var(--accent);
 }
+
+/* Confirmação antes de atualizar (ConfirmarAtualizacao.jsx): fundo turvo sobre a
+   dockpane inteira e uma caixa centralizada. */
+.confirmar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: surgir 0.15s;
+}
+
+.confirmar-caixa {
+  width: 360px;
+  max-width: 100%;
+  padding: 22px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.confirmar-titulo {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.confirmar-texto {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.confirmar-botoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+

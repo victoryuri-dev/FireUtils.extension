@@ -8,6 +8,7 @@ import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
+import ConfirmarAtualizacao from "./components/ConfirmarAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarArquivosPublicados, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
@@ -271,6 +272,20 @@ export default function App() {
   // O Python baixa, confere e instala (plugin_atualizacao.py) — com a sessão
   // daqui só se geram os links do bucket privado. Plugin sem esse suporte, ou
   // sem conseguir os links, cai no perfil do site.
+  // Os botões "Atualizar" (faixa, bloqueio e ícone da barra lateral) pedem
+  // confirmação antes: a pessoa precisa salvar o projeto. Sem suporte a
+  // atualização no plugin, o caminho é só abrir o perfil no site, sem confirmar.
+  const [confirmandoAtualizacao, setConfirmandoAtualizacao] = useState(false);
+
+  function pedirAtualizacao() {
+    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada"].includes(estadoAtualizacao?.fase)) return;
+    if (!suportaAtualizacao || !versaoPublicada) {
+      abrirPerfilNoSite();
+      return;
+    }
+    setConfirmandoAtualizacao(true);
+  }
+
   async function baixarAtualizacao() {
     if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada"].includes(estadoAtualizacao?.fase)) return;
     if (!suportaAtualizacao || !versaoPublicada) {
@@ -683,18 +698,30 @@ export default function App() {
             ? {
                 versaoNova: avaliacaoVersao.versaoNova,
                 estado: estadoAtualizacao,
-                onBaixar: baixarAtualizacao,
+                onBaixar: pedirAtualizacao,
               }
             : null
         }
       />
+
+      {confirmandoAtualizacao && (
+        <ConfirmarAtualizacao
+          versaoNova={versaoPublicada?.versao}
+          tipo={versaoPublicada?.tipo}
+          onCancelar={() => setConfirmandoAtualizacao(false)}
+          onConfirmar={() => {
+            setConfirmandoAtualizacao(false);
+            baixarAtualizacao();
+          }}
+        />
+      )}
 
       <div className="app">
         {avaliacaoVersao.estado === "obrigatoria" ? (
           <AtualizacaoNecessaria
             versaoNova={avaliacaoVersao.versaoNova}
             estado={estadoAtualizacao}
-            onBaixar={baixarAtualizacao}
+            onBaixar={pedirAtualizacao}
           />
         ) : (
         <>
@@ -702,7 +729,7 @@ export default function App() {
           <AvisoAtualizacao
             versaoNova={avaliacaoVersao.versaoNova}
             estado={estadoAtualizacao}
-            onBaixar={baixarAtualizacao}
+            onBaixar={pedirAtualizacao}
             onDispensar={dispensarAviso}
           />
         )}
