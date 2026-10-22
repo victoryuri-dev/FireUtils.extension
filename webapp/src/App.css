@@ -2129,6 +2129,9 @@
   width: fit-content;
   max-width: 100%;
   align-self: center;
+  /* Sem isto a barra (item de um flex column com rolagem) encolhia abaixo da
+     altura do conteúdo e o overflow:hidden cortava os botões. */
+  flex-shrink: 0;
   box-sizing: border-box;
   margin-top: 14px;
   padding: 12px 16px;
