@@ -222,7 +222,7 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         </span>
         <h1>Saídas de Emergência</h1>
         <button type="button" className="se-botao se-pagina-header-botao" onClick={handleBuscarRevit} disabled={buscando}>
-          {buscando ? "Recarregando…" : "Recarregar"}
+          {buscando ? "Buscando…" : "Buscar do Revit"}
         </button>
       </div>
 

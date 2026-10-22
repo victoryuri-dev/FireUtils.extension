@@ -4368,3 +4368,117 @@ h1, h2, h3, h4, h5, h6,
 .atualizacoes-tag-correcao {
   color: var(--amber);
 }
+
+/* Saídas de Emergência: árvore de acessos e ambientes em largura reduzida ----
+   A dockpane costuma ficar estreita (~480px). Em largura grande o layout é o de
+   sempre; os blocos só quebram linha quando não cabem, e abaixo de 640px cada
+   cartão empilha (nome / pessoas e porta / AD-PT-ER) em vez de espremer. */
+.se-pagina-header {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.se-pagina-header h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.se-detalhe-header {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.se-detalhe-header .se-modal-header-esq {
+  flex: 1 1 auto;
+}
+
+.se-piso-descarga {
+  flex-shrink: 1;
+  white-space: normal;
+}
+
+.se-card-header {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+/* Reserva o canto da lixeira (posição absoluta) para ela não cobrir o conteúdo. */
+.se-card-header:has(> .se-card-lixeira) {
+  padding-right: 40px;
+}
+
+/* Com flex-wrap ligado, "width: 100%" quebraria a linha mesmo em tela larga:
+   o bloco do meio (pessoas | porta) cresce a partir de 220px e só desce de
+   linha quando realmente não cabe ao lado do nome. */
+.se-card-header-dir {
+  width: auto;
+  flex: 1 1 220px;
+}
+
+.se-secao-titulo-linha {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.se-acesso-acoes {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .se-pagina-header h1 {
+    font-size: 18px;
+  }
+
+  .se-detalhe-header .se-piso-descarga {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .se-card-header {
+    padding: 12px;
+  }
+
+  .se-card-header:has(> .se-card-lixeira) {
+    padding-right: 40px;
+  }
+
+  .se-card-header-esq {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .se-card-header-dir {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .se-card-header-dims {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    padding-right: 0;
+  }
+
+  .se-dim-entradas {
+    justify-content: flex-start;
+    gap: 6px 18px;
+    padding: 0 12px 12px;
+  }
+
+  /* Sem a linha reta entre os valores: ao quebrar, ela ficaria no fim da linha. */
+  .se-dim-entradas .se-sep {
+    display: none;
+  }
+
+  .se-card-body {
+    padding: 8px 6px;
+  }
+
+  .se-acesso-card-filho {
+    margin-left: 0;
+  }
+}
