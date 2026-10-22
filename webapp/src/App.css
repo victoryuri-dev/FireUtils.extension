@@ -4497,3 +4497,32 @@ h1, h2, h3, h4, h5, h6,
     margin-left: 0;
   }
 }
+
+/* Largura reduzida: tudo centralizado. O espaço do canto (lixeira) é reservado
+   dos dois lados, para o centro visual ser o centro do cartão. */
+@media (max-width: 640px) {
+  .se-card-header:has(> .se-card-lixeira) {
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+
+  .se-card-header-esq {
+    justify-content: center;
+  }
+
+  .se-card-header-dims,
+  .se-card-header-dir,
+  .se-dim-entradas {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .se-dim-entradas {
+    padding: 0 14px 12px;
+  }
+
+  .se-card-header-dims .se-acesso-populacao {
+    text-align: center;
+  }
+}
