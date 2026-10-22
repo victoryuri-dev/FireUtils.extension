@@ -2125,69 +2125,100 @@
   bottom: 0;
   z-index: 10;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 14px;
-  padding: 10px 16px;
+  padding: 10px 16px 12px;
   border: 1px solid var(--accent);
   border-radius: 8px;
   background: var(--bg-3);
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* Linha de cima, isolada: só a contagem, pequena e acinzentada. */
 .se-selecao-contagem {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
   white-space: nowrap;
+}
+
+.se-selecao-acoes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .se-selecao-select {
   width: auto;
   flex: 1 1 auto;
+  min-width: 0;
   max-width: 320px;
   font-size: 12px;
   padding: 6px 10px;
 }
 
-.se-selecao-botao-apagar {
+/* Botões só com ícone (mover, apagar, cancelar). */
+.se-selecao-icone {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
   border-radius: 6px;
-  padding: 6px 12px;
+  color: var(--text);
   cursor: pointer;
   transition: 0.15s;
 }
 
-.se-selecao-botao-apagar:hover {
+.se-selecao-icone .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.se-selecao-icone:hover:not(:disabled) {
+  border-color: var(--text-2);
+}
+
+.se-selecao-icone:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.se-selecao-icone-destaque:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--white);
+}
+
+.se-selecao-icone-apagar {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.se-selecao-icone-apagar:hover:not(:disabled) {
   background: var(--accent);
   color: var(--white);
 }
 
-.se-selecao-botao-apagar .icon {
-  width: 12px;
-  height: 12px;
-}
-
-.se-selecao-cancelar {
+.se-selecao-icone-x {
   background: transparent;
-  border: none;
+  border-color: transparent;
   color: var(--text-3);
-  font-size: 12px;
-  text-decoration: underline;
-  cursor: pointer;
-  margin-left: auto;
-  white-space: nowrap;
 }
 
-.se-selecao-cancelar:hover {
+.se-selecao-icone-x:hover:not(:disabled) {
   color: var(--text);
+  border-color: transparent;
+}
+
+/* Na barra de ações, o X (cancelar seleção) vai para a ponta direita. */
+.se-selecao-fim {
+  margin-left: auto;
 }
 
 /* Nome editável inline -------------------------------------------------------- */

@@ -16,6 +16,7 @@ import xIconSvg from "../../assets/icons/x-icon.svg?raw";
 import exitBoxIconSvg from "../../assets/icons/exit-box-icon.svg?raw";
 import perfilIconSvg from "../../assets/icons/perfil-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
+import arrowUpDownIconSvg from "../../assets/icons/arrow-up-down-icon.svg?raw";
 
 /**
  * AcessosDescargasView.jsx — árvore de Acessos e Descargas de um pavimento
@@ -473,13 +474,19 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
   // escolhido (ver MOVER_AMBIENTES_ACESSO no seReducer).
   const [selecionados, setSelecionados] = useState(new Set());
   const [alvoSelecao, setAlvoSelecao] = useState("");
+  // Barra de seleção em dois estados: ações (mover/apagar/cancelar) e, depois de
+  // clicar em mover, só o destino + confirmar + X (volta para as ações).
+  const [modoMover, setModoMover] = useState(false);
   const toggleSelecaoAmbiente = (id) =>
     setSelecionados((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
-  const limparSelecao = () => setSelecionados(new Set());
+  const limparSelecao = () => {
+    setSelecionados(new Set());
+    setModoMover(false);
+  };
   const moverSelecionados = () => {
     if (!selecionados.size || !alvoSelecao) return;
     const novoAcessoId = alvoSelecao === ALVO_SEM_ACESSO ? null : alvoSelecao;
@@ -677,23 +684,45 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
           ambientes selecionados. */}
       {selecionados.size > 0 && (
         <div className="se-selecao-barra">
-          <span className="se-selecao-contagem">{selecionados.size} ambiente{selecionados.size > 1 ? "s" : ""} selecionado{selecionados.size > 1 ? "s" : ""}</span>
-          <select value={alvoSelecao} onChange={(e) => setAlvoSelecao(e.target.value)} className="se-selecao-select">
-            <option value="">Mover para...</option>
-            <option value={ALVO_SEM_ACESSO}>— Sem acesso atribuído —</option>
-            {alvosSelecao.map((a) => (
-              <option key={a.id} value={a.id}>{a.label}</option>
-            ))}
-          </select>
-          <button type="button" className="se-botao" disabled={!alvoSelecao} onClick={moverSelecionados}>
-            <Icon svg={checkIconSvg} /> Mover
-          </button>
-          <button type="button" className="se-selecao-botao-apagar" onClick={apagarSelecionados}>
-            <Icon svg={trashIconSvg} /> Apagar selecionados
-          </button>
-          <button type="button" className="se-selecao-cancelar" onClick={limparSelecao}>
-            Cancelar seleção
-          </button>
+          <span className="se-selecao-contagem">
+            {selecionados.size} ambiente{selecionados.size > 1 ? "s" : ""} selecionado{selecionados.size > 1 ? "s" : ""}
+          </span>
+          {modoMover ? (
+            <div className="se-selecao-acoes">
+              <select value={alvoSelecao} onChange={(e) => setAlvoSelecao(e.target.value)} className="se-selecao-select" aria-label="Mover para">
+                <option value="">Mover para...</option>
+                <option value={ALVO_SEM_ACESSO}>— Sem acesso atribuído —</option>
+                {alvosSelecao.map((a) => (
+                  <option key={a.id} value={a.id}>{a.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="se-selecao-icone se-selecao-icone-destaque"
+                disabled={!alvoSelecao}
+                onClick={moverSelecionados}
+                title="Mover"
+                aria-label="Mover"
+              >
+                <Icon svg={arrowUpDownIconSvg} />
+              </button>
+              <button type="button" className="se-selecao-icone se-selecao-icone-x" onClick={() => { setModoMover(false); setAlvoSelecao(""); }} title="Cancelar" aria-label="Cancelar mover">
+                <Icon svg={xIconSvg} />
+              </button>
+            </div>
+          ) : (
+            <div className="se-selecao-acoes">
+              <button type="button" className="se-selecao-icone" onClick={() => setModoMover(true)} title="Mover selecionados" aria-label="Mover selecionados">
+                <Icon svg={arrowUpDownIconSvg} />
+              </button>
+              <button type="button" className="se-selecao-icone se-selecao-icone-apagar" onClick={apagarSelecionados} title="Apagar selecionados" aria-label="Apagar selecionados">
+                <Icon svg={trashIconSvg} />
+              </button>
+              <button type="button" className="se-selecao-icone se-selecao-icone-x se-selecao-fim" onClick={limparSelecao} title="Cancelar seleção" aria-label="Cancelar seleção">
+                <Icon svg={xIconSvg} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
