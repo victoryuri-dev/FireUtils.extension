@@ -4457,16 +4457,31 @@ h1, h2, h3, h4, h5, h6,
     gap: 4px 12px;
   }
 
+  /* Em linhas separadas e na mesma margem esquerda: nome / pessoas / botões
+     AD-PT-ER / resultados (que quebram de linha se não couberem). */
   .se-card-header-dims {
     flex: 1 1 100%;
     flex-wrap: wrap;
-    padding-right: 0;
+    gap: 8px 6px;
+    padding: 0 0 0 2px;
+  }
+
+  .se-card-header-dims .se-acesso-populacao {
+    flex: 0 0 100%;
+  }
+
+  .se-card-header-dir {
+    padding-left: 2px;
   }
 
   .se-dim-entradas {
     justify-content: flex-start;
     gap: 6px 18px;
-    padding: 0 12px 12px;
+    padding: 0 14px 12px;
+  }
+
+  .se-dim-entrada {
+    padding: 2px 0;
   }
 
   /* Sem a linha reta entre os valores: ao quebrar, ela ficaria no fim da linha. */
