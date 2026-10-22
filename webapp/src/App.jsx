@@ -692,7 +692,6 @@ export default function App() {
         email={sessao?.user?.email}
         modulosLiberados={modulosLiberados}
         versaoPlugin={versaoPlugin}
-        baseInstalador={baseInstalador}
         atualizacao={
           avaliacaoVersao.estado === "disponivel" || avaliacaoVersao.estado === "obrigatoria"
             ? {

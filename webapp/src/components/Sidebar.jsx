@@ -47,7 +47,6 @@ export default function Sidebar({
   modulosLiberados,
   atualizacao,
   versaoPlugin,
-  baseInstalador,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -174,7 +173,7 @@ export default function Sidebar({
               <p className="avatar-popover-email">{email}</p>
               <p className="avatar-popover-versao" title="Versão do plugin instalado">
                 <Icon svg={logoSvg} />
-                <span>Fire Utils {textoDaVersao(versaoPlugin, baseInstalador)}</span>
+                <span>Fire Utils {textoDaVersao(versaoPlugin)}</span>
               </p>
               <button type="button" className="avatar-popover-sair" onClick={sair}>
                 <Icon svg={exitIconSvg} />
