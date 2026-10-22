@@ -4498,27 +4498,29 @@ h1, h2, h3, h4, h5, h6,
   }
 }
 
-/* Largura reduzida: tudo centralizado. O espaço do canto (lixeira) é reservado
-   dos dois lados, para o centro visual ser o centro do cartão. */
+/* Largura reduzida: o nome (cabeçalho do cartão) fica à ESQUERDA; pessoas,
+   botões e resultados ficam centralizados. A lixeira ocupa 40px à direita; o
+   recuo extra de 28px à esquerda nas linhas centralizadas equilibra os dois
+   lados (12 + 28 = 40), então o centro delas é o centro do cartão. */
 @media (max-width: 640px) {
   .se-card-header:has(> .se-card-lixeira) {
-    padding-left: 40px;
+    padding-left: 12px;
     padding-right: 40px;
   }
 
   .se-card-header-esq {
-    justify-content: center;
+    justify-content: flex-start;
   }
 
   .se-card-header-dims,
-  .se-card-header-dir,
-  .se-dim-entradas {
+  .se-card-header-dir {
     justify-content: center;
-    padding-left: 0;
+    padding-left: 28px;
     padding-right: 0;
   }
 
   .se-dim-entradas {
+    justify-content: center;
     padding: 0 14px 12px;
   }
 
