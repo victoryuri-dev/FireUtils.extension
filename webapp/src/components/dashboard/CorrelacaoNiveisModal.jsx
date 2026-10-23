@@ -88,7 +88,7 @@ function LinhaVazia({ indice }) {
   );
 }
 
-export default function CorrelacaoNiveisModal({ projeto, estrutura, adicionarToast, onFechar }) {
+export default function CorrelacaoNiveisModal({ projeto, estrutura, adicionarToast, onFechar, obrigatorio = false }) {
   const [niveis, setNiveis] = useState(null); // null = ainda carregando
   const [erro, setErro] = useState(null);
   const [salvando, setSalvando] = useState(false);
@@ -115,8 +115,10 @@ export default function CorrelacaoNiveisModal({ projeto, estrutura, adicionarToa
         const { ok, erro: erroSalvar } = mensagem.payload || {};
         if (ok) {
           adicionarToast?.({ tipo: "sucesso", titulo: "Níveis correlacionados", duracaoMs: 4000 });
-          postToHost(BridgeMessageTypes.GET_DIMENSIONAMENTOS_STATUS, {});
-          onFechar?.();
+          postToHost(BridgeMessageTypes.GET_DIMENSIONAMENTOS_STATUS, { estruturaId: estrutura.id });
+          // Obrigatório: não fecha aqui — o Dashboard desmonta o modal
+          // quando o status "correlacionado" chega.
+          if (!obrigatorio) onFechar?.();
         } else {
           adicionarToast?.({
             tipo: "erro",
@@ -152,18 +154,23 @@ export default function CorrelacaoNiveisModal({ projeto, estrutura, adicionarToa
   const linhas = Math.max(pavimentos.length, niveis?.length || 0);
 
   return (
-    <div className="niveis-modal-overlay" onClick={onFechar}>
+    <div className="niveis-modal-overlay" onClick={obrigatorio ? undefined : onFechar}>
       <div className="niveis-modal-caixa" onClick={(e) => e.stopPropagation()}>
         <div className="niveis-modal-header">
-          <span className="niveis-modal-titulo">Correlacionar Níveis</span>
-          <button type="button" className="se-icon-botao" onClick={onFechar}>
-            <Icon svg={xIconSvg} />
-          </button>
+          <span className="niveis-modal-titulo">
+            {obrigatorio ? "Etapa 1 · Correlacionar Níveis" : "Correlacionar Níveis"}
+          </span>
+          {!obrigatorio && (
+            <button type="button" className="se-icon-botao" onClick={onFechar}>
+              <Icon svg={xIconSvg} />
+            </button>
+          )}
         </div>
 
         <p className="niveis-modal-ajuda">
           Arraste os níveis do Revit (direita) até alinhar cada linha com o pavimento correspondente do FireUtils
           (esquerda) — nem sempre o nome do nível no Revit bate com o pavimento cadastrado no site.
+          {obrigatorio && " Esta etapa é obrigatória antes de abrir o dashboard desta estrutura."}
         </p>
 
         {erro && <p className="vazio">{erro}</p>}
@@ -197,9 +204,11 @@ export default function CorrelacaoNiveisModal({ projeto, estrutura, adicionarToa
             </div>
 
             <div className="niveis-modal-rodape">
-              <button type="button" className="botao" onClick={onFechar} disabled={salvando}>
-                Cancelar
-              </button>
+              {!obrigatorio && (
+                <button type="button" className="botao" onClick={onFechar} disabled={salvando}>
+                  Cancelar
+                </button>
+              )}
               <button type="button" className="botao accent" onClick={salvar} disabled={salvando}>
                 {salvando ? "Salvando..." : "Salvar correlação"}
               </button>

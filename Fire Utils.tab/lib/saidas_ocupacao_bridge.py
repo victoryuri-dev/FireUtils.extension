@@ -12,8 +12,11 @@ Mensagens (contrato em webapp/src/lib/bridge.js):
       os níveis do modelo: o que os antigos formulários WPF mostravam, para a
       página montar os seletores.
   IDENTIFICAR_AMBIENTES    -> SAIDAS_AMBIENTES_PROGRESSO*, SAIDAS_AMBIENTES_RESULTADO
-      {modo: "selecao" | "niveis" | "todos", ocupacao, niveis?}. Grava a
-      ocupação nos ambientes escolhidos e sincroniza com o site.
+      {modo: "selecao" | "niveis" | "todos", ocupacao, estruturaNome, niveis?}.
+      Grava a ocupação nos ambientes escolhidos e sincroniza com o site.
+      Trava de etapa: ambiente sem o parâmetro "Estrutura" preenchido recebe
+      `estruturaNome` antes de ser identificado (quem já tem estrutura mantém
+      a sua) — nenhum ambiente é identificado sem estrutura.
         selecao  ambientes clicados no Revit (os 3 modos eram 3 botões:
                  Identificar por Ambiente / por Nível / Todos sem Ocupação)
         niveis   todos os ambientes dos níveis informados (nomes)
@@ -45,6 +48,7 @@ from Autodesk.Revit.UI.Selection import ObjectType
 import licenca
 from projeto import carregar_dados_projeto
 from family_error_utils import texto_erro
+from estrutura_param import ler_estrutura, atribuir_estrutura
 
 _TIPO_OPCOES = u"SAIDAS_OPCOES"
 _TIPO_PROGRESSO = u"SAIDAS_AMBIENTES_PROGRESSO"
@@ -216,6 +220,10 @@ def _identificar(uiapp, payload, fila_acoes, postar_mensagem):
     if modo not in _MODOS:
         raise _Falha(u"Modo de identificação inválido.")
 
+    estrutura_nome = (payload.get(u"estruturaNome") or u"").strip()
+    if not estrutura_nome:
+        raise _Falha(u"Escolha a estrutura a que os ambientes pertencem.")
+
     doc, projeto_dir, estado = _contexto(uiapp)
     if codigo not in estado[u"tabela"]:
         raise _Falha(u"A ocupação '{}' não existe na norma deste estado.".format(codigo))
@@ -227,6 +235,14 @@ def _identificar(uiapp, payload, fila_acoes, postar_mensagem):
     if not rooms:
         return {u"ok": True, u"acao": u"identificar", u"ambientes": 0,
                 u"resumo": u"Nenhum ambiente encontrado para identificar."}
+
+    # Etapa 2 (estrutura) antes da etapa 3 (ocupação): só os sem estrutura
+    # recebem a escolhida agora.
+    sem_estrutura = [r for r in rooms if not ler_estrutura(r)]
+    if sem_estrutura:
+        marcados, _ignorados = atribuir_estrutura(doc, sem_estrutura, estrutura_nome)
+        if marcados < len(sem_estrutura):
+            raise _Falha(u"Não foi possível gravar o parâmetro Estrutura em todos os ambientes.")
 
     ok, saida = _capturando_saida(set_occupancy, rooms, codigo, estado, doc)
     if not ok:

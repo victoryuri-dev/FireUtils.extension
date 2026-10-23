@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
-import { pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
+import { pavimentosCompletos, sistemasAtivos, estruturasDoProjeto } from "../../lib/projetoDados";
 import { getSeNorma } from "../../lib/normasCentral";
 import { calcPopPav, contarSaidasPavimento, getDistanciaPavimento } from "../../data/se_calc";
 import { OCUPACOES } from "../../data/ocupacoesMA";
@@ -114,7 +114,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
  * popup de verdade (ver editAmb dentro de AcessosDescargasView.jsx). O
  * título "Saídas de Emergência" no topo fica fixo nos dois passos.
  */
-export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtualizado, adicionarToast }) {
+export default function SaidaEmergenciaPage({ projeto, estruturaId, estruturasVinculadas, onProjetoAtualizado, adicionarToast }) {
   const uf = (projeto.dados && projeto.dados.uf) || "MA";
   const [seNorma, setSeNorma] = useState(null);
   const [erro, setErro] = useState(null);
@@ -240,7 +240,11 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         />
       ) : (
         <>
-          <SaidasFerramentas onConcluido={handleBuscarRevit} />
+          <SaidasFerramentas
+            onConcluido={handleBuscarRevit}
+            estruturas={estruturasVinculadas?.length ? estruturasVinculadas : estruturasDoProjeto(projeto)}
+            estruturaPadraoId={estruturaId}
+          />
 
           <p className="dashboard-subtitulo se-secao-titulo-pagina">Pavimentos</p>
 
