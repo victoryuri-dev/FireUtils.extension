@@ -195,8 +195,8 @@ export function ResumoExecutivo({ d }) {
       {cards.map((c) => (
         <Cartao key={c.id}>
           <CartaoHeader>
-            <span className={`hiddim-id-badge hiddim-id-badge-${c.cor}`}>{c.id}</span>
             <span className={`hiddim-situacao hiddim-situacao-${c.cor}`}>{c.label}</span>
+            <span className="hiddim-id-badge hiddim-id-badge-neutro">{c.id}</span>
           </CartaoHeader>
           <div className="hiddim-resumo-corpo">
             {c.rows.map((r, i) => (

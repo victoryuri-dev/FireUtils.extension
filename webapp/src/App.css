@@ -3406,6 +3406,12 @@
 
 .hiddim-id-badge-red { color: var(--accent); }
 .hiddim-id-badge-amber { color: var(--amber); }
+/* Cinza, depois do badge de situação (ResumoExecutivo). */
+.hiddim-id-badge-neutro {
+  background: var(--bg-3);
+  border-color: var(--border);
+  color: var(--text-3);
+}
 
 .hiddim-label-fraco {
   font-size: 9px;
