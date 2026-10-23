@@ -28,7 +28,10 @@ function norm(s) {
     .replace(/\s+/g, " ");
 }
 
-function resolverPavimentoSite(nomeImportado, pavimentos) {
+function resolverPavimentoSite(nomeImportado, pavimentos, pavimentoId) {
+  // Nível correlacionado no Revit (etapa obrigatória do Dashboard) manda.
+  const porId = pavimentoId && pavimentos.find((p) => p.id === pavimentoId);
+  if (porId) return porId;
   const porLabel = pavimentos.find((p) => norm(p.label) === norm(nomeImportado));
   if (porLabel) return porLabel;
   const m = norm(nomeImportado).match(/^(?:n[ií]vel|piso|level)\s*(\d+)$/);
@@ -70,7 +73,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
 
   payloadSE.pavimentos.forEach((p, pi) => {
     const nomeImportado = p.nome || `Pavimento ${pi + 1}`;
-    const pavSite = resolverPavimentoSite(nomeImportado, pavimentos);
+    const pavSite = resolverPavimentoSite(nomeImportado, pavimentos, p.pavimentoId);
     if (!pavSite) {
       erros.push(`"${nomeImportado}": nenhum pavimento correspondente encontrado no projeto.`);
       return;

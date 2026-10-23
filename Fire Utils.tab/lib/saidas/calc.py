@@ -27,6 +27,7 @@ import datetime
 
 from sync import enviar as enviar_sync, buscar
 from family_error_utils import texto_erro
+from projeto import carregar_cache
 
 _CACHE_NOME = u"firedata.json"
 
@@ -39,7 +40,7 @@ def _cache_path(projeto_dir):
 # PAYLOAD — ambientes classificados por pavimento, de UMA estrutura
 # ===========================================================================
 
-def montar_payload_ambientes(rooms_data, estado):
+def montar_payload_ambientes(rooms_data, estado, correlacao=None):
     """
     rooms_data : list de dicts {nivel, nome, grupo, area, pop, uid,
                  estruturaNome}, já de UMA estrutura (ver
@@ -52,6 +53,11 @@ def montar_payload_ambientes(rooms_data, estado):
                  assento fixo cadastrado por lá) e manda de volta a
                  População/Taxa Populacional prontas (ver
                  populacao.puxar_populacao_do_site, caminho oposto).
+
+    correlacao : lista salva por "Correlacionar Níveis" (niveis_bridge.py)
+                 [{pavimentoId, nivelNome, ...}]; cada pavimento do payload
+                 ganha `pavimentoId` quando o nível foi correlacionado — a
+                 dockpane usa isso em vez de adivinhar pelo nome.
 
     Retorna {"pavimentos": [{"nome": <nível>, "ambientes": [...]}, ...]} —
     mesmo formato que o site espera (SaidaEmergenciaPage.jsx →
@@ -68,6 +74,8 @@ def montar_payload_ambientes(rooms_data, estado):
             ordem.append(nivel)
         by_nivel[nivel].append(r)
 
+    pav_por_nivel = dict((c.get(u"nivelNome"), c.get(u"pavimentoId"))
+                         for c in (correlacao or []) if c.get(u"nivelNome") and c.get(u"pavimentoId"))
     pavimentos = []
     for nivel in ordem:
         ambientes = []
@@ -77,7 +85,10 @@ def montar_payload_ambientes(rooms_data, estado):
             # classificar) — aqui só repassa, sem recalcular nada.
             ambientes.append({u"nome": r[u"nome"], u"divisao": r[u"grupo"],
                                u"area": r[u"area"], u"revitId": r.get(u"uid")})
-        pavimentos.append({u"nome": nivel, u"ambientes": ambientes})
+        pav = {u"nome": nivel, u"ambientes": ambientes}
+        if nivel in pav_por_nivel:
+            pav[u"pavimentoId"] = pav_por_nivel[nivel]
+        pavimentos.append(pav)
 
     return {u"pavimentos": pavimentos}
 
@@ -190,7 +201,8 @@ def sincronizar_ambientes(rooms_data, estado, projeto_dir):
     mapa_id_para_nome = dict((v, k) for k, v in mapa_nomes.items())
     resumo = []
     for estrutura_id, rooms_da_estrutura in por_estrutura.items():
-        payload = montar_payload_ambientes(rooms_da_estrutura, estado)
+        correlacao = (carregar_cache(projeto_dir).get(u"niveis_pavimentos") or {}).get(estrutura_id)
+        payload = montar_payload_ambientes(rooms_da_estrutura, estado, correlacao)
         payload[u"_timestamp"] = datetime.datetime.now().strftime(u"%d/%m/%Y %H:%M")
         try:
             salvar_cache_se_import(payload, projeto_dir, estrutura_id)
