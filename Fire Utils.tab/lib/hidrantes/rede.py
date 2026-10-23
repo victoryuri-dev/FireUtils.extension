@@ -252,18 +252,24 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
 
 
 def bfs_ate(elem_ini, eid_ini, eid_alvo):
-    """BFS de elem_ini ate eid_alvo. Retorna (caminho, visitados).
+    """BFS de elem_ini ate eid_alvo. Retorna (caminho, visitados, caminhos).
     Se o alvo nao for alcancado, caminho vem vazio e visitados guarda
-    tudo que a busca conseguiu percorrer, para diagnostico da quebra.
+    tudo que a busca conseguiu percorrer, para diagnostico da quebra -
+    `caminhos` guarda, para CADA elemento visitado, a rota completa
+    (lista de ElementId.Value) de elem_ini ate ele, para o chamador poder
+    mostrar no Revit o trecho inteiro ate um ponto de quebra especifico
+    (ver get_pontas_abertas), nao so o ponto isolado.
     Nao atravessa equipamentos (bombas, RTI etc.) encontrados pelo
     caminho - ver eh_equipamento. Usado para a succao (RTI -> Bomba),
-    que e sempre um caminho unico ponto-a-ponto, sem ramificacao."""
+    que e sempre um caminho unico ponto-a-ponto, sem ramificacao, e para
+    a busca de diagnostico valvula -> bomba (ver hidrantes_mapear_bridge.py)."""
     visitados = set([eid_ini])
+    caminhos  = {eid_ini: [eid_ini]}
     fila      = deque([(elem_ini, [eid_ini])])
     while fila:
         elem, caminho = fila.popleft()
         if get_id(elem) == eid_alvo:
-            return caminho, visitados
+            return caminho, visitados, caminhos
         if eh_equipamento(elem) and get_id(elem) != eid_ini:
             continue
         for conn in get_conectores(elem):
@@ -274,9 +280,11 @@ def bfs_ate(elem_ini, eid_ini, eid_alvo):
                     vid = get_id(viz)
                     if vid not in visitados:
                         visitados.add(vid)
-                        fila.append((viz, caminho + [vid]))
+                        caminho_vid = caminho + [vid]
+                        caminhos[vid] = caminho_vid
+                        fila.append((viz, caminho_vid))
             except: continue
-    return [], visitados
+    return [], visitados, caminhos
 
 
 def percorre_rotas_hidrantes(elem_ini, eid_ini):
