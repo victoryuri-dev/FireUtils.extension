@@ -101,14 +101,7 @@ export default function HidrantesMapeamento({
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
       <div className="se-pagina-header" style={{ marginBottom: 0 }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Mapeamento da Rede</h3>
-          <p className="dashboard-subtitulo" style={{ margin: "4px 0 0" }}>
-            {jaMapeado
-              ? "Rede mapeada. Mapeie de novo se mudar a tubulação no Revit."
-              : "Passo antes de dimensionar: clique na RTI e na bomba no Revit."}
-          </p>
-        </div>
+        <h3 style={{ margin: 0 }}>Mapeamento da Rede</h3>
         <button
           type="button"
           className="se-botao se-botao-accent se-pagina-header-botao"
@@ -156,6 +149,14 @@ export default function HidrantesMapeamento({
       )}
 
       {!mapeando && !pendente && !inconsistencia && jaMapeado && <TabelaTrechos trechos={trechos} />}
+
+      {/* Mesma formatação da nota "Sempre que trocar o sistema…" do cartão de
+          classificação (.hid-nota-aviso), no pé do cartão. */}
+      <p className="hid-nota-aviso">
+        {jaMapeado
+          ? "Rede mapeada. Mapeie de novo se mudar a tubulação no Revit."
+          : "Passo antes de dimensionar: clique na RTI e na bomba no Revit."}
+      </p>
     </div>
   );
 }
