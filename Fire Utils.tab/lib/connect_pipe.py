@@ -611,94 +611,6 @@ def _juntar(doc, c1, c2):
     return _elbow(doc, c1, c2)
 
 
-def _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, elbows_pend):
-    """
-    Se c_ref_end (ponta de pipe_ref) e conn_final (conector do último tubo
-    da rota) estão colineares — de frente um pro outro, na mesma reta —
-    MESCLA os dois num tubo só: estende pipe_ref até a ponta livre do
-    último tubo e apaga esse tubo. ConnectTo (usado em _juntar) só liga os
-    conectores logicamente; os tubos ficam dois elementos separados só
-    "encostados" — o que aparecia como "o último tubo vai até o ponto do
-    conector mas não conecta". Mesclar num elemento único de verdade,
-    igual a Etapa 1 já faz pra pipe_desc, resolve isso pra pipe_ref.
-
-    elbows_pend é a lista (mutável) de joelhos pendentes ainda não criados
-    — se algum deles apontar pro conector "do outro lado" do tubo que vai
-    ser apagado (o lado que segue pro resto da rota já construída), é
-    atualizado in-place pra apontar pro novo conector de pipe_ref, senão
-    aquela pendência ficaria referenciando um conector de um elemento
-    apagado.
-
-    Nunca apaga pipe_desc (mesmo que ele acabe sendo o "último tubo" via
-    _tenta_estender_colinear): diferente dos segmentos criados nesta
-    operação — cujas duas pontas são 100% rastreadas por elbows_pend —
-    pipe_desc pode ter uma conexão pré-existente do lado oposto (fora
-    desta operação) que não teríamos como recuperar depois de apagá-lo.
-
-    Retorna True se mesclou (quem chamou não deve mais tentar
-    joelho/ConnectTo — já está tudo resolvido aqui). False se não são
-    colineares (ou é pipe_desc/pipe_ref), OU se algo inesperado falhar no
-    meio do processo — segue o fluxo normal (joelho/Tê) nos dois casos.
-
-    pipe_last (o "último tubo da rota", dono de conn_final) pode ainda
-    estar FLUTUANDO/desconectado do resto da rota já construída quando
-    isto roda — os joelhos de elbows_pend só são criados DEPOIS, no loop
-    final de _construir_conexao (ver seu docstring) — então, se o eixo
-    "par" (colinear com pipe_ref por definição) não for a 1ª perna
-    construída, pipe_last pode ter 0 ou 1 conexões reais além de
-    conn_final. Por segurança (não travar a prévia inteira por causa só
-    desta otimização), qualquer exceção aqui desfaz a extensão de
-    pipe_ref já aplicada e cai pro joelho normal, em vez de propagar.
-    """
-    if not isinstance(pipe_ref, Pipe):
-        # Fitting (joelho/tê/válvula) não é "esticável" — não tem
-        # Location.Curve pra estender. Segue pro joelho normal.
-        return False
-    d1, d2 = _conn_dir(c_ref_end), _conn_dir(conn_final)
-    if d1 is None or d2 is None or d1.DotProduct(d2) >= -0.999:
-        return False
-
-    pipe_last = conn_final.Owner
-    if pipe_last.Id == pipe_ref.Id or pipe_last.Id == pipe_desc.Id:
-        return False  # segurança: nunca mesclar pipe_ref/pipe_desc apagando-os
-
-    curva_ref_antes = pipe_ref.Location.Curve
-    try:
-        # Conector do outro lado de pipe_last — o que segue pro resto da
-        # rota já construída (None se pipe_last só tiver o próprio
-        # conn_final, ex.: tubo degenerado/sem outra ponta).
-        conn_outro = None
-        for c in pipe_last.ConnectorManager.Connectors:
-            if c.Origin.DistanceTo(conn_final.Origin) > TOL:
-                conn_outro = c
-                break
-
-        p_ref_fixo = _extremo_oposto(pipe_ref.Location.Curve, c_ref_end.Origin)
-        alvo = conn_outro.Origin if conn_outro is not None else conn_final.Origin
-        pipe_ref.Location.Curve = Line.CreateBound(p_ref_fixo, alvo)
-        doc.Regenerate()
-
-        if conn_outro is not None:
-            novo_conn = _conn_near(pipe_ref, alvo)
-            if novo_conn is not None:
-                for i, (pc1, pc2) in enumerate(elbows_pend):
-                    nc1 = novo_conn if (pc1.Owner.Id == pipe_last.Id) else pc1
-                    nc2 = novo_conn if (pc2.Owner.Id == pipe_last.Id) else pc2
-                    if nc1 is not pc1 or nc2 is not pc2:
-                        elbows_pend[i] = (nc1, nc2)
-
-        doc.Delete(pipe_last.Id)
-        _desrastrear(pipe_last.Id)
-        return True
-    except Exception:
-        try:
-            pipe_ref.Location.Curve = curva_ref_antes
-            doc.Regenerate()
-        except Exception:
-            pass
-        return False
-
-
 def _tee(doc, pipe_ref, P_target, conn_branch):
     """
     Cria tê no corpo de pipe_ref em P_target, conectando conn_branch como ramal.
@@ -835,18 +747,6 @@ def _rastrear(elemento):
     no-op barato."""
     if _rastreador_ativo and elemento is not None:
         _rastreador_criados.append(elemento.Id)
-
-
-def _desrastrear(elemento_id):
-    """Remove um Id já registrado nesta rodada — usado quando um
-    elemento criado agora mesmo acaba sendo apagado antes do fim do
-    ciclo (ex.: _mesclar_colinear funde dois tubos num só, apagando um
-    deles)."""
-    if _rastreador_ativo:
-        try:
-            _rastreador_criados.remove(elemento_id)
-        except ValueError:
-            pass
 
 
 # ============================================================================
@@ -1770,14 +1670,15 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                 pt_ponta = pt_A if at_end_a else pt_B
                 c_ponta  = _conn_near(pipe_ref, pt_ponta)
                 if c_ponta:
-                    # Colinear (reta contínua): mescla os dois tubos num só
-                    # em vez de só ConnectTo (que deixava dois elementos
-                    # separados, só "encostados", sem virar um segmento
-                    # único de verdade). Se não for colinear, _juntar cria
-                    # o joelho normalmente.
-                    ok = _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ponta, conn_final, _elbows_pend)
-                    if not ok:
-                        ok = _juntar(doc, c_ponta, conn_final)
+                    # _juntar: colinear (reta contínua) vira ConnectTo
+                    # (liga os conectores logicamente, sem fitting — é
+                    # uma conexão real de verdade, só não "funde" os dois
+                    # elementos num Pipe só); outro ângulo vira joelho.
+                    # NUNCA mescla pipe_ref num elemento só (ver
+                    # _mesclar_colinear, removida) — reatribuir
+                    # Location.Curve nele inteiro arriscava desconectar o
+                    # que já estava ligado na ponta OPOSTA.
+                    ok = _juntar(doc, c_ponta, conn_final)
                     if not ok:
                         output.print_md(u"| Conexão na ponta | **falhou** |")
             else:
@@ -1793,11 +1694,8 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         doc.Regenerate()
         c_ref_end = _conn_near(pipe_ref, P_final)
         if c_ref_end and conn_final:
-            # Idem: colinear vira mescla (um tubo só), não ConnectTo nem
-            # joelho — ver _mesclar_colinear/_juntar.
-            ok = _mesclar_colinear(doc, pipe_ref, pipe_desc, c_ref_end, conn_final, _elbows_pend)
-            if not ok:
-                ok = _juntar(doc, c_ref_end, conn_final)
+            # Idem — ver comentário acima: _juntar, nunca _mesclar_colinear.
+            ok = _juntar(doc, c_ref_end, conn_final)
             if not ok:
                 output.print_md(
                     u"| Conexão na ponta | **falhou** — "
