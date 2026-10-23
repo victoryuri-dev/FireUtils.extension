@@ -346,7 +346,7 @@ export default function App() {
           adicionarToast({
             tipo: "sucesso",
             titulo: tituloDaAplicada(novo.reinicio),
-            mensagem: textoDaAplicada(novo.reinicio),
+            mensagem: textoDaAplicada(novo.reinicio, novo.recarga),
             duracaoMs: novo.reinicio === "nenhum" ? 8000 : 20000,
           });
         }

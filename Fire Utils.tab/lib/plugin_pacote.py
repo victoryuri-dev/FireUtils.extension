@@ -40,9 +40,9 @@ antes de copiar) com o que o painel usa:
   "pyrevit" mudou a estrutura da faixa (bundle.yaml, ícones, script.py de botão,
             botão novo ou removido) -> recarregar o pyRevit;
   "nenhum"  só código usado pelos botões -> já vale no próximo clique.
-O recarregamento automático do pyRevit (`_RECARREGAR_PYREVIT`) está desligado por
-não ter sido testado: a dockpane pede o recarregamento manual no nível "pyrevit"
-e o reinício do Revit no nível "revit".
+O pyRevit é recarregado sozinho (`_RECARREGAR_PYREVIT`) nos níveis "pyrevit" e
+"revit"; se a recarga falhar, a dockpane avisa e pede o recarregamento manual.
+No nível "revit" o reinício do Revit continua necessário.
 
 Mensagens à dockpane: ATUALIZACAO_PROGRESSO / ATUALIZACAO_RESULTADO (as mesmas do
 instalador; o resultado traz estado "aplicada").
@@ -79,10 +79,10 @@ _PROTEGIDOS = (u"fire utils.tab/lib/webview2_runtime/", u"fire utils.tab/lib/fam
 
 _LIMITE_ZIP = 100 * 1024 * 1024
 _LIMITE_DESCOMPACTADO = 300 * 1024 * 1024
-# Desligado até o recarregamento automático ser testado no Revit: pode travar ou
-# ser ignorado, e não dá para saber se funcionou. A dockpane pede o recarregamento
-# manual (aba pyRevit > Recarregar). Mude para True para tentar o automático.
-_RECARREGAR_PYREVIT = False
+# Recarrega o pyRevit sozinho depois de aplicar (níveis "pyrevit" e "revit"). Se
+# a chamada falhar, a dockpane recebe um aviso e pede o recarregamento manual
+# (aba pyRevit > Recarregar). Desligue (False) se o recarregamento travar o Revit.
+_RECARREGAR_PYREVIT = True
 
 _em_andamento = False
 _trava = threading.Lock()
@@ -450,15 +450,16 @@ def _aplicar(preparo, arquivos, raiz, versao):
 
 def _recarregar_pyrevit():
     """Recarrega o pyRevit para o que dá para pegar sem reiniciar (a faixa e os
-    scripts dos botões). Melhor esforço: o Python que a dockpane já carregou só
-    muda quando o Revit reinicia, e é isso que a dockpane avisa."""
+    scripts dos botões). O Python que a dockpane já carregou só muda quando o
+    Revit reinicia, e é isso que a dockpane avisa. Devolve False se falhou."""
     if not _RECARREGAR_PYREVIT:
-        return
+        return True
     try:
         from pyrevit.loader import sessionmgr
         sessionmgr.load_session()
+        return True
     except Exception:
-        pass
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +511,13 @@ def tratar_instalar_pacote(uiapp, payload, fila_acoes, postar_mensagem):
         if sucesso and resposta.get(u"reinicio") != u"nenhum":
             # Depois da resposta, na thread de API: o recarregamento do pyRevit
             # não pode competir com a mensagem que avisa o usuário.
-            fila_acoes.enfileirar(lambda _uiapp: _recarregar_pyrevit())
+            def recarregar(_uiapp, versao=resposta.get(u"versao"), reinicio=resposta.get(u"reinicio")):
+                if not _recarregar_pyrevit():
+                    # Segunda mensagem: o aviso inicial prometia a recarga.
+                    postar_mensagem(u"ATUALIZACAO_RESULTADO", {
+                        u"ok": True, u"estado": u"aplicada", u"versao": versao,
+                        u"reinicio": reinicio, u"recarga": u"falhou"})
+            fila_acoes.enfileirar(recarregar)
 
     threading.Thread(target=trabalho).start()
 

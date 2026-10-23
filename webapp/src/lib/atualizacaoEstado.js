@@ -17,17 +17,19 @@ export function emAndamento(estado) {
  * mudou (plugin_pacote.py): reiniciar o Revit, só recarregar o pyRevit ou nada.
  * Sem o campo (plugin que não informa), pede o reinício, que é o caso seguro.
  */
-export function textoDaAplicada(reinicio) {
+export function textoDaAplicada(reinicio, recarga) {
   if (reinicio === "nenhum") return "Atualização instalada. Já está valendo, não precisa reiniciar.";
   if (reinicio === "pyrevit") {
-    return "Atualização instalada. Recarregue o pyRevit (aba pyRevit › Recarregar) para aplicar.";
+    return recarga === "falhou"
+      ? "Atualização instalada, mas o pyRevit não recarregou sozinho. Use Recarregar na aba pyRevit."
+      : "Atualização instalada. O pyRevit está sendo recarregado; se a faixa não atualizar, use Recarregar na aba pyRevit.";
   }
   return "Atualização instalada. Reinicie o Revit para concluir.";
 }
 
 /** Título do aviso (toast) depois de um pacote aplicado. */
 export function tituloDaAplicada(reinicio) {
-  if (reinicio === "pyrevit") return "Atualização instalada: recarregue o pyRevit";
+  if (reinicio === "pyrevit") return "Atualização instalada";
   return reinicio === "nenhum" ? "Atualização instalada" : "Atualização instalada: reinicie o Revit";
 }
 
@@ -45,7 +47,7 @@ export function textoDoEstado(estado) {
     case "aplicando":
       return "Aplicando a atualização…";
     case "aplicada":
-      return textoDaAplicada(estado.reinicio);
+      return textoDaAplicada(estado.reinicio, estado.recarga);
     case "agendada":
       return "Atualização pronta. Ela será instalada quando você fechar o Revit.";
     case "manual":
@@ -70,6 +72,7 @@ export function estadoDaMensagem(tipo, payload) {
           fase: ["agendada", "aplicada"].includes(p.estado) ? p.estado : "manual",
           versao: p.versao,
           reinicio: p.reinicio,
+          recarga: p.recarga,
         }
       : { fase: "erro", erro: p.erro };
   }

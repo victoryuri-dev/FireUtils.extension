@@ -423,9 +423,9 @@ com o Revit aberto (`lib/plugin_pacote.py`).
   - **`revit`:** mudou código que a dockpane usa (bridges, `hidrantes/`, `saidas/`,
     licença, `family_loader_webview.xaml`...) → "Reinicie o Revit".
   - **`pyrevit`:** mudou a faixa (`bundle.yaml`, ícones, `script.py` de botão, botão
-    novo ou removido) → a dockpane pede para recarregar o pyRevit (aba pyRevit ›
-    Recarregar). O recarregamento automático existe (`_RECARREGAR_PYREVIT` em
-    `plugin_pacote.py`), mas está **desligado** até ser testado no Revit.
+    novo ou removido) → o pyRevit é recarregado sozinho; a dockpane só pede para recarregar o pyRevit (aba pyRevit ›
+    Recarregar) caso o recarregamento automático falhe (`_RECARREGAR_PYREVIT` em
+    `plugin_pacote.py`).
   - **`nenhum`:** só código de `lib` que apenas os botões usam → já vale no
     próximo clique, sem reiniciar.
   Se vários tipos mudaram, vale o mais exigente. Plugin sem essa informação cai

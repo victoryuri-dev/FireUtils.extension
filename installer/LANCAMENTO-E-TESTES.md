@@ -257,12 +257,12 @@ chave privada. O guia completo está no `README.md` ("Atualização rápida por 
    se comportar diferente do esperado no Revit.
 3. Script de atualização em segundo plano: se o Windows encerrar a sessão antes
    de ele rodar, a dockpane oferece de novo na próxima abertura (G9).
-5. **Pacote:** a aplicação sobrescreve arquivos com o Revit aberto. O
-   recarregamento automático do pyRevit (`sessionmgr.load_session()`) nunca rodou
-   e está **desligado** (`_RECARREGAR_PYREVIT = False` em `lib\plugin_pacote.py`):
-   a dockpane pede para recarregar o pyRevit à mão (nível "pyrevit") ou reiniciar
-   o Revit (nível "revit"). Sem versão anterior guardada: uma falha no meio da
-   cópia deixa arquivos misturados até o pacote seguinte (a dockpane tenta de
-   novo, pois `VERSION` só muda no final).
+5. **Pacote:** a aplicação sobrescreve arquivos com o Revit aberto e recarrega o
+   pyRevit sozinho (`sessionmgr.load_session()`), o que **nunca rodou** no Revit e
+   pode travar ou ser ignorado. Se a chamada falhar, a dockpane avisa e pede a recarga
+   manual; se travar o Revit, desligue com `_RECARREGAR_PYREVIT = False` em
+   `lib\plugin_pacote.py`. Sem versão anterior guardada: uma falha no meio da cópia
+   deixa arquivos misturados até o pacote seguinte (a dockpane tenta de novo, pois
+   `VERSION` só muda no final).
 4. Instalação **troca** a pasta da extensão: se interromper no meio, rode o
    instalador de novo.
