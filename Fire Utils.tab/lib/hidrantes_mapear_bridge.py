@@ -129,15 +129,20 @@ def _selecionar(uidoc, postar_mensagem, instrucao, prompt, filtro):
     return uidoc.Document.GetElement(ref.ElementId)
 
 
-def _itens_pontas(doc, origem, pontas):
+def _itens_pontas(doc, origem, pontas, caminhos):
     """Itens {trecho, elemento, eids} da lista de inconsistências, um por
-    ponta aberta encontrada em `origem` (Sucção ou Recalque)."""
+    ponta aberta encontrada em `origem` (Sucção ou Recalque). `eids` traz a
+    rota COMPLETA (ponto de partida da busca até a ponta aberta, ambos
+    inclusive — ver bfs_ate), não só o elemento isolado: "Localizar" na
+    dockpane seleciona/enquadra o trecho inteiro no Revit, não um ponto
+    solto sem contexto de onde ele está na rede."""
     itens = []
     for eid in pontas:
         elem = doc.GetElement(to_element_id(eid))
         descricao = (descricao_curta_elemento(elem) if elem is not None
                      else u"ID {} (elemento não encontrado no modelo)".format(eid))
-        itens.append({u"trecho": origem, u"elemento": descricao, u"eids": [eid]})
+        itens.append({u"trecho": origem, u"elemento": descricao,
+                      u"eids": caminhos.get(eid, [eid])})
     return itens
 
 
@@ -274,17 +279,17 @@ def _mapear(uiapp, postar_mensagem):
     eid_rec = get_id(tubo_rec)
 
     # --- Sucção (RTI -> Bomba) ----------------------------------------------
-    caminho_succao, visitados_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
+    caminho_succao, visitados_succao, caminhos_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
     if not caminho_succao:
         pontas = get_pontas_abertas(doc, visitados_succao)
         if pontas:
-            itens = _itens_pontas(doc, u"Sucção (RTI → Bomba)", pontas)
+            itens = _itens_pontas(doc, u"Sucção (RTI → Bomba)", pontas, caminhos_succao)
         else:
             itens = [{
                 u"trecho": u"Sucção (RTI → Bomba)",
                 u"elemento": u"{} elemento(s) alcançado(s), sem conector aberto identificado "
                              u"— categoria sem suporte a conectores?".format(len(visitados_succao)),
-                u"eids": [eid_rti],
+                u"eids": list(visitados_succao),
             }]
         raise _Interrompido(
             u"A sucção não chega da RTI até a bomba. Corrija a tubulação nos pontos abaixo.",
@@ -306,26 +311,34 @@ def _mapear(uiapp, postar_mensagem):
     itens_recalque = []
     for valvula in valvulas_sem_rota:
         eid_valvula = get_id(valvula)
-        caminho, visitados = bfs_ate(valvula, eid_valvula, eid_rec)
+        caminho, visitados, caminhos = bfs_ate(valvula, eid_valvula, eid_rec)
         if caminho:
             # A árvore não passou por essa válvula, mas a busca à parte achou
             # caminho: sinal de anel fechado na modelagem (um elemento
             # compartilhado por dois galhos). Reportado à parte, sem entrar
-            # no ranking.
+            # no ranking — "eids" traz a rota inteira (válvula -> bomba)
+            # achada pela busca, pro "Localizar" mostrar o trecho todo.
             itens_recalque.append({
                 u"trecho": u"Válvula sem rota — {}".format(descricao_curta_elemento(valvula)),
                 u"elemento": u"Achada por busca à parte (possível anel fechado na rede — "
                              u"revise a modelagem)",
-                u"eids": [eid_valvula],
+                u"eids": caminho,
             })
             continue
+        # Rota completa (válvula -> ponta desconectada), não só o ponto
+        # isolado — "Localizar" na dockpane seleciona/enquadra o trecho
+        # inteiro no Revit (ver _itens_pontas).
         pontas_valvula = get_pontas_abertas(doc, visitados)
         origem = u"Recalque → {}".format(descricao_curta_elemento(valvula))
         if pontas_valvula:
-            itens_recalque.extend(_itens_pontas(doc, origem, pontas_valvula))
+            itens_recalque.extend(_itens_pontas(doc, origem, pontas_valvula, caminhos))
         else:
+            # Nenhum conector desconectado identificado (categoria sem
+            # suporte?) — mostra toda a ilha alcançada a partir da válvula,
+            # já que não há um ponto de quebra específico pra apontar.
             itens_recalque.append({
-                u"trecho": origem, u"elemento": u"Sem rota até a bomba", u"eids": [eid_valvula],
+                u"trecho": origem, u"elemento": u"Sem rota até a bomba",
+                u"eids": list(visitados),
             })
 
     if not rotas:

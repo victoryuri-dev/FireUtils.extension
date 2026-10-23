@@ -278,7 +278,17 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     postToHost(BridgeMessageTypes.CONTINUAR_MAPEAMENTO, {});
   }
 
+  // Rede mapeada com sucesso (trechos salvos) — ver mesmo cálculo em
+  // HidrantesMapeamento.jsx (jaMapeado). Sem isso, o cache 'rotas' que
+  // "Dimensionar Hidrantes" lê do lado Python nem existe ainda (ou está
+  // desatualizado, de um mapeamento anterior barrado por inconsistência),
+  // então o botão fica bloqueado e a seção de resultados escondida — ver
+  // uso abaixo.
+  const trechosAtuais = trechosMapeados ?? resposta?.mapeamento;
+  const mapeamentoOk = trechosAtuais?.length > 0;
+
   async function dimensionar() {
+    if (!mapeamentoOk) return;
     setDimensionando(true);
     const { data } = (await supabase?.auth.getSession()) ?? {};
     postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, {
@@ -635,18 +645,25 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               type="button"
               className="se-botao se-botao-accent se-pagina-header-botao"
               onClick={dimensionar}
-              disabled={dimensionando || mapeando}
+              disabled={dimensionando || mapeando || !mapeamentoOk}
+              title={mapeamentoOk ? undefined : 'Mapeie a rede (acima) antes de dimensionar'}
             >
               {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
             </button>
           </div>
-          {!dimensionamento ? (
+          {/* Resultados (ou o placeholder de "nenhum dimensionamento ainda")
+              só fazem sentido com uma rede mapeada de verdade — sem isso o
+              cache 'rotas' que o dimensionamento lê nem existe, e mostrar
+              um resultado desatualizado (de um mapeamento anterior) ou o
+              placeholder confundiria o RT. A seção some até lá; a própria
+              HidrantesMapeamento acima já diz o que fazer. */}
+          {mapeamentoOk && (!dimensionamento ? (
             <p className="vazio">
-              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Mapeie a rede e clique em "Dimensionar Hidrantes" acima.'}
+              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
             </p>
           ) : (
             <HidrantesDimensionamento d={dimensionamento} limites={limites} />
-          )}
+          ))}
         </>
       )}
 
