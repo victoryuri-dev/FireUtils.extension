@@ -40,8 +40,9 @@ antes de copiar) com o que o painel usa:
   "pyrevit" mudou a estrutura da faixa (bundle.yaml, ícones, script.py de botão,
             botão novo ou removido) -> recarregar o pyRevit;
   "nenhum"  só código usado pelos botões -> já vale no próximo clique.
-O pyRevit é recarregado (melhor esforço) quando o nível é "pyrevit" ou "revit",
-e a dockpane mostra o aviso certo.
+O recarregamento automático do pyRevit (`_RECARREGAR_PYREVIT`) está desligado por
+não ter sido testado: a dockpane pede o recarregamento manual no nível "pyrevit"
+e o reinício do Revit no nível "revit".
 
 Mensagens à dockpane: ATUALIZACAO_PROGRESSO / ATUALIZACAO_RESULTADO (as mesmas do
 instalador; o resultado traz estado "aplicada").
@@ -78,7 +79,10 @@ _PROTEGIDOS = (u"fire utils.tab/lib/webview2_runtime/", u"fire utils.tab/lib/fam
 
 _LIMITE_ZIP = 100 * 1024 * 1024
 _LIMITE_DESCOMPACTADO = 300 * 1024 * 1024
-_RECARREGAR_PYREVIT = True
+# Desligado até o recarregamento automático ser testado no Revit: pode travar ou
+# ser ignorado, e não dá para saber se funcionou. A dockpane pede o recarregamento
+# manual (aba pyRevit > Recarregar). Mude para True para tentar o automático.
+_RECARREGAR_PYREVIT = False
 
 _em_andamento = False
 _trava = threading.Lock()

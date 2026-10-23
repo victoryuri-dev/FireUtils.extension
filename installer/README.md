@@ -409,7 +409,7 @@ com o Revit aberto (`lib/plugin_pacote.py`).
   da extensão, apaga os arquivos de código que saíram da versão e grava `VERSION`
   **por último** (se falhar no meio, `VERSION` não muda e a dockpane oferece de
   novo). **Não guarda versão anterior**: a correção de um pacote ruim é o pacote
-  seguinte. Depois recarrega o pyRevit (melhor esforço) e a dockpane mostra
+  seguinte. Depois a dockpane mostra
   "Atualização instalada. Reinicie o Revit para concluir." (o Python já carregado
   só muda ao reiniciar).
 - **`BASE` e `baseMinima`:** o instalador grava `BASE` (sua versão), que pacotes
@@ -423,7 +423,9 @@ com o Revit aberto (`lib/plugin_pacote.py`).
   - **`revit`:** mudou código que a dockpane usa (bridges, `hidrantes/`, `saidas/`,
     licença, `family_loader_webview.xaml`...) → "Reinicie o Revit".
   - **`pyrevit`:** mudou a faixa (`bundle.yaml`, ícones, `script.py` de botão, botão
-    novo ou removido) → o pyRevit é recarregado.
+    novo ou removido) → a dockpane pede para recarregar o pyRevit (aba pyRevit ›
+    Recarregar). O recarregamento automático existe (`_RECARREGAR_PYREVIT` em
+    `plugin_pacote.py`), mas está **desligado** até ser testado no Revit.
   - **`nenhum`:** só código de `lib` que apenas os botões usam → já vale no
     próximo clique, sem reiniciar.
   Se vários tipos mudaram, vale o mais exigente. Plugin sem essa informação cai

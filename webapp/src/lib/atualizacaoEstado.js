@@ -20,14 +20,15 @@ export function emAndamento(estado) {
 export function textoDaAplicada(reinicio) {
   if (reinicio === "nenhum") return "Atualização instalada. Já está valendo, não precisa reiniciar.";
   if (reinicio === "pyrevit") {
-    return "Atualização instalada. O pyRevit foi recarregado; se algo não aparecer, use Recarregar na aba pyRevit.";
+    return "Atualização instalada. Recarregue o pyRevit (aba pyRevit › Recarregar) para aplicar.";
   }
   return "Atualização instalada. Reinicie o Revit para concluir.";
 }
 
 /** Título do aviso (toast) depois de um pacote aplicado. */
 export function tituloDaAplicada(reinicio) {
-  return reinicio === "revit" || !reinicio ? "Atualização instalada: reinicie o Revit" : "Atualização instalada";
+  if (reinicio === "pyrevit") return "Atualização instalada: recarregue o pyRevit";
+  return reinicio === "nenhum" ? "Atualização instalada" : "Atualização instalada: reinicie o Revit";
 }
 
 /** Frase para a faixa, a tela de bloqueio e o tooltip do ícone. */
