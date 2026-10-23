@@ -10,6 +10,10 @@ import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import ConfirmarAtualizacao from "./components/ConfirmarAtualizacao";
 import AtualizacoesPage from "./components/AtualizacoesPage";
+import AvisoPosAtualizacao from "./components/AvisoPosAtualizacao";
+import {
+  ATRASO_RECARGA_MS, guardarAvisoPosAtualizacao, lerAvisoPosAtualizacao, limparAvisoPosAtualizacao,
+} from "./lib/avisoPosAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarArquivosPublicados, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
@@ -127,6 +131,9 @@ export default function App() {
   const [suportaAtualizacao, setSuportaAtualizacao] = useState(false);
   const [estadoAtualizacao, setEstadoAtualizacao] = useState(null);
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
+  // Aviso do que fazer depois de uma atualização: guardado em sessionStorage
+  // porque a página é recarregada logo após aplicar o pacote.
+  const [avisoPosAtualizacao, setAvisoPosAtualizacao] = useState(lerAvisoPosAtualizacao);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const [atribuindoEstrutura, setAtribuindoEstrutura] = useState(false);
@@ -349,6 +356,16 @@ export default function App() {
             mensagem: textoDaAplicada(novo.reinicio, novo.recarga),
             duracaoMs: novo.reinicio === "nenhum" ? 8000 : 20000,
           });
+          // O aviso precisa sobreviver ao recarregamento da página (abaixo).
+          const aviso = { versao: novo.versao, reinicio: novo.reinicio, recarga: novo.recarga };
+          guardarAvisoPosAtualizacao(aviso);
+          setAvisoPosAtualizacao(aviso);
+          // Recarrega a página uma vez: pega a interface e a versão novas. A
+          // mensagem de "recarga falhou" (segunda, mesmo resultado) não recarrega de novo.
+          if (!novo.recarga && !window.__fireutilsRecargaAgendada) {
+            window.__fireutilsRecargaAgendada = true;
+            window.setTimeout(() => window.location.reload(), ATRASO_RECARGA_MS);
+          }
         }
         return;
       }
@@ -717,6 +734,15 @@ export default function App() {
       )}
 
       <div className="app">
+        {avisoPosAtualizacao && (
+          <AvisoPosAtualizacao
+            aviso={avisoPosAtualizacao}
+            onFechar={() => {
+              limparAvisoPosAtualizacao();
+              setAvisoPosAtualizacao(null);
+            }}
+          />
+        )}
         {avaliacaoVersao.estado === "obrigatoria" ? (
           <AtualizacaoNecessaria
             versaoNova={avaliacaoVersao.versaoNova}
