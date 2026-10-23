@@ -278,7 +278,9 @@
  *     plugin-releases); o Python confere a assinatura, extrai com regras
  *     estritas, copia por cima da extensão com o Revit aberto e recarrega o
  *     pyRevit. Só enviar se LICENCAS trouxe `suportaPacote`. O resultado é
- *     ATUALIZACAO_RESULTADO com estado "aplicada": é preciso reiniciar o Revit.
+ *     ATUALIZACAO_RESULTADO com estado "aplicada" e `reinicio`: "revit" (reiniciar o
+ *     Revit: mudou algo que a dockpane usa), "pyrevit" (recarregar o pyRevit:
+ *     mudou a faixa) ou "nenhum" (já vale).
  *
  *   { type: "ATUALIZACAO_PROGRESSO", payload: { etapa: "baixando" | "verificando" | "aplicando",
  *     percentual?: number } }

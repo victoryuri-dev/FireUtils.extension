@@ -416,6 +416,19 @@ com o Revit aberto (`lib/plugin_pacote.py`).
   não alteram. Cada pacote declara no nome a menor base que o aceita
   (`FireUtils-Pacote-3.2.0-base-3.1.0.zip`) e o plugin recusa se a base for menor.
 
+- **Quanto reiniciar (automático):** antes de copiar, o plugin compara arquivo a
+  arquivo o que mudou e o cruza com o que a dockpane usa (os módulos que ela
+  carregou e, transitivamente, tudo que eles importam, até imports preguiçosos).
+  Resultado, mostrado na dockpane:
+  - **`revit`:** mudou código que a dockpane usa (bridges, `hidrantes/`, `saidas/`,
+    licença, `family_loader_webview.xaml`...) → "Reinicie o Revit".
+  - **`pyrevit`:** mudou a faixa (`bundle.yaml`, ícones, `script.py` de botão, botão
+    novo ou removido) → o pyRevit é recarregado.
+  - **`nenhum`:** só código de `lib` que apenas os botões usam → já vale no
+    próximo clique, sem reiniciar.
+  Se vários tipos mudaram, vale o mais exigente. Plugin sem essa informação cai
+  em `revit` (o caso seguro). Arquivos idênticos não são nem reescritos.
+
 **Uma vez só (preparar):**
 
 ```powershell

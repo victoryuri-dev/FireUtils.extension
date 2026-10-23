@@ -31,9 +31,17 @@ na versão antiga e a dockpane oferece o pacote de novo (a aplicação é
 idempotente). NÃO se guarda a versão anterior: a correção de um pacote ruim é o
 pacote seguinte.
 
-O Python já carregado na memória não muda até o Revit reiniciar; por isso, no
-fim, o pyRevit é recarregado (melhor esforço) e a dockpane avisa para reiniciar
-o Revit.
+Reinício: o Python que a dockpane já carregou fica na memória até o Revit
+reiniciar, mas os botões da faixa rodam com código novo a cada clique. Então o
+pacote diz QUANTO precisa reiniciar, comparando o que mudou (arquivo a arquivo,
+antes de copiar) com o que o painel usa:
+  "revit"   mudou um arquivo que a dockpane carregou (ou que ela importa, direta
+            ou indiretamente) -> reiniciar o Revit;
+  "pyrevit" mudou a estrutura da faixa (bundle.yaml, ícones, script.py de botão,
+            botão novo ou removido) -> recarregar o pyRevit;
+  "nenhum"  só código usado pelos botões -> já vale no próximo clique.
+O pyRevit é recarregado (melhor esforço) quando o nível é "pyrevit" ou "revit",
+e a dockpane mostra o aviso certo.
 
 Mensagens à dockpane: ATUALIZACAO_PROGRESSO / ATUALIZACAO_RESULTADO (as mesmas do
 instalador; o resultado traz estado "aplicada").
@@ -178,6 +186,92 @@ def pacote_ligado():
 
 
 # ---------------------------------------------------------------------------
+# Quanto precisa reiniciar (puro, testável)
+# ---------------------------------------------------------------------------
+
+_IMPORT = re.compile(r"^[ \t]*(?:from[ \t]+([\w.]+)[ \t]+import[ \t]+(\([^)]*\)|[\w, \t]+)|import[ \t]+([\w., \t]+))",
+                     re.MULTILINE)
+_PREFIXO_LIB = u"fire utils.tab/lib/"
+# Arquivos de dados que a dockpane lê ao subir (não são .py, então o grafo de
+# imports não os enxerga).
+_ARQUIVOS_DO_PAINEL = (u"fire utils.tab/lib/family_loader_webview.xaml",)
+
+NIVEIS_REINICIO = (u"nenhum", u"pyrevit", u"revit")
+
+
+def modulos_importados(fonte):
+    """Nomes de módulo citados nos imports de um fonte Python (candidatos: o
+    próprio módulo e, em `from X import a, b`, também X.a e X.b)."""
+    nomes = set()
+    for achou in _IMPORT.finditer(fonte or u""):
+        origem, importados, simples = achou.groups()
+        if simples:
+            for item in simples.split(u","):
+                item = item.strip().split(u" as ")[0].strip()
+                if item:
+                    nomes.add(item)
+        else:
+            nomes.add(origem)
+            for item in re.split(r"[,\s()]+", importados):
+                if item and item != u"as":
+                    nomes.add(origem + u"." + item)
+    return nomes
+
+
+def _arquivo_do_modulo(nome, arquivos_lib):
+    base = _PREFIXO_LIB + nome.replace(u".", u"/")
+    for candidato in (base + u".py", base + u"/__init__.py"):
+        if candidato in arquivos_lib:
+            return candidato
+    return None
+
+
+def alcance_do_painel(iniciais, ler_fonte, arquivos_lib):
+    """
+    Todos os arquivos de `lib` que a dockpane usa: os que ela já carregou
+    (`iniciais`) mais, transitivamente, tudo que eles importam — inclusive os
+    imports preguiçosos, ainda não executados nesta sessão, que carregariam o
+    código novo misturado com o antigo. Caminhos relativos à raiz da extensão,
+    em minúsculas e com "/".
+    """
+    visto = set()
+    fila = [c for c in iniciais if c in arquivos_lib]
+    while fila:
+        atual = fila.pop()
+        if atual in visto:
+            continue
+        visto.add(atual)
+        for nome in modulos_importados(ler_fonte(atual)):
+            arquivo = _arquivo_do_modulo(nome, arquivos_lib)
+            if arquivo and arquivo not in visto:
+                fila.append(arquivo)
+            # pacote pai (X/__init__.py) também roda ao importar X.Y
+            partes = nome.split(u".")
+            for i in range(1, len(partes)):
+                pai = _arquivo_do_modulo(u".".join(partes[:i]), arquivos_lib)
+                if pai and pai not in visto:
+                    fila.append(pai)
+    return visto
+
+
+def classificar_reinicio(mudancas, alcance):
+    """
+    `mudancas`: {caminho relativo (minúsculo, "/"): "alterado" | "novo" | "removido"}.
+    `alcance`: saída de alcance_do_painel. Devolve "nenhum", "pyrevit" ou "revit".
+    """
+    nivel = u"nenhum"
+    for caminho, tipo in mudancas.items():
+        if caminho in alcance or caminho in _ARQUIVOS_DO_PAINEL:
+            return u"revit"
+        if caminho.startswith(u"fire utils.tab/lib/"):
+            continue  # só botões usam: código novo a cada clique
+        # Faixa: yaml, ícones, script.py e botão novo/removido mudam a estrutura.
+        if caminho.startswith(u"fire utils.tab/"):
+            nivel = u"pyrevit"
+    return nivel
+
+
+# ---------------------------------------------------------------------------
 # .NET (só dentro do Revit)
 # ---------------------------------------------------------------------------
 
@@ -255,16 +349,83 @@ def _copiar_com_tentativas(origem, destino):
     raise _Falha(u"Não foi possível atualizar {} ({}).".format(os.path.basename(destino), texto_erro(ultimo)))
 
 
+def _bytes(caminho):
+    with io.open(caminho, u"rb") as arquivo:
+        return arquivo.read()
+
+
+def _modulos_carregados(raiz):
+    """Arquivos de `lib` que ESTE processo (o da dockpane) já importou, como
+    caminhos relativos à raiz, em minúsculas e com "/"."""
+    import sys
+    lib = os.path.normcase(os.path.abspath(os.path.join(raiz, u"Fire Utils.tab", u"lib")))
+    achados = set()
+    for modulo in list(sys.modules.values()):
+        arquivo = getattr(modulo, u"__file__", None)
+        if not arquivo:
+            continue
+        arquivo = os.path.normcase(os.path.abspath(arquivo))
+        if not arquivo.startswith(lib + os.sep):
+            continue
+        rel = os.path.relpath(os.path.splitext(arquivo)[0] + u".py", os.path.normcase(os.path.abspath(raiz)))
+        achados.add(rel.replace(u"\\", u"/").lower())
+    return achados
+
+
+def _arquivos_da_lib(raiz):
+    """Todos os .py de `lib`, como caminhos relativos minúsculos com "/"."""
+    achados = set()
+    base = os.path.join(raiz, u"Fire Utils.tab", u"lib")
+    for pasta, _subpastas, nomes in os.walk(base):
+        for nome in nomes:
+            if nome.lower().endswith(u".py"):
+                rel = os.path.relpath(os.path.join(pasta, nome), raiz).replace(u"\\", u"/")
+                achados.add(rel.lower())
+    return achados
+
+
 def _aplicar(preparo, arquivos, raiz, versao):
-    """Copia por cima, apaga o que saiu e grava VERSION por último."""
+    """Copia por cima, apaga o que saiu e grava VERSION por último. Devolve o
+    nível de reinício ("nenhum", "pyrevit" ou "revit"), calculado ANTES de copiar
+    (o alcance do painel vem do código antigo, o que está na memória)."""
     novos = set(c.lower() for c in arquivos)
+
+    # O que muda de fato: compara o conteúdo com o que já está instalado.
+    mudancas = {}
+    for rel in arquivos:
+        destino = os.path.join(raiz, *rel.split(u"/"))
+        if not os.path.isfile(destino):
+            mudancas[rel.lower()] = u"novo"
+        elif _bytes(destino) != _bytes(os.path.join(preparo, *rel.split(u"/"))):
+            mudancas[rel.lower()] = u"alterado"
+
+    base_codigo = os.path.join(raiz, u"Fire Utils.tab")
+    for pasta, _subpastas, nomes in os.walk(base_codigo):
+        for nome in nomes:
+            rel = os.path.relpath(os.path.join(pasta, nome), raiz).replace(u"\\", u"/")
+            if codigo_gerenciado(rel) and rel.lower() not in novos:
+                mudancas[rel.lower()] = u"removido"
+
+    arquivos_lib = _arquivos_da_lib(raiz)
+
+    def ler_fonte(rel):
+        # `rel` vem em minúsculas; o sistema de arquivos do Windows não diferencia.
+        try:
+            with io.open(os.path.join(raiz, *rel.split(u"/")), u"r", encoding=u"utf-8-sig") as arquivo:
+                return arquivo.read()
+        except Exception:
+            return u""
+
+    alcance = alcance_do_painel(_modulos_carregados(raiz), ler_fonte, arquivos_lib)
+    nivel = classificar_reinicio(mudancas, alcance)
 
     for rel in arquivos:
         destino = os.path.join(raiz, *rel.split(u"/"))
         pasta = os.path.dirname(destino)
         if not os.path.isdir(pasta):
             os.makedirs(pasta)
-        _copiar_com_tentativas(os.path.join(preparo, *rel.split(u"/")), destino)
+        if mudancas.get(rel.lower()):
+            _copiar_com_tentativas(os.path.join(preparo, *rel.split(u"/")), destino)
 
     # Órfãos: código que existia e não faz parte desta versão.
     base_codigo = os.path.join(raiz, u"Fire Utils.tab")
@@ -280,6 +441,7 @@ def _aplicar(preparo, arquivos, raiz, versao):
 
     with io.open(os.path.join(raiz, u"VERSION"), u"w", encoding=u"utf-8") as arquivo:
         arquivo.write(versao)
+    return nivel
 
 
 def _recarregar_pyrevit():
@@ -327,6 +489,7 @@ def tratar_instalar_pacote(uiapp, payload, fila_acoes, postar_mensagem):
     def trabalho():
         global _em_andamento
         sucesso = False
+        resposta = {}
         try:
             resposta = _executar(dados, fila_acoes, postar_mensagem)
             sucesso = True
@@ -340,7 +503,7 @@ def tratar_instalar_pacote(uiapp, payload, fila_acoes, postar_mensagem):
                        u"erro": u"Falha inesperada na atualização: {}".format(texto_erro(ex))})
         finally:
             _em_andamento = False
-        if sucesso:
+        if sucesso and resposta.get(u"reinicio") != u"nenhum":
             # Depois da resposta, na thread de API: o recarregamento do pyRevit
             # não pode competir com a mensagem que avisa o usuário.
             fila_acoes.enfileirar(lambda _uiapp: _recarregar_pyrevit())
@@ -393,7 +556,7 @@ def _executar(dados, fila_acoes, postar_mensagem):
             raise _Falha(erro)
 
         progresso(u"aplicando")
-        _aplicar(preparo, arquivos, plugin_versao.raiz_da_extensao(), dados[u"versao"])
+        reinicio = _aplicar(preparo, arquivos, plugin_versao.raiz_da_extensao(), dados[u"versao"])
     finally:
         # Pacote e preparo não ficam no disco: uma só versão, a instalada.
         if os.path.isfile(caminho_zip):
@@ -404,4 +567,4 @@ def _executar(dados, fila_acoes, postar_mensagem):
         if os.path.isdir(preparo):
             shutil.rmtree(preparo, True)
 
-    return {u"ok": True, u"estado": u"aplicada", u"versao": dados[u"versao"]}
+    return {u"ok": True, u"estado": u"aplicada", u"versao": dados[u"versao"], u"reinicio": reinicio}

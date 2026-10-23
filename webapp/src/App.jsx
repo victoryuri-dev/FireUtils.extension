@@ -13,7 +13,7 @@ import AtualizacoesPage from "./components/AtualizacoesPage";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarArquivosPublicados, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
-import { emAndamento, estadoDaMensagem } from "./lib/atualizacaoEstado";
+import { emAndamento, estadoDaMensagem, textoDaAplicada, tituloDaAplicada } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -341,13 +341,13 @@ export default function App() {
         const novo = estadoDaMensagem(mensagem.type, mensagem.payload);
         setEstadoAtualizacao(novo);
         if (novo?.fase === "aplicada") {
-          // Pacote instalado com o Revit aberto: o Python já carregado só muda
-          // depois de reiniciar, e a pessoa precisa saber.
+          // Pacote instalado com o Revit aberto. O que a pessoa precisa fazer
+          // depende do que mudou: reiniciar o Revit, recarregar o pyRevit ou nada.
           adicionarToast({
             tipo: "sucesso",
-            titulo: "Atualização instalada",
-            mensagem: "Reinicie o Revit para concluir a atualização.",
-            duracaoMs: 20000,
+            titulo: tituloDaAplicada(novo.reinicio),
+            mensagem: textoDaAplicada(novo.reinicio),
+            duracaoMs: novo.reinicio === "nenhum" ? 8000 : 20000,
           });
         }
         return;

@@ -18,7 +18,7 @@ export default function ConfirmarAtualizacao({ versaoNova, tipo, onCancelar, onC
         <p className="confirmar-texto">
           Vamos atualizar o Fire Utils para a versão <strong>{versaoNova}</strong>.{" "}
           {tipo === "pacote"
-            ? "Depois da atualização será preciso reiniciar o Revit. Salve o seu trabalho agora para não perder nada."
+            ? "Dependendo do que mudar, pode ser preciso reiniciar o Revit depois (a dockpane avisa). Salve o seu trabalho agora para não perder nada."
             : "Para instalar, o Revit precisa estar fechado. Salve o seu trabalho agora para não perder nada."}
         </p>
         <div className="confirmar-botoes">
