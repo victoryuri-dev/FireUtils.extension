@@ -3567,11 +3567,14 @@
 
 .hiddim-ministat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* Quebra linha em vez de vazar: cada caixa tem no mínimo 130px e as que não
+     cabem descem para a linha de baixo. */
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 8px;
 }
 
 .hiddim-ministat {
+  min-width: 0;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -3584,7 +3587,8 @@
   text-transform: uppercase;
   letter-spacing: .05em;
   margin-bottom: 3px;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .hiddim-ministat-val {

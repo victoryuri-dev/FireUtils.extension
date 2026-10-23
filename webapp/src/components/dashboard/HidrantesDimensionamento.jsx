@@ -119,12 +119,6 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
             <TH w={32}></TH>
             <TH>Hidrante</TH>
             <TH right>
-              <THSigla sigla="J" align="end" tip="Perda de carga do trecho Bomba → Hidrante, por Hazen-Williams, com a vazão nominal de um único hidrante — sem equilíbrio hidráulico. Usada só para ranquear." />
-            </TH>
-            <TH right>
-              <THSigla sigla="∆Z" align="end" tip="Desnível geométrico entre a bomba e o hidrante." />
-            </TH>
-            <TH right>
               <THSigla sigla="J + ∆Z" align="end" tip="Perda de Carga Total = perda de carga (J) + desnível (∆Z) — usada só para ranquear os hidrantes. O 1º e o 2º mais desfavoráveis recebem a marcha de cálculo completa, com equilíbrio hidráulico, no restante desta etapa." />
             </TH>
             <TH center>Situação</TH>
@@ -145,8 +139,6 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
                   )}
                 </td>
                 <TD bold>{h.id}</TD>
-                <TD right mono muted>{fmca(h.J)}</TD>
-                <TD right mono muted>{f4(h.dZ)} m</TD>
                 <TD right bold mono>{fmca(h.score)}</TD>
                 <td className="hiddim-td hiddim-align-center">
                   {situacao ? <span className={`hiddim-situacao ${situacao.classe}`}>{situacao.texto}</span> : <span className="hiddim-td-vazio">—</span>}
@@ -204,7 +196,7 @@ export function ResumoExecutivo({ d }) {
         <Cartao key={c.id}>
           <CartaoHeader>
             <span className={`hiddim-id-badge hiddim-id-badge-${c.cor}`}>{c.id}</span>
-            <span className="hiddim-label-fraco">{c.label}</span>
+            <span className={`hiddim-situacao hiddim-situacao-${c.cor}`}>{c.label}</span>
           </CartaoHeader>
           <div className="hiddim-resumo-corpo">
             {c.rows.map((r, i) => (
