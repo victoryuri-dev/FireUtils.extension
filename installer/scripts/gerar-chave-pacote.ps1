@@ -18,11 +18,26 @@
     Supabase). Escrito sem acentuacao de proposito (powershell.exe le arquivo
     sem BOM como ANSI).
 
+    Alem de imprimir, grava as duas linhas PUBLICAS (so elas, nunca a privada)
+    em installer\output\chave-publica-pacote.txt e abre o arquivo no Bloco de
+    Notas. Com -AtualizarPlugin, cola as linhas direto em
+    Fire Utils.tab\lib\plugin_pacote.py (depois disso e preciso gerar um
+    instalador novo, que leva a chave publica).
+
 .PARAMETER Saida
     Onde gravar a chave privada.
+
+.PARAMETER AtualizarPlugin
+    Substitui _CHAVE_PACOTE_MODULO e _CHAVE_PACOTE_EXPOENTE em
+    lib\plugin_pacote.py pelos valores deste par.
+
+.PARAMETER SemBlocoDeNotas
+    Nao abre o arquivo da chave publica no Bloco de Notas.
 #>
 param(
-    [string]$Saida = (Join-Path $env:USERPROFILE 'fireutils-pacote-privada.xml')
+    [string]$Saida = (Join-Path $env:USERPROFILE 'fireutils-pacote-privada.xml'),
+    [switch]$AtualizarPlugin,
+    [switch]$SemBlocoDeNotas
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +58,33 @@ Write-Host 'Faca backup OFFLINE dela agora. Nao a envie para lugar nenhum.' -For
 Write-Host ''
 Write-Host 'Cole em Fire Utils.tab\lib\plugin_pacote.py:' -ForegroundColor Green
 Write-Host ''
-Write-Host ('_CHAVE_PACOTE_MODULO = u"{0}"' -f $publica.RSAKeyValue.Modulus)
-Write-Host ('_CHAVE_PACOTE_EXPOENTE = u"{0}"' -f $publica.RSAKeyValue.Exponent)
+$linhaModulo   = ('_CHAVE_PACOTE_MODULO = u"{0}"' -f $publica.RSAKeyValue.Modulus)
+$linhaExpoente = ('_CHAVE_PACOTE_EXPOENTE = u"{0}"' -f $publica.RSAKeyValue.Exponent)
+Write-Host $linhaModulo
+Write-Host $linhaExpoente
 Write-Host ''
+
+# Arquivo so com a parte PUBLICA, ao lado do instalador (installer\output nao vai
+# para o Git). Nunca escreva nada da chave privada aqui.
+$RepoRoot  = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$OutputDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'output'
+if (-not (Test-Path -LiteralPath $OutputDir)) {
+    New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
+}
+$arquivoPublico = Join-Path $OutputDir 'chave-publica-pacote.txt'
+[System.IO.File]::WriteAllText($arquivoPublico, ($linhaModulo + "`r`n" + $linhaExpoente + "`r`n"))
+Write-Host "Chave publica gravada em: $arquivoPublico" -ForegroundColor Green
+
+if ($AtualizarPlugin) {
+    $alvo = Join-Path $RepoRoot 'Fire Utils.tab\lib\plugin_pacote.py'
+    $texto = [System.IO.File]::ReadAllText($alvo, [System.Text.Encoding]::UTF8)
+    $texto = [regex]::Replace($texto, '(?m)^_CHAVE_PACOTE_MODULO\s*=\s*u"[^"]*"', { param($m) $linhaModulo })
+    $texto = [regex]::Replace($texto, '(?m)^_CHAVE_PACOTE_EXPOENTE\s*=\s*u"[^"]*"', { param($m) $linhaExpoente })
+    # UTF-8 sem BOM, como o resto dos arquivos Python do plugin.
+    [System.IO.File]::WriteAllText($alvo, $texto, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "plugin_pacote.py atualizado. Gere um INSTALADOR novo (.\build.ps1): ele leva a chave publica." -ForegroundColor Yellow
+}
+
+if (-not $SemBlocoDeNotas) {
+    Start-Process notepad.exe -ArgumentList ('"{0}"' -f $arquivoPublico)
+}
