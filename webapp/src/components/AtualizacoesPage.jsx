@@ -1,6 +1,7 @@
 import Icon from "./Icon";
 import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
 import { notasDaAtualizacao } from "../lib/patchNotes";
+import { mesclarNotas } from "../lib/versoesPublicadas";
 import { PATCH_NOTES } from "../data/patchNotes";
 import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
 
@@ -19,9 +20,13 @@ function formatarData(texto) {
  * @param instalada  versão do código instalado (texto, "dev" ou null)
  * @param atualizacao  { versao, tipo } da versão disponível, ou null
  * @param estado  andamento (lib/atualizacaoEstado.js)
+ * @param notasPublicadas  notas vindas do painel de administração (lib/versoesPublicadas.js);
+ *   prevalecem sobre as de data/patchNotes.js, que cobrem só as versões ausentes do painel
  */
-export default function AtualizacoesPage({ instalada, atualizacao, estado, onAtualizar }) {
-  const notas = atualizacao ? notasDaAtualizacao(PATCH_NOTES, instalada, atualizacao.versao) : [];
+export default function AtualizacoesPage({ instalada, atualizacao, estado, notasPublicadas = [], onAtualizar }) {
+  const notas = atualizacao
+    ? notasDaAtualizacao(mesclarNotas(notasPublicadas, PATCH_NOTES), instalada, atualizacao.versao)
+    : [];
   const fase = estado?.fase;
   const ocupado = emAndamento(estado);
   const concluido = ["agendada", "manual", "aplicada"].includes(fase);

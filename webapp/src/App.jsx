@@ -16,7 +16,7 @@ import {
 } from "./lib/avisoPosAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
-import { listarArquivosPublicados, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
+import { listarVersoesPublicadas, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
 import { emAndamento, estadoDaMensagem, textoDaAplicada, tituloDaAplicada } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
@@ -122,7 +122,8 @@ export default function App() {
   // Versão do plugin instalado, informada junto das licenças: undefined = o
   // Python ainda não respondeu; null = plugin antigo, que não informa versão.
   const [versaoPlugin, setVersaoPlugin] = useState(undefined);
-  const [arquivosPublicados, setArquivosPublicados] = useState(null); // nomes no bucket
+  const [arquivosPublicados, setArquivosPublicados] = useState(null); // nomes dos arquivos publicados
+  const [notasPublicadas, setNotasPublicadas] = useState([]); // notas das versões (painel de administração)
   // Versão do instalador de base e se o plugin aplica pacotes (ver LICENCAS).
   const [baseInstalador, setBaseInstalador] = useState(null);
   const [suportaPacote, setSuportaPacote] = useState(false);
@@ -255,7 +256,10 @@ export default function App() {
   const logado = !!sessao;
   useEffect(() => {
     if (!logado || !estaDentroDoWebView2()) return;
-    listarArquivosPublicados().then(setArquivosPublicados);
+    listarVersoesPublicadas().then((r) => {
+      setArquivosPublicados(r?.arquivos ?? null);
+      setNotasPublicadas(r?.notas ?? []);
+    });
   }, [logado]);
 
   // A atualização a oferecer: pacote rápido (só Python) se servir a esta
@@ -764,6 +768,7 @@ export default function App() {
             instalada={versaoPlugin}
             atualizacao={avaliacaoVersao.estado === "disponivel" ? versaoPublicada : null}
             estado={estadoAtualizacao}
+            notasPublicadas={notasPublicadas}
             onAtualizar={pedirAtualizacao}
           />
         ) : abaAtual === "dashboard" || abaAtual === "saidas" || abaAtual === "hidrantes" ? (

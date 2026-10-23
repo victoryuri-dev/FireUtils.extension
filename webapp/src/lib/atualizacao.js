@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { nomesDosArquivos, notasDasVersoes } from "./versoesPublicadas";
 
 // Bucket PRIVADO: só contas com licença lêem (política em
 // supabase/migrations/*plugin_releases* no ETOS.FireUtils). Cada versão
@@ -24,6 +25,33 @@ export async function listarArquivosPublicados() {
     console.info("[atualização] falha ao listar as versões:", ex?.message || ex);
     return null;
   }
+}
+
+/**
+ * As versões publicadas pelo painel de administração (tabela `plugin_releases`):
+ * os nomes de arquivo (para `escolherAtualizacao`) e as notas de atualização.
+ * Se a tabela não responder ou vier vazia, cai na listagem do bucket (os
+ * arquivos continuam com os mesmos nomes), sem notas do painel — assim a
+ * atualização não deixa de ser avisada. null se nada deu certo.
+ *
+ * @returns {Promise<{arquivos: string[], notas: object[]}|null>}
+ */
+export async function listarVersoesPublicadas() {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from("plugin_releases")
+      .select("versao, tipo, arquivo, base_minima, titulo, notas, publicada_em")
+      .eq("publicada", true);
+    if (!error && data?.length) {
+      return { arquivos: nomesDosArquivos(data), notas: notasDasVersoes(data) };
+    }
+    console.info("[atualização] tabela de versões indisponível, usando o bucket:", error?.message || "vazia");
+  } catch (ex) {
+    console.info("[atualização] falha ao ler as versões publicadas:", ex?.message || ex);
+  }
+  const arquivos = await listarArquivosPublicados();
+  return arquivos ? { arquivos, notas: [] } : null;
 }
 
 /**
