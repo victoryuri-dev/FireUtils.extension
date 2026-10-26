@@ -18,7 +18,7 @@ import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarVersoesPublicadas, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
 import { emAndamento, estadoDaMensagem, textoDaAplicada, tituloDaAplicada } from "./lib/atualizacaoEstado";
-import { buscarTokenDeLicenca, precisaRenovarToken } from "./lib/licencaToken";
+import { buscarTokenDeLicenca, precisaRenovarToken, tokenRecusado } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
@@ -400,7 +400,9 @@ export default function App() {
         if (fase === "enviado") {
           // Resposta do Python ao token que acabou de ser entregue.
           faseTokenRef.current = "idle";
-          if (precisa) {
+          // Só é recusa se o plugin não guardou um token válido: um token novo
+          // sempre "precisa renovar" quando a margem é igual à validade.
+          if (tokenRecusado(resumo)) {
             adicionarToast({
               tipo: "erro",
               titulo: "Não foi possível validar a licença",
