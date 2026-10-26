@@ -27,6 +27,35 @@ function comTimeout(promessa, ms, mensagem) {
   ]);
 }
 
+/** Espera o status da estrutura chegar do Revit; se demorar, oferece tentar
+ * de novo em vez de ficar carregando para sempre. */
+function StatusAguardando({ estruturaId }) {
+  const [demorou, setDemorou] = useState(false);
+  useEffect(() => {
+    setDemorou(false);
+    const t = setTimeout(() => setDemorou(true), 8000);
+    return () => clearTimeout(t);
+  }, [estruturaId]);
+
+  if (!demorou) return <div className="tela-carregando"><Loader size={40} /></div>;
+  return (
+    <div className="dashboard-tela">
+      <p className="vazio">O Revit não respondeu ao verificar a correlação de níveis.</p>
+      <button
+        type="button"
+        className="se-botao"
+        onClick={() => {
+          setDemorou(false);
+          postToHost(BridgeMessageTypes.GET_DIMENSIONAMENTOS_STATUS, { estruturaId });
+          setTimeout(() => setDemorou(true), 8000);
+        }}
+      >
+        Tentar de novo
+      </button>
+    </div>
+  );
+}
+
 /**
  * Orquestra o fluxo: Conectar um projeto -> (Selecione as estruturas, se
  * nenhuma ainda vinculada) -> Dashboard de UMA estrutura por vez. `vinculo`
@@ -208,9 +237,13 @@ export default function Dashboard({
   // Trava de etapa: 1) estruturas vinculadas -> 2) níveis correlacionados
   // -> dashboard. O status só vale se for da estrutura atual (o Python
   // ecoa `estruturaId`); até chegar, espera em vez de piscar o modal.
-  const statusAtual = dimensionamentos && dimensionamentos.estruturaId === estado.estruturaId;
+  // Plugin antigo (sem o eco de `estruturaId`) responde sem o campo: aceita
+  // a resposta mesmo assim, senão o carregamento nunca terminaria.
+  const statusAtual =
+    !!dimensionamentos &&
+    (dimensionamentos.estruturaId === undefined || dimensionamentos.estruturaId === estado.estruturaId);
   if (!statusAtual) {
-    return <div className="tela-carregando"><Loader size={40} /></div>;
+    return <StatusAguardando estruturaId={estado.estruturaId} />;
   }
   // Estrutura sem pavimentos cadastrados não tem o que correlacionar.
   if (!dimensionamentos.niveis && pavimentosCompletos(estado.linha, estado.estruturaId).length > 0) {
