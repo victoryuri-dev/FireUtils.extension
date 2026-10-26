@@ -283,6 +283,8 @@ export default function DashboardEstrutura({
   gravandoQuantitativos,
   onAtribuirEstrutura,
   atribuindoEstrutura,
+  saidasEstruturaId = null,
+  onEscolherEstruturaSaidas,
 }) {
   // Normas de Extintores e Saída de Emergência pros cartões-resumo do
   // Dashboard (abaixo) — busca uma vez por UF, só no modo "dashboard" (as
@@ -336,6 +338,12 @@ export default function DashboardEstrutura({
         projeto={projeto}
         estruturaId={estrutura.id}
         estruturasVinculadas={estruturasVinculadas}
+        estruturaEscolhida={saidasEstruturaId === estrutura.id}
+        onEscolherEstrutura={(id) => {
+          onTrocarEstrutura?.(id);
+          onEscolherEstruturaSaidas?.(id);
+        }}
+        onTrocarEscolha={() => onEscolherEstruturaSaidas?.(null)}
         onProjetoAtualizado={onAtualizarProjeto}
         adicionarToast={adicionarToast}
       />

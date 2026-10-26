@@ -87,6 +87,11 @@ export default function Dashboard({
   atribuindoEstrutura,
 }) {
   const [estado, setEstado] = useState(ESTADO_INICIAL);
+  // Estrutura escolhida para o dimensionamento de Saídas de Emergência
+  // (passo antes da lista de pavimentos). Fica aqui, e não na página, porque
+  // a página desmonta ao trocar de aba/estrutura (inclusive durante a trava
+  // de correlação de níveis) e a escolha não pode se perder.
+  const [saidasEstruturaId, setSaidasEstruturaId] = useState(null);
 
   function persistirVinculo(linha, estruturasEscolhidas) {
     postToHost(BridgeMessageTypes.SET_PROJECT_LINK, {
@@ -278,6 +283,8 @@ export default function Dashboard({
       gravandoQuantitativos={gravandoQuantitativos}
       onAtribuirEstrutura={onAtribuirEstrutura}
       atribuindoEstrutura={atribuindoEstrutura}
+      saidasEstruturaId={saidasEstruturaId}
+      onEscolherEstruturaSaidas={setSaidasEstruturaId}
       // A tela de Saída de Emergência edita e persiste direto no Supabase
       // (ver AcessosDescargasView.jsx) — isso atualiza `estado.linha` aqui
       // pra manter uma única fonte de verdade (a mesma linha que o resto

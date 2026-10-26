@@ -124,7 +124,16 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
  * popup de verdade (ver editAmb dentro de AcessosDescargasView.jsx). O
  * título "Saídas de Emergência" no topo fica fixo nos dois passos.
  */
-export default function SaidaEmergenciaPage({ projeto, estruturaId, estruturasVinculadas, onProjetoAtualizado, adicionarToast }) {
+export default function SaidaEmergenciaPage({
+  projeto,
+  estruturaId,
+  estruturasVinculadas,
+  estruturaEscolhida = true,
+  onEscolherEstrutura,
+  onTrocarEscolha,
+  onProjetoAtualizado,
+  adicionarToast,
+}) {
   const uf = (projeto.dados && projeto.dados.uf) || "MA";
   const [seNorma, setSeNorma] = useState(null);
   const [erro, setErro] = useState(null);
@@ -224,6 +233,37 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, estruturasVi
     }
   }
 
+  // Dimensionamento separado por estrutura: com 2+ estruturas vinculadas, a
+  // escolha vem antes da lista de pavimentos.
+  const estruturasOpcoes = estruturasVinculadas?.length ? estruturasVinculadas : estruturasDoProjeto(projeto);
+  const precisaEscolher = estruturasOpcoes.length > 1 && !estruturaEscolhida;
+  const estruturaAtual = estruturasOpcoes.find((e) => e.id === estruturaId);
+
+  if (precisaEscolher) {
+    return (
+      <div className="se-pagina se-pagina-saidas">
+        <div className="se-pagina-header">
+          <span className="se-pagina-icone">
+            <Icon svg={exitIconSvg} />
+          </span>
+          <h1>Saídas de Emergência</h1>
+        </div>
+        <p className="dashboard-subtitulo se-secao-titulo-pagina">Escolha a estrutura a dimensionar</p>
+        <div className="lista-estruturas">
+          {estruturasOpcoes.map((e) => {
+            const nPav = pavimentosCompletos(projeto, e.id).length;
+            return (
+              <button key={e.id} type="button" className="botao-estrutura" onClick={() => onEscolherEstrutura?.(e.id)}>
+                {e.nome}
+                <span className="se-aviso-pequeno">{nPav} pavimento(s)</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="se-pagina se-pagina-saidas">
       <div className="se-pagina-header">
@@ -231,6 +271,11 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, estruturasVi
           <Icon svg={exitIconSvg} />
         </span>
         <h1>Saídas de Emergência</h1>
+        {estruturasOpcoes.length > 1 && estruturaAtual && (
+          <button type="button" className="se-botao" onClick={onTrocarEscolha} title="Trocar de estrutura">
+            {estruturaAtual.nome} · Trocar
+          </button>
+        )}
         <button type="button" className="se-botao se-pagina-header-botao" onClick={handleBuscarRevit} disabled={buscando}>
           {buscando ? "Buscando…" : "Buscar do Revit"}
         </button>
