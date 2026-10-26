@@ -80,11 +80,18 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
     }
     const existentesPorRevitId = new Map((pavSite.ambientes || []).filter((a) => a.revitId).map((a) => [a.revitId, a]));
     const existentesPorNome = new Map((pavSite.ambientes || []).map((a) => [norm(a.nome), a]));
+    const idsUsados = new Set();
     atualizacoes.push({
       pavimentoId: pavSite.id,
       ambientes: (p.ambientes || []).map((a, ai) => {
         const nome = a.nome || `Ambiente ${ai + 1}`;
-        const existente = (a.revitId && existentesPorRevitId.get(a.revitId)) || existentesPorNome.get(norm(nome));
+        // Cada ambiente já cadastrado só pode ser reaproveitado UMA vez:
+        // ambientes com o mesmo nome (ex.: dois "Banheiro") caíam no mesmo
+        // existente e ficavam com o mesmo `id`, então selecionar/mover um
+        // levava os outros junto.
+        const candidato = (a.revitId && existentesPorRevitId.get(a.revitId)) || existentesPorNome.get(norm(nome));
+        const existente = candidato && !idsUsados.has(candidato.id) ? candidato : null;
+        if (existente) idsUsados.add(existente.id);
         return {
           id: existente?.id ?? idAmbienteSE(),
           acessoId: existente?.acessoId ?? null,
