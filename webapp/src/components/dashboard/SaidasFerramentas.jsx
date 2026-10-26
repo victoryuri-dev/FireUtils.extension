@@ -53,10 +53,12 @@ function Cartao({ titulo, icone, onClick, ocupado, desabilitado }) {
   );
 }
 
-function ModalOcupacao({ ferramenta, opcoes, onCancelar, onConfirmar }) {
+function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCancelar, onConfirmar }) {
   const [uso, setUso] = useState("");
   const [codigo, setCodigo] = useState("");
   const [niveis, setNiveis] = useState([]);
+  const [estruturaId, setEstruturaId] = useState(estruturaPadraoId || estruturas[0]?.id || "");
+  const estrutura = estruturas.find((e) => e.id === estruturaId);
 
   const grupos = opcoes?.grupos || [];
   const grupo = grupos.find((g) => g.uso === uso) || grupos[0];
@@ -66,7 +68,7 @@ function ModalOcupacao({ ferramenta, opcoes, onCancelar, onConfirmar }) {
     setNiveis((atuais) => (atuais.includes(nome) ? atuais.filter((n) => n !== nome) : [...atuais, nome]));
   }
 
-  const podeConfirmar = !!item && (!ferramenta.pedeNiveis || niveis.length > 0);
+  const podeConfirmar = !!item && !!estrutura && (!ferramenta.pedeNiveis || niveis.length > 0);
 
   return (
     <div className="niveis-modal-overlay" onClick={onCancelar}>
@@ -86,8 +88,21 @@ function ModalOcupacao({ ferramenta, opcoes, onCancelar, onConfirmar }) {
             <p className="niveis-modal-ajuda">
               {ferramenta.ajuda} Ocupação ({opcoes.estadoNome}):
             </p>
+            <p className="niveis-modal-ajuda">
+              Ambientes sem estrutura no parâmetro "Estrutura" recebem a estrutura escolhida; os que já têm mantêm a sua.
+            </p>
 
             <div className="saidas-ocup-campos">
+              <label>
+                <span className="saidas-ocup-rotulo">Estrutura</span>
+                <select className="se-select" value={estruturaId} onChange={(e) => setEstruturaId(e.target.value)}>
+                  {estruturas.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 <span className="saidas-ocup-rotulo">Grupo</span>
                 <select
@@ -159,7 +174,7 @@ function ModalOcupacao({ ferramenta, opcoes, onCancelar, onConfirmar }) {
             type="button"
             className="se-botao se-botao-accent"
             disabled={!podeConfirmar}
-            onClick={() => onConfirmar({ modo: ferramenta.modo, ocupacao: item.codigo, niveis })}
+            onClick={() => onConfirmar({ modo: ferramenta.modo, ocupacao: item.codigo, estruturaNome: estrutura.nome, niveis })}
           >
             Identificar
           </button>
@@ -213,7 +228,7 @@ function Resultado({ r, onFechar }) {
  * `onConcluido` é chamado quando uma ação termina sem erro (a página usa para
  * recarregar os ambientes que o plugin acabou de enviar ao site).
  */
-export default function SaidasFerramentas({ onConcluido }) {
+export default function SaidasFerramentas({ onConcluido, estruturas = [], estruturaPadraoId }) {
   const [opcoes, setOpcoes] = useState(null); // null = ainda não carregou
   const [ferramenta, setFerramenta] = useState(null);
   const [executando, setExecutando] = useState(null); // { acao, instrucao }
@@ -294,6 +309,8 @@ export default function SaidasFerramentas({ onConcluido }) {
         <ModalOcupacao
           ferramenta={ferramenta}
           opcoes={opcoes}
+          estruturas={estruturas}
+          estruturaPadraoId={estruturaPadraoId}
           onCancelar={() => setFerramenta(null)}
           onConfirmar={confirmar}
         />

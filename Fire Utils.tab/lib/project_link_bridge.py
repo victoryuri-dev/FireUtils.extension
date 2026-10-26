@@ -146,7 +146,9 @@ def tratar_get_dimensionamentos_status(uiapp, payload, postar_mensagem):
     quem ainda não manda o parâmetro nenhum."""
     projeto_dir = _projeto_dir(uiapp)
     if projeto_dir is None:
-        postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {u"hidrantes": False, u"saidaEmergencia": False, u"niveis": False})
+        postar_mensagem(u"DIMENSIONAMENTOS_STATUS", {
+            u"hidrantes": False, u"saidaEmergencia": False, u"niveis": False,
+            u"estruturaId": (payload or {}).get(u"estruturaId")})
         return
 
     estrutura_id = (payload or {}).get(u"estruturaId")
@@ -169,4 +171,8 @@ def tratar_get_dimensionamentos_status(uiapp, payload, postar_mensagem):
         u"hidrantes": hidrantes_ok,
         u"saidaEmergencia": saida_ok,
         u"niveis": niveis_ok,
+        # Ecoa a estrutura a que o status se refere: o Dashboard só libera
+        # a tela depois que o status da estrutura atual chegou (trava de
+        # "Correlacionar níveis" — ver Dashboard.jsx).
+        u"estruturaId": estrutura_id,
     })

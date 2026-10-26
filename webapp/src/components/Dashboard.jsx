@@ -3,10 +3,11 @@ import Loader from "./Loader";
 import saveIconPng from "../assets/icons/save-icon.png";
 import { postToHost, BridgeMessageTypes } from "../lib/bridge";
 import { buscarProjeto } from "../lib/projectData";
-import { estruturasDoProjeto, dashboardEstrutura } from "../lib/projetoDados";
+import { estruturasDoProjeto, dashboardEstrutura, pavimentosCompletos } from "../lib/projetoDados";
 import ConectarProjeto from "./dashboard/ConectarProjeto";
 import SelecionarEstrutura from "./dashboard/SelecionarEstrutura";
 import DashboardEstrutura from "./dashboard/DashboardEstrutura";
+import CorrelacaoNiveisModal from "./dashboard/CorrelacaoNiveisModal";
 
 const ESTADO_INICIAL = { carregando: false, erro: null, linha: null, estruturaId: null };
 
@@ -200,6 +201,27 @@ export default function Dashboard({
         projeto={estado.linha}
         estruturas={estruturasDoProjeto(estado.linha)}
         onConfirmar={(escolhidas) => confirmarEstruturas(estado.linha, escolhidas)}
+      />
+    );
+  }
+
+  // Trava de etapa: 1) estruturas vinculadas -> 2) níveis correlacionados
+  // -> dashboard. O status só vale se for da estrutura atual (o Python
+  // ecoa `estruturaId`); até chegar, espera em vez de piscar o modal.
+  const statusAtual = dimensionamentos && dimensionamentos.estruturaId === estado.estruturaId;
+  if (!statusAtual) {
+    return <div className="tela-carregando"><Loader size={40} /></div>;
+  }
+  // Estrutura sem pavimentos cadastrados não tem o que correlacionar.
+  if (!dimensionamentos.niveis && pavimentosCompletos(estado.linha, estado.estruturaId).length > 0) {
+    const estruturaAtual = dashboardEstrutura(estado.linha, estado.estruturaId);
+    return (
+      <CorrelacaoNiveisModal
+        key={estado.estruturaId}
+        obrigatorio
+        projeto={estado.linha}
+        estrutura={estruturaAtual}
+        adicionarToast={adicionarToast}
       />
     );
   }

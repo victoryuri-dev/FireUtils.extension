@@ -335,6 +335,7 @@ export default function DashboardEstrutura({
       <SaidaEmergenciaPage
         projeto={projeto}
         estruturaId={estrutura.id}
+        estruturasVinculadas={estruturasVinculadas}
         onProjetoAtualizado={onAtualizarProjeto}
         adicionarToast={adicionarToast}
       />

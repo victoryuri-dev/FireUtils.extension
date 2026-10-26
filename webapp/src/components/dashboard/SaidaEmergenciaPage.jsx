@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
-import { pavimentosCompletos, sistemasAtivos } from "../../lib/projetoDados";
+import { pavimentosCompletos, sistemasAtivos, estruturasDoProjeto } from "../../lib/projetoDados";
 import { getSeNorma } from "../../lib/normasCentral";
 import { calcPopPav, contarSaidasPavimento, getDistanciaPavimento } from "../../data/se_calc";
 import { OCUPACOES } from "../../data/ocupacoesMA";
@@ -28,7 +28,10 @@ function norm(s) {
     .replace(/\s+/g, " ");
 }
 
-function resolverPavimentoSite(nomeImportado, pavimentos) {
+function resolverPavimentoSite(nomeImportado, pavimentos, pavimentoId) {
+  // Nível correlacionado no Revit (etapa obrigatória do Dashboard) manda.
+  const porId = pavimentoId && pavimentos.find((p) => p.id === pavimentoId);
+  if (porId) return porId;
   const porLabel = pavimentos.find((p) => norm(p.label) === norm(nomeImportado));
   if (porLabel) return porLabel;
   const m = norm(nomeImportado).match(/^(?:n[ií]vel|piso|level)\s*(\d+)$/);
@@ -70,7 +73,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
 
   payloadSE.pavimentos.forEach((p, pi) => {
     const nomeImportado = p.nome || `Pavimento ${pi + 1}`;
-    const pavSite = resolverPavimentoSite(nomeImportado, pavimentos);
+    const pavSite = resolverPavimentoSite(nomeImportado, pavimentos, p.pavimentoId);
     if (!pavSite) {
       erros.push(`"${nomeImportado}": nenhum pavimento correspondente encontrado no projeto.`);
       return;
@@ -114,7 +117,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
  * popup de verdade (ver editAmb dentro de AcessosDescargasView.jsx). O
  * título "Saídas de Emergência" no topo fica fixo nos dois passos.
  */
-export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtualizado, adicionarToast }) {
+export default function SaidaEmergenciaPage({ projeto, estruturaId, estruturasVinculadas, onProjetoAtualizado, adicionarToast }) {
   const uf = (projeto.dados && projeto.dados.uf) || "MA";
   const [seNorma, setSeNorma] = useState(null);
   const [erro, setErro] = useState(null);
@@ -240,7 +243,11 @@ export default function SaidaEmergenciaPage({ projeto, estruturaId, onProjetoAtu
         />
       ) : (
         <>
-          <SaidasFerramentas onConcluido={handleBuscarRevit} />
+          <SaidasFerramentas
+            onConcluido={handleBuscarRevit}
+            estruturas={estruturasVinculadas?.length ? estruturasVinculadas : estruturasDoProjeto(projeto)}
+            estruturaPadraoId={estruturaId}
+          />
 
           <p className="dashboard-subtitulo se-secao-titulo-pagina">Pavimentos</p>
 
