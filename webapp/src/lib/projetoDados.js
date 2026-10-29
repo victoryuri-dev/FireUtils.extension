@@ -145,7 +145,24 @@ export function estruturasDoProjeto(linha) {
  * pro dashboard). */
 export function pavimentosCompletos(linha, estruturaId) {
   const dados = linha.dados || {};
-  return (dados.pavimentos || []).filter((p) => p.estruturaId === estruturaId);
+  return (dados.pavimentos || [])
+    .filter((p) => p.estruturaId === estruturaId)
+    .map((p) => ({ ...p, label: normalizarRotuloPavimento(p.label) }));
+}
+
+/** Rótulos antigos gerados pelo site ("Pavimento 2", "Subsolo 1", "Terreo")
+ * -> numeração atual: Térreo, 1º Pavimento, 2º Pavimento…; 2º Subsolo, 1º
+ * Subsolo. O primeiro pavimento acima do térreo (id ...-P2) é o "1º". Mesma
+ * regra do site (ProjetoContext.jsx); só mexe em rótulos no formato
+ * automático e é idempotente — projetos ainda não reabertos no site chegam
+ * aqui com o rótulo antigo. */
+export function normalizarRotuloPavimento(label) {
+  if (label === "Terreo") return "Térreo";
+  const pav = /^Pavimento (\d+)$/.exec(label || "");
+  if (pav) return `${Math.max(1, parseInt(pav[1], 10) - 1)}º Pavimento`;
+  const sub = /^Subsolo (\d+)$/.exec(label || "");
+  if (sub) return `${sub[1]}º Subsolo`;
+  return label;
 }
 
 /** Chuveiros automáticos / detecção de incêndio da estrutura — badges
