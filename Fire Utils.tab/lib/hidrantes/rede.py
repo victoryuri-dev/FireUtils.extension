@@ -204,11 +204,19 @@ def get_cota_rti(elem):
 
 def get_primeiro_tubo(elem_ini, direcoes_ini):
     """A partir dos conectores de `elem_ini` (RTI ou bomba) cuja Direction
-    esteja em `direcoes_ini`, anda pela rede - pulando acessorios/conexoes
-    que nao sejam Pipe (ex.: luva de reducao, valvula) - e retorna o
-    primeiro Pipe encontrado. Nao atravessa outros equipamentos (ex.: uma
-    segunda bomba) pelo caminho. Retorna None se a rede nao alcancar
-    nenhum tubo nessa direcao.
+    esteja em `direcoes_ini`, anda pela rede até achar o primeiro Pipe.
+    Não atravessa outros equipamentos (ex.: uma segunda bomba) pelo
+    caminho. Retorna (tubo, intermediarios):
+      tubo: o primeiro Pipe encontrado, ou None se a rede não alcançar
+        nenhum tubo nessa direção.
+      intermediarios: lista de FamilyInstance (acessórios/conexões/
+        válvulas) entre `elem_ini` e `tubo`, na ordem em que foram
+        percorridos — ex.: válvula de gaveta ou de retenção instalada
+        direto na conexão da bomba/RTI, antes do primeiro tubo de
+        verdade. Antes eram descartados em silêncio: nunca entravam em
+        nenhum trecho, então a perda de carga deles (parâmetro "Perda
+        de Carga", ver get_leq) nunca era contabilizada em nada. Vazia
+        se `tubo` vier None.
 
     Se nenhum conector bater exatamente com `direcoes_ini`, cai pra um
     conector Bidirectional conectado - mesmo motivo/fallback de
@@ -230,14 +238,15 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
                 vid = get_id(viz)
                 if vid not in visitados:
                     visitados.add(vid)
-                    fila.append(viz)
+                    fila.append((viz, []))
         except: continue
 
     while fila:
-        elem = fila.popleft()
+        elem, caminho = fila.popleft()
         if isinstance(elem, Pipe):
-            return elem
+            return elem, caminho
         if eh_equipamento(elem): continue
+        caminho_novo = caminho + [elem]
         for conn in get_conectores(elem):
             try:
                 if not conn.IsConnected: continue
@@ -246,9 +255,9 @@ def get_primeiro_tubo(elem_ini, direcoes_ini):
                     vid = get_id(viz)
                     if vid not in visitados:
                         visitados.add(vid)
-                        fila.append(viz)
+                        fila.append((viz, caminho_novo))
             except: continue
-    return None
+    return None, []
 
 
 def bfs_ate(elem_ini, eid_ini, eid_alvo):

@@ -243,40 +243,52 @@ def _mapear(uiapp, postar_mensagem):
         u"Clique no reservatório (RTI) no Revit.",
         u"Selecione o reservatório (RTI)", _FiltroEquipamento())
 
-    tubo_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
+    tubo_rti, interm_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
     rti_auto = tubo_rti is not None
     if tubo_rti is None:
         tubo_rti = _selecionar(
             uidoc, postar_mensagem,
             u"Não deu para identificar o tubo de saída da RTI. Clique nesse tubo no Revit.",
             u"Tubo de saída da RTI", _FiltroTubo())
+        interm_rti = []
 
     bomba = _selecionar(
         uidoc, postar_mensagem,
         u"Clique na bomba de incêndio no Revit.",
         u"Selecione a bomba de incêndio", _FiltroEquipamento())
 
-    tubo_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
+    tubo_bomba, interm_succao_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
     if tubo_bomba is None:
         tubo_bomba = _selecionar(
             uidoc, postar_mensagem,
             u"Não deu para identificar o tubo de entrada (sucção) da bomba. "
             u"Clique no tubo que conecta na entrada da bomba.",
             u"Tubo de sucção da bomba", _FiltroTubo())
+        interm_succao_bomba = []
 
-    tubo_rec = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
+    tubo_rec, interm_recalque_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
     if tubo_rec is None:
         tubo_rec = _selecionar(
             uidoc, postar_mensagem,
             u"Não deu para identificar o tubo de saída (recalque) da bomba. "
             u"Clique no tubo que conecta na saída da bomba.",
             u"Tubo de recalque da bomba", _FiltroTubo())
+        interm_recalque_bomba = []
 
     postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": u"Percorrendo a rede…"})
 
     eid_rti = get_id(tubo_rti)
     eid_bomba = get_id(tubo_bomba)
     eid_rec = get_id(tubo_rec)
+
+    # Acessórios/válvulas entre a RTI/bomba e o primeiro tubo de verdade (ex.:
+    # válvula de gaveta, válvula de retenção vertical instaladas direto na
+    # conexão) — get_primeiro_tubo não descarta mais esses elementos; aqui
+    # eles entram nos trechos correspondentes (sucção ou recalque), pra
+    # contar na perda de carga (parâmetro "Perda de Carga", ver get_leq).
+    ids_interm_rti = [get_id(e) for e in interm_rti]
+    ids_interm_succao_bomba = [get_id(e) for e in interm_succao_bomba]
+    ids_interm_recalque_bomba = [get_id(e) for e in interm_recalque_bomba]
 
     # --- Sucção (RTI -> Bomba) ----------------------------------------------
     caminho_succao, visitados_succao, caminhos_succao = bfs_ate(tubo_rti, eid_rti, eid_bomba)
@@ -294,11 +306,13 @@ def _mapear(uiapp, postar_mensagem):
         raise _Interrompido(
             u"A sucção não chega da RTI até a bomba. Corrija a tubulação nos pontos abaixo.",
             u"inconsistencia", itens)
+    caminho_succao = ids_interm_rti + caminho_succao + ids_interm_succao_bomba
 
     # --- Recalque: árvore Bomba -> válvulas -----------------------------------
     # Ramais que não levam a hidrante nenhum (dreno, teste de bomba, cavalete)
     # nunca entram em `rotas`, então não afetam o ranking.
     rotas = percorre_rotas_hidrantes(tubo_rec, eid_rec)
+    rotas = [ids_interm_recalque_bomba + rota for rota in rotas]
 
     ids_alcancadas = set(rota[-1] for rota in rotas)
     valvulas_sem_rota = [v for v in todas_valvulas_hidrante(doc)
