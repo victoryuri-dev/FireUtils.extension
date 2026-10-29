@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DndContext, useDraggable, useDroppable, PointerSensor, useSensor, useSensors, pointerWithin } from "@dnd-kit/core";
 import Icon from "../Icon";
 import { AmbienteForm, fmtM } from "./seShared";
@@ -400,17 +400,74 @@ function AcessoCard({
           ))}
           {filhos.length === 0 && filhosAmbientes.length === 0 && <div className="se-vazio-italico">Arraste ambientes para cá.</div>}
           <div className="se-acesso-acoes">
-            {isRaiz && (
-              <button type="button" className="se-botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
-                <Icon svg={plusIconSvg} /> CRIAR ACESSO
-              </button>
-            )}
-            <button type="button" className="se-botao" onClick={() => onCreateAmbiente(acesso.id)}>
-              <Icon svg={plusIconSvg} /> ADICIONAR AMBIENTE
-            </button>
+            <BotaoAdicionar
+              titulo={`Adicionar em ${acesso.nome}`}
+              opcoes={[
+                ...(isRaiz ? [{ rotulo: "Acesso", onSelecionar: () => onCriarAcessoFilho(acesso.id) }] : []),
+                { rotulo: "Ambiente", onSelecionar: () => onCreateAmbiente(acesso.id) },
+              ]}
+            />
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Botão redondo "+" que abre um popup flutuante, acima dele, com o que dá
+ * pra criar ali (Saída/Escada, Acesso ou Ambiente). `opcoes`: [{ rotulo,
+ * onSelecionar }]. Fecha ao escolher, ao clicar fora ou com Esc. */
+function BotaoAdicionar({ opcoes, titulo = "Adicionar" }) {
+  const [aberto, setAberto] = useState(false);
+  const raiz = useRef(null);
+
+  useEffect(() => {
+    if (!aberto) return undefined;
+    const fora = (e) => {
+      if (raiz.current && !raiz.current.contains(e.target)) setAberto(false);
+    };
+    const esc = (e) => {
+      if (e.key === "Escape") setAberto(false);
+    };
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [aberto]);
+
+  return (
+    <div className="se-add" ref={raiz}>
+      {aberto && (
+        <div className="se-add-popup" role="menu">
+          {opcoes.map((o) => (
+            <button
+              key={o.rotulo}
+              type="button"
+              role="menuitem"
+              className="se-add-opcao"
+              onClick={() => {
+                setAberto(false);
+                o.onSelecionar();
+              }}
+            >
+              {o.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        className={`se-add-botao ${aberto ? "se-add-botao-aberto" : ""}`}
+        onClick={() => setAberto((a) => !a)}
+        aria-haspopup="menu"
+        aria-expanded={aberto}
+        title={titulo}
+        aria-label={titulo}
+      >
+        <Icon svg={plusIconSvg} />
+      </button>
     </div>
   );
 }
@@ -678,18 +735,20 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
             </div>
 
             <div className="se-centralizado">
-              <button type="button" className="se-botao" onClick={criarRaiz}>
-                <Icon svg={plusIconSvg} /> CRIAR {rotuloRaiz.toUpperCase()}
-              </button>
+              <BotaoAdicionar
+                titulo={`Adicionar ${rotuloRaiz.toLowerCase()}`}
+                opcoes={[
+                  { rotulo: rotuloRaiz, onSelecionar: criarRaiz },
+                  { rotulo: "Ambiente", onSelecionar: () => criarAmbiente() },
+                ]}
+              />
             </div>
           </div>
 
           <div>
             <div className="se-secao-titulo-linha">
               <div className="se-secao-titulo">Ambientes sem acesso atribuído</div>
-              <button type="button" className="se-botao" onClick={() => criarAmbiente()}>
-                <Icon svg={plusIconSvg} /> Adicionar Ambiente
-              </button>
+              <BotaoAdicionar titulo="Adicionar ambiente" opcoes={[{ rotulo: "Ambiente", onSelecionar: () => criarAmbiente() }]} />
             </div>
             <SemAcessoDropZone ambientes={semAcesso} taxaPopulacional={TAXA_POPULACIONAL} larguras={LARGURAS_MINIMAS} onEdit={setEditAmb} onRemove={removerAmbiente}
               selecionados={selecionados} onToggleSelecaoAmbiente={toggleSelecaoAmbiente} />
