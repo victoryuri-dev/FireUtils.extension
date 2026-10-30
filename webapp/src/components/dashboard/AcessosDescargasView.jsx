@@ -317,9 +317,7 @@ function AcessoCard({
 
   const remover = (e) => {
     e.stopPropagation();
-    if (window.confirm(`Remover "${acesso.nome}"? Os ambientes/acessos dentro dele ficarão sem posição, mas não serão apagados.`)) {
-      onRemover(acesso.id);
-    }
+    onRemover(acesso.id);
   };
   const toggleDim = (d) => onSetDim(acesso.id, d, !dims[d]);
 
