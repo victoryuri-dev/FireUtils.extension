@@ -4554,3 +4554,12 @@ h1, h2, h3, h4, h5, h6,
     text-align: center;
   }
 }
+
+/* Rolagem da página de Saídas: fininha, quase imperceptível. */
+.se-pagina::-webkit-scrollbar {
+  width: 3px;
+}
+
+.se-pagina::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+}
