@@ -4563,3 +4563,14 @@ h1, h2, h3, h4, h5, h6,
 .se-pagina::-webkit-scrollbar-thumb {
   border-radius: 3px;
 }
+
+/* Lista de pavimentos: mais ar entre o nome e os números (vertical) e entre
+   os três números (horizontal). */
+.se-pavimentos-lista .se-card-header {
+  gap: 16px 24px;
+}
+
+.se-pavimentos-lista .se-card-header-dir {
+  flex-wrap: wrap;
+  gap: 14px 32px;
+}

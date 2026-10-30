@@ -326,9 +326,9 @@ export default function SaidaEmergenciaPage({
                     </div>
                   </div>
                   <div className="se-card-header-dir">
-                    <StatCol label="População" value={pop} big />
+                    <StatCol label="Pop." value={pop} big />
                     <StatCol label={pav.pisoDescarga ? "Saídas" : "Escadas/Rampas"} value={nSaidas} big />
-                    <StatCol label="Dist. máxima" value={dist !== null ? `${dist} m` : "Consultar NT"} big={dist !== null} />
+                    <StatCol label="Dist. máx." value={dist !== null ? `${dist} m` : "Consultar NT"} big={dist !== null} />
                   </div>
                 </div>
               ))}
