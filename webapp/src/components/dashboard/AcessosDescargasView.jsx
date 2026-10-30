@@ -366,6 +366,16 @@ function AcessoCard({
       )}
       {aberto && (
         <div className="se-card-body">
+          <div className="se-acesso-acoes">
+            {isRaiz && (
+              <button type="button" className="se-botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
+                <Icon svg={plusIconSvg} /> CRIAR ACESSO
+              </button>
+            )}
+            <button type="button" className="se-botao" onClick={() => onCreateAmbiente(acesso.id)}>
+              <Icon svg={plusIconSvg} /> ADICIONAR AMBIENTE
+            </button>
+          </div>
           {/* Ambientes direto deste Acesso vêm antes dos Acessos filhos —
               o que pertence a ele fica visualmente "em cima" do próximo
               nível da árvore, em vez de misturado depois. */}
@@ -399,27 +409,8 @@ function AcessoCard({
             />
           ))}
           {filhos.length === 0 && filhosAmbientes.length === 0 && <div className="se-vazio-italico">Arraste ambientes para cá.</div>}
-          <div className="se-acesso-acoes">
-            {isRaiz && (
-              <button type="button" className="se-botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
-                <Icon svg={plusIconSvg} /> CRIAR ACESSO
-              </button>
-            )}
-            <button type="button" className="se-botao" onClick={() => onCreateAmbiente(acesso.id)}>
-              <Icon svg={plusIconSvg} /> ADICIONAR AMBIENTE
-            </button>
-          </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function RootDropZone() {
-  const { setNodeRef, isOver } = useDroppable({ id: "drop-root", data: { kind: "root" } });
-  return (
-    <div ref={setNodeRef} className={`se-root-drop ${isOver ? "se-root-drop-over" : ""}`}>
-      Solte um acesso aqui para desprendê-lo, tornando-o uma nova raiz da árvore
     </div>
   );
 }
@@ -609,7 +600,10 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
     }
     if (activeData.kind === "acs") {
       const acessoId = activeData.id;
-      const novoAlimentaEm = overData.kind === "acesso" ? overData.id : null;
+      // Sem a zona de "desprender", um acesso só muda de lugar quando solto
+      // em cima de outro acesso — soltar em qualquer outro lugar não faz nada.
+      if (overData.kind !== "acesso") return;
+      const novoAlimentaEm = overData.id;
       if (novoAlimentaEm === acessoId) return;
       const proibidos = descendentesDe(acessoId, acessos);
       if (novoAlimentaEm !== null && proibidos.has(novoAlimentaEm)) return; // evitaria um ciclo
@@ -645,7 +639,11 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
           </div>
 
           <div className="se-arvore">
-            <RootDropZone />
+            <div className="se-centralizado">
+              <button type="button" className="se-botao" onClick={criarRaiz}>
+                <Icon svg={plusIconSvg} /> CRIAR {rotuloRaiz.toUpperCase()}
+              </button>
+            </div>
 
             <div className="se-raizes">
               {raizes.map((r) => (
@@ -677,11 +675,6 @@ export default function AcessosDescargasView({ projeto, pav, seNorma, ocupacoes,
               )}
             </div>
 
-            <div className="se-centralizado">
-              <button type="button" className="se-botao" onClick={criarRaiz}>
-                <Icon svg={plusIconSvg} /> CRIAR {rotuloRaiz.toUpperCase()}
-              </button>
-            </div>
           </div>
 
           <div>
