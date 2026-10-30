@@ -4058,6 +4058,19 @@ h1, h2, h3, h4, h5, h6,
    vem abaixo e botões em grade com espaço entre si. */
 .se-pagina-saidas > .se-pagina-header {
   margin-bottom: 32px;
+  /* O título quebra em duas linhas em vez de empurrar o botão para outra
+     linha, assim "Buscar do Revit" fica sempre alinhado ao lado dele. */
+  flex-wrap: nowrap;
+}
+
+.se-pagina-saidas > .se-pagina-header h1 {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.se-pagina-saidas > .se-pagina-header .se-botao {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .se-pagina-saidas .se-secao-titulo-pagina {
