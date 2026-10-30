@@ -25,7 +25,7 @@ estilos = listar_estilos_de_linha(doc)
 if not estilos:
     forms.alert(u"Nenhum estilo de linha encontrado no projeto.", exitscript=True)
 
-estilo_padrao, _prefixo_nao_usado = carregar_config(doc)
+estilo_padrao, _prefixo_nao_usado, _tipo_texto_nao_usado = carregar_config(doc)
 if estilo_padrao and estilo_padrao in estilos:
     nome_escolhido = estilo_padrao
 else:

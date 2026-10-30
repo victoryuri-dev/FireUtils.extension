@@ -33,14 +33,17 @@
 
         <TextBlock Text="Configurar Comprimento de Linhas" FontSize="15" FontWeight="SemiBold"
                    Foreground="{StaticResource BrushAccent}" Margin="0,0,0,4"/>
-        <TextBlock Text="Pré-configura o estilo de linha usado por &quot;Inserir Linha com Limite&quot; (pra não precisar escolher toda vez) e o texto inserido antes do valor por &quot;Medir e Inserir Texto&quot;."
+        <TextBlock Text="Pré-configura o estilo de linha e o estilo de texto usados por &quot;Inserir Linha com Limite&quot; e &quot;Medir e Inserir Texto&quot; (pra não precisar escolher toda vez), e o texto inserido antes do valor do comprimento — pode deixar em branco."
                    FontSize="11" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,0,0,16"/>
 
         <TextBlock Text="Estilo de linha padrão" Style="{StaticResource LabelStyle}"/>
         <ComboBox x:Name="CmbEstilo" Height="28" FontSize="12" Margin="0,0,0,14"/>
 
-        <TextBlock Text="Texto antes do valor (ex.: &quot;L = &quot;)" Style="{StaticResource LabelStyle}"/>
-        <TextBox x:Name="TxtPrefixo" Text="L = " Height="28" FontSize="12"
+        <TextBlock Text="Estilo de texto padrão" Style="{StaticResource LabelStyle}"/>
+        <ComboBox x:Name="CmbTipoTexto" Height="28" FontSize="12" Margin="0,0,0,14"/>
+
+        <TextBlock Text="Texto antes do valor (ex.: &quot;L = &quot; — pode ficar em branco)" Style="{StaticResource LabelStyle}"/>
+        <TextBox x:Name="TxtPrefixo" Height="28" FontSize="12"
                  Padding="6,4,6,4" Margin="0,0,0,10"/>
 
         <TextBlock x:Name="TxtErro" Text="" FontSize="11" FontWeight="SemiBold"

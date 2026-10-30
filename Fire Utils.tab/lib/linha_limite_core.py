@@ -25,8 +25,7 @@ import os
 
 from Autodesk.Revit.DB import (
     Line, Transaction, UnitUtils, BuiltInCategory, GraphicsStyleType,
-    FilteredElementCollector, TextNoteType, TextNote, TextNoteOptions,
-    HorizontalTextAlignment,
+    TextNote, TextNoteOptions, HorizontalTextAlignment,
 )
 from pyrevit import forms
 
@@ -95,18 +94,19 @@ def _direcao_acima_na_view(view):
 
 
 def _inserir_texto_comprimento(doc, view, ponto_final, comprimento_m):
-    """TextNote com o mesmo prefixo configurável de "Medir e Inserir
-    Texto" (comprimento_linha_config.py), 0,25 m ACIMA de ponto_final —
-    sempre vista de planta aqui (único jeito de desenhar as linhas), ver
-    _direcao_acima_na_view."""
-    tipos = list(FilteredElementCollector(doc).OfClass(TextNoteType))
-    if not tipos:
-        forms.alert(u"Nenhum tipo de TextNote encontrado.",
+    """TextNote no estilo de texto e com o prefixo configuráveis em
+    "Configurar" (comprimento_linha_config.py — prefixo pode ser vazio),
+    0,25 m ACIMA de ponto_final — sempre vista de planta aqui (único
+    jeito de desenhar essas linhas), ver _direcao_acima_na_view."""
+    from comprimento_linha_config import carregar as carregar_config, resolver_tipo_texto
+    _, prefixo, tipo_texto_nome = carregar_config(doc)
+
+    tipo_texto_id = resolver_tipo_texto(doc, tipo_texto_nome)
+    if tipo_texto_id is None:
+        forms.alert(u"Nenhum estilo de texto (TextNoteType) encontrado.",
                     title=u"Inserir Linha com Limite", warn_icon=True)
         return
 
-    from comprimento_linha_config import carregar as carregar_config
-    _, prefixo = carregar_config(doc)
     texto = u"{}{:.2f} m".format(prefixo, comprimento_m)
 
     deslocamento = _direcao_acima_na_view(view).Multiply(_metros_para_interno(0.25))
@@ -114,7 +114,7 @@ def _inserir_texto_comprimento(doc, view, ponto_final, comprimento_m):
 
     with Transaction(doc, u"Inserir Comprimento de Linha") as t:
         t.Start()
-        opcoes = TextNoteOptions(tipos[0].Id)
+        opcoes = TextNoteOptions(tipo_texto_id)
         opcoes.HorizontalAlignment = HorizontalTextAlignment.Left
         TextNote.Create(doc, view.Id, ponto_texto, texto, opcoes)
         t.Commit()

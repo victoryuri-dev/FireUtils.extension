@@ -9,11 +9,11 @@ exigir(u"pro")
 
 from pyrevit import revit, forms
 from Autodesk.Revit.DB import (
-    FilteredElementCollector, TextNoteType, TextNote, TextNoteOptions,
-    Transaction, UnitUtils, CurveElement, HorizontalTextAlignment
+    TextNote, TextNoteOptions, Transaction, UnitUtils, CurveElement,
+    HorizontalTextAlignment
 )
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
-from comprimento_linha_config import carregar as carregar_config
+from comprimento_linha_config import carregar as carregar_config, resolver_tipo_texto
 import clr
 
 clr.AddReference("RevitAPI")
@@ -41,13 +41,6 @@ def get_length_meters(element):
         return UnitUtils.ConvertFromInternalUnits(length_feet, DisplayUnitType.DUT_METERS)
 
 
-def get_default_text_type():
-    types = list(FilteredElementCollector(doc).OfClass(TextNoteType))
-    if not types:
-        forms.alert("Nenhum tipo de TextNote encontrado.", exitscript=True)
-    return types[0].Id
-
-
 try:
     # Verifica seleção prévia
     current_ids = uidoc.Selection.GetElementIds()
@@ -65,7 +58,11 @@ try:
             forms.alert("Nenhuma linha selecionada.", exitscript=True)
         elements = [doc.GetElement(r.ElementId) for r in refs]
 
-    _, prefixo = carregar_config(doc)
+    _, prefixo, tipo_texto_nome = carregar_config(doc)
+    tipo_texto_id = resolver_tipo_texto(doc, tipo_texto_nome)
+    if tipo_texto_id is None:
+        forms.alert("Nenhum estilo de texto (TextNoteType) encontrado.", exitscript=True)
+
     total_length = sum(get_length_meters(e) for e in elements)
     text_content = u"{}{:.2f} m".format(prefixo, total_length)
 
@@ -73,7 +70,7 @@ try:
 
     with Transaction(doc, "Inserir Comprimento de Linha") as t:
         t.Start()
-        options = TextNoteOptions(get_default_text_type())
+        options = TextNoteOptions(tipo_texto_id)
         options.HorizontalAlignment = HorizontalTextAlignment.Left
         TextNote.Create(doc, uidoc.ActiveView.Id, insert_point, text_content, options)
         t.Commit()
