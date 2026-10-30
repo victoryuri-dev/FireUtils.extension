@@ -4084,7 +4084,13 @@ h1, h2, h3, h4, h5, h6,
 .saidas-grade {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  gap: 6px;
+}
+
+/* O espaço entre os botões vem só do gap da grade (o cartão traz um
+   margin-bottom próprio, que somava e deixava o vão grande). */
+.saidas-grade .cartao-dimensionamento {
+  margin-bottom: 0;
 }
 
 .saidas-secao .hid-aviso,
