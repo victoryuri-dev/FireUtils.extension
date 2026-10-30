@@ -162,8 +162,7 @@ export default function SaidaEmergenciaPage({
         const pop = calcPopPav(p, seNorma.TAXA_POPULACIONAL);
         const nSaidas = Math.max(1, contarSaidasPavimento(p.acessos || []));
         const dist = getDistanciaPavimento(p, nSaidas, sistemas.sprinklers, sistemas.deteccao, seNorma.DISTANCIAS_MAXIMAS);
-        const semAcessoCount = (p.ambientes || []).filter((a) => !a.acessoId).length;
-        return { pav: p, pop, nSaidas, dist, semAcessoCount };
+        return { pav: p, pop, nSaidas, dist };
       })
     : [];
 
@@ -313,7 +312,7 @@ export default function SaidaEmergenciaPage({
             <p className="vazio">Nenhum pavimento cadastrado no site para esta estrutura.</p>
           ) : (
             <div className="se-pavimentos-lista">
-              {dadosPav.map(({ pav, pop, nSaidas, dist, semAcessoCount }) => (
+              {dadosPav.map(({ pav, pop, nSaidas, dist }) => (
                 <div
                   key={pav.id}
                   className="se-card se-card-header se-card-clicavel"
@@ -324,7 +323,6 @@ export default function SaidaEmergenciaPage({
                       <span className="se-acesso-nome">{pav.label}</span>
                       {pav.pisoDescarga && <span className="se-tag-descarga">DESCARGA</span>}
                       {pop === maiorPop && <span className="se-tag-populoso">MAIS POPULOSO</span>}
-                      {semAcessoCount > 0 && <div className="se-aviso-pequeno">{semAcessoCount} sem acesso</div>}
                     </div>
                   </div>
                   <div className="se-card-header-dir">
