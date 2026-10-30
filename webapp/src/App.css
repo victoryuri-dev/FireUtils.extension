@@ -1869,6 +1869,12 @@
   padding-top: 2px;
 }
 
+/* Os botões de criar dividem toda a largura do card. */
+.se-acesso-acoes .se-botao {
+  flex: 1 1 0;
+  justify-content: center;
+}
+
 /* Grade de estatísticas de um Acesso/Saída/Escada-Rampa — duas linhas
    (Acesso/Descarga ou Escada/Rampa em cima, Portas embaixo), colunas
    alinhadas entre as duas via grid (mesmas 5 colunas pras duas linhas,
