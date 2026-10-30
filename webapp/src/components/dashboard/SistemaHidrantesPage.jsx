@@ -354,8 +354,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // não confirmado), senão o que está salvo no Supabase (a mesma escolha
   // que o site vê/edita), senão o que já está aplicado no Revit — mesmo
   // sem nenhum clique ainda, um Tipo com mais de uma variante (Tipo 4) já
-  // mostra as pills de variante.
-  const tipoEfetivo = tipoSelecionado ?? tipoSalvo ?? classificacao?.tipo ?? null;
+  // mostra as pills de variante. `||`, não `??`: tipoSalvo vem '' (não
+  // null) quando o site ainda não tem uma escolha válida salva (ver
+  // useClassificacaoHidrantes.js) — com `??` a cadeia pararia nesse ''
+  // sem nunca chegar a conferir o que já está aplicado no Revit.
+  const tipoEfetivo = tipoSelecionado || tipoSalvo || classificacao?.tipo || null;
   const variantesDoTipoEfetivo = tipoEfetivo ? normaHidrantesMA.TIPOS_SISTEMA[tipoEfetivo]?.variantes || [] : [];
 
   function rtiParaTipo(tipo) {
@@ -628,15 +631,27 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {etapa === 1 && resposta?.ok && (
         <>
-          <HidrantesMapeamento
-            mapeando={mapeando}
-            instrucao={instrucaoMapeamento}
-            pendente={mapeamentoPendente}
-            inconsistencia={inconsistenciaMapeamento}
-            trechos={trechosMapeados ?? resposta.mapeamento}
-            onMapear={mapear}
-            onContinuar={continuarMapeamento}
-          />
+          {/* "Mapear Trechos" depende do Tipo já aplicado no Revit
+              (classificacao.tipo — o parâmetro de Project Information que o
+              bridge lê pra saber Qs/Pmin): sem isso, o próprio mapeamento
+              falharia no Revit pedindo pra classificar primeiro. Em vez de
+              deixar o RT descobrir isso só ao clicar, a seção nem aparece
+              até o Tipo estar identificado. */}
+          {classificacao?.tipo ? (
+            <HidrantesMapeamento
+              mapeando={mapeando}
+              instrucao={instrucaoMapeamento}
+              pendente={mapeamentoPendente}
+              inconsistencia={inconsistenciaMapeamento}
+              trechos={trechosMapeados ?? resposta.mapeamento}
+              onMapear={mapear}
+              onContinuar={continuarMapeamento}
+            />
+          ) : (
+            <div className="hid-aviso" style={{ marginBottom: 14 }}>
+              Escolha e aplique o Tipo do sistema acima antes de mapear a rede.
+            </div>
+          )}
           <div className="se-pagina-header" style={{ marginBottom: 14 }}>
             <p className="dashboard-subtitulo" style={{ margin: 0 }}>
               Resultados do dimensionamento.
