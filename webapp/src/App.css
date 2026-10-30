@@ -1718,10 +1718,6 @@
   gap: 15px;
 }
 
-.se-raizes > div{
-  border-color: var(--text-2);
-}
-
 .se-centralizado {
   display: flex;
   justify-content: center;
@@ -2464,13 +2460,11 @@
   box-shadow: none;
 }
 
-.se-botao:hover {
-  /* Era background: var(--border-2) — preenchia o botão inteiro com a
-     cor da borda (achatada, "muito escura" sobre --bg-3, e invisível em
-     repouso por ser a mesma cor da borda em si). Só intensifica a
-     borda no hover, sem trocar o fundo — mesmo espírito do
-     .btn-ghost:hover do site (realça a borda, não preenche um bloco). */
-  border-color: var(--text-3);
+.se-botao:hover:not(:disabled) {
+  /* Hover: fundo todo vermelho (a borda acompanha, sem efeito próprio). */
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .se-botao .icon {
@@ -2484,8 +2478,9 @@
   background: var(--bg-2);
 }
 
-.se-botao.se-botao-accent:hover {
-  background: var(--red-dim);
+.se-botao.se-botao-accent:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
 }
 
 .se-botao:disabled {
