@@ -2820,8 +2820,8 @@
 .hid-secao-desc {
   font-size: 11px;
   color: var(--text-3);
-  line-height: 1.5;
-  margin: -6px 0 12px;
+  line-height: 1.4;
+  margin: -10px 0 12px;
 }
 
 .hid-ponto-operacao {

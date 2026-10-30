@@ -245,6 +245,15 @@ function limiteVelocidade(trechoId, succao, limites) {
 
 export function VerificacaoVelocidade({ d, limites }) {
   const trechos = ORDEM_TRECHOS.map((id) => [id, d.res.j[id]]);
+  const linhas = trechos.flatMap(([id, t]) => {
+    const vLimite = limiteVelocidade(id, d.succao, limites);
+    return t.segmentos.map((seg, i) => ({
+      key: `${id}-${i}`, label: t.label, dn: seg.d_mm, v: seg.V, vLimite,
+    }));
+  });
+  // Sem coluna de limite na tabela — o limite só aparece no texto abaixo,
+  // junto da orientação do que fazer, quando algum trecho não atende.
+  const falhas = linhas.filter((l) => l.v > l.vLimite);
   return (
     <div className="hiddim-secao">
       <h4 className="hiddim-secao-titulo">Verificação de Velocidade</h4>
@@ -253,26 +262,32 @@ export function VerificacaoVelocidade({ d, limites }) {
           <tr>
             <TH>Trecho</TH>
             <TH>DN</TH>
-            <TH right>Limite Normativo</TH>
             <TH>Velocidade</TH>
           </tr>
         </thead>
         <tbody>
-          {trechos.flatMap(([id, t]) => {
-            const vLimite = limiteVelocidade(id, d.succao, limites);
-            return t.segmentos.map((seg, i) => (
-              <tr key={`${id}-${i}`}>
-                <TD bold>{t.label}</TD>
-                <TD mono muted>DN{Number(seg.d_mm).toFixed(0)}</TD>
-                <TD right mono muted>{ms(vLimite)}</TD>
-                <td className="hiddim-td">
-                  <VelChip v={seg.V} limite={vLimite} />
-                </td>
-              </tr>
-            ));
-          })}
+          {linhas.map((l) => (
+            <tr key={l.key}>
+              <TD bold>{l.label}</TD>
+              <TD mono muted>DN{Number(l.dn).toFixed(0)}</TD>
+              <td className="hiddim-td">
+                <VelChip v={l.v} limite={l.vLimite} />
+              </td>
+            </tr>
+          ))}
         </tbody>
       </Tabela>
+      {falhas.length > 0 && (
+        <div className="hid-aviso" style={{ marginTop: 10 }}>
+          {falhas.map((l, i) => (
+            <p key={l.key} style={{ margin: i === 0 ? 0 : "6px 0 0" }}>
+              {l.label} (DN{Number(l.dn).toFixed(0)}): velocidade de {ms(l.v)} acima do limite normativo de{" "}
+              {ms(l.vLimite)} — aumente o diâmetro deste trecho (a vazão é um dado normativo fixo do tipo de
+              sistema e não pode ser reduzida).
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
