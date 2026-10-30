@@ -367,11 +367,9 @@ function AcessoCard({
       {aberto && (
         <div className="se-card-body">
           <div className="se-acesso-acoes">
-            {isRaiz && (
-              <button type="button" className="se-botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
-                <Icon svg={plusIconSvg} /> CRIAR ACESSO
-              </button>
-            )}
+            <button type="button" className="se-botao" onClick={() => onCriarAcessoFilho(acesso.id)}>
+              <Icon svg={plusIconSvg} /> CRIAR ACESSO
+            </button>
             <button type="button" className="se-botao" onClick={() => onCreateAmbiente(acesso.id)}>
               <Icon svg={plusIconSvg} /> ADICIONAR AMBIENTE
             </button>
