@@ -2617,7 +2617,11 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding-right: 6px;
+  /* O .app tem 20px de padding; sem isto a barra de rolagem ficava 20px
+     afastada da borda. Estica a área rolável até as bordas do painel
+     (direita, topo e base) e devolve o respiro como padding interno. */
+  margin: -20px -20px -20px 0;
+  padding: 20px 20px 20px 0;
   animation: surgir 0.2s;
 }
 
