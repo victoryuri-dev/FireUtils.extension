@@ -3579,6 +3579,14 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 7px 9px;
+  /* Coluna esticada pela altura da linha do grid (stretch é o padrão de
+     .hiddim-ministat-grid) — o valor fica sempre no rodapé da caixa
+     (margin-top: auto, ver .hiddim-ministat-val), alinhado entre as três
+     caixas mesmo quando o rótulo de uma quebra em 2 linhas e o da vizinha
+     não. */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .hiddim-ministat-label {
@@ -3591,27 +3599,21 @@
   overflow-wrap: anywhere;
 }
 
+/* Tamanho/peso únicos pras três caixas (Leq/Ltotal/J) — só a cor muda
+   (.hiddim-ministat-destaque), pra não perder o destaque da perda de
+   carga do trecho (o resultado final desta seção) entre os dois
+   intermediários. */
 .hiddim-ministat-val {
   font-family: var(--font-corpo);
   font-variant-numeric: tabular-nums;
-}
-
-.hiddim-ministat-primario {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--accent);
-}
-
-.hiddim-ministat-secundario {
-  font-size: 12px;
-  font-weight: 600;
   color: var(--text);
+  margin-top: auto;
 }
 
-.hiddim-ministat-terciario {
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-3);
+.hiddim-ministat-destaque {
+  color: var(--accent);
 }
 
 /* Aba bloqueada por licença — ocupa o lugar do conteúdo (ver SemLicenca.jsx).

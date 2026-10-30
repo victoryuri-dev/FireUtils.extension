@@ -293,11 +293,11 @@ export function VerificacaoVelocidade({ d, limites }) {
 }
 
 // ── Perdas de Carga por Trecho ───────────────────────────────────────────
-function MiniStat({ label, nivel = "secundario", val }) {
+function MiniStat({ label, destaque, val }) {
   return (
     <div className="hiddim-ministat">
       <div className="hiddim-ministat-label">{label}</div>
-      <div className={`hiddim-ministat-val hiddim-ministat-${nivel}`}>{val}</div>
+      <div className={`hiddim-ministat-val ${destaque ? "hiddim-ministat-destaque" : ""}`}>{val}</div>
     </div>
   );
 }
@@ -339,9 +339,9 @@ function SegmentoTrecho({ seg }) {
       )}
 
       <div className="hiddim-ministat-grid">
-        <MiniStat label="Comp. Equivalente (Leq)" nivel="terciario" val={`${f4(seg.Leq)} m`} />
-        <MiniStat label="Comp. Total (Ltotal)" nivel="secundario" val={`${f4(seg.Ltotal)} m`} />
-        <MiniStat label="Perda de Carga do Trecho (J)" nivel="primario" val={fmca(seg.J)} />
+        <MiniStat label="Comp. Equivalente (Leq)" val={`${f4(seg.Leq)} m`} />
+        <MiniStat label="Comp. Total (Ltotal)" val={`${f4(seg.Ltotal)} m`} />
+        <MiniStat label="Perda de Carga do Trecho (J)" destaque val={fmca(seg.J)} />
       </div>
     </div>
   );
