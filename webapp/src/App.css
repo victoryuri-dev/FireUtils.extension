@@ -1727,22 +1727,6 @@
   justify-content: center;
 }
 
-.se-root-drop {
-  border: 1px dashed var(--text-3);
-  border-radius: 6px;
-  padding: 7px 10px;
-  font-size: 11px;
-  text-align: center;
-  color: var(--text-3);
-  transition: border-color 0.15s, background-color 0.15s;
-}
-
-.se-root-drop-over {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(234, 19, 48, 0.05);
-}
-
 .se-vazio-grande {
   padding: 34px;
   text-align: center;
