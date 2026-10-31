@@ -7,7 +7,8 @@
         SizeToContent="Height"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
-        Background="#F5F5F5">
+        Background="#F5F5F5"
+        Closing="on_closing">
 
     <Window.Resources>
         <SolidColorBrush x:Key="BrushCard"    Color="#FFFFFF"/>
@@ -17,6 +18,7 @@
         <SolidColorBrush x:Key="BrushAccent"  Color="#CC1A32"/>
         <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
         <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
+        <SolidColorBrush x:Key="BrushOk"      Color="#1B7A3D"/>
         <SolidColorBrush x:Key="BrushWarn"    Color="#B03A2E"/>
 
         <Style x:Key="LabelStyle" TargetType="TextBlock">
@@ -39,6 +41,39 @@
             <Setter Property="Margin" Value="0,0,0,8"/>
             <Setter Property="Cursor" Value="Hand"/>
         </Style>
+
+        <!-- Opção em formato de botão (RadioButton com template próprio) —
+             duas/quatro lado a lado por pergunta, clique alterna qual está ativa. -->
+        <Style x:Key="OpcaoBotaoStyle" TargetType="RadioButton">
+            <Setter Property="Padding" Value="6,10,6,10"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushValor}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Bd" Background="{StaticResource BrushBranco}"
+                                BorderBrush="{StaticResource BrushBorder}" BorderThickness="1"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               TextBlock.TextAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushAccent}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                                <Setter Property="Foreground" Value="{StaticResource BrushBranco}"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <StackPanel Margin="22,18,22,18">
@@ -59,8 +94,50 @@
 
         <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
                 BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,12">
-            <CheckBox x:Name="ChkAbrigo" Content="Inserir abrigo de mangueira em cada hidrante"
-                      Style="{StaticResource NivelCheckStyle}" Margin="0"/>
+            <StackPanel>
+                <TextBlock Text="Orientação da válvula e do ramal (toda a coluna)"
+                           Style="{StaticResource LabelStyle}" TextWrapping="Wrap"/>
+                <UniformGrid Columns="2" Margin="0,0,0,0">
+                    <RadioButton x:Name="RbDirFrente" GroupName="GrupoDirecao" Margin="0,0,4,8"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_direcao_changed">
+                        <TextBlock Text="Frente" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton x:Name="RbDirTras" GroupName="GrupoDirecao" Margin="4,0,0,8"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_direcao_changed">
+                        <TextBlock Text="Trás" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton x:Name="RbDirEsquerda" GroupName="GrupoDirecao" Margin="0,0,4,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_direcao_changed">
+                        <TextBlock Text="Esquerda" TextWrapping="Wrap"/>
+                    </RadioButton>
+                    <RadioButton x:Name="RbDirDireita" GroupName="GrupoDirecao" Margin="4,0,0,0"
+                                 Style="{StaticResource OpcaoBotaoStyle}" Checked="on_direcao_changed">
+                        <TextBlock Text="Direita" TextWrapping="Wrap"/>
+                    </RadioButton>
+                </UniformGrid>
+            </StackPanel>
+        </Border>
+
+        <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
+                BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,12">
+            <StackPanel>
+                <CheckBox x:Name="ChkAbrigo" Content="Inserir abrigo de mangueira em cada hidrante"
+                          Style="{StaticResource NivelCheckStyle}" Margin="0,0,0,0"
+                          Checked="on_abrigo_changed" Unchecked="on_abrigo_changed"/>
+                <StackPanel x:Name="SecaoLadoAbrigo" Margin="0,8,0,0">
+                    <TextBlock Text="Lado do abrigo (em relação à válvula)" Style="{StaticResource LabelStyle}"/>
+                    <UniformGrid Columns="2">
+                        <RadioButton x:Name="RbLadoEsquerda" GroupName="GrupoLado" Margin="0,0,4,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_lado_changed">
+                            <TextBlock Text="Esquerda" TextWrapping="Wrap"/>
+                        </RadioButton>
+                        <RadioButton x:Name="RbLadoDireita" GroupName="GrupoLado" Margin="4,0,0,0"
+                                     Style="{StaticResource OpcaoBotaoStyle}" Checked="on_lado_changed">
+                            <TextBlock Text="Direita" TextWrapping="Wrap"/>
+                        </RadioButton>
+                    </UniformGrid>
+                </StackPanel>
+            </StackPanel>
         </Border>
 
         <TextBlock x:Name="TxtStatus" Text="" FontSize="11" FontWeight="SemiBold"
