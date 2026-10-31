@@ -10,7 +10,7 @@
     <Window.Resources>
         <SolidColorBrush x:Key="BrushLabel"   Color="#646464"/>
         <SolidColorBrush x:Key="BrushValor"   Color="#1E1E1E"/>
-        <SolidColorBrush x:Key="BrushAccent"  Color="#D83B01"/>
+        <SolidColorBrush x:Key="BrushAccent"  Color="#CC1A32"/>
         <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
         <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
 
