@@ -13,6 +13,14 @@ quanto uma coluna vertical de verdade atravessando vários níveis de uma
 vez (2+ níveis — ver _construir_coluna), com um ramal horizontal + válvula
 (e, opcionalmente, abrigo de mangueira) em cada nível escolhido.
 
+A origem (clique inicial) pode ser um tubo OU uma conexão/fitting (joelho/
+tê/cruzeta/luva) — nesse caso, só é selecionável se tiver um conector LIVRE
+apontando pra cima ou pra baixo (ver _FiltroElemento/
+_conectores_verticais_livres), e os níveis incompatíveis com a direção
+livre dela vêm desabilitados na lista (ver z_nivel_min/z_nivel_max em
+_preparar_coluna). A conexão em si, nesse caso, é um ConnectTo direto no
+conector já livre — nunca BreakCurve nem fitting novo.
+
 Usa um diálogo MODELESS com PRÉVIA AO VIVO (mesmo padrão de
 connect_pipe.py/connect_shelter_core_preview.py) pra escolher os níveis, se
 tem abrigo, a orientação da válvula/ramal e o lado do abrigo em relação à
@@ -216,17 +224,28 @@ def _pipe_is_vertical(pipe):
 
 
 
-def _get_connector_at(pipe, pt):
-    for conn in pipe.ConnectorManager.Connectors:
+def _connector_manager(elemento):
+    """ConnectorManager de um Pipe (.ConnectorManager) ou de um fitting/
+    FamilyInstance (.MEPModel.ConnectorManager) — unifica os dois
+    caminhos pra _get_connector_at/_get_connector_near/_get_far_connector
+    funcionarem com qualquer um dos dois tipos de elemento de origem."""
+    try:
+        return elemento.ConnectorManager
+    except AttributeError:
+        return elemento.MEPModel.ConnectorManager
+
+
+def _get_connector_at(elemento, pt):
+    for conn in _connector_manager(elemento).Connectors:
         if conn.Origin.IsAlmostEqualTo(pt, TOL):
             return conn
     return None
 
 
-def _get_connector_near(pipe, pt, max_dist_ft=0.2):
+def _get_connector_near(elemento, pt, max_dist_ft=0.2):
     """Como _get_connector_at mas com tolerância maior — útil após delete/BreakCurve."""
     best, best_dist = None, max_dist_ft
-    for conn in pipe.ConnectorManager.Connectors:
+    for conn in _connector_manager(elemento).Connectors:
         d = conn.Origin.DistanceTo(pt)
         if d < best_dist:
             best_dist = d
@@ -234,10 +253,10 @@ def _get_connector_near(pipe, pt, max_dist_ft=0.2):
     return best
 
 
-def _get_far_connector(pipe, pt_near):
-    """Retorna o conector de pipe mais distante de pt_near (= lado da válvula)."""
+def _get_far_connector(elemento, pt_near):
+    """Retorna o conector de elemento mais distante de pt_near (= lado da válvula)."""
     best, max_dist = None, -1.0
-    for conn in pipe.ConnectorManager.Connectors:
+    for conn in _connector_manager(elemento).Connectors:
         d = conn.Origin.DistanceTo(pt_near)
         if d > max_dist:
             max_dist = d
@@ -305,17 +324,59 @@ def _ordenar_conectores(conns):
     return run + rest
 
 
+def _conectores_verticais_livres(fitting):
+    """(conn_up, conn_down): os conectores LIVRES (não conectados) de
+    fitting que apontam pra cima/baixo (verticais, dentro de uma
+    tolerância) — None em qualquer um dos dois que não existir. É por um
+    desses conectores que a coluna entra na conexão clicada (ver
+    _preparar_coluna/_construir_ramal_unico/_construir_coluna) — nunca
+    criando um fitting novo ali, só ConnectTo direto no conector já
+    livre da peça existente."""
+    conn_up = conn_down = None
+    try:
+        conns = _connector_manager(fitting).Connectors
+    except Exception:
+        return None, None
+    for c in conns:
+        if c.IsConnected:
+            continue
+        d = _dir_conn(c)
+        if abs(d.X) > 0.05 or abs(d.Y) > 0.05:
+            continue  # não é vertical
+        if d.Z > 0 and conn_up is None:
+            conn_up = c
+        elif d.Z < 0 and conn_down is None:
+            conn_down = c
+    return conn_up, conn_down
+
+
+def _dir_de_fitting(doc, fitting):
+    """Direção horizontal de referência de um fitting: usa o primeiro
+    Pipe conectado a ele (ex.: o through-run de um tê) — fallback eixo X
+    se nenhum Pipe estiver conectado ainda."""
+    for conn in _connector_manager(fitting).Connectors:
+        for ref in conn.AllRefs:
+            try:
+                elem = doc.GetElement(ref.Owner.Id)
+                if isinstance(elem, Pipe):
+                    return _direcao_horizontal(elem)
+            except Exception:
+                pass
+    return XYZ(1.0, 0.0, 0.0)
+
+
 class _FiltroElemento(ISelectionFilter):
-    """Aceita Pipe ou FamilyInstance com 2-3 conectores MEP (Joelho / Tê)."""
+    """Aceita Pipe, ou fitting (FamilyInstance — joelho/tê/cruzeta/luva)
+    com pelo menos um conector LIVRE apontando pra cima ou pra baixo —
+    é esse conector que vai receber a coluna (ver
+    _conectores_verticais_livres). Fittings sem nenhum conector vertical
+    livre nem aparecem como selecionáveis."""
     def AllowElement(self, e):
         if isinstance(e, Pipe):
             return True
         if isinstance(e, FamilyInstance):
-            try:
-                n = e.MEPModel.ConnectorManager.Connectors.Size
-                return 2 <= n <= 3
-            except Exception:
-                pass
+            conn_up, conn_down = _conectores_verticais_livres(e)
+            return conn_up is not None or conn_down is not None
         return False
     def AllowReference(self, r, p): return True
 
@@ -389,21 +450,21 @@ def _preparar_coluna(doc, uidoc):
         pyscript.exit()
 
     # PickObject primeiro — Esc não cancela o comando, só pula pro modo
-    # livre (PickPoint de ponto qualquer).
+    # livre (PickPoint de ponto qualquer). Aceita um tubo OU uma conexão/
+    # fitting com conector livre vertical (ver _FiltroElemento — fittings
+    # sem isso já nem aparecem como selecionáveis).
     tubo_origem = None
     pt_clique   = None
     try:
         ref_sel = uidoc.Selection.PickObject(
             ObjectType.PointOnElement, _FiltroElemento(),
-            u"Clique no tubo de origem pra conectar a coluna (Esc pra "
-            u"posicionar livremente)"
+            u"Clique no tubo ou conexão de origem pra conectar a coluna "
+            u"(Esc pra posicionar livremente)"
         )
         elem_ref = doc.GetElement(ref_sel.ElementId)
-        if isinstance(elem_ref, Pipe):
+        if isinstance(elem_ref, (Pipe, FamilyInstance)):
             tubo_origem = elem_ref
             pt_clique   = ref_sel.GlobalPoint
-        # FamilyInstance (joelho/tê) como origem não é suportado aqui —
-        # cai pro modo livre abaixo.
     except Exception:
         pass
 
@@ -415,13 +476,44 @@ def _preparar_coluna(doc, uidoc):
         except Exception:
             pyscript.exit()
 
-    # Coluna nasce exatamente sobre o eixo do tubo de origem (X/Y do
-    # clique projetado nesse eixo) — não faz sentido a coluna "quase"
-    # cruzar o tubo sem estar exatamente sobre o ponto de corte.
-    z_origem      = None
-    dir_principal = XYZ(1.0, 0.0, 0.0)
+    # origem_eh_fitting: True quando tubo_origem é uma conexão (joelho/
+    # tê/cruzeta/luva) em vez de um tubo — muda como a coluna se liga a
+    # ele (ConnectTo direto no conector já livre, nunca BreakCurve nem
+    # fitting novo — ver _construir_ramal_unico/_construir_coluna) e
+    # quais níveis fazem sentido marcar (só na direção que tiver
+    # conector livre — ver z_nivel_min/z_nivel_max e _JanelaOpcoesColuna,
+    # que desabilita os níveis fora disso).
+    origem_eh_fitting = isinstance(tubo_origem, FamilyInstance)
+
+    z_origem         = None
+    dir_principal    = XYZ(1.0, 0.0, 0.0)
     nivel_ref_origem = None
-    if tubo_origem is not None:
+    z_nivel_min      = None
+    z_nivel_max      = None
+
+    if origem_eh_fitting:
+        dir_principal = _dir_de_fitting(doc, tubo_origem)
+        conn_up, conn_down = _conectores_verticais_livres(tubo_origem)
+        conn_ref = conn_up if conn_up is not None else conn_down
+        if conn_ref is not None:
+            # Coluna nasce exatamente no conector livre da conexão — não
+            # no ponto bruto do clique (que só serviu pra identificar a
+            # peça).
+            pt_clique = XYZ(conn_ref.Origin.X, conn_ref.Origin.Y, conn_ref.Origin.Z)
+            z_origem  = conn_ref.Origin.Z
+        if conn_up is not None and conn_down is None:
+            z_nivel_min = conn_up.Origin.Z       # só livre pra cima
+        elif conn_down is not None and conn_up is None:
+            z_nivel_max = conn_down.Origin.Z     # só livre pra baixo
+        # livre nos dois lados: sem limite nenhum (z_nivel_min/max ficam None)
+        try:
+            nivel_ref_origem = doc.GetElement(tubo_origem.LevelId)
+        except Exception:
+            pass
+    elif tubo_origem is not None:
+        # Coluna nasce exatamente sobre o eixo do tubo de origem (X/Y do
+        # clique projetado nesse eixo) — não faz sentido a coluna "quase"
+        # cruzar o tubo sem estar exatamente sobre o ponto de corte.
         loc_o = tubo_origem.Location.Curve
         pt_origem = _projetar_no_eixo(pt_clique, loc_o.GetEndPoint(0), loc_o.GetEndPoint(1))
         pt_clique = XYZ(pt_origem.X, pt_origem.Y, pt_clique.Z)
@@ -434,8 +526,11 @@ def _preparar_coluna(doc, uidoc):
 
     # Tipo/sistema de tubulação: prefere herdar do PRÓPRIO tubo de
     # origem (garante compatibilidade perfeita com o sistema que a
-    # coluna está entrando); sem tubo de origem, prefere qualquer Pipe
-    # JÁ EXISTENTE no projeto — um PipeType que já tem tubos de verdade
+    # coluna está entrando) — se for uma conexão, herda do primeiro Pipe
+    # já conectado a ela, se houver (GetTypeId() da conexão seria o
+    # FamilySymbol dela, não um PipeType — não serve pra Pipe.Create).
+    # Sem tubo nem conexão com pipe conectado, prefere qualquer Pipe JÁ
+    # EXISTENTE no projeto — um PipeType que já tem tubos de verdade
     # modelados quase certamente já tem Preferências de Roteamento
     # configuradas (joelho/tê definidos pra esse tipo/tamanho). O
     # fallback final ("1º PipeType do FilteredElementCollector") pode
@@ -444,7 +539,24 @@ def _preparar_coluna(doc, uidoc):
     # BreakCurve envolvido) derrubar com "failed to insert elbow/tee.":
     # o tipo em si não tem família de joelho/tê associada, não é um
     # problema de geometria.
-    pipe_existente = tubo_origem
+    if isinstance(tubo_origem, Pipe):
+        pipe_existente = tubo_origem
+    elif origem_eh_fitting:
+        pipe_existente = None
+        for conn in _connector_manager(tubo_origem).Connectors:
+            for ref in conn.AllRefs:
+                try:
+                    elem = doc.GetElement(ref.Owner.Id)
+                    if isinstance(elem, Pipe):
+                        pipe_existente = elem
+                        break
+                except Exception:
+                    pass
+            if pipe_existente is not None:
+                break
+    else:
+        pipe_existente = None
+
     if pipe_existente is None:
         pipe_existente = next(iter(FilteredElementCollector(doc).OfClass(Pipe).ToElements()), None)
 
@@ -485,6 +597,8 @@ def _preparar_coluna(doc, uidoc):
         u"niveis": niveis, u"tubo_origem": tubo_origem, u"pt_clique": pt_clique,
         u"z_origem": z_origem, u"dir_principal": dir_principal,
         u"nivel_ref_origem": nivel_ref_origem,
+        u"origem_eh_fitting": origem_eh_fitting,
+        u"z_nivel_min": z_nivel_min, u"z_nivel_max": z_nivel_max,
         u"modo_livre": (tubo_origem is None),
         u"pipe_type_id": pipe_type_id, u"sys_type_id": sys_type_id,
     }
@@ -502,17 +616,28 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
     dele na altura da válvula), ramal horizontal, válvula e, se marcado,
     abrigo.
 
-    A conexão a tubo_origem (joelho na ponta / tê no meio, via
-    PlumbingUtils.BreakCurve) roda SEMPRE, inclusive durante um ciclo de
-    prévia — é destrutiva num elemento pré-existente (corta/estende a
-    curva dele), mas isso é seguro aqui porque quem chama (ver
-    _JanelaOpcoesColuna._restaurar_curva_origem) restaura a curva
-    original de tubo_origem no início de CADA ciclo, antes de chamar
-    esta função de novo — mesmo padrão que connect_pipe.py já usa pra
-    pipe_ref. Isso é o que permite a prévia detectar ao vivo uma falha
-    de espaço/sobreposição ao criar o joelho/tê (ex.: Revit recusa por
-    falta de reta livre), em vez de só descobrir na hora de confirmar —
-    qualquer aviso retornado aqui bloqueia a confirmação (ver
+    tubo_origem pode ser um Pipe OU uma conexão/fitting (joelho/tê/
+    cruzeta/luva — ver ctx[u"origem_eh_fitting"]), clicada pelo corpo em
+    _preparar_coluna (não precisa mirar um conector específico — o
+    conector LIVRE vertical certo pra este nível é escolhido aqui, ver
+    abaixo). Nos dois casos a conexão roda SEMPRE, inclusive durante um
+    ciclo de prévia:
+
+    - tubo_origem é um Pipe: joelho na ponta / tê no meio, via
+      PlumbingUtils.BreakCurve — destrutivo (corta/estende a curva
+      dele), mas seguro aqui porque quem chama (ver
+      _JanelaOpcoesColuna._restaurar_curva_origem) restaura a curva
+      original no início de CADA ciclo, antes de chamar esta função de
+      novo — mesmo padrão que connect_pipe.py já usa pra pipe_ref.
+    - tubo_origem é uma conexão: ConnectTo direto no conector já livre
+      dela — não destrutivo (a peça já existe e já tem o conector
+      parado ali esperando), então não precisa de restauração nenhuma.
+
+    Isso é o que permite a prévia detectar ao vivo uma falha de espaço/
+    sobreposição ao criar o joelho/tê (ex.: Revit recusa por falta de
+    reta livre), ou uma falha ao conectar (ex.: diâmetros incompatíveis),
+    em vez de só descobrir na hora de confirmar — qualquer aviso
+    retornado aqui bloqueia a confirmação (ver
     _JanelaOpcoesColuna._ciclo_preview).
     """
     comp_horiz_ft     = _to_ft(COMP_HORIZ_M)
@@ -520,18 +645,39 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
     diam_ft           = _to_ft(DIAM_RAMAL_M)
     tol_fim_ft        = _to_ft(TOL_FIM)
 
-    simbolo        = ctx[u"simbolo"]
-    simbolo_abrigo = ctx[u"simbolo_abrigo"]
-    tubo_origem    = ctx[u"tubo_origem"]
-    pt_clique      = ctx[u"pt_clique"]
-    z_origem       = ctx[u"z_origem"]
-    pipe_type_id   = ctx[u"pipe_type_id"]
-    sys_type_id    = ctx[u"sys_type_id"]
+    simbolo           = ctx[u"simbolo"]
+    simbolo_abrigo    = ctx[u"simbolo_abrigo"]
+    tubo_origem       = ctx[u"tubo_origem"]
+    origem_eh_fitting = ctx[u"origem_eh_fitting"]
+    pt_clique         = ctx[u"pt_clique"]
+    z_origem          = ctx[u"z_origem"]
+    pipe_type_id      = ctx[u"pipe_type_id"]
+    sys_type_id       = ctx[u"sys_type_id"]
 
     z_valvula = nivel.Elevation + altura_valvula_ft
 
     if tubo_origem is None:
         pt_ramal         = XYZ(pt_clique.X, pt_clique.Y, z_valvula)
+        tubo_eh_vertical = False
+        pt_A = pt_B      = pt_ramal
+    elif origem_eh_fitting:
+        # Escolhe o conector livre certo PRA ESTE NÍVEL (não o de
+        # z_origem/ctx, que só serve pra _preparar_coluna decidir o
+        # intervalo permitido de níveis) — pra cima se a válvula fica
+        # acima do conector, pra baixo se fica abaixo. A UI já garante
+        # que um dos dois serve (ver _JanelaOpcoesColuna, que desabilita
+        # níveis fora da direção livre), mas valida de novo aqui —
+        # _construir_ramal_unico pode ser chamado com o estado de
+        # checkboxes de qualquer ciclo de prévia.
+        conn_up, conn_down = _conectores_verticais_livres(tubo_origem)
+        conn_fit = None
+        if conn_up is not None and z_valvula >= conn_up.Origin.Z - tol_fim_ft:
+            conn_fit = conn_up
+        elif conn_down is not None and z_valvula <= conn_down.Origin.Z + tol_fim_ft:
+            conn_fit = conn_down
+        if conn_fit is None:
+            raise Exception(u"Nível incompatível com a direção livre da conexão selecionada.")
+        pt_ramal         = XYZ(conn_fit.Origin.X, conn_fit.Origin.Y, conn_fit.Origin.Z)
         tubo_eh_vertical = False
         pt_A = pt_B      = pt_ramal
     else:
@@ -619,7 +765,24 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
             abrigo = _inserir_abrigo_transacao(doc, simbolo_abrigo, pt_abrigo, dir_abrigo, nivel)
             _rastrear(abrigo)
 
-    if tubo_origem is not None:
+    if origem_eh_fitting:
+        # Conexão já existe de verdade (foi o que o usuário clicou) e já
+        # tem o conector livre exatamente onde precisa — só ConnectTo,
+        # nunca BreakCurve nem fitting novo (ver docstring da função).
+        doc.Regenerate()
+        if tem_vertical:
+            conn_ramal = _get_connector_near(tubo_vert, pt_conexao)
+        else:
+            conn_ramal = _get_connector_near(tubo_horiz, pt_conexao)
+        conn_fit_fresco = _get_connector_near(tubo_origem, pt_conexao)
+        if conn_ramal and conn_fit_fresco:
+            try:
+                conn_fit_fresco.ConnectTo(conn_ramal)
+            except Exception as e:
+                avisos.append(u"Conexão de origem: falhou ({})".format(str(e)))
+        else:
+            avisos.append(u"Conexão de origem: conector não encontrado")
+    elif tubo_origem is not None:
         doc.Regenerate()
         if tem_vertical:
             conn_ramal = _get_connector_near(tubo_vert, pt_conexao)
@@ -671,18 +834,25 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
     nível marcado, delega pra _construir_ramal_unico (sem coluna vertical
     nenhuma — ver docstring dela).
 
-    A conexão com o tubo de origem (evento "origem" — corta/estende a
-    curva dele, via PlumbingUtils.BreakCurve ou _ajustar_endpoint) roda
-    SEMPRE, inclusive durante um ciclo de prévia: é destrutiva num
-    elemento pré-existente, mas quem chama (ver
-    _JanelaOpcoesColuna._restaurar_curva_origem) restaura a curva
-    original de tubo_origem no início de CADA ciclo, antes de chamar
-    esta função de novo — mesmo padrão que connect_pipe.py já usa pra
-    pipe_ref. É isso que permite a prévia detectar ao vivo uma falha de
-    espaço/sobreposição ao criar o Tê/cruzeta em qualquer ponto da
-    coluna (inclusive onde ela cruza o tubo de origem), em vez de só
-    descobrir na hora de confirmar — qualquer aviso retornado aqui
-    bloqueia a confirmação (ver _JanelaOpcoesColuna._ciclo_preview).
+    A conexão com o tubo de origem (evento "origem") roda SEMPRE,
+    inclusive durante um ciclo de prévia. tubo_origem pode ser um Pipe ou
+    uma conexão/fitting (ver ctx[u"origem_eh_fitting"]):
+
+    - Pipe: corta/estende a curva dele (PlumbingUtils.BreakCurve ou
+      _ajustar_endpoint) — destrutivo, mas seguro aqui porque quem chama
+      (ver _JanelaOpcoesColuna._restaurar_curva_origem) restaura a curva
+      original no início de CADA ciclo, antes de chamar esta função de
+      novo — mesmo padrão que connect_pipe.py já usa pra pipe_ref.
+    - Fitting: ConnectTo direto no(s) conector(es) já livre(s) dela — a
+      peça já existe e já está parada ali esperando, não precisa cortar
+      nem recriar nada, então não precisa de restauração nenhuma.
+
+    É isso que permite a prévia detectar ao vivo uma falha de espaço/
+    sobreposição ao criar o Tê/cruzeta em qualquer ponto da coluna
+    (inclusive onde ela cruza o tubo de origem), ou uma falha ao
+    conectar numa conexão existente, em vez de só descobrir na hora de
+    confirmar — qualquer aviso retornado aqui bloqueia a confirmação (ver
+    _JanelaOpcoesColuna._ciclo_preview).
 
     Levanta Exception (nunca pyscript.exit) em qualquer estado inválido
     (nenhum nível, abrigo sem família etc.) — quem chama (ciclo de
@@ -701,13 +871,14 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
     diam_ft           = _to_ft(DIAM_RAMAL_M)
     tol_fim_ft         = _to_ft(TOL_FIM)
 
-    simbolo        = ctx[u"simbolo"]
-    simbolo_abrigo = ctx[u"simbolo_abrigo"]
-    tubo_origem    = ctx[u"tubo_origem"]
-    pt_clique      = ctx[u"pt_clique"]
-    z_origem       = ctx[u"z_origem"]
-    pipe_type_id   = ctx[u"pipe_type_id"]
-    sys_type_id    = ctx[u"sys_type_id"]
+    simbolo           = ctx[u"simbolo"]
+    simbolo_abrigo    = ctx[u"simbolo_abrigo"]
+    tubo_origem       = ctx[u"tubo_origem"]
+    origem_eh_fitting = ctx[u"origem_eh_fitting"]
+    pt_clique         = ctx[u"pt_clique"]
+    z_origem          = ctx[u"z_origem"]
+    pipe_type_id      = ctx[u"pipe_type_id"]
+    sys_type_id       = ctx[u"sys_type_id"]
 
     nivel_base = niveis_sel[0]
     nivel_topo = niveis_sel[-1]
@@ -746,7 +917,8 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
     valvulas_criadas = []
     avisos           = []
 
-    loc_o = tubo_origem.Location.Curve if tubo_origem is not None else None
+    loc_o = (tubo_origem.Location.Curve
+             if tubo_origem is not None and not origem_eh_fitting else None)
 
     tubo_vert = Pipe.Create(doc, sys_type_id, pipe_type_id, nivel_base.Id, pt_base, pt_topo)
     _setar_diametro_ft(tubo_vert, diam_ft)
@@ -852,7 +1024,30 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
                     abrigo = _inserir_abrigo_transacao(doc, simbolo_abrigo, pt_abrigo, dir_abrigo, nivel)
                     _rastrear(abrigo)
 
-        else:  # evento[u"tipo"] == u"origem"
+        elif origem_eh_fitting:
+            # Conexão já existe de verdade e já tem o(s) conector(es)
+            # livre(s) exatamente onde precisa — um ConnectTo por perna
+            # da coluna nesse ponto (1 se extremo, 2 se meio — mesmo
+            # conns_coluna de cima), nunca BreakCurve nem fitting novo.
+            # Casa cada perna com o conector livre certo (cima/baixo)
+            # pela própria direção dela: BasisZ de um conector aponta pra
+            # FORA do corpo do tubo que o possui — uma perna que desce
+            # (BasisZ +Z, "fora" é pra cima dela) precisa do conector de
+            # BAIXO do fitting (que aponta -Z, pra dentro do vão que ela
+            # deixou); uma perna que sobe (BasisZ -Z) precisa do de CIMA
+            # (+Z) — sempre direções opostas quando o par está certo.
+            conn_up, conn_down = _conectores_verticais_livres(tubo_origem)
+            for conn_perna in conns_coluna:
+                conn_fit = conn_down if _dir_conn(conn_perna).Z > 0 else conn_up
+                if conn_fit is not None:
+                    try:
+                        conn_fit.ConnectTo(conn_perna)
+                    except Exception as e:
+                        avisos.append(u"Conexão de origem: falhou ({})".format(str(e)))
+                else:
+                    avisos.append(u"Conexão de origem: direção necessária não está livre")
+
+        else:  # evento[u"tipo"] == u"origem", tubo_origem é um Pipe
             # ── Pernas do lado do TUBO DE ORIGEM: 1 se o ponto de corte
             # cair perto de uma ponta (estende até lá), 2 se for no meio
             # (BreakCurve) — mutação destrutiva num elemento
@@ -915,7 +1110,9 @@ _CHAVE_JANELA_COLUNA = u"FireUtils_InserirHidranteColuna_JanelaAtiva"
 class _JanelaOpcoesColuna(forms.WPFWindow):
     """Janela MODELESS (hydrant_coluna_opcoes.xaml) com PRÉVIA AO VIVO —
     mesmo padrão de connect_pipe.py/_JanelaOpcoesRota: níveis (checkbox
-    por nível, criados dinamicamente porque o número varia por projeto),
+    por nível, criados dinamicamente porque o número varia por projeto —
+    desabilitados quando a origem é uma conexão/fitting e o nível fica na
+    direção sem conector livre, ver ctx[u"z_nivel_min"]/[u"z_nivel_max"]),
     abrigo de mangueira (toggle, ligado por padrão) e orientação da
     válvula/ramal (botão único de rotação, UMA só mesmo com vários
     níveis) + lado do abrigo (quando ligado) — qualquer troca reconstrói
@@ -945,9 +1142,12 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
         # _construir_ramal_unico) roda em TODO ciclo de prévia, não só na
         # confirmação, exatamente pra pegar ao vivo uma falha de espaço
         # do Revit ao criar o Tê/cruzeta ali — sem isso, cada ciclo
-        # deixaria tubo_origem cada vez mais cortado/deslocado.
+        # deixaria tubo_origem cada vez mais cortado/deslocado. Só se
+        # aplica quando tubo_origem é um Pipe — uma conexão/fitting não é
+        # mutada (ConnectTo no conector já livre dela), não tem curva
+        # nenhuma pra restaurar.
         self._tubo_origem = ctx[u"tubo_origem"]
-        if self._tubo_origem is not None:
+        if self._tubo_origem is not None and not ctx[u"origem_eh_fitting"]:
             _loc_origem = self._tubo_origem.Location.Curve
             self._p0_origem_orig = _loc_origem.GetEndPoint(0)
             self._p1_origem_orig = _loc_origem.GetEndPoint(1)
@@ -955,14 +1155,21 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
             self._p0_origem_orig = None
             self._p1_origem_orig = None
 
-        # Nível pré-marcado: o mesmo nível de referência do tubo de
-        # origem (tubo_origem.ReferenceLevel) — None em modo livre, caso
-        # em que nenhum nível vem marcado (igual a antes). Marcado em
-        # código, sob o mesmo guard _sincronizando do abrigo acima (ver
-        # comentário logo abaixo): setar IsChecked dispara Checked
-        # síncrono, e isso não pode disparar _agendar_atualizacao antes
-        # do resto da janela existir.
+        # Nível pré-marcado: o mesmo nível de referência do tubo/conexão
+        # de origem — None em modo livre, caso em que nenhum nível vem
+        # marcado (igual a antes). Marcado em código, sob o mesmo guard
+        # _sincronizando do abrigo abaixo: setar IsChecked dispara
+        # Checked síncrono, e isso não pode disparar _agendar_atualizacao
+        # antes do resto da janela existir.
         nivel_ref_origem = ctx[u"nivel_ref_origem"]
+
+        # Faixa de nível permitida quando a origem é uma conexão/fitting
+        # (ver ctx[u"z_nivel_min"]/[u"z_nivel_max"] — None = sem limite
+        # naquele lado): níveis cuja válvula ficaria na direção SEM
+        # conector livre vêm desabilitados — não dá pra nem marcar.
+        z_nivel_min       = ctx[u"z_nivel_min"]
+        z_nivel_max       = ctx[u"z_nivel_max"]
+        altura_valvula_ft = _to_ft(ALTURA_VALVULA_M)
 
         from System.Windows.Controls import CheckBox
         estilo = self.FindResource(u"NivelCheckStyle")
@@ -976,8 +1183,19 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
                 cb.Style   = estilo
                 cb.Checked   += self.on_opcao_changed
                 cb.Unchecked += self.on_opcao_changed
-                if nivel_ref_origem is not None and nivel.Id == nivel_ref_origem.Id:
+
+                z_valvula_nivel = nivel.Elevation + altura_valvula_ft
+                compativel = (
+                    (z_nivel_min is None or z_valvula_nivel >= z_nivel_min - TOL) and
+                    (z_nivel_max is None or z_valvula_nivel <= z_nivel_max + TOL)
+                )
+                if not compativel:
+                    cb.IsEnabled = False
+                    cb.ToolTip = (
+                        u"Fora da direção livre da conexão selecionada como origem")
+                elif nivel_ref_origem is not None and nivel.Id == nivel_ref_origem.Id:
                     cb.IsChecked = True
+
                 self.PainelNiveis.Children.Add(cb)
                 self._checkboxes.append(cb)
         finally:
@@ -1200,17 +1418,22 @@ def run_coluna_multilevel(doc, uidoc, output):
     abrigo de mangueira é opcional (toggle, ligado por padrão).
 
     Fluxo:
-      1. Clique: tubo de origem pra conectar o ramal/coluna (PickObject)
-         OU Esc pra posicionar livremente (sem conexão a nada existente).
+      1. Clique: tubo OU conexão/fitting (joelho/tê/cruzeta/luva) de
+         origem pra conectar o ramal/coluna (PickObject — uma conexão só
+         é selecionável se tiver um conector livre vertical, ver
+         _FiltroElemento) OU Esc pra posicionar livremente (sem conexão
+         a nada existente).
       2. Diálogo com prévia ao vivo (_JanelaOpcoesColuna): níveis a
-         incluir (mín. 1), abrigo de mangueira e orientação da
-         válvula/ramal (+ lado do abrigo, se ligado) — toda troca
-         reconstrói o resultado inteiro no modelo (_construir_coluna)
-         para o usuário ver antes de confirmar.
+         incluir (mín. 1 — desabilitados os que ficam na direção sem
+         conector livre, se a origem for uma conexão), abrigo de
+         mangueira e orientação da válvula/ramal (+ lado do abrigo, se
+         ligado) — toda troca reconstrói o resultado inteiro no modelo
+         (_construir_coluna) para o usuário ver antes de confirmar.
       3. Na confirmação, o resultado é reconstruído de vez numa transação
-         própria, agora COM a conexão real ao tubo de origem (ver
-         docstring de _construir_coluna/_construir_ramal_unico sobre por
-         que essa conexão só acontece uma vez).
+         própria. Com origem em Pipe, isso já rodava a cada ciclo de
+         prévia (ver docstring de _construir_coluna/_construir_ramal_unico);
+         com origem numa conexão, o ConnectTo também já roda a cada
+         ciclo — a confirmação só torna o último ciclo definitivo.
     """
     janela_ativa = pyscript.get_envvar(_CHAVE_JANELA_COLUNA)
     if janela_ativa is not None:
