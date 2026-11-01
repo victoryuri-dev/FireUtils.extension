@@ -420,12 +420,17 @@ def _preparar_coluna(doc, uidoc):
     # cruzar o tubo sem estar exatamente sobre o ponto de corte.
     z_origem      = None
     dir_principal = XYZ(1.0, 0.0, 0.0)
+    nivel_ref_origem = None
     if tubo_origem is not None:
         loc_o = tubo_origem.Location.Curve
         pt_origem = _projetar_no_eixo(pt_clique, loc_o.GetEndPoint(0), loc_o.GetEndPoint(1))
         pt_clique = XYZ(pt_origem.X, pt_origem.Y, pt_clique.Z)
         z_origem  = pt_origem.Z
         dir_principal = _direcao_horizontal(tubo_origem)
+        try:
+            nivel_ref_origem = tubo_origem.ReferenceLevel
+        except Exception:
+            pass
 
     # Tipo/sistema de tubulação: prefere herdar do PRÓPRIO tubo de
     # origem (garante compatibilidade perfeita com o sistema que a
@@ -479,6 +484,7 @@ def _preparar_coluna(doc, uidoc):
         u"simbolo": simbolo, u"simbolo_abrigo": simbolo_abrigo, u"erro_abrigo": erro_abrigo,
         u"niveis": niveis, u"tubo_origem": tubo_origem, u"pt_clique": pt_clique,
         u"z_origem": z_origem, u"dir_principal": dir_principal,
+        u"nivel_ref_origem": nivel_ref_origem,
         u"modo_livre": (tubo_origem is None),
         u"pipe_type_id": pipe_type_id, u"sys_type_id": sys_type_id,
     }
@@ -949,18 +955,33 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
             self._p0_origem_orig = None
             self._p1_origem_orig = None
 
+        # Nível pré-marcado: o mesmo nível de referência do tubo de
+        # origem (tubo_origem.ReferenceLevel) — None em modo livre, caso
+        # em que nenhum nível vem marcado (igual a antes). Marcado em
+        # código, sob o mesmo guard _sincronizando do abrigo acima (ver
+        # comentário logo abaixo): setar IsChecked dispara Checked
+        # síncrono, e isso não pode disparar _agendar_atualizacao antes
+        # do resto da janela existir.
+        nivel_ref_origem = ctx[u"nivel_ref_origem"]
+
         from System.Windows.Controls import CheckBox
         estilo = self.FindResource(u"NivelCheckStyle")
         self._checkboxes = []
-        for nivel in ctx[u"niveis"]:
-            cb = CheckBox()
-            cb.Content = nivel.Name
-            cb.Tag     = nivel
-            cb.Style   = estilo
-            cb.Checked   += self.on_opcao_changed
-            cb.Unchecked += self.on_opcao_changed
-            self.PainelNiveis.Children.Add(cb)
-            self._checkboxes.append(cb)
+        self._sincronizando = True
+        try:
+            for nivel in ctx[u"niveis"]:
+                cb = CheckBox()
+                cb.Content = nivel.Name
+                cb.Tag     = nivel
+                cb.Style   = estilo
+                cb.Checked   += self.on_opcao_changed
+                cb.Unchecked += self.on_opcao_changed
+                if nivel_ref_origem is not None and nivel.Id == nivel_ref_origem.Id:
+                    cb.IsChecked = True
+                self.PainelNiveis.Children.Add(cb)
+                self._checkboxes.append(cb)
+        finally:
+            self._sincronizando = False
 
         # Abrigo vem ligado por padrão — setado aqui em código, não via
         # IsChecked="True" no XAML: mudar IsChecked dispara Checked tanto
