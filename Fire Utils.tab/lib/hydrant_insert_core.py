@@ -16,10 +16,11 @@ Chamado pelos botões:
 
 As 3 ferramentas usam um diálogo MODELESS com PRÉVIA AO VIVO (mesmo
 padrão de connect_pipe.py/connect_shelter_core_preview.py) pra escolher a
-orientação da válvula/ramal (4 botões cardeais) e, quando há abrigo, o
-lado dele em relação à válvula — substituindo os antigos cliques de
-direção. Ver _JanelaOpcoesHidrante, _JanelaOpcoesHidranteAbrigo e
-_JanelaOpcoesColuna.
+orientação da válvula/ramal e, quando há abrigo, o lado dele em relação à
+válvula — cada opção é um botão único que rotaciona pra próxima escolha a
+cada clique (ver _ORDEM_DIRECAO/_ORDEM_LADO), substituindo os antigos
+cliques de direção. Ver _JanelaOpcoesHidrante, _JanelaOpcoesHidranteAbrigo
+e _JanelaOpcoesColuna.
 """
 
 import os
@@ -124,13 +125,16 @@ def _rastrear(elemento):
 
 
 # ===========================================================================
-# OPÇÕES DE DIREÇÃO (4 botões cardeais — substitui o clique de direção)
+# OPÇÕES DE DIREÇÃO (botão único de rotação — substitui o clique de direção)
 # ===========================================================================
 # Sem tubo/fitting de referência (modo livre): direções globais do projeto.
 # Com referência: direções relativas ao eixo do tubo/fitting selecionado —
 # "frente" é o próprio eixo, "direita" é _direita_de(eixo). Os nomes das
 # chaves (frente/tras/esquerda/direita) são sempre os mesmos; só o RÓTULO
-# exibido no botão muda conforme o modo (ver _ROTULOS_DIRECAO_*).
+# exibido no botão muda conforme o modo (ver _ROTULOS_DIRECAO_*). Um clique
+# só no botão (ver on_direcao_click nas janelas abaixo) avança pra próxima
+# chave de _ORDEM_DIRECAO, em vez de uma grade de 4 botões — sentido
+# horário: Frente → Direita → Trás → Esquerda → Frente…
 _ROTULOS_DIRECAO_RELATIVO = {
     u"frente": u"Frente", u"tras": u"Trás",
     u"esquerda": u"Esquerda", u"direita": u"Direita",
@@ -139,11 +143,16 @@ _ROTULOS_DIRECAO_GLOBAL = {
     u"frente": u"Norte", u"tras": u"Sul",
     u"esquerda": u"Oeste", u"direita": u"Leste",
 }
-_BOTOES_DIRECAO = {
-    u"frente": u"RbDirFrente", u"tras": u"RbDirTras",
-    u"esquerda": u"RbDirEsquerda", u"direita": u"RbDirDireita",
-}
-_BOTOES_LADO = {u"esquerda": u"RbLadoEsquerda", u"direita": u"RbLadoDireita"}
+_ROTULOS_LADO = {u"esquerda": u"Esquerda", u"direita": u"Direita"}
+
+_ORDEM_DIRECAO = [u"frente", u"direita", u"tras", u"esquerda"]
+_ORDEM_LADO    = [u"direita", u"esquerda"]
+
+
+def _proximo_na_lista(lista, atual):
+    """Próximo item de lista após atual, voltando ao início no final —
+    usada pelo botão único de rotação (direção/lado) a cada clique."""
+    return lista[(lista.index(atual) + 1) % len(lista)]
 
 
 def _opcoes_direcao(modo_livre, dir_principal):
@@ -902,18 +911,14 @@ class _JanelaOpcoesHidrante(forms.WPFWindow):
         self._direcao_atual        = u"frente"
         self.fila_acoes            = criar_fila_acoes()
 
-        rotulos = (_ROTULOS_DIRECAO_GLOBAL if ctx[u"modo_livre"] else _ROTULOS_DIRECAO_RELATIVO)
-        for chave, nome_btn in _BOTOES_DIRECAO.items():
-            getattr(self, nome_btn).Content = rotulos[chave]
-
-        self._sincronizando = True
-        try:
-            self.RbDirFrente.IsChecked = True
-        finally:
-            self._sincronizando = False
+        self._atualizar_texto_direcao()
 
         self.TxtStatus.Text       = u"Carregando prévia…"
         self.TxtStatus.Foreground = self.Resources[u"BrushLabel"]
+
+    def _atualizar_texto_direcao(self):
+        rotulos = (_ROTULOS_DIRECAO_GLOBAL if self.ctx[u"modo_livre"] else _ROTULOS_DIRECAO_RELATIVO)
+        self.BtnDirecao.Content = u"{}   ↻".format(rotulos[self._direcao_atual])
 
     def _direcao_saida_atual(self):
         return _opcoes_direcao(self.ctx[u"modo_livre"], self.ctx[u"dir_principal"])[self._direcao_atual]
@@ -1027,13 +1032,9 @@ class _JanelaOpcoesHidrante(forms.WPFWindow):
             self._ciclo_preview()
         self.fila_acoes.enfileirar(_acao)
 
-    def on_direcao_changed(self, sender, args):
-        if self._sincronizando:
-            return
-        for chave, nome_btn in _BOTOES_DIRECAO.items():
-            if getattr(self, nome_btn).IsChecked:
-                self._direcao_atual = chave
-                break
+    def on_direcao_click(self, sender, args):
+        self._direcao_atual = _proximo_na_lista(_ORDEM_DIRECAO, self._direcao_atual)
+        self._atualizar_texto_direcao()
         self._agendar_atualizacao()
 
     def on_cancel(self, sender, args):
@@ -1069,11 +1070,10 @@ class _JanelaOpcoesHidranteAbrigo(_JanelaOpcoesHidrante):
     def __init__(self, doc, uidoc, ctx, output):
         self._lado_atual = u"direita"
         _JanelaOpcoesHidrante.__init__(self, doc, uidoc, ctx, output)
-        self._sincronizando = True
-        try:
-            self.RbLadoDireita.IsChecked = True
-        finally:
-            self._sincronizando = False
+        self._atualizar_texto_lado()
+
+    def _atualizar_texto_lado(self):
+        self.BtnLadoAbrigo.Content = u"{}   ↻".format(_ROTULOS_LADO[self._lado_atual])
 
     def _dir_abrigo_atual(self):
         return _dir_abrigo_de_lado(self._lado_atual, self._direcao_saida_atual())
@@ -1082,13 +1082,9 @@ class _JanelaOpcoesHidranteAbrigo(_JanelaOpcoesHidrante):
         return _construir_hidrante_com_abrigo(
             self.doc, self.ctx, dir_saida, self._dir_abrigo_atual(), fazer_conexao_principal)
 
-    def on_lado_changed(self, sender, args):
-        if self._sincronizando:
-            return
-        for lado, nome_btn in _BOTOES_LADO.items():
-            if getattr(self, nome_btn).IsChecked:
-                self._lado_atual = lado
-                break
+    def on_lado_click(self, sender, args):
+        self._lado_atual = _proximo_na_lista(_ORDEM_LADO, self._lado_atual)
+        self._atualizar_texto_lado()
         self._agendar_atualizacao()
 
 
@@ -1565,10 +1561,11 @@ _CHAVE_JANELA_COLUNA = u"FireUtils_InserirHidranteColuna_JanelaAtiva"
 class _JanelaOpcoesColuna(forms.WPFWindow):
     """Janela MODELESS (hydrant_coluna_opcoes.xaml) com PRÉVIA AO VIVO —
     mesmo padrão de _JanelaOpcoesHidrante: níveis (checkbox por nível,
-    criados dinamicamente porque o número varia por projeto), "inserir
-    abrigo" e, agora, orientação da válvula/ramal (4 botões cardeais,
-    UMA só pra toda a coluna) + lado do abrigo (quando marcado) —
-    qualquer troca reconstrói a coluna inteira no modelo."""
+    criados dinamicamente porque o número varia por projeto), abrigo de
+    mangueira (toggle, ligado por padrão) e orientação da válvula/ramal
+    (botão único de rotação, UMA só pra toda a coluna) + lado do abrigo
+    (quando ligado) — qualquer troca reconstrói a coluna inteira no
+    modelo."""
 
     def __init__(self, doc, uidoc, ctx, output):
         forms.WPFWindow.__init__(self, _XAML_COLUNA_PATH)
@@ -1600,20 +1597,33 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
             self.PainelNiveis.Children.Add(cb)
             self._checkboxes.append(cb)
 
-        rotulos = (_ROTULOS_DIRECAO_GLOBAL if ctx[u"modo_livre"] else _ROTULOS_DIRECAO_RELATIVO)
-        for chave, nome_btn in _BOTOES_DIRECAO.items():
-            getattr(self, nome_btn).Content = rotulos[chave]
+        self._atualizar_texto_direcao()
+        self._atualizar_texto_lado()
 
+        # Abrigo vem ligado por padrão — setado aqui em código, não via
+        # IsChecked="True" no XAML: mudar IsChecked dispara Checked tanto
+        # faz a origem (clique do usuário ou o parser de XAML aplicando o
+        # atributo), e isso aconteceria DENTRO de forms.WPFWindow.__init__
+        # (acima), antes do resto do estado desta janela existir — daí o
+        # guard _sincronizando, mesmo padrão já usado nos botões de
+        # direção/lado antes da troca pro botão único de rotação.
         self._sincronizando = True
         try:
-            self.RbDirFrente.IsChecked  = True
-            self.RbLadoDireita.IsChecked = True
-            self.SecaoLadoAbrigo.Visibility = SW.Visibility.Collapsed
+            self.ChkAbrigo.IsChecked = True
         finally:
             self._sincronizando = False
+        self.SecaoLadoAbrigo.Visibility = (
+            SW.Visibility.Visible if self.ChkAbrigo.IsChecked else SW.Visibility.Collapsed)
 
         self.TxtStatus.Text       = u"Carregando prévia…"
         self.TxtStatus.Foreground = self.Resources[u"BrushLabel"]
+
+    def _atualizar_texto_direcao(self):
+        rotulos = (_ROTULOS_DIRECAO_GLOBAL if self.ctx[u"modo_livre"] else _ROTULOS_DIRECAO_RELATIVO)
+        self.BtnDirecao.Content = u"{}   ↻".format(rotulos[self._direcao_atual])
+
+    def _atualizar_texto_lado(self):
+        self.BtnLado.Content = u"{}   ↻".format(_ROTULOS_LADO[self._lado_atual])
 
     def _niveis_selecionados(self):
         return sorted((cb.Tag for cb in self._checkboxes if cb.IsChecked),
@@ -1739,22 +1749,14 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
             return
         self._agendar_atualizacao()
 
-    def on_direcao_changed(self, sender, args):
-        if self._sincronizando:
-            return
-        for chave, nome_btn in _BOTOES_DIRECAO.items():
-            if getattr(self, nome_btn).IsChecked:
-                self._direcao_atual = chave
-                break
+    def on_direcao_click(self, sender, args):
+        self._direcao_atual = _proximo_na_lista(_ORDEM_DIRECAO, self._direcao_atual)
+        self._atualizar_texto_direcao()
         self._agendar_atualizacao()
 
-    def on_lado_changed(self, sender, args):
-        if self._sincronizando:
-            return
-        for lado, nome_btn in _BOTOES_LADO.items():
-            if getattr(self, nome_btn).IsChecked:
-                self._lado_atual = lado
-                break
+    def on_lado_click(self, sender, args):
+        self._lado_atual = _proximo_na_lista(_ORDEM_LADO, self._lado_atual)
+        self._atualizar_texto_lado()
         self._agendar_atualizacao()
 
     def on_abrigo_changed(self, sender, args):
