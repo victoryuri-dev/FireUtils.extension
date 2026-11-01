@@ -125,21 +125,11 @@ def _rastrear(elemento):
 # Sem tubo/fitting de referência (modo livre): direções globais do projeto.
 # Com referência: direções relativas ao eixo do tubo/fitting selecionado —
 # "frente" é o próprio eixo, "direita" é _direita_de(eixo). Os nomes das
-# chaves (frente/tras/esquerda/direita) são sempre os mesmos; só o RÓTULO
-# exibido no botão muda conforme o modo (ver _ROTULOS_DIRECAO_*). Um clique
-# só no botão (ver on_direcao_click nas janelas abaixo) avança pra próxima
+# chaves (frente/tras/esquerda/direita) são sempre os mesmos. Um clique só
+# no botão (ver on_direcao_click nas janelas abaixo) avança pra próxima
 # chave de _ORDEM_DIRECAO, em vez de uma grade de 4 botões — sentido
-# horário: Frente → Direita → Trás → Esquerda → Frente…
-_ROTULOS_DIRECAO_RELATIVO = {
-    u"frente": u"Frente", u"tras": u"Trás",
-    u"esquerda": u"Esquerda", u"direita": u"Direita",
-}
-_ROTULOS_DIRECAO_GLOBAL = {
-    u"frente": u"Norte", u"tras": u"Sul",
-    u"esquerda": u"Oeste", u"direita": u"Leste",
-}
-_ROTULOS_LADO = {u"esquerda": u"Esquerda", u"direita": u"Direita"}
-
+# horário: Frente → Direita → Trás → Esquerda → Frente… O botão não mostra
+# o valor atual (só o ícone) — o usuário acompanha pela prévia ao vivo.
 _ORDEM_DIRECAO = [u"frente", u"direita", u"tras", u"esquerda"]
 _ORDEM_LADO    = [u"direita", u"esquerda"]
 
@@ -972,9 +962,6 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
             self.PainelNiveis.Children.Add(cb)
             self._checkboxes.append(cb)
 
-        self._atualizar_texto_direcao()
-        self._atualizar_texto_lado()
-
         # Abrigo vem ligado por padrão — setado aqui em código, não via
         # IsChecked="True" no XAML: mudar IsChecked dispara Checked tanto
         # faz a origem (clique do usuário ou o parser de XAML aplicando o
@@ -992,13 +979,6 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
 
         self.TxtStatus.Text       = u"Carregando prévia…"
         self.TxtStatus.Foreground = self.Resources[u"BrushLabel"]
-
-    def _atualizar_texto_direcao(self):
-        rotulos = (_ROTULOS_DIRECAO_GLOBAL if self.ctx[u"modo_livre"] else _ROTULOS_DIRECAO_RELATIVO)
-        self.TxtDirecaoValor.Text = rotulos[self._direcao_atual]
-
-    def _atualizar_texto_lado(self):
-        self.TxtLadoValor.Text = _ROTULOS_LADO[self._lado_atual]
 
     def _niveis_selecionados(self):
         return sorted((cb.Tag for cb in self._checkboxes if cb.IsChecked),
@@ -1152,12 +1132,10 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
 
     def on_direcao_click(self, sender, args):
         self._direcao_atual = _proximo_na_lista(_ORDEM_DIRECAO, self._direcao_atual)
-        self._atualizar_texto_direcao()
         self._agendar_atualizacao()
 
     def on_lado_click(self, sender, args):
         self._lado_atual = _proximo_na_lista(_ORDEM_LADO, self._lado_atual)
-        self._atualizar_texto_lado()
         self._agendar_atualizacao()
 
     def on_abrigo_changed(self, sender, args):
