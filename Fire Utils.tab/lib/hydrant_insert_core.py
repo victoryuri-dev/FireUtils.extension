@@ -1180,17 +1180,19 @@ def _criar_fitting_generico(doc, conectores):
     cruzeta) já ordenados por _ordenar_conectores — generaliza a mesma
     lógica que _construir_hidrante já usa pra reconectar o elemento
     principal, agora reusada pro ponto onde a coluna multinível
-    cruza/termina um tubo de origem.
+    cruza/termina um tubo de origem. Retorna o fitting criado — quem
+    chama é responsável por _rastrear() o resultado (ver _construir_coluna),
+    senão ele nunca é desfeito entre um ciclo de prévia e outro.
     """
     conectores = [c for c in conectores if c is not None]
     ord_ = _ordenar_conectores(conectores)
     n = len(ord_)
     if n == 2:
-        doc.Create.NewElbowFitting(ord_[0], ord_[1])
+        return doc.Create.NewElbowFitting(ord_[0], ord_[1])
     elif n == 3:
-        doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+        return doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
     elif n == 4:
-        doc.Create.NewCrossFitting(ord_[0], ord_[1], ord_[2], ord_[3])
+        return doc.Create.NewCrossFitting(ord_[0], ord_[1], ord_[2], ord_[3])
     else:
         raise Exception(u"número de conectores não suportado ({})".format(n))
 
@@ -1455,7 +1457,8 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
 
             if conn_h_ini and conns_coluna:
                 try:
-                    _criar_fitting_generico(doc, conns_coluna + [conn_h_ini])
+                    fitting_ramal = _criar_fitting_generico(doc, conns_coluna + [conn_h_ini])
+                    _rastrear(fitting_ramal)
                 except Exception as e:
                     avisos.append(u"{}: conexão do ramal falhou ({})".format(nivel.Name, str(e)))
             elif not conn_h_ini:
@@ -1541,7 +1544,8 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
             conns_totais = conns_origem + conns_coluna
             if len(conns_totais) >= 2:
                 try:
-                    _criar_fitting_generico(doc, conns_totais)
+                    fitting_origem = _criar_fitting_generico(doc, conns_totais)
+                    _rastrear(fitting_origem)
                 except Exception as e:
                     avisos.append(u"Tubo de origem: conexão falhou ({})".format(str(e)))
             else:
