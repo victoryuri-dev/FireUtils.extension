@@ -6,8 +6,6 @@ author: Fire Utils
 # listado aqui antes e não correspondia a pasta nenhuma, então este layout
 # era ignorado — passava despercebido porque havia um único botão.
 layout:
-  - Inserir Hidrante
   - Inserir Hidrante por Nivel
-  - Inserir Hidrante com Abrigo
   - Conectar Abrigo
   - Conectar Tubulação

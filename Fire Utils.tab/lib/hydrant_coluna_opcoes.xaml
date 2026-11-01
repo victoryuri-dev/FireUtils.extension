@@ -44,16 +44,28 @@
 
         <!-- Botão único de rotação: cada clique avança pra próxima opção
              (ver _ORDEM_DIRECAO/_ORDEM_LADO em hydrant_insert_core.py) —
-             mostra a opção ATUAL, não uma grade de botões. -->
+             só o ícone, quadrado; o valor ATUAL fica num TextBlock ao
+             lado (ver TxtDirecaoValor/TxtLadoValor), não dentro do
+             botão. -->
         <Style x:Key="RotacaoBotaoStyle" TargetType="Button">
-            <Setter Property="Height" Value="40"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontSize" Value="15"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Background" Value="{StaticResource BrushAccent}"/>
             <Setter Property="Foreground" Value="{StaticResource BrushBranco}"/>
             <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Content" Value="&#x21BB;"/>
             <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+
+        <Style x:Key="ValorDirecaoStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushValor}"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <!-- Toggle liga/desliga (CheckBox com template próprio: uma
@@ -113,7 +125,7 @@
                 <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
                         BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,12">
                     <StackPanel>
-                        <TextBlock Text="Níveis onde inserir hidrante (mín. 2 — base e topo da coluna)"
+                        <TextBlock Text="Níveis onde inserir hidrante (1 = hidrante único; 2+ = coluna vertical)"
                                    Style="{StaticResource LabelStyle}" TextWrapping="Wrap"/>
                         <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
                             <StackPanel x:Name="PainelNiveis"/>
@@ -124,9 +136,13 @@
                 <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
                         BorderThickness="1" CornerRadius="5" Padding="16,14,16,14" Margin="0,0,0,12">
                     <StackPanel>
-                        <TextBlock Text="Orientação da válvula e do ramal (toda a coluna)"
+                        <TextBlock Text="Orientação da válvula e do ramal"
                                    Style="{StaticResource LabelStyle}" TextWrapping="Wrap"/>
-                        <Button x:Name="BtnDirecao" Style="{StaticResource RotacaoBotaoStyle}" Click="on_direcao_click"/>
+                        <DockPanel LastChildFill="True">
+                            <Button x:Name="BtnDirecao" DockPanel.Dock="Right"
+                                    Style="{StaticResource RotacaoBotaoStyle}" Click="on_direcao_click"/>
+                            <TextBlock x:Name="TxtDirecaoValor" Style="{StaticResource ValorDirecaoStyle}"/>
+                        </DockPanel>
                     </StackPanel>
                 </Border>
 
@@ -141,7 +157,11 @@
                         </DockPanel>
                         <StackPanel x:Name="SecaoLadoAbrigo" Margin="0,12,0,0">
                             <TextBlock Text="Lado do abrigo (em relação à válvula)" Style="{StaticResource LabelStyle}"/>
-                            <Button x:Name="BtnLado" Style="{StaticResource RotacaoBotaoStyle}" Click="on_lado_click"/>
+                            <DockPanel LastChildFill="True">
+                                <Button x:Name="BtnLado" DockPanel.Dock="Right"
+                                        Style="{StaticResource RotacaoBotaoStyle}" Click="on_lado_click"/>
+                                <TextBlock x:Name="TxtLadoValor" Style="{StaticResource ValorDirecaoStyle}"/>
+                            </DockPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>
