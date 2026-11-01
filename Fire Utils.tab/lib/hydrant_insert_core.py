@@ -494,8 +494,7 @@ def _preparar_coluna(doc, uidoc):
     }
 
 
-def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrigo,
-                            fazer_conexao_origem):
+def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrigo):
     """
     Caso especial de _construir_coluna quando só 1 nível está marcado —
     não existe "coluna" nenhuma (base==topo não forma um tubo vertical
@@ -508,9 +507,17 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
     abrigo.
 
     A conexão a tubo_origem (joelho na ponta / tê no meio, via
-    PlumbingUtils.BreakCurve) só roda quando fazer_conexao_origem=True —
-    é destrutiva num elemento pré-existente, mesmo motivo de
-    _construir_coluna (ver sua docstring).
+    PlumbingUtils.BreakCurve) roda SEMPRE, inclusive durante um ciclo de
+    prévia — é destrutiva num elemento pré-existente (corta/estende a
+    curva dele), mas isso é seguro aqui porque quem chama (ver
+    _JanelaOpcoesColuna._restaurar_curva_origem) restaura a curva
+    original de tubo_origem no início de CADA ciclo, antes de chamar
+    esta função de novo — mesmo padrão que connect_pipe.py já usa pra
+    pipe_ref. Isso é o que permite a prévia detectar ao vivo uma falha
+    de espaço/sobreposição ao criar o joelho/tê (ex.: Revit recusa por
+    falta de reta livre), em vez de só descobrir na hora de confirmar —
+    qualquer aviso retornado aqui bloqueia a confirmação (ver
+    _JanelaOpcoesColuna._ciclo_preview).
     """
     comp_horiz_ft     = _to_ft(COMP_HORIZ_M)
     altura_valvula_ft = _to_ft(ALTURA_VALVULA_M)
@@ -616,7 +623,7 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
             abrigo = _inserir_abrigo_transacao(doc, simbolo_abrigo, pt_abrigo, dir_abrigo, nivel)
             _rastrear(abrigo)
 
-    if fazer_conexao_origem and tubo_origem is not None:
+    if tubo_origem is not None:
         doc.Regenerate()
         if tem_vertical:
             conn_ramal = _get_connector_near(tubo_vert, pt_conexao)
@@ -633,7 +640,8 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
                 conn_fim = _get_connector_near(tubo_origem, pt_fim)
                 if conn_fim:
                     try:
-                        doc.Create.NewElbowFitting(conn_fim, conn_ramal)
+                        fitting_o = doc.Create.NewElbowFitting(conn_fim, conn_ramal)
+                        _rastrear(fitting_o)
                     except Exception as e:
                         avisos.append(u"Tubo de origem: conexão falhou ({})".format(str(e)))
                 else:
@@ -642,11 +650,13 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
                 try:
                     new_id   = PlumbingUtils.BreakCurve(doc, tubo_origem.Id, pt_conexao)
                     tubo_sec = doc.GetElement(new_id)
+                    _rastrear(tubo_sec)
                     conn_p1  = _get_connector_near(tubo_origem, pt_conexao)
                     conn_p2  = _get_connector_near(tubo_sec,    pt_conexao)
                     if conn_p1 and conn_p2:
                         ord_ = _ordenar_conectores([conn_p1, conn_p2, conn_ramal])
-                        doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+                        fitting_o = doc.Create.NewTeeFitting(ord_[0], ord_[1], ord_[2])
+                        _rastrear(fitting_o)
                     else:
                         avisos.append(u"Tubo de origem: conectores pós-corte não encontrados")
                 except Exception as e:
@@ -657,23 +667,26 @@ def _construir_ramal_unico(doc, ctx, nivel, dir_saida, inserir_abrigo, dir_abrig
     return {u"valvulas_criadas": [(valvula, nivel)], u"avisos": avisos}
 
 
-def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrigo,
-                       fazer_conexao_origem):
+def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrigo):
     """
     Constrói a coluna inteira — igual à Etapa 6 original de
     run_coluna_multilevel — parametrizada por niveis_sel (vem do estado
-    ATUAL dos checkboxes, muda a cada ciclo de prévia) e
-    fazer_conexao_origem. Com exatamente 1 nível marcado, delega pra
-    _construir_ramal_unico (sem coluna vertical nenhuma — ver docstring
-    dela).
+    ATUAL dos checkboxes, muda a cada ciclo de prévia). Com exatamente 1
+    nível marcado, delega pra _construir_ramal_unico (sem coluna vertical
+    nenhuma — ver docstring dela).
 
-    fazer_conexao_origem=False (ciclos de prévia): o evento "origem"
-    nunca mexe no tubo_origem (pré-existente) — só o corte do TUBO
-    VERTICAL NOVO na altura dele (se for meio de coluna) acontece, pra
-    já mostrar o formato certo da coluna; a conexão real (que corta/
-    estende o tubo_origem do usuário) é destrutiva e não dá pra desfazer
-    entre um ciclo e outro, então só roda na confirmação (ver
-    fazer_conexao_origem=True, chamado por _JanelaOpcoesColuna._finalizar).
+    A conexão com o tubo de origem (evento "origem" — corta/estende a
+    curva dele, via PlumbingUtils.BreakCurve ou _ajustar_endpoint) roda
+    SEMPRE, inclusive durante um ciclo de prévia: é destrutiva num
+    elemento pré-existente, mas quem chama (ver
+    _JanelaOpcoesColuna._restaurar_curva_origem) restaura a curva
+    original de tubo_origem no início de CADA ciclo, antes de chamar
+    esta função de novo — mesmo padrão que connect_pipe.py já usa pra
+    pipe_ref. É isso que permite a prévia detectar ao vivo uma falha de
+    espaço/sobreposição ao criar o Tê/cruzeta em qualquer ponto da
+    coluna (inclusive onde ela cruza o tubo de origem), em vez de só
+    descobrir na hora de confirmar — qualquer aviso retornado aqui
+    bloqueia a confirmação (ver _JanelaOpcoesColuna._ciclo_preview).
 
     Levanta Exception (nunca pyscript.exit) em qualquer estado inválido
     (nenhum nível, abrigo sem família etc.) — quem chama (ciclo de
@@ -685,8 +698,7 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
         raise Exception(ctx[u"erro_abrigo"] or u"Não foi possível carregar a família do abrigo.")
 
     if len(niveis_sel) == 1:
-        return _construir_ramal_unico(
-            doc, ctx, niveis_sel[0], dir_saida, inserir_abrigo, dir_abrigo, fazer_conexao_origem)
+        return _construir_ramal_unico(doc, ctx, niveis_sel[0], dir_saida, inserir_abrigo, dir_abrigo)
 
     comp_horiz_ft     = _to_ft(COMP_HORIZ_M)
     altura_valvula_ft = _to_ft(ALTURA_VALVULA_M)
@@ -845,14 +857,13 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
                     _rastrear(abrigo)
 
         else:  # evento[u"tipo"] == u"origem"
-            if not fazer_conexao_origem:
-                continue
-
             # ── Pernas do lado do TUBO DE ORIGEM: 1 se o ponto de corte
             # cair perto de uma ponta (estende até lá), 2 se for no meio
             # (BreakCurve) — mutação destrutiva num elemento
-            # pré-existente, por isso só roda aqui (fazer_conexao_origem
-            # True), nunca num ciclo de prévia.
+            # pré-existente, mas segura aqui porque quem chama
+            # (_JanelaOpcoesColuna._restaurar_curva_origem) reseta a
+            # curva de tubo_origem a cada ciclo (ver docstring de
+            # _construir_coluna).
             p0o, p1o = loc_o.GetEndPoint(0), loc_o.GetEndPoint(1)
             dist_a = pt_z.DistanceTo(p0o)
             dist_b = pt_z.DistanceTo(p1o)
@@ -873,6 +884,7 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
                 try:
                     new_id_o        = PlumbingUtils.BreakCurve(doc, tubo_origem.Id, pt_z)
                     tubo_origem_sec = doc.GetElement(new_id_o)
+                    _rastrear(tubo_origem_sec)
                 except Exception as e:
                     avisos.append(u"Tubo de origem: corte falhou ({})".format(str(e)))
                 if tubo_origem_sec is not None:
@@ -930,6 +942,22 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
         self._direcao_atual        = u"frente"
         self._lado_atual           = u"direita"
         self.fila_acoes            = criar_fila_acoes()
+
+        # Curva original de tubo_origem, pra restaurar a cada ciclo (ver
+        # _restaurar_curva_origem) — a conexão com ele (BreakCurve /
+        # _ajustar_endpoint, dentro de _construir_coluna/
+        # _construir_ramal_unico) roda em TODO ciclo de prévia, não só na
+        # confirmação, exatamente pra pegar ao vivo uma falha de espaço
+        # do Revit ao criar o Tê/cruzeta ali — sem isso, cada ciclo
+        # deixaria tubo_origem cada vez mais cortado/deslocado.
+        self._tubo_origem = ctx[u"tubo_origem"]
+        if self._tubo_origem is not None:
+            _loc_origem = self._tubo_origem.Location.Curve
+            self._p0_origem_orig = _loc_origem.GetEndPoint(0)
+            self._p1_origem_orig = _loc_origem.GetEndPoint(1)
+        else:
+            self._p0_origem_orig = None
+            self._p1_origem_orig = None
 
         from System.Windows.Controls import CheckBox
         estilo = self.FindResource(u"NivelCheckStyle")
@@ -993,6 +1021,19 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
                 pass
         self._elementos_criados = set()
 
+    def _restaurar_curva_origem(self):
+        """Reseta tubo_origem pra curva original (antes de qualquer
+        BreakCurve/_ajustar_endpoint do ciclo anterior) — chamada sempre
+        junto de _desfazer_elementos_criados() (mesmo padrão de
+        connect_pipe.py/_JanelaOpcoesRota._restaurar_curvas_originais).
+        No-op se não há tubo_origem (modo livre)."""
+        if self._p0_origem_orig is not None:
+            try:
+                self._tubo_origem.Location.Curve = Line.CreateBound(
+                    self._p0_origem_orig, self._p1_origem_orig)
+            except Exception:
+                pass
+
     def _finalizar(self, confirmado):
         if confirmado:
             niveis_sel      = self._niveis_selecionados()
@@ -1003,10 +1044,10 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
             t.Start()
             try:
                 self._desfazer_elementos_criados()
+                self._restaurar_curva_origem()
                 self.doc.Regenerate()
                 resultado = _construir_coluna(
-                    self.doc, self.ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrigo,
-                    fazer_conexao_origem=True)
+                    self.doc, self.ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrigo)
                 t.Commit()
             except Exception as e:
                 t.RollBack()
@@ -1022,6 +1063,7 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
         t.Start()
         try:
             self._desfazer_elementos_criados()
+            self._restaurar_curva_origem()
         finally:
             try:
                 t.Commit()
@@ -1044,22 +1086,34 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
         t.Start()
         try:
             self._desfazer_elementos_criados()
+            self._restaurar_curva_origem()
             self.doc.Regenerate()
 
             _iniciar_rastreamento()
             erro = None
             try:
-                _construir_coluna(
+                resultado = _construir_coluna(
                     self.doc, self.ctx, self._niveis_selecionados(),
                     self._direcao_saida_atual(), self._inserir_abrigo_atual(),
-                    self._dir_abrigo_atual(), fazer_conexao_origem=False)
+                    self._dir_abrigo_atual())
                 self.doc.Regenerate()
+                # Falha ao criar um Tê/cruzeta/joelho (ex.: sem reta livre
+                # pro Revit encaixar o fitting) não propaga como Exception
+                # — _construir_coluna/_construir_ramal_unico seguem até o
+                # fim e só anotam em "avisos", pra construir o máximo
+                # possível mesmo com uma conexão falhando. Mas na PRÉVIA
+                # isso tem que travar a confirmação (ver on_ok) — é
+                # exatamente a limitação de espaço/sobreposição que o
+                # usuário só descobriria com o Revit reclamando depois.
+                if resultado[u"avisos"]:
+                    erro = u" | ".join(resultado[u"avisos"])
             except Exception as ex:
                 erro = u"{}".format(ex)
             self._elementos_criados = _parar_rastreamento()
 
             if erro is not None:
                 self._desfazer_elementos_criados()
+                self._restaurar_curva_origem()
                 self.doc.Regenerate()
                 self._preview_ok = False
                 self.TxtStatus.Text       = erro
