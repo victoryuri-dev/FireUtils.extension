@@ -432,6 +432,15 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         for e in necessarios:
             if e not in ordem:
                 ordem.append(e)
+
+        # "Paralelo" nunca pode ser o 1º eixo a alinhar em Conectar
+        # Abrigo — se calhou de ser, troca de lugar com o próximo que
+        # não for (ainda pode ficar como 2º/último, só não como 1º).
+        if ordem and ordem[0] == u"par":
+            for i in range(1, len(ordem)):
+                if ordem[i] != u"par":
+                    ordem[0], ordem[i] = ordem[i], ordem[0]
+                    break
         self._ordem_pref = ordem
 
         n = len(ordem)
@@ -445,8 +454,10 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             self.LblOrdem1.Visibility   = mostrar1
             if n >= 2:
                 for eixo, nome_btn in self._BOTOES_ORDEM1.items():
+                    # "Paralelo" nunca aparece como opção de 1º eixo.
+                    mostrar_btn = eixo in ordem and eixo != u"par"
                     getattr(self, nome_btn).Visibility = (
-                        SW.Visibility.Visible if eixo in ordem else SW.Visibility.Collapsed)
+                        SW.Visibility.Visible if mostrar_btn else SW.Visibility.Collapsed)
                 getattr(self, self._BOTOES_ORDEM1[ordem[0]]).IsChecked = True
 
             mostrar2 = SW.Visibility.Visible if n >= 3 else SW.Visibility.Collapsed
@@ -653,15 +664,22 @@ def _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel, d
     ordem_eixos = [u"z", u"par", u"perp"]
 
     if len(necessarios) >= 2:
-        escolha1 = forms.SelectFromList.show(
-            [_NOME_EIXO[e] for e in necessarios],
-            title=u"Fire Utils — Conectar Abrigo",
-            prompt=u"Qual eixo alinhar primeiro?",
-            multiselect=False
-        )
-        if not escolha1:
-            return None
-        primeiro  = [e for e in necessarios if _NOME_EIXO[e] == escolha1][0]
+        # "Paralelo" nunca pode ser o 1º eixo a alinhar em Conectar
+        # Abrigo — só entra como opção de 1º se for o único necessário
+        # além dele (nesse caso nem tem escolha real a fazer).
+        opcoes_primeiro = [e for e in necessarios if e != u"par"]
+        if len(opcoes_primeiro) >= 2:
+            escolha1 = forms.SelectFromList.show(
+                [_NOME_EIXO[e] for e in opcoes_primeiro],
+                title=u"Fire Utils — Conectar Abrigo",
+                prompt=u"Qual eixo alinhar primeiro?",
+                multiselect=False
+            )
+            if not escolha1:
+                return None
+            primeiro = [e for e in opcoes_primeiro if _NOME_EIXO[e] == escolha1][0]
+        else:
+            primeiro = opcoes_primeiro[0]
         restantes = [e for e in necessarios if e != primeiro]
 
         if len(restantes) >= 2:
