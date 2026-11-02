@@ -1714,6 +1714,17 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     fallback_horizontal = _direcao_horizontal_pipe(pipe_desc)
     d_par_efetivo        = _direcao_par_efetiva(d_ref, fallback_horizontal)
 
+    # pipe_ref é um tubo VERTICAL? Só nesse caso o eixo "z" é livre (ver
+    # _ponto_sobre_corpo mais abaixo) — quando pipe_ref é horizontal, o
+    # eixo livre é "par" (desliza ao longo do próprio pipe_ref), já
+    # tratado por _ajustar_alvo_corpo_invertido antes do loop principal;
+    # sem essa distinção, a convergência antecipada no loop reconheceria
+    # como "já encostou" uma posição de pipe_desc ao longo de par que só
+    # coincide por acaso com o corpo de pipe_ref, sem ter de fato
+    # chegado no ponto clicado — pulando o trecho par que ainda faltava
+    # criar de verdade.
+    pipe_ref_vertical = XYZ(d_ref.X, d_ref.Y, 0.0).GetLength() <= TOL
+
     # ── Etapa 1: extensão direta ─────────────────────────────────────────────
     # Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref,
     # apenas estende e conecta sem criar tubos extras. Só roda no modo "auto"
@@ -1851,8 +1862,11 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         # Convergência antecipada: se os trechos já fechados deixaram
         # P_cur encostando no corpo físico de pipe_ref (modo "corpo"),
         # os eixos restantes da ordem escolhida ficam desnecessários —
-        # ver docstring de _ponto_sobre_corpo.
-        if not clicou_ponta:
+        # ver docstring de _ponto_sobre_corpo. Só pra pipe_ref VERTICAL
+        # (eixo livre = "z") — pra pipe_ref horizontal (eixo livre =
+        # "par") essa mesma ideia já é tratada antes do loop, por
+        # _ajustar_alvo_corpo_invertido; ver pipe_ref_vertical acima.
+        if not clicou_ponta and pipe_ref_vertical:
             P_toque = _ponto_sobre_corpo(P_cur, pt_A, pt_B, d_ref)
             if P_toque is not None:
                 P_final = P_toque
