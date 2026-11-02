@@ -42,9 +42,9 @@
         <TextBlock Text="Estilo de texto padrão" Style="{StaticResource LabelStyle}"/>
         <ComboBox x:Name="CmbTipoTexto" Height="28" FontSize="12" Margin="0,0,0,14"/>
 
-        <TextBlock Text="Texto antes do valor (ex.: &quot;L = &quot; — pode ficar em branco)" Style="{StaticResource LabelStyle}"/>
-        <TextBox x:Name="TxtPrefixo" Height="28" FontSize="12"
-                 Padding="6,4,6,4" Margin="0,0,0,10"/>
+        <TextBlock Text="Texto antes do valor (ex.: &quot;D = &quot; — pode ficar em branco)" Style="{StaticResource LabelStyle}"/>
+        <TextBox x:Name="TxtPrefixo" Height="30" FontSize="12"
+                 Padding="6,0,6,0" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
 
         <TextBlock x:Name="TxtErro" Text="" FontSize="11" FontWeight="SemiBold"
                    Foreground="{StaticResource BrushWarn}" TextWrapping="Wrap" Margin="0,0,0,10"/>

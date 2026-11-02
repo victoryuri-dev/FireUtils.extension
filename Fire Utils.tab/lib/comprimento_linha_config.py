@@ -10,8 +10,8 @@ Linhas":
     Texto" e pelo painel "Limite Atingido" de "Inserir Linha com Limite"
     ao criar o TextNote do comprimento;
   - prefixo de texto — inserido antes do valor do comprimento (hoje
-    fixo em "L = ", editável aqui; vazio ("") é um valor válido — só
-    "nunca configurado" cai no padrão "L = ", ver carregar()).
+    fixo em "D = ", editável aqui; vazio ("") é um valor válido — só
+    "nunca configurado" cai no padrão "D = ", ver carregar()).
 
 Persistida no mesmo firedata.json da pasta do projeto que o resto da
 extensão já usa (ver projeto.py) — não no pyRevit nem no repositório.
@@ -31,7 +31,7 @@ from pyrevit import forms
 from projeto import carregar_cache, cache_path
 
 _CHAVE = u"comprimento_linha"
-_PREFIXO_PADRAO = u"L = "
+_PREFIXO_PADRAO = u"D = "
 
 _XAML_PATH = os.path.join(os.path.dirname(__file__), u"comprimento_linha_opcoes.xaml")
 
@@ -99,7 +99,7 @@ def resolver_tipo_texto(doc, tipo_texto_nome):
 def carregar(doc):
     """-> (nome_estilo_linha ou None, prefixo_texto, nome_tipo_texto ou
     None). prefixo_texto pode vir vazio ("") se foi assim que o usuário
-    salvou em "Configurar" — só cai no padrão "L = " quando NUNCA foi
+    salvou em "Configurar" — só cai no padrão "D = " quando NUNCA foi
     salvo (chave ausente), não quando foi salvo vazio de propósito."""
     projeto_dir = _projeto_dir(doc)
     if not projeto_dir:
