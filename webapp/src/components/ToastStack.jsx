@@ -1,14 +1,11 @@
 import Icon from "./Icon";
 import checkIconSvg from "../assets/icons/check-icon.svg?raw";
 import xIconSvg from "../assets/icons/x-icon.svg?raw";
-import avisoIconSvg from "../assets/icons/pasta-icon.svg?raw";
 
-// Mesmo ícone preto de "pasta" usado no indicador de card já carregado —
-// aqui representa o mesmo significado ("já estava no projeto").
+// Aviso usa um "!" em texto dentro do círculo; sucesso e erro, o ícone.
 const ICONE_POR_TIPO = {
   sucesso: checkIconSvg,
   erro: xIconSvg,
-  aviso: avisoIconSvg,
 };
 
 export default function ToastStack({ toasts, onDismiss }) {
@@ -19,7 +16,7 @@ export default function ToastStack({ toasts, onDismiss }) {
       {toasts.map((toast) => (
         <div key={toast.id} className={`toast toast-${toast.tipo}`}>
           <div className="toast-icone">
-            <Icon svg={ICONE_POR_TIPO[toast.tipo] || avisoIconSvg} />
+            {ICONE_POR_TIPO[toast.tipo] ? <Icon svg={ICONE_POR_TIPO[toast.tipo]} /> : "!"}
           </div>
           <div className="toast-corpo">
             {toast.titulo && <p className="toast-titulo">{toast.titulo}</p>}

@@ -130,34 +130,40 @@
   }
 }
 
+/* Notificação: fundo tingido com a cor do tipo, barra grossa à esquerda,
+   ícone redondo preenchido, título em destaque e mensagem mais suave. */
 .toast {
+  --toast-cor: var(--border-2);
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 12px 12px 14px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  border-left: 4px solid var(--border-2);
+  gap: 14px;
+  background: color-mix(in srgb, var(--toast-cor) 16%, var(--bg-2));
+  border-radius: 4px;
+  border-left: 4px solid var(--toast-cor);
+  padding: 16px 14px 16px 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
   animation: toast-entrada 0.18s ease-out;
 }
 
 .toast-icone {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--white);
+  background: var(--toast-cor);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
   margin-top: 1px;
 }
 
 .toast-icone .icon {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 .toast-corpo {
@@ -166,7 +172,7 @@
 }
 
 .toast-titulo {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text);
   margin: 0;
@@ -174,9 +180,9 @@
 }
 
 .toast-mensagem {
-  font-size: 11px;
-  color: var(--text-2);
-  margin: 2px 0 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--text) 78%, transparent);
+  margin: 4px 0 0;
   overflow-wrap: break-word;
   white-space: pre-line;
 }
@@ -194,33 +200,25 @@
   justify-content: center;
 }
 
+.toast-fechar:hover {
+  color: var(--text);
+}
+
 .toast-fechar .icon {
   width: 8px;
   height: 8px;
 }
 
 .toast-sucesso {
-  border-left-color: var(--green);
-}
-
-.toast-sucesso .toast-icone {
-  background: var(--green);
+  --toast-cor: var(--green);
 }
 
 .toast-erro {
-  border-left-color: var(--accent);
-}
-
-.toast-erro .toast-icone {
-  background: var(--accent);
+  --toast-cor: var(--accent);
 }
 
 .toast-aviso {
-  border-left-color: var(--black);
-}
-
-.toast-aviso .toast-icone {
-  background: var(--black);
+  --toast-cor: var(--amber);
 }
 
 @keyframes toast-entrada {
