@@ -881,8 +881,19 @@
   flex-direction: column;
   gap: 25px;
   overflow-y: auto;
-  padding-right: 6px;
+  /* Mesmo ajuste de .se-pagina: a barra de rolagem rente à borda do painel
+     (o .app tem 20px de padding), com o respiro devolvido como padding. */
+  margin: -20px -20px -20px 0;
+  padding: 20px 20px 20px 0;
   animation: surgir 0.2s;
+}
+
+.dashboard-tela::-webkit-scrollbar {
+  width: 3px;
+}
+
+.dashboard-tela::-webkit-scrollbar-thumb {
+  border-radius: 3px;
 }
 
 .dashboard-aviso-salvar {
