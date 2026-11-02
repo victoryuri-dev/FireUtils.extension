@@ -184,43 +184,64 @@ function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCa
   );
 }
 
-function Resultado({ r, onFechar }) {
-  const erro = !r.ok ? r.erro : r.erroEnvio;
-  return (
-    <div className={`saidas-resultado ${erro ? "saidas-resultado-erro" : ""}`} role="status">
-      <div className="saidas-resultado-texto">
-        {!r.ok && <p>{r.erro}</p>}
-        {r.ok && (
-          <>
-            <p>
-              <strong>{r.acao === "sincronizar" ? "Ambientes sincronizados" : "Ambientes identificados"}</strong>
-              {typeof r.ambientes === "number" && ` — ${r.ambientes} no Revit`}
-            </p>
-            {r.resumo && <p className="saidas-resultado-linhas">{r.resumo}</p>}
-            {r.populacao &&
-              (r.populacao.erro ? (
-                <p>População não sincronizada: {r.populacao.erro}</p>
-              ) : (
-                <p>
-                  {r.populacao.atualizados} ambiente(s) com população atualizada a partir do site.
-                  {r.populacao.naoEncontrados > 0 &&
-                    ` ${r.populacao.naoEncontrados} do site não foram encontrados neste modelo (apagados ou em outro arquivo).`}
-                </p>
-              ))}
-            {r.populacaoManual?.length > 0 && (
-              <p>
-                {r.populacaoManual.length} ambiente(s) sem taxa por área: informe a população no parâmetro
-                "População" do ambiente.
-              </p>
-            )}
-          </>
-        )}
-      </div>
-      <button type="button" className="se-botao" onClick={onFechar}>
-        Ok
-      </button>
-    </div>
-  );
+// Linhas do resumo em "deu certo" e "deu errado". O plugin novo já manda as
+// duas listas; o antigo só manda `resumo` (texto), então separa por padrão.
+function separarResumo(r) {
+  if (Array.isArray(r.resumoOk) || Array.isArray(r.resumoFalhas)) {
+    return { ok: r.resumoOk || [], falhas: r.resumoFalhas || [] };
+  }
+  const linhas = (r.resumo || "").split("\n").filter(Boolean);
+  return {
+    ok: linhas.filter((l) => /enviado\(s\)$/.test(l)),
+    falhas: linhas.filter((l) => !/enviado\(s\)$/.test(l)),
+  };
+}
+
+// Resultado de uma ação vira notificações: o que deu certo numa (verde) e o
+// que deu errado em outra (erro).
+function notificarResultado(r, adicionarToast) {
+  const rotulo = r.acao === "sincronizar" ? "sincronizar os ambientes" : "identificar os ambientes";
+  if (!r.ok) {
+    adicionarToast?.({ tipo: "erro", titulo: `Não foi possível ${rotulo}`, mensagem: r.erro, duracaoMs: 10000 });
+    return;
+  }
+
+  const { ok, falhas } = separarResumo(r);
+  const certo = [...ok];
+  const errado = [...falhas];
+  if (r.erroEnvio && !errado.includes(r.erroEnvio)) errado.push(r.erroEnvio);
+
+  if (r.populacao) {
+    if (r.populacao.erro) {
+      errado.push(`População não sincronizada: ${r.populacao.erro}`);
+    } else {
+      certo.push(`${r.populacao.atualizados} ambiente(s) com população atualizada a partir do site.`);
+      if (r.populacao.naoEncontrados > 0) {
+        errado.push(
+          `${r.populacao.naoEncontrados} ambiente(s) do site não foram encontrados neste modelo (apagados ou em outro arquivo).`
+        );
+      }
+    }
+  }
+  if (r.populacaoManual?.length > 0) {
+    errado.push(
+      `${r.populacaoManual.length} ambiente(s) sem taxa por área: informe a população no parâmetro "População" do ambiente.`
+    );
+  }
+
+  const titulo = r.acao === "sincronizar" ? "Ambientes sincronizados" : "Ambientes identificados";
+  if (certo.length > 0 || errado.length === 0) {
+    const noRevit = typeof r.ambientes === "number" ? ` — ${r.ambientes} no Revit` : "";
+    adicionarToast?.({
+      tipo: "sucesso",
+      titulo: `${titulo}${noRevit}`,
+      mensagem: certo.length > 0 ? certo.join("\n") : r.resumo || undefined,
+      duracaoMs: 7000,
+    });
+  }
+  if (errado.length > 0) {
+    adicionarToast?.({ tipo: "erro", titulo: "Atenção", mensagem: errado.join("\n"), duracaoMs: 12000 });
+  }
 }
 
 /**
@@ -228,13 +249,14 @@ function Resultado({ r, onFechar }) {
  * `onConcluido` é chamado quando uma ação termina sem erro (a página usa para
  * recarregar os ambientes que o plugin acabou de enviar ao site).
  */
-export default function SaidasFerramentas({ onConcluido, estruturas = [], estruturaPadraoId }) {
+export default function SaidasFerramentas({ onConcluido, estruturas = [], estruturaPadraoId, adicionarToast }) {
   const [opcoes, setOpcoes] = useState(null); // null = ainda não carregou
   const [ferramenta, setFerramenta] = useState(null);
   const [executando, setExecutando] = useState(null); // { acao, instrucao }
-  const [resultado, setResultado] = useState(null);
   const concluidoRef = useRef(onConcluido);
   concluidoRef.current = onConcluido;
+  const toastRef = useRef(adicionarToast);
+  toastRef.current = adicionarToast;
 
   useEffect(() => {
     return escutarMensagensDoHost((mensagem) => {
@@ -246,7 +268,7 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
       } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_RESULTADO) {
         const r = mensagem.payload || {};
         setExecutando(null);
-        setResultado(r);
+        notificarResultado(r, toastRef.current);
         if (r.ok && !r.erroEnvio) concluidoRef.current?.();
       }
     });
@@ -261,13 +283,11 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
 
   function confirmar(pedido) {
     setFerramenta(null);
-    setResultado(null);
     setExecutando({ acao: "identificar", modo: pedido.modo, instrucao: "Gravando a ocupação nos ambientes…" });
     postToHost(BridgeMessageTypes.IDENTIFICAR_AMBIENTES, pedido);
   }
 
   function sincronizar() {
-    setResultado(null);
     setExecutando({ acao: "sincronizar", instrucao: "Sincronizando com o site…" });
     postToHost(BridgeMessageTypes.SINCRONIZAR_AMBIENTES, {});
   }
@@ -303,7 +323,6 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
           <span>{executando.instrucao}</span>
         </div>
       )}
-      {resultado && <Resultado r={resultado} onFechar={() => setResultado(null)} />}
 
       {ferramenta && (
         <ModalOcupacao

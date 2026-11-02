@@ -298,6 +298,7 @@ export default function SaidaEmergenciaPage({
             onConcluido={handleBuscarRevit}
             estruturas={estruturasVinculadas?.length ? estruturasVinculadas : estruturasDoProjeto(projeto)}
             estruturaPadraoId={estruturaId}
+            adicionarToast={adicionarToast}
           />
 
           <p className="dashboard-subtitulo se-secao-titulo-pagina">Pavimentos</p>

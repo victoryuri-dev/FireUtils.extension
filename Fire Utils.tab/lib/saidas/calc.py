@@ -217,30 +217,38 @@ def sincronizar_ambientes(rooms_data, estado, projeto_dir):
             u"semEstrutura": sem_estrutura, u"erro": None}
 
 
-def resumo_texto(resultado):
-    """Formata o retorno de sincronizar_ambientes numa linha por estrutura
-    (+ aviso de não reconhecidos), pronto pra um forms.alert — usado pelos
-    a dockpane (saidas_ocupacao_bridge.py)."""
+def resumo_partes(resultado):
+    """(ok, falhas): linhas do resumo separadas entre o que deu certo e o que
+    não — a dockpane mostra cada grupo numa notificação própria (verde e de
+    erro)."""
     if resultado.get(u"erro"):
-        return resultado[u"erro"]
+        return [], [resultado[u"erro"]]
 
-    linhas = []
+    ok = []
+    falhas = []
     for item in resultado.get(u"porEstrutura") or []:
+        nome = item.get(u"estruturaNome") or u"?"
         if item.get(u"erro"):
-            linhas.append(u"{}: falha ao enviar ({})".format(item.get(u"estruturaNome") or u"?", item[u"erro"]))
+            falhas.append(u"{}: falha ao enviar ({})".format(nome, item[u"erro"]))
         else:
-            linhas.append(u"{}: {} ambiente(s) enviado(s)".format(item.get(u"estruturaNome") or u"?", item[u"quantidade"]))
+            ok.append(u"{}: {} ambiente(s) enviado(s)".format(nome, item[u"quantidade"]))
 
     nao_reconhecidos = resultado.get(u"naoReconhecidos") or []
     if nao_reconhecidos:
-        linhas.append(u"Texto de Estrutura não reconhecido em algum ambiente: {}".format(
+        falhas.append(u"Texto de Estrutura não reconhecido em algum ambiente: {}".format(
             u", ".join(nao_reconhecidos)))
 
     sem_estrutura = resultado.get(u"semEstrutura") or 0
     if sem_estrutura:
-        linhas.append(u"{} ambiente(s) sem o parâmetro Estrutura preenchido — não sincronizado(s).".format(sem_estrutura))
+        falhas.append(u"{} ambiente(s) sem o parâmetro Estrutura preenchido — não sincronizado(s).".format(sem_estrutura))
 
-    if not linhas:
-        linhas.append(u"Nenhum ambiente com Estrutura reconhecida pra sincronizar.")
+    if not ok and not falhas:
+        falhas.append(u"Nenhum ambiente com Estrutura reconhecida pra sincronizar.")
+    return ok, falhas
 
-    return u"\n".join(linhas)
+
+def resumo_texto(resultado):
+    """Formata o retorno de sincronizar_ambientes numa linha por item, pronto
+    pra um texto corrido — usado pela dockpane (saidas_ocupacao_bridge.py)."""
+    ok, falhas = resumo_partes(resultado)
+    return u"\n".join(ok + falhas)

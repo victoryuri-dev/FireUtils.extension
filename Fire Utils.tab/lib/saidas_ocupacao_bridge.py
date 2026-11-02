@@ -310,11 +310,12 @@ def _enviar_em_background(dados, estado, projeto_dir, fila_acoes, postar_mensage
     do modelo — nada aqui toca a API do Revit. Se `depois` existe, ele cuida
     da resposta; senão a resposta sai daqui."""
     def trabalho():
-        from saidas.calc import sincronizar_ambientes, resumo_texto
+        from saidas.calc import sincronizar_ambientes, resumo_texto, resumo_partes
         try:
             resultado = sincronizar_ambientes(dados, estado, projeto_dir)
             resposta = dict(base)
             resposta[u"resumo"] = resumo_texto(resultado)
+            resposta[u"resumoOk"], resposta[u"resumoFalhas"] = resumo_partes(resultado)
             resposta[u"erroEnvio"] = resultado.get(u"erro")
         except Exception as ex:
             resposta = dict(base)
