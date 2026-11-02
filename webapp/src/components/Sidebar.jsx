@@ -8,7 +8,7 @@ import { textoDoEstado } from "../lib/atualizacaoEstado";
 import { textoDaVersao } from "../lib/textoDaVersao";
 import logoSvg from "../assets/icons/fireutils-logo.svg?raw";
 import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
-import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
+import painelIconSvg from "../assets/icons/painel-icon.svg?raw";
 import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
@@ -22,7 +22,7 @@ import temaEscuroIconSvg from "../assets/icons/theme-dark-icon.svg?raw";
 // que o respectivo cartão de dimensionamento dentro do Dashboard.
 const ITENS_NAV = [
   { id: "biblioteca", label: "Biblioteca de Famílias", svg: libraryIconSvg },
-  { id: "dashboard", label: "Dashboard", svg: dashboardIconSvg },
+  { id: "dashboard", label: "Painel", svg: painelIconSvg },
   { id: "hidrantes", label: "Sistema de Hidrantes", svg: hydrantIconSvg },
   { id: "saidas", label: "Saídas de Emergência", svg: exitIconSvg },
 ];
