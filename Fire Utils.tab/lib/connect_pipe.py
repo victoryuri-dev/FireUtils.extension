@@ -1569,6 +1569,35 @@ def _ajustar_alvo_corpo_invertido(pipe_ref, pt_A, pt_B, d_ref, P_mid):
     return u"ponta", _escolher_ponta_livre(pipe_ref, pt_A, pt_B, d_ref, P_mid)
 
 
+def _ponto_sobre_corpo(P, pt_A, pt_B, d_ref):
+    """
+    Se P já cai, dentro de tolerância, sobre o corpo FÍSICO de pipe_ref
+    (entre pt_A e pt_B) — não só sobre a reta infinita que ele define —
+    retorna o ponto projetado exatamente sobre esse corpo (P "limpo",
+    sem a folga residual de quem chamou). None se P ainda não encosta
+    (fora do segmento físico, ou longe demais da reta).
+
+    Usado em _construir_conexao pra interromper o roteamento mais cedo:
+    se um trecho já fez o tubo encostar em pipe_ref, os eixos restantes
+    de ordem_ativa ficam desnecessários — conecta ali mesmo em vez de
+    seguir fechando trechos que só rodeariam o que já está pronto. Ex.:
+    pipe_ref vertical, ordem par→perp→z — depois de par+perp o ponto já
+    cai em cima da reta vertical de pipe_ref EM QUALQUER altura (o corpo
+    inteiro serve de "alinhamento" de Z), então Z nem precisa ser
+    ajustado.
+    """
+    L_ref = pt_A.DistanceTo(pt_B)
+    if L_ref < TOL:
+        return None
+    t = (P - pt_A).DotProduct(d_ref)
+    if t < -TOL or t > L_ref + TOL:
+        return None
+    P_proj = XYZ(pt_A.X + d_ref.X * t, pt_A.Y + d_ref.Y * t, pt_A.Z + d_ref.Z * t)
+    if P.DistanceTo(P_proj) > TOL_COLINEAR:
+        return None
+    return P_proj
+
+
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                         ordem_eixos=(u"z", u"par", u"perp"),
                         modo_conexao_ref=u"auto"):
@@ -1819,6 +1848,16 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     dirs_horiz     = {u"par": d_par_efetivo, u"perp": d_perp}
 
     for eixo in ordem_ativa:
+        # Convergência antecipada: se os trechos já fechados deixaram
+        # P_cur encostando no corpo físico de pipe_ref (modo "corpo"),
+        # os eixos restantes da ordem escolhida ficam desnecessários —
+        # ver docstring de _ponto_sobre_corpo.
+        if not clicou_ponta:
+            P_toque = _ponto_sobre_corpo(P_cur, pt_A, pt_B, d_ref)
+            if P_toque is not None:
+                P_final = P_toque
+                break
+
         if eixo == u"z":
             P_next  = XYZ(P_cur.X, P_cur.Y, P_final.Z)
             tol_leg = TOL_DZ
