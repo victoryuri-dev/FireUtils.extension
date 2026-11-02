@@ -197,50 +197,55 @@ function separarResumo(r) {
   };
 }
 
-// Resultado de uma ação vira notificações: o que deu certo numa (verde) e o
-// que deu errado em outra (erro).
+// Resultado de uma ação vira notificações: uma verde por estrutura que deu
+// certo (com o detalhe por pavimento) e uma de erro por estrutura que falhou,
+// mais uma de erro para as falhas gerais.
 function notificarResultado(r, adicionarToast) {
-  const rotulo = r.acao === "sincronizar" ? "sincronizar os ambientes" : "identificar os ambientes";
+  const rotulo = r.acao === "sincronizar" ? "sincronizar ambientes" : "identificar ambientes";
+  const tituloFalha = `Falha ao ${rotulo}`;
   if (!r.ok) {
-    adicionarToast?.({ tipo: "erro", titulo: `Não foi possível ${rotulo}`, mensagem: r.erro, duracaoMs: 10000 });
+    adicionarToast?.({ tipo: "erro", titulo: tituloFalha, mensagem: r.erro, duracaoMs: 10000 });
     return;
   }
 
   const { ok, falhas } = separarResumo(r);
-  const certo = [...ok];
-  const errado = [...falhas];
-  if (r.erroEnvio && !errado.includes(r.erroEnvio)) errado.push(r.erroEnvio);
+  const gerais = [];
+  const porEstrutura = [];
+  falhas.forEach((linha) => (/falha ao enviar/.test(linha) ? porEstrutura : gerais).push(linha));
+  if (r.erroEnvio && !falhas.includes(r.erroEnvio)) gerais.push(r.erroEnvio);
 
+  const populacaoOk = [];
   if (r.populacao) {
     if (r.populacao.erro) {
-      errado.push(`População não sincronizada: ${r.populacao.erro}`);
+      gerais.push(`População não sincronizada: ${r.populacao.erro}`);
     } else {
-      certo.push(`${r.populacao.atualizados} ambiente(s) com população atualizada a partir do site.`);
+      populacaoOk.push(`${r.populacao.atualizados} ambiente(s) com população atualizada a partir do site.`);
       if (r.populacao.naoEncontrados > 0) {
-        errado.push(
+        gerais.push(
           `${r.populacao.naoEncontrados} ambiente(s) do site não foram encontrados neste modelo (apagados ou em outro arquivo).`
         );
       }
     }
   }
   if (r.populacaoManual?.length > 0) {
-    errado.push(
+    gerais.push(
       `${r.populacaoManual.length} ambiente(s) sem taxa por área: informe a população no parâmetro "População" do ambiente.`
     );
   }
 
   const titulo = r.acao === "sincronizar" ? "Ambientes sincronizados" : "Ambientes identificados";
-  if (certo.length > 0 || errado.length === 0) {
-    const noRevit = typeof r.ambientes === "number" ? ` — ${r.ambientes} no Revit` : "";
-    adicionarToast?.({
-      tipo: "sucesso",
-      titulo: `${titulo}${noRevit}`,
-      mensagem: certo.length > 0 ? certo.join("\n") : r.resumo || undefined,
-      duracaoMs: 7000,
-    });
+  ok.forEach((bloco) => adicionarToast?.({ tipo: "sucesso", titulo, mensagem: bloco, duracaoMs: 8000 }));
+  if (populacaoOk.length > 0) {
+    adicionarToast?.({ tipo: "sucesso", titulo: "População atualizada", mensagem: populacaoOk.join("\n"), duracaoMs: 8000 });
   }
-  if (errado.length > 0) {
-    adicionarToast?.({ tipo: "erro", titulo: "Atenção", mensagem: errado.join("\n"), duracaoMs: 12000 });
+  porEstrutura.forEach((linha) =>
+    adicionarToast?.({ tipo: "erro", titulo: tituloFalha, mensagem: linha, duracaoMs: 12000 })
+  );
+  if (gerais.length > 0) {
+    adicionarToast?.({ tipo: "erro", titulo: tituloFalha, mensagem: gerais.join("\n"), duracaoMs: 12000 });
+  }
+  if (ok.length === 0 && populacaoOk.length === 0 && porEstrutura.length === 0 && gerais.length === 0) {
+    adicionarToast?.({ tipo: "sucesso", titulo, mensagem: r.resumo || undefined, duracaoMs: 6000 });
   }
 }
 

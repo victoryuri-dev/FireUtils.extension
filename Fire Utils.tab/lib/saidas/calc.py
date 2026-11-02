@@ -187,10 +187,13 @@ def sincronizar_ambientes(rooms_data, estado, projeto_dir):
     por_estrutura = {}
     nao_reconhecidos = set()
     sem_estrutura = 0
+    sem_estrutura_por_nivel = {}
     for r in rooms_data:
         nome = (r.get(u"estruturaNome") or u"").strip()
         if not nome:
             sem_estrutura += 1
+            nivel = r.get(u"nivel") or u"(sem nível)"
+            sem_estrutura_por_nivel[nivel] = sem_estrutura_por_nivel.get(nivel, 0) + 1
             continue
         estrutura_id = mapa_nomes.get(nome)
         if estrutura_id is None:
@@ -211,10 +214,12 @@ def sincronizar_ambientes(rooms_data, estado, projeto_dir):
                             u"erro": texto_erro(e)})
             continue
         resumo.append({u"estruturaNome": mapa_id_para_nome.get(estrutura_id),
-                        u"quantidade": len(rooms_da_estrutura), u"erro": None})
+                        u"quantidade": len(rooms_da_estrutura), u"erro": None,
+                        u"porPavimento": [(p[u"nome"], len(p[u"ambientes"])) for p in payload[u"pavimentos"]]})
 
     return {u"porEstrutura": resumo, u"naoReconhecidos": sorted(nao_reconhecidos),
-            u"semEstrutura": sem_estrutura, u"erro": None}
+            u"semEstrutura": sem_estrutura, u"semEstruturaPorNivel": sem_estrutura_por_nivel,
+            u"erro": None}
 
 
 def resumo_partes(resultado):
@@ -231,7 +236,10 @@ def resumo_partes(resultado):
         if item.get(u"erro"):
             falhas.append(u"{}: falha ao enviar ({})".format(nome, item[u"erro"]))
         else:
-            ok.append(u"{}: {} ambiente(s) enviado(s)".format(nome, item[u"quantidade"]))
+            linhas = [u"{}: {} ambiente(s) enviado(s)".format(nome, item[u"quantidade"])]
+            for pav, qtd in item.get(u"porPavimento") or []:
+                linhas.append(u"   {}: {}".format(pav, qtd))
+            ok.append(u"\n".join(linhas))
 
     nao_reconhecidos = resultado.get(u"naoReconhecidos") or []
     if nao_reconhecidos:
@@ -240,7 +248,10 @@ def resumo_partes(resultado):
 
     sem_estrutura = resultado.get(u"semEstrutura") or 0
     if sem_estrutura:
-        falhas.append(u"{} ambiente(s) sem o parâmetro Estrutura preenchido — não sincronizado(s).".format(sem_estrutura))
+        por_nivel = resultado.get(u"semEstruturaPorNivel") or {}
+        detalhe = u", ".join(u"{} ({})".format(n, q) for n, q in sorted(por_nivel.items()))
+        falhas.append(u"{} ambiente(s) sem o parâmetro Estrutura preenchido — não sincronizado(s){}".format(
+            sem_estrutura, u": " + detalhe if detalhe else u"."))
 
     if not ok and not falhas:
         falhas.append(u"Nenhum ambiente com Estrutura reconhecida pra sincronizar.")
