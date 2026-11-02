@@ -42,15 +42,42 @@ def _projeto_dir(doc):
     return os.path.dirname(doc.PathName)
 
 
+def _nome_elemento(elemento):
+    """Nome de um Element (ex.: TextNoteType) — `.Name` direto FALHA pra
+    vários ElementType (TextNoteType incluso): a propriedade é
+    implementação explícita de interface no Revit API, que o acesso
+    direto via atributo (.Name) não resolve em várias combinações de
+    engine/versão — por isso listar_tipos_de_texto() voltava sempre
+    vazio (try/except engolindo a exceção em silêncio). Tenta, nessa
+    ordem: atributo direto, o workaround clássico do IronPython
+    (Element.Name.__get__) e o helper estático oficial desde a API 2022
+    (Element.Name.GetValue) — cobre tanto o engine IronPython quanto o
+    CPython3 do pyRevit."""
+    try:
+        nome = elemento.Name
+        if nome:
+            return nome
+    except Exception:
+        pass
+    from Autodesk.Revit.DB import Element
+    try:
+        nome = Element.Name.__get__(elemento)
+        if nome:
+            return nome
+    except Exception:
+        pass
+    try:
+        return Element.Name.GetValue(elemento)
+    except Exception:
+        return None
+
+
 def listar_tipos_de_texto(doc):
     """{nome: ElementId} de cada TextNoteType do projeto."""
     from Autodesk.Revit.DB import FilteredElementCollector, TextNoteType
     tipos = {}
     for tipo in FilteredElementCollector(doc).OfClass(TextNoteType):
-        try:
-            nome = tipo.Name
-        except Exception:
-            continue
+        nome = _nome_elemento(tipo)
         if nome:
             tipos[nome] = tipo.Id
     return tipos
