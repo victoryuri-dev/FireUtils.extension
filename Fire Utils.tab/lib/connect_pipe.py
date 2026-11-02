@@ -167,6 +167,52 @@ def _perp_horizontal(d_ref):
     return XYZ(-d_horiz.Y, d_horiz.X, 0.0)
 
 
+def _direcao_horizontal_pipe(pipe):
+    """XYZ horizontal (Z=0, não necessariamente unitário) do eixo de
+    `pipe`, ou None se não for possível obter (sem Location.Curve) —
+    usado como fallback em _direcao_par_efetiva."""
+    try:
+        c = pipe.Location.Curve
+        p0, p1 = c.GetEndPoint(0), c.GetEndPoint(1)
+        return XYZ(p1.X - p0.X, p1.Y - p0.Y, 0.0)
+    except Exception:
+        return None
+
+
+def _direcao_par_efetiva(d_ref, fallback_horizontal=None):
+    """
+    Direção horizontal unitária usada como eixo "par" na decomposição da
+    rota em até 3 trechos retos (z/par/perp) — normalmente a projeção
+    horizontal do próprio eixo de pipe_ref (d_ref), renormalizada.
+
+    DEGENERA (vira vetor nulo) quando pipe_ref é um tubo VERTICAL: nesse
+    caso não existe "paralelo a pipe_ref" no plano horizontal — qualquer
+    direção horizontal é igualmente perpendicular a um tubo vertical —
+    e sem este fallback _eixos_necessarios nunca detecta que os trechos
+    par/perp são necessários (a_par e a_perp saem sempre ~0, por maior
+    que seja o desalinhamento horizontal real entre pipe_desc e a
+    coluna), então a rota tenta só ajustar Z — que sozinho nunca alcança
+    o alvo (fica faltando fechar a distância em X/Y).
+
+    fallback_horizontal, se dado (a direção horizontal do próprio
+    pipe_desc, ou do stub em Conectar Abrigo), é usado nesse caso —
+    mantém disponível o atalho de estender o próprio tubo em vez de
+    criar segmento + joelho, se ele já apontar pro lugar certo. Sem
+    fallback utilizável, cai pro eixo X do mundo, só pra sempre haver
+    uma base ortogonal válida pros eixos par/perp.
+    """
+    d_horiz = XYZ(d_ref.X, d_ref.Y, 0.0)
+    L_h     = d_horiz.GetLength()
+    if L_h > TOL:
+        return XYZ(d_horiz.X / L_h, d_horiz.Y / L_h, 0.0)
+    if fallback_horizontal is not None:
+        d_fb = XYZ(fallback_horizontal.X, fallback_horizontal.Y, 0.0)
+        L_fb = d_fb.GetLength()
+        if L_fb > TOL:
+            return XYZ(d_fb.X / L_fb, d_fb.Y / L_fb, 0.0)
+    return XYZ(1.0, 0.0, 0.0)
+
+
 def _rota_ate_endpoint(P_knee, P_target, d_ref, inverter_eixos=False):
     """
     Calcula a rota em L de P_knee até P_target.
@@ -202,7 +248,7 @@ def _rota_ate_endpoint(P_knee, P_target, d_ref, inverter_eixos=False):
 _NOME_EIXO = {u"z": u"Vertical (Z)", u"par": u"Paralelo", u"perp": u"Perpendicular"}
 
 
-def _eixos_necessarios(P_start, P_final, d_ref):
+def _eixos_necessarios(P_start, P_final, d_ref, fallback_horizontal=None):
     """
     Quais dos 3 eixos (z = vertical, par = paralelo ao eixo de pipe_ref,
     perp = perpendicular a ele) realmente precisam de ajuste pra ir de
@@ -211,11 +257,17 @@ def _eixos_necessarios(P_start, P_final, d_ref):
     vai existir. Retorna uma lista com os códigos necessários, SEM ordem
     definida (a ordem de execução é decidida pelo usuário — ver ordem_eixos
     em _construir_conexao).
+
+    fallback_horizontal: repassado a _direcao_par_efetiva — usado só
+    quando d_ref é vertical (pipe_ref é um tubo vertical), caso em que
+    "par"/"perp" relativos a d_ref degeneram — ver docstring de
+    _direcao_par_efetiva.
     """
-    d_perp = _perp_horizontal(d_ref)
+    d_par  = _direcao_par_efetiva(d_ref, fallback_horizontal)
+    d_perp = _perp_horizontal(d_par)
     dz     = P_final.Z - P_start.Z
     v_h    = XYZ(P_final.X - P_start.X, P_final.Y - P_start.Y, 0.0)
-    a_par  = v_h.DotProduct(d_ref)
+    a_par  = v_h.DotProduct(d_par)
     a_perp = v_h.DotProduct(d_perp)
     necessarios = []
     if abs(dz) > TOL_DZ:
@@ -285,7 +337,7 @@ def _eixos_disponiveis(pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, modo_co
         P_final, d_ref = _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref, P_start)
     except _ConexaoError:
         return [u"z", u"par", u"perp"]
-    return _eixos_necessarios(P_start, P_final, d_ref)
+    return _eixos_necessarios(P_start, P_final, d_ref, _direcao_horizontal_pipe(pipe_desc))
 
 
 def _intersecao_com_pipe(P_start, d_ext, pt_A, pt_B):
@@ -1626,6 +1678,13 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             clicou_ponta = False
             pt_endpoint  = None
 
+    # Direção horizontal efetiva pros eixos par/perp da rota: a projeção
+    # horizontal do próprio eixo de pipe_ref, renormalizada — ou, se
+    # pipe_ref for um tubo VERTICAL (projeção horizontal nula), a
+    # direção horizontal do próprio pipe_desc — ver _direcao_par_efetiva.
+    fallback_horizontal = _direcao_horizontal_pipe(pipe_desc)
+    d_par_efetivo        = _direcao_par_efetiva(d_ref, fallback_horizontal)
+
     # ── Etapa 1: extensão direta ─────────────────────────────────────────────
     # Se o eixo de pipe_desc, estendido a partir de P_start, intersectar pipe_ref,
     # apenas estende e conecta sem criar tubos extras. Só roda no modo "auto"
@@ -1711,7 +1770,7 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             and abs(P_start.Z - P_final.Z) <= TOL_DZ):
         raise _ConexaoError(u"Os tubos já estão alinhados — nenhuma conexão necessária.")
 
-    necessarios = _eixos_necessarios(P_start, P_final, d_ref)
+    necessarios = _eixos_necessarios(P_start, P_final, d_ref, fallback_horizontal)
     ordem_ativa = [e for e in ordem_eixos if e in necessarios]
     for e in necessarios:
         if e not in ordem_ativa:
@@ -1735,7 +1794,7 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             and u"par" in ordem_ativa and len(ordem_ativa) >= 2
             and ordem_ativa.index(u"par") == len(ordem_ativa) - 1):
         P_mid_check, _, _ = _rota_ate_endpoint(
-            XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_ref, inverter_eixos=True)
+            XYZ(P_start.X, P_start.Y, P_final.Z), P_final, d_par_efetivo, inverter_eixos=True)
         modo_resultado, alvo = _ajustar_alvo_corpo_invertido(
             pipe_ref, pt_A, pt_B, d_ref, P_mid_check)
         if modo_resultado == u"corpo":
@@ -1743,7 +1802,7 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         else:
             clicou_ponta = True
             P_final = alvo
-        necessarios = _eixos_necessarios(P_start, P_final, d_ref)
+        necessarios = _eixos_necessarios(P_start, P_final, d_ref, fallback_horizontal)
         ordem_ativa = [e for e in ordem_eixos if e in necessarios]
         for e in necessarios:
             if e not in ordem_ativa:
@@ -1756,8 +1815,8 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     conn_cur       = conn_desc
     P_cur          = P_start
     primeira_perna = True
-    d_perp         = _perp_horizontal(d_ref)
-    dirs_horiz     = {u"par": d_ref, u"perp": d_perp}
+    d_perp         = _perp_horizontal(d_par_efetivo)
+    dirs_horiz     = {u"par": d_par_efetivo, u"perp": d_perp}
 
     for eixo in ordem_ativa:
         if eixo == u"z":

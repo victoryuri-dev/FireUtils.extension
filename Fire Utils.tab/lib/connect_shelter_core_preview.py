@@ -154,7 +154,7 @@ def _eixos_disponiveis_abrigo(pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face
         P_final, d_ref = _preparar_alvo_nominal(pipe_ref, pt_click_ref, modo_conexao_ref, P_start)
     except _ConexaoError:
         return [u"z", u"par", u"perp"]
-    return _eixos_necessarios(P_start, P_final, d_ref)
+    return _eixos_necessarios(P_start, P_final, d_ref, _direcao_lado(dir_face, lado))
 
 
 # ===========================================================================
