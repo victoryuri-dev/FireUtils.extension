@@ -1830,7 +1830,20 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
     # (uma das pontas de pipe_ref fica entre esse ponto e o alvo clicado)
     # → cai pra ponta LIVRE mais próxima (modo joelho), recalculando a
     # rota pra ela.
-    if (modo_conexao_ref == u"corpo" and not clicou_ponta
+    #
+    # Só faz sentido pra pipe_ref HORIZONTAL: a matemática assume que
+    # "par" é o próprio eixo de pipe_ref (d_par_efetivo == d_ref), então
+    # t_mid (posição ao longo de d_ref) realmente testa se o trecho
+    # z+perp já fechado chegou dentro do CORPO físico. Pra pipe_ref
+    # VERTICAL, "par" é só o fallback (eixo de pipe_desc, não o de
+    # pipe_ref — ver _direcao_par_efetiva) — t_mid aí vira só a altura
+    # do alvo clicado (sempre dentro da extensão vertical, por
+    # definição), então esse teste sempre "passava" e descartava o
+    # trecho paralelo mesmo com X/Y ainda bem longe de pipe_ref, sem
+    # criar o tubo que faltava pra alcançar o ponto clicado de verdade.
+    # Pra VERTICAL, "z" é quem é livre (ver pipe_ref_vertical no loop
+    # principal, mais abaixo) — "par" continua obrigatório.
+    if (modo_conexao_ref == u"corpo" and not clicou_ponta and not pipe_ref_vertical
             and u"par" in ordem_ativa and len(ordem_ativa) >= 2
             and ordem_ativa.index(u"par") == len(ordem_ativa) - 1):
         P_mid_check, _, _ = _rota_ate_endpoint(
