@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__title__ = "Inserir Hidrante\npor Nível"
+__title__ = "Inserir Hidrante"
 __doc__ = (
     "Cria uma coluna de hidrantes atravessando vários níveis de uma vez: "
     "escolha os níveis (e se quer abrigo de mangueira em cada um) num "
