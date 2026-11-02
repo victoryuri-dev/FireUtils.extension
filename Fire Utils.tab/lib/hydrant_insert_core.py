@@ -550,9 +550,8 @@ def _preparar_coluna(doc, uidoc):
                 _conn_fim_click = _get_connector_near(elem_ref, _p0c if _perto_p0 else _p1c)
                 if _conn_fim_click is not None and _conn_fim_click.IsConnected:
                     forms.alert(
-                        u"Essa ponta do tubo já está conectada a outra coisa "
-                        u"— clique em outro ponto do tubo (não na ponta) ou "
-                        u"em outro elemento.",
+                        u"Não é possível criar nesse ponto - clique em outro "
+                        u"ponto livre.",
                         title=u"Fire Utils", warn_icon=True)
                     continue
 
@@ -1473,6 +1472,8 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
                 resultado = _construir_coluna(
                     self.doc, self.ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrigo,
                     finalizando=True)
+                if resultado[u"avisos"]:
+                    raise Exception(u" | ".join(resultado[u"avisos"]))
                 t.Commit()
             except Exception as e:
                 t.RollBack()
@@ -1480,8 +1481,6 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
                     u"Erro ao criar a coluna de hidrantes:\n{}".format(str(e)),
                     title=u"Fire Utils – Erro", warn_icon=True)
                 return
-            for aviso in resultado[u"avisos"]:
-                self.output.print_md(u"| Aviso | {} |".format(aviso))
             return
 
         t = Transaction(self.doc, u"FireUtils - Inserir Coluna de Hidrantes (descartar prévia)")
