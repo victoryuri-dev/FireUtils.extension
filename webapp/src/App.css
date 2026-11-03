@@ -2761,10 +2761,15 @@
 /* Títulos de seção e de card nesta página em preto (var(--text)) — as
    classes compartilhadas (.dashboard-subtitulo, .cartao-info h3) usam um
    cinza mais claro (var(--text-2)) nas outras páginas do Dashboard;
-   escopado a .hid-pagina pra não mudar o resto do app. */
+   escopado a .hid-pagina pra não mudar o resto do app. line-height
+   reduzido (herdava 1.55 do body) pra sobrar menos espaço vazio abaixo do
+   título antes do parágrafo de descrição (.hid-secao-desc) — sem isso, a
+   margem negativa dali precisava ser grande o bastante pra sobrepor o
+   próprio título (ver App.css, "Bomba de Incêndio"). */
 .hid-pagina .dashboard-subtitulo,
 .hid-pagina .cartao-info h3 {
   color: var(--text);
+  line-height: 1.2;
 }
 
 .hid-salvando {
@@ -2833,7 +2838,7 @@
   font-size: 11px;
   color: var(--text-3);
   line-height: 1.4;
-  margin: -10px 0 12px;
+  margin: -2px 0 12px;
 }
 
 .hid-ponto-operacao {
