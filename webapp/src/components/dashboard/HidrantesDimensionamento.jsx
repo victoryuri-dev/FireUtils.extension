@@ -119,7 +119,7 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
             <TH w={32}></TH>
             <TH>Hidrante</TH>
             <TH right>
-              <THSigla sigla="J + ∆Z" align="end" tip="Perda de Carga Total = perda de carga (J) + desnível (∆Z) — usada só para ranquear os hidrantes. O 1º e o 2º mais desfavoráveis recebem a marcha de cálculo completa, com equilíbrio hidráulico, no restante desta etapa." />
+              <THSigla sigla="Perda de carga" align="end" tip="Perda de Carga Total = perda de carga (J) + desnível (∆Z) — usada só para ranquear os hidrantes. O 1º e o 2º mais desfavoráveis recebem a marcha de cálculo completa, com equilíbrio hidráulico, no restante desta etapa." />
             </TH>
             <TH center>Situação</TH>
           </tr>
@@ -378,22 +378,20 @@ export function PerdasPorTrecho({ d }) {
   );
 }
 
-// ── Seção completa — composição das peças acima. Difere da ordem do site
-// (HidrantesPage.jsx lá) logo no início: os cards dos hidrantes mais
-// desfavoráveis analisados (ResumoExecutivo) e de pressão/vazão do sistema
-// (ResultadoHidraulico) abrem a seção — ficam dentro de "Resultados
-// calculados a partir da classificação do sistema" (ver
-// SistemaHidrantesPage.jsx) — e só depois vem a tabela de ranking completa
-// (VerificacaoHidranteDesfavoravel). `d` é o cache cru de "Dimensionar
-// Hidrantes" (payload.dimensionamento, ver bridge.js) e `limites` os
-// limites normativos de velocidade (payload.limites).
+// ── Seção completa — composição das peças acima. As duas verificações
+// (ranking dos hidrantes e velocidade por trecho) vêm ANTES do resultado
+// em si (ResumoExecutivo/ResultadoHidraulico — os cards de HD01/HD02 e
+// Ht/Qt): são checagens que justificam o resultado, faz mais sentido ler
+// antes dele. `d` é o cache cru de "Dimensionar Hidrantes"
+// (payload.dimensionamento, ver bridge.js) e `limites` os limites
+// normativos de velocidade (payload.limites).
 export default function HidrantesDimensionamento({ d, limites }) {
   return (
     <>
-      <ResumoExecutivo d={d} />
-      <ResultadoHidraulico d={d} />
       <VerificacaoHidranteDesfavoravel ranking={d.ranking_hidrantes} />
       <VerificacaoVelocidade d={d} limites={limites} />
+      <ResumoExecutivo d={d} />
+      <ResultadoHidraulico d={d} />
       <PerdasPorTrecho d={d} />
     </>
   );

@@ -3079,8 +3079,17 @@
    paleta @theme de lá). Ver components/dashboard/HidrantesDimensionamento.jsx.
    =========================================================================== */
 
+/* Mesmo tratamento de cartão de "Mapeamento da Rede" (.cartao-info) — cada
+   seção com título (Verificação do Hidrante Mais Desfavorável, Verificação
+   de Velocidade, Perdas de Carga por Trecho) fica dentro de uma caixa
+   própria, em vez do título e a tabela soltos direto no corpo da página. */
 .hiddim-secao {
-  margin-bottom: 28px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 16px;
 }
 
 .hiddim-secao-titulo {

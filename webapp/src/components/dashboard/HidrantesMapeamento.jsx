@@ -2,7 +2,6 @@ import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, BridgeMessageTypes } from "../../lib/bridge";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
-import { fmtNum } from "../../lib/numero";
 
 // Título do aviso por categoria da falha de MAPEAR_TRECHOS (ver
 // hidrantes_mapear_bridge.py). "inconsistencia" e "cancelado" não viram
@@ -49,33 +48,6 @@ function ListaInconsistencias({ itens }) {
               </td>
               <td className="hiddim-td hiddim-align-left">{item.trecho}</td>
               <td className="hiddim-td hiddim-align-left hiddim-cor-muted">{item.elemento}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function TabelaTrechos({ trechos }) {
-  return (
-    <div className="hiddim-tabela-wrap" style={{ marginTop: 10 }}>
-      <table className="hiddim-tabela">
-        <thead>
-          <tr>
-            <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
-            <th className="hiddim-th hiddim-align-left">Trecho</th>
-            <th className="hiddim-th hiddim-align-right">Perda (mca)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {trechos.map((t, i) => (
-            <tr key={i}>
-              <td className="hiddim-td hiddim-align-center">
-                <BotaoLocalizar eids={t.eids} />
-              </td>
-              <td className="hiddim-td hiddim-align-left">{t.nome}</td>
-              <td className="hiddim-td hiddim-align-right hiddim-mono">{fmtNum(t.perda, 2, "0")}</td>
             </tr>
           ))}
         </tbody>
@@ -148,7 +120,12 @@ export default function HidrantesMapeamento({
         </div>
       )}
 
-      {!mapeando && !pendente && !inconsistencia && jaMapeado && <TabelaTrechos trechos={trechos} />}
+      {/* A lista de trechos/hidrantes (Trecho → Perda) que aparecia aqui foi
+          removida: é a mesma verificação que "Verificação do Hidrante Mais
+          Desfavorável" mostra depois de dimensionar — e dimensionar não
+          trava mais por velocidade (ver motor-hidrantes), então essa
+          segunda exibição sempre aparece. Mostrar as duas era repetir a
+          mesma informação. */}
 
       {/* Mesma formatação da nota "Sempre que trocar o sistema…" do cartão de
           classificação (.hid-nota-aviso), no pé do cartão. */}
