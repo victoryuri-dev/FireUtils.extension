@@ -35,6 +35,7 @@ clr.AddReference(u"RevitAPI")
 
 from System.Collections.Generic import List
 from Autodesk.Revit.DB import (
+    BuiltInParameter,
     CopyPasteOptions,
     DuplicateTypeAction,
     Element,
@@ -46,6 +47,12 @@ from Autodesk.Revit.DB import (
     Transform,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe, PipeType
+
+from family_error_utils import texto_erro
+
+# Aparece no console do pyRevit ao carregar um sistema: mostra qual versão deste
+# módulo está de fato rodando (a dockpane só pega código novo ao reiniciar o Revit).
+VERSAO_DO_MODULO = u"2"
 
 CARREGADO = u"carregado"
 JA_EXISTENTE = u"ja_existente"
@@ -59,13 +66,31 @@ class _ReusarTiposDoDestino(IDuplicateTypeNamesHandler):
 
 
 def _nome(elemento):
-    """Nome do elemento. No IronPython, `.Name` de um tipo (ElementType) pode
-    falhar por ambiguidade entre ElementType.Name e Element.Name; a leitura
-    pela propriedade da classe base funciona sempre."""
-    try:
-        return Element.Name.GetValue(elemento)
-    except Exception:
-        return elemento.Name
+    """
+    Nome do elemento, sem depender de `elemento.Name`.
+
+    No IronPython, `.Name` de um tipo (ElementType) é resolvido de forma
+    ambígua entre ElementType.Name e Element.Name e pode falhar com um erro
+    seco ("Name"). Tenta, em ordem: a propriedade da classe base
+    (Element.Name), o acessor .NET direto (get_Name) e, por último, o
+    parâmetro "Nome do tipo" (ALL_MODEL_TYPE_NAME). Só levanta se nenhum
+    funcionar, dizendo qual elemento e o que cada tentativa respondeu.
+    """
+    falhas = []
+    for descricao, ler in (
+        (u"Element.Name", lambda: Element.Name.GetValue(elemento)),
+        (u"get_Name", lambda: elemento.get_Name()),
+        (u"ALL_MODEL_TYPE_NAME", lambda: elemento.get_Parameter(
+            BuiltInParameter.ALL_MODEL_TYPE_NAME).AsString()),
+    ):
+        try:
+            valor = ler()
+            if valor:
+                return valor
+        except Exception as ex:
+            falhas.append(u"{}: {}".format(descricao, texto_erro(ex)))
+    raise ValueError(u"Não foi possível ler o nome do elemento {} ({}) — {}".format(
+        elemento.Id.IntegerValue, type(elemento).__name__, u"; ".join(falhas)))
 
 
 def _tipos_de_tubo(doc):
