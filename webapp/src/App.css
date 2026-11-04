@@ -4756,3 +4756,26 @@ h1, h2, h3, h4, h5, h6,
   flex-wrap: wrap;
   gap: 14px 32px;
 }
+
+/* Tela de "reinicie o Revit" (ReiniciarRevit.jsx): só a logo animada e a mensagem,
+   centralizadas na dockpane inteira. */
+.reiniciar-revit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  height: 100vh;
+  padding: 24px;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--text);
+  text-align: center;
+}
+
+.reiniciar-revit p {
+  max-width: 340px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}

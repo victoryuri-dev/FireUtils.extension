@@ -718,6 +718,12 @@ export default function App() {
     return <LoginScreen onLogin={setSessao} />;
   }
 
+  // Pacote que exige reiniciar o Revit: tela inteira só com a mensagem, sem
+  // menu, perfil nem faixa.
+  if (bloqueadoParaReinicio) {
+    return <ReiniciarRevit versao={estadoAtualizacao.versao} />;
+  }
+
   return (
     <div className="app-shell">
       <div className="notificacoes-topo">
@@ -773,9 +779,7 @@ export default function App() {
             onDispensar={estadoAtualizacao ? () => setFaixaConcluidaOculta(true) : dispensarAviso}
           />
         )}
-        {bloqueadoParaReinicio ? (
-          <ReiniciarRevit versao={estadoAtualizacao.versao} />
-        ) : avaliacaoVersao.estado === "obrigatoria" ? (
+        {avaliacaoVersao.estado === "obrigatoria" ? (
           <AtualizacaoNecessaria
             versaoNova={avaliacaoVersao.versaoNova}
             estado={estadoAtualizacao}
