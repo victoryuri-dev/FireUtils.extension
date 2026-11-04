@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
@@ -28,6 +28,19 @@ const NOME_ETAPA = {
 };
 
 const ETAPAS = ["t1", "t2", "t3", "t4"];
+
+function chavePipeType(id) {
+  return id === null || id === undefined ? "none" : String(id);
+}
+
+/** Todo (etapa, chave) que o último mapeamento encontrou — usado pra
+ * aplicar uma escolha única a tudo de uma vez, e pra inferir se o que já
+ * está salvo é, de fato, igual em todo mundo. */
+function todasAsChaves(pipeTypesPorEtapa) {
+  return ETAPAS.flatMap((etapa) =>
+    (pipeTypesPorEtapa?.[etapa] || []).map((g) => ({ etapa, chave: chavePipeType(g.id) }))
+  );
+}
 
 function PillSistema({ active, onClick, children }) {
   return (
@@ -71,6 +84,14 @@ function BotaoLocalizar({ eids }) {
  * bem-sucedido (mapeamentoOk) — antes disso ele fica oculto, não aparece
  * nem com um placeholder.
  *
+ * "Mesmo material/conexão para todos os trechos": simplifica pra um
+ * controle só, que grava A MESMA escolha em TODO (etapa, tipo de tubo)
+ * conhecido — sem formato novo nenhum do lado do Python: é só o mesmo
+ * SET_MATERIAL_CONEXAO de sempre, com a mesma escolha repetida em cada
+ * chave. Ao carregar, se tudo que já está salvo (ou nada) já é igual, o
+ * modo único entra ligado sozinho; se há escolhas diferentes entre
+ * trechos, começa desligado pra não escondê-las.
+ *
  * Escolha salva no Project Information do projeto
  * (material_conexao.py); lida pelo "Dimensionar Hidrantes" seguinte — um
  * dimensionamento já feito só reflete a troca depois de "Dimensionar
@@ -79,6 +100,9 @@ function BotaoLocalizar({ eids }) {
 export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarToast }) {
   const [porEtapa, setPorEtapa] = useState({});
   const [carregado, setCarregado] = useState(false);
+  const [mesmoParaTodos, setMesmoParaTodos] = useState(false);
+  const [escolhaUnica, setEscolhaUnica] = useState({ material: null, sistema: "bsp" });
+  const inferenciaFeitaRef = useRef(false);
 
   useEffect(() => {
     postToHost(BridgeMessageTypes.GET_MATERIAL_CONEXAO, {});
@@ -108,8 +132,28 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Só uma vez, assim que carrega: se tudo que já está configurado pras
+  // combinações do mapeamento é igual (ou nada está configurado ainda),
+  // liga o modo único sozinho — sem forçar de novo depois, pra não
+  // atrapalhar o usuário trocando manualmente entre os modos.
+  useEffect(() => {
+    if (!carregado || inferenciaFeitaRef.current) return;
+    const chaves = todasAsChaves(pipeTypesPorEtapa);
+    if (chaves.length === 0) return; // ainda sem combinações — espera o mapeamento
+    inferenciaFeitaRef.current = true;
+
+    const valores = chaves.map(({ etapa, chave }) => porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" });
+    const primeiro = valores[0];
+    const todasIguais = valores.every((v) => (v.material || null) === (primeiro.material || null) && (v.sistema || "bsp") === (primeiro.sistema || "bsp"));
+    if (todasIguais) {
+      setEscolhaUnica({ material: primeiro.material || null, sistema: primeiro.sistema || "bsp" });
+      setMesmoParaTodos(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregado, pipeTypesPorEtapa]);
+
   function escolher(etapa, pipeTypeId, campo, valor) {
-    const chave = pipeTypeId === null || pipeTypeId === undefined ? "none" : String(pipeTypeId);
+    const chave = chavePipeType(pipeTypeId);
     const atual = porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" };
     if (atual[campo] === valor) return;
     const novo = {
@@ -118,6 +162,27 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
     };
     setPorEtapa(novo);
     postToHost(BridgeMessageTypes.SET_MATERIAL_CONEXAO, { porEtapa: novo });
+  }
+
+  function aplicarParaTodos(escolha) {
+    const chaves = todasAsChaves(pipeTypesPorEtapa);
+    const novo = { ...porEtapa };
+    for (const { etapa, chave } of chaves) {
+      novo[etapa] = { ...novo[etapa], [chave]: escolha };
+    }
+    setPorEtapa(novo);
+    postToHost(BridgeMessageTypes.SET_MATERIAL_CONEXAO, { porEtapa: novo });
+  }
+
+  function alternarMesmoParaTodos(ligado) {
+    setMesmoParaTodos(ligado);
+    if (ligado) aplicarParaTodos(escolhaUnica);
+  }
+
+  function escolherUnica(campo, valor) {
+    const nova = { ...escolhaUnica, [campo]: valor };
+    setEscolhaUnica(nova);
+    aplicarParaTodos(nova);
   }
 
   const etapasComTubo = ETAPAS.filter((etapa) => (pipeTypesPorEtapa?.[etapa]?.length || 0) > 0);
@@ -134,62 +199,116 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
       ) : etapasComTubo.length === 0 ? (
         <p className="vazio">Mapeie a rede (acima) para configurar material e conexão por trecho.</p>
       ) : (
-        etapasComTubo.map((etapa) => (
-          <div key={etapa} style={{ marginTop: 10 }}>
-            <p className="dashboard-subtitulo" style={{ margin: "0 0 6px" }}>{NOME_ETAPA[etapa]}</p>
+        <>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={mesmoParaTodos}
+              onChange={(e) => alternarMesmoParaTodos(e.target.checked)}
+            />
+            <span>Mesmo material e conexão para todos os trechos</span>
+          </label>
+
+          {mesmoParaTodos ? (
             <div className="hiddim-tabela-wrap">
               <table className="hiddim-tabela">
                 <thead>
                   <tr>
-                    <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
-                    <th className="hiddim-th hiddim-align-left">Tipo de tubo</th>
                     <th className="hiddim-th hiddim-align-left">Material</th>
                     <th className="hiddim-th hiddim-align-left">Sistema de conexão</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pipeTypesPorEtapa[etapa].map((grupo) => {
-                    const chave = grupo.id === null ? "none" : String(grupo.id);
-                    const escolha = porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" };
-                    return (
-                      <tr key={chave}>
-                        <td className="hiddim-td hiddim-align-center">
-                          <BotaoLocalizar eids={grupo.eids} />
-                        </td>
-                        <td className="hiddim-td hiddim-align-left">{rotuloPipeType(grupo)}</td>
-                        <td className="hiddim-td hiddim-align-left">
-                          <select
-                            className="se-select"
-                            value={escolha.material || ""}
-                            onChange={(e) => escolher(etapa, grupo.id, "material", e.target.value || null)}
+                  <tr>
+                    <td className="hiddim-td hiddim-align-left">
+                      <select
+                        className="se-select"
+                        value={escolhaUnica.material || ""}
+                        onChange={(e) => escolherUnica("material", e.target.value || null)}
+                      >
+                        <option value="">Galvanizado (padrão)</option>
+                        {MATERIAIS.map((m) => (
+                          <option key={m.key} value={m.key}>{m.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="hiddim-td hiddim-align-left">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {Object.keys(ROTULO_SISTEMA).map((sistema) => (
+                          <PillSistema
+                            key={sistema}
+                            active={(escolhaUnica.sistema || "bsp") === sistema}
+                            onClick={() => escolherUnica("sistema", sistema)}
                           >
-                            <option value="">Galvanizado (padrão)</option>
-                            {MATERIAIS.map((m) => (
-                              <option key={m.key} value={m.key}>{m.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="hiddim-td hiddim-align-left">
-                          <div style={{ display: "flex", gap: 6 }}>
-                            {Object.keys(ROTULO_SISTEMA).map((sistema) => (
-                              <PillSistema
-                                key={sistema}
-                                active={(escolha.sistema || "bsp") === sistema}
-                                onClick={() => escolher(etapa, grupo.id, "sistema", sistema)}
-                              >
-                                {ROTULO_SISTEMA[sistema]}
-                              </PillSistema>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                            {ROTULO_SISTEMA[sistema]}
+                          </PillSistema>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
+              <p className="hid-nota-aviso">Aplicado a todos os trechos e tipos de tubo encontrados no mapeamento.</p>
             </div>
-          </div>
-        ))
+          ) : (
+            etapasComTubo.map((etapa) => (
+              <div key={etapa} style={{ marginTop: 10 }}>
+                <p className="dashboard-subtitulo" style={{ margin: "0 0 6px" }}>{NOME_ETAPA[etapa]}</p>
+                <div className="hiddim-tabela-wrap">
+                  <table className="hiddim-tabela">
+                    <thead>
+                      <tr>
+                        <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
+                        <th className="hiddim-th hiddim-align-left">Tipo de tubo</th>
+                        <th className="hiddim-th hiddim-align-left">Material</th>
+                        <th className="hiddim-th hiddim-align-left">Sistema de conexão</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pipeTypesPorEtapa[etapa].map((grupo) => {
+                        const chave = chavePipeType(grupo.id);
+                        const escolha = porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" };
+                        return (
+                          <tr key={chave}>
+                            <td className="hiddim-td hiddim-align-center">
+                              <BotaoLocalizar eids={grupo.eids} />
+                            </td>
+                            <td className="hiddim-td hiddim-align-left">{rotuloPipeType(grupo)}</td>
+                            <td className="hiddim-td hiddim-align-left">
+                              <select
+                                className="se-select"
+                                value={escolha.material || ""}
+                                onChange={(e) => escolher(etapa, grupo.id, "material", e.target.value || null)}
+                              >
+                                <option value="">Galvanizado (padrão)</option>
+                                {MATERIAIS.map((m) => (
+                                  <option key={m.key} value={m.key}>{m.label}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="hiddim-td hiddim-align-left">
+                              <div style={{ display: "flex", gap: 6 }}>
+                                {Object.keys(ROTULO_SISTEMA).map((sistema) => (
+                                  <PillSistema
+                                    key={sistema}
+                                    active={(escolha.sistema || "bsp") === sistema}
+                                    onClick={() => escolher(etapa, grupo.id, "sistema", sistema)}
+                                  >
+                                    {ROTULO_SISTEMA[sistema]}
+                                  </PillSistema>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          )}
+        </>
       )}
     </div>
   );
