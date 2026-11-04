@@ -271,31 +271,37 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
 def combinacoes_pipe_type(elems, get_diametro_fn, get_pipe_type_fn, get_id_fn=None):
     """
     Lista, SEM calcular nada (só pra descoberta/exibição), as combinações
-    (pipe_type_id, pipe_type_nome) encontradas em `elems` e os diâmetros
-    (DN, mm) de cada uma. Usado por "Mapear Trechos" pra informar a
-    dockpane quais (etapa, tipo de tubo) existem de fato no modelo, pra
-    ela desenhar o seletor de material/sistema de conexão (ver
-    hidrantes_mapear_bridge.py, material_conexao.py).
+    (pipe_type_id, pipe_type_nome) encontradas nos TUBOS (Pipe) de `elems`
+    e os diâmetros (DN, mm) de cada uma. Usado por "Mapear Trechos" pra
+    informar a dockpane quais (etapa, tipo de tubo) existem de fato no
+    modelo, pra ela desenhar o seletor de material/sistema de conexão
+    (ver hidrantes_mapear_bridge.py, material_conexao.py).
 
-    Mesmo critério de agrupamento de extrair_trecho — get_diametro_fn/
-    get_pipe_type_fn já resolvem o diâmetro/tipo "do trecho" (emprestando
-    de vizinhos quando o próprio elemento não tem, ver
-    get_diametro_no_trecho/get_pipe_type_no_trecho em rede.py).
+    SÓ considera elementos Pipe — conexões/acessórios (FamilyInstance)
+    são ignorados aqui de propósito, mesmo que get_pipe_type_fn consiga
+    resolver um tipo pra eles (emprestado do tubo vizinho, ver
+    get_pipe_type_no_trecho em rede.py): "tipo de tubo" é conceito de
+    TUBO, não de conexão — uma válvula/união na entrada da bomba não deve
+    aparecer como membro de um grupo nem fazer a dockpane pedir uma
+    escolha extra por causa dela. extrair_trecho (cálculo de verdade)
+    continua emprestando o material do vizinho pras conexões, sem
+    mudança nenhuma — só esta função de descoberta/UI ficou restrita a
+    Pipe.
 
     get_id_fn é opcional (devolve um int, o ElementId do elemento) —
-    habilita o botão "Localizar" de cada grupo na dockpane: "diâmetro sem
-    vizinho Pipe dentro do próprio trecho" é esperado pra conexões bem na
-    ponta do trecho (ligadas a um equipamento, não a outro tubo) e cai no
-    grupo "não identificado" — o botão deixa conferir no Revit quais
-    elementos são esses, em vez de só confiar no rótulo.
+    habilita o botão "Localizar" de cada grupo na dockpane.
 
     Retorna [ {"id", "nome", "diametros": [d_mm, ...], "eids": [...]} ],
     ordenado por id (grupo sem pipe_type, id None, por último). "eids"
     vazio se get_id_fn não foi informado.
     """
+    from Autodesk.Revit.DB.Plumbing import Pipe
+
     grupos = {}
     ordem = []
     for elem in elems:
+        if not isinstance(elem, Pipe):
+            continue
         pipe_type_id, pipe_type_nome = get_pipe_type_fn(elem) or (None, None)
         if pipe_type_id not in grupos:
             grupos[pipe_type_id] = {"id": pipe_type_id, "nome": pipe_type_nome, "diametros": set(), "eids": []}
