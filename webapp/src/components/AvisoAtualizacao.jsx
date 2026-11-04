@@ -1,38 +1,64 @@
 import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
 
 /**
- * Faixa no topo avisando que há versão nova do plugin. Pode ser dispensada
- * (o pai lembra qual versão foi dispensada, para avisar de novo só na seguinte).
- * Quando o usuário clica em Baixar, a faixa passa a mostrar o andamento
- * (`estado`, ver lib/atualizacaoEstado.js).
+ * Faixa vermelha no topo da dockpane para a atualização do plugin. O download
+ * começa sozinho; a faixa mostra o andamento (sem poder ser fechada enquanto
+ * baixa) e, quando termina, o que a pessoa precisa fazer (lib/atualizacaoEstado.js):
+ *   - só a interface mudou        → "Recarregar painel"
+ *   - mudou a faixa do pyRevit    → "Reiniciar pyRevit e aplicar" (salvar o projeto antes)
+ *   - mudou código do painel      → só a mensagem; o painel fica bloqueado (ReiniciarRevit)
+ *   - instalador (agendada/manual)→ só a mensagem, pode ser fechada
+ * Sem `estado` (plugin sem suporte a baixar sozinho) é o aviso simples de versão
+ * nova, que pode ser dispensado.
  */
-export default function AvisoAtualizacao({ versaoNova, estado, onBaixar, onDispensar }) {
+export default function AvisoAtualizacao({
+  versaoNova, estado, onVerNovidades, onTentarNovamente, onRecarregarPyrevit, onRecarregarPagina, onDispensar,
+}) {
   const fase = estado?.fase;
   const ocupado = emAndamento(estado);
-  const concluido = ["agendada", "manual", "aplicada"].includes(fase);
+  const concluidaSemAcao = fase === "agendada" || fase === "manual";
+  const progressoDefinido = fase === "baixando" && typeof estado.percentual === "number";
+
+  let acao = null;
+  if (!fase) {
+    acao = (
+      <>
+        <button type="button" className="aviso-atualizacao-botao" onClick={onVerNovidades}>Ver novidades</button>
+        <button type="button" className="aviso-atualizacao-dispensar" onClick={onDispensar} title="Lembrar depois">Depois</button>
+      </>
+    );
+  } else if (fase === "erro") {
+    acao = <button type="button" className="aviso-atualizacao-botao" onClick={onTentarNovamente}>Tentar de novo</button>;
+  } else if (fase === "aplicada" && estado.reinicio === "pyrevit") {
+    acao = <button type="button" className="aviso-atualizacao-botao" onClick={onRecarregarPyrevit}>Reiniciar pyRevit e aplicar</button>;
+  } else if (fase === "aplicada" && estado.reinicio === "nenhum") {
+    acao = <button type="button" className="aviso-atualizacao-botao" onClick={onRecarregarPagina}>Recarregar painel</button>;
+  } else if (concluidaSemAcao) {
+    acao = <button type="button" className="aviso-atualizacao-dispensar" onClick={onDispensar}>Ok</button>;
+  }
 
   return (
     <div className="aviso-atualizacao" role="status">
-      <span className="aviso-atualizacao-texto">
-        {fase && fase !== "erro" ? (
-          textoDoEstado(estado)
-        ) : (
-          <>
-            {fase === "erro" && <>{textoDoEstado(estado)} </>}
-            Nova versão do Fire Utils disponível: <strong>{versaoNova}</strong>
-          </>
+      <div className="aviso-atualizacao-corpo">
+        <span className="aviso-atualizacao-texto">
+          {fase ? textoDoEstado(estado) : <>Nova versão do Fire Utils disponível: <strong>{versaoNova}</strong></>}
+        </span>
+        {ocupado && fase !== "recarregando" && (
+          <div
+            className={`aviso-atualizacao-progresso${progressoDefinido ? "" : " indeterminado"}`}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressoDefinido ? estado.percentual : undefined}
+          >
+            <div
+              className="aviso-atualizacao-progresso-barra"
+              style={progressoDefinido ? { width: `${estado.percentual}%` } : undefined}
+            />
+          </div>
         )}
-      </span>
-      {!ocupado && !concluido && (
-        <button type="button" className="aviso-atualizacao-botao" onClick={onBaixar}>
-          {fase === "erro" ? "Ver detalhes" : "Ver novidades"}
-        </button>
-      )}
-      {!ocupado && (
-        <button type="button" className="aviso-atualizacao-dispensar" onClick={onDispensar} title="Lembrar depois">
-          {concluido ? "Ok" : "Depois"}
-        </button>
-      )}
+      </div>
+      {acao}
     </div>
   );
 }

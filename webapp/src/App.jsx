@@ -8,16 +8,15 @@ import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
-import ConfirmarAtualizacao from "./components/ConfirmarAtualizacao";
 import AtualizacoesPage from "./components/AtualizacoesPage";
-import AvisoPosAtualizacao from "./components/AvisoPosAtualizacao";
+import ReiniciarRevit from "./components/ReiniciarRevit";
 import {
   ATRASO_RECARGA_MS, guardarAvisoPosAtualizacao, lerAvisoPosAtualizacao, limparAvisoPosAtualizacao,
 } from "./lib/avisoPosAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarVersoesPublicadas, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
-import { emAndamento, estadoDaMensagem, textoDaAplicada, tituloDaAplicada } from "./lib/atualizacaoEstado";
+import { emAndamento, estadoDaMensagem, precisaReiniciarRevit } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken, tokenRecusado } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -130,11 +129,19 @@ export default function App() {
   // O plugin instalado sabe baixar e instalar atualizações (informado junto
   // das licenças); sem isso o botão leva ao perfil no site.
   const [suportaAtualizacao, setSuportaAtualizacao] = useState(false);
-  const [estadoAtualizacao, setEstadoAtualizacao] = useState(null);
+  // Andamento da atualização. Uma atualização já aplicada que ainda espera uma
+  // ação da pessoa (reiniciar o pyRevit ou o Revit) volta de sessionStorage:
+  // sobrevive a um recarregamento da página, mas some quando o Revit reinicia.
+  const [estadoAtualizacao, setEstadoAtualizacao] = useState(() => {
+    const guardado = lerAvisoPosAtualizacao();
+    return guardado
+      ? { fase: "aplicada", versao: guardado.versao, reinicio: guardado.reinicio, recarga: guardado.recarga }
+      : null;
+  });
+  const [faixaConcluidaOculta, setFaixaConcluidaOculta] = useState(false);
+  const recargaPyrevitRef = useRef(null);
+  const tentouAutomaticaRef = useRef(null);
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
-  // Aviso do que fazer depois de uma atualização: guardado em sessionStorage
-  // porque a página é recarregada logo após aplicar o pacote.
-  const [avisoPosAtualizacao, setAvisoPosAtualizacao] = useState(lerAvisoPosAtualizacao);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
   const [gravandoQuantitativos, setGravandoQuantitativos] = useState(false);
   const [atribuindoEstrutura, setAtribuindoEstrutura] = useState(false);
@@ -281,41 +288,75 @@ export default function App() {
     [versaoPlugin, versaoPublicada]
   );
 
+  // Faixa vermelha de atualização: aparece enquanto há andamento ou ação
+  // pendente (não some no download); sem andamento, só se houver versão nova
+  // não dispensada. Concluídas sem ação na dockpane (agendada/manual) podem ser
+  // fechadas.
+  const concluidaSemAcao = ["agendada", "manual"].includes(estadoAtualizacao?.fase);
+  const mostrarFaixa = estadoAtualizacao
+    ? !(concluidaSemAcao && faixaConcluidaOculta)
+    : avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova;
+  // Pacote aplicado que pede reiniciar o Revit: o código novo está no disco e o
+  // antigo na memória; o painel fica indisponível até o reinício.
+  const bloqueadoParaReinicio = precisaReiniciarRevit(estadoAtualizacao);
+
   // O Python baixa, confere e instala (plugin_atualizacao.py) — com a sessão
   // daqui só se geram os links do bucket privado. Plugin sem esse suporte, ou
   // sem conseguir os links, cai no perfil do site.
-  // Os botões "Atualizar" (faixa, bloqueio e ícone da barra lateral) pedem
-  // confirmação antes: a pessoa precisa salvar o projeto. Sem suporte a
-  // atualização no plugin, o caminho é só abrir o perfil no site, sem confirmar.
-  const [confirmandoAtualizacao, setConfirmandoAtualizacao] = useState(false);
-
+  // O download começa sozinho assim que há versão nova (efeito abaixo); os
+  // botões "Atualizar"/"Tentar de novo" só repetem o pedido, por exemplo depois
+  // de um erro. Sem suporte a atualização no plugin, o caminho é o perfil no site.
   function pedirAtualizacao() {
-    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada"].includes(estadoAtualizacao?.fase)) return;
-    if (!suportaAtualizacao || !versaoPublicada) {
-      abrirPerfilNoSite();
-      return;
-    }
-    setConfirmandoAtualizacao(true);
+    baixarAtualizacao(true);
   }
 
-  async function baixarAtualizacao() {
-    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada"].includes(estadoAtualizacao?.fase)) return;
+  async function baixarAtualizacao(pelaPessoa = true) {
+    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada", "manual"].includes(estadoAtualizacao?.fase)) return;
     if (!suportaAtualizacao || !versaoPublicada) {
-      abrirPerfilNoSite();
+      if (pelaPessoa) abrirPerfilNoSite();
       return;
     }
-    setEstadoAtualizacao({ fase: "preparando" });
+    const versao = versaoPublicada.versao;
+    setFaixaConcluidaOculta(false);
+    setEstadoAtualizacao({ fase: "preparando", versao });
     const links = await gerarLinksDaAtualizacao(versaoPublicada);
     if (links.erro) {
-      setEstadoAtualizacao({ fase: "erro", erro: links.erro });
+      setEstadoAtualizacao({ fase: "erro", erro: links.erro, versao });
       return;
     }
     postToHost(
       versaoPublicada.tipo === "pacote"
         ? BridgeMessageTypes.INSTALAR_PACOTE
         : BridgeMessageTypes.INSTALAR_ATUALIZACAO,
-      { versao: versaoPublicada.versao, arquivo: versaoPublicada.arquivo, ...links }
+      // Download automático não abre a pasta do instalador de repente.
+      { versao, arquivo: versaoPublicada.arquivo, ...links, abrirPasta: pelaPessoa }
     );
+  }
+
+  // Versão nova publicada: baixa sozinho, uma tentativa por versão (se falhar,
+  // a faixa mostra o erro e "Tentar de novo"; não fica insistindo em laço).
+  useEffect(() => {
+    if (avaliacaoVersao.estado !== "disponivel" && avaliacaoVersao.estado !== "obrigatoria") return;
+    if (!suportaAtualizacao || !versaoPublicada || estadoAtualizacao) return;
+    if (tentouAutomaticaRef.current === versaoPublicada.versao) return;
+    tentouAutomaticaRef.current = versaoPublicada.versao;
+    baixarAtualizacao(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avaliacaoVersao.estado, suportaAtualizacao, versaoPublicada, estadoAtualizacao]);
+
+  // Pacote que só pede o pyRevit recarregado: a pessoa salva o projeto e clica.
+  // O painel recarrega junto, para pegar a versão nova.
+  function recarregarPyrevit() {
+    limparAvisoPosAtualizacao();
+    setEstadoAtualizacao((anterior) => ({ ...anterior, fase: "recarregando" }));
+    postToHost(BridgeMessageTypes.RECARREGAR_PYREVIT, {});
+    recargaPyrevitRef.current = window.setTimeout(() => window.location.reload(), ATRASO_RECARGA_MS);
+  }
+
+  // Pacote só de interface: nada a recarregar no Revit, só o painel.
+  function recarregarPagina() {
+    limparAvisoPosAtualizacao();
+    window.location.reload();
   }
 
   function dispensarAviso() {
@@ -350,26 +391,19 @@ export default function App() {
         mensagem.type === BridgeMessageTypes.ATUALIZACAO_RESULTADO
       ) {
         const novo = estadoDaMensagem(mensagem.type, mensagem.payload);
-        setEstadoAtualizacao(novo);
+        if (novo) {
+          // O Python não repete a versão a cada andamento: mantém a anterior.
+          setEstadoAtualizacao((anterior) => ({ ...novo, versao: novo.versao ?? anterior?.versao }));
+        }
         if (novo?.fase === "aplicada") {
-          // Pacote instalado com o Revit aberto. O que a pessoa precisa fazer
-          // depende do que mudou: reiniciar o Revit, recarregar o pyRevit ou nada.
-          adicionarToast({
-            tipo: "sucesso",
-            titulo: tituloDaAplicada(novo.reinicio),
-            mensagem: textoDaAplicada(novo.reinicio, novo.recarga),
-            duracaoMs: novo.reinicio === "nenhum" ? 8000 : 20000,
-          });
-          // O aviso precisa sobreviver ao recarregamento da página (abaixo).
-          const aviso = { versao: novo.versao, reinicio: novo.reinicio, recarga: novo.recarga };
-          guardarAvisoPosAtualizacao(aviso);
-          setAvisoPosAtualizacao(aviso);
-          // Recarrega a página uma vez: pega a interface e a versão novas. A
-          // mensagem de "recarga falhou" (segunda, mesmo resultado) não recarrega de novo.
-          if (!novo.recarga && !window.__fireutilsRecargaAgendada) {
-            window.__fireutilsRecargaAgendada = true;
-            window.setTimeout(() => window.location.reload(), ATRASO_RECARGA_MS);
+          // Se a recarga do pyRevit falhou, cancela o recarregamento da página
+          // que o clique tinha agendado.
+          if (novo.recarga === "falhou" && recargaPyrevitRef.current) {
+            window.clearTimeout(recargaPyrevitRef.current);
+            recargaPyrevitRef.current = null;
           }
+          // Guarda a ação pendente: sobrevive a um recarregamento da página.
+          guardarAvisoPosAtualizacao({ versao: novo.versao, reinicio: novo.reinicio, recarga: novo.recarga });
         }
         return;
       }
@@ -727,29 +761,21 @@ export default function App() {
         }
       />
 
-      {confirmandoAtualizacao && (
-        <ConfirmarAtualizacao
-          versaoNova={versaoPublicada?.versao}
-          tipo={versaoPublicada?.tipo}
-          onCancelar={() => setConfirmandoAtualizacao(false)}
-          onConfirmar={() => {
-            setConfirmandoAtualizacao(false);
-            baixarAtualizacao();
-          }}
-        />
-      )}
-
       <div className="app">
-        {avisoPosAtualizacao && (
-          <AvisoPosAtualizacao
-            aviso={avisoPosAtualizacao}
-            onFechar={() => {
-              limparAvisoPosAtualizacao();
-              setAvisoPosAtualizacao(null);
-            }}
+        {mostrarFaixa && (
+          <AvisoAtualizacao
+            versaoNova={avaliacaoVersao.versaoNova}
+            estado={estadoAtualizacao}
+            onVerNovidades={() => setAbaAtual("atualizacoes")}
+            onTentarNovamente={pedirAtualizacao}
+            onRecarregarPyrevit={recarregarPyrevit}
+            onRecarregarPagina={recarregarPagina}
+            onDispensar={estadoAtualizacao ? () => setFaixaConcluidaOculta(true) : dispensarAviso}
           />
         )}
-        {avaliacaoVersao.estado === "obrigatoria" ? (
+        {bloqueadoParaReinicio ? (
+          <ReiniciarRevit versao={estadoAtualizacao.versao} />
+        ) : avaliacaoVersao.estado === "obrigatoria" ? (
           <AtualizacaoNecessaria
             versaoNova={avaliacaoVersao.versaoNova}
             estado={estadoAtualizacao}
@@ -757,14 +783,6 @@ export default function App() {
           />
         ) : (
         <>
-        {avaliacaoVersao.estado === "disponivel" && (avisoDispensado !== avaliacaoVersao.versaoNova || estadoAtualizacao?.fase) && (
-          <AvisoAtualizacao
-            versaoNova={avaliacaoVersao.versaoNova}
-            estado={estadoAtualizacao}
-            onBaixar={() => setAbaAtual("atualizacoes")}
-            onDispensar={dispensarAviso}
-          />
-        )}
         {abaAtual === "atualizacoes" ? (
           <AtualizacoesPage
             instalada={versaoPlugin}

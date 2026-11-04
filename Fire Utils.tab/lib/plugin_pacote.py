@@ -40,8 +40,10 @@ antes de copiar) com o que o painel usa:
   "pyrevit" mudou a estrutura da faixa (bundle.yaml, ícones, script.py de botão,
             botão novo ou removido) -> recarregar o pyRevit;
   "nenhum"  só código usado pelos botões -> já vale no próximo clique.
-O pyRevit é recarregado sozinho (`_RECARREGAR_PYREVIT`) nos níveis "pyrevit" e
-"revit"; se a recarga falhar, a dockpane avisa e pede o recarregamento manual.
+O pyRevit NÃO é recarregado sozinho: a pessoa precisa salvar o projeto antes,
+então a dockpane mostra o botão e manda RECARREGAR_PYREVIT
+(tratar_recarregar_pyrevit); se a recarga falhar, ela é avisada para usar o
+botão Recarregar da aba pyRevit.
 No nível "revit" o reinício do Revit continua necessário.
 
 Mensagens à dockpane: ATUALIZACAO_PROGRESSO / ATUALIZACAO_RESULTADO (as mesmas do
@@ -493,12 +495,8 @@ def tratar_instalar_pacote(uiapp, payload, fila_acoes, postar_mensagem):
 
     def trabalho():
         global _em_andamento
-        sucesso = False
-        resposta = {}
         try:
-            resposta = _executar(dados, fila_acoes, postar_mensagem)
-            sucesso = True
-            responder(resposta)
+            responder(_executar(dados, fila_acoes, postar_mensagem))
         except _Falha as ex:
             responder({u"ok": False, u"erro": u"{}".format(ex)})
         except plugin_atualizacao._Falha as ex:
@@ -508,18 +506,24 @@ def tratar_instalar_pacote(uiapp, payload, fila_acoes, postar_mensagem):
                        u"erro": u"Falha inesperada na atualização: {}".format(texto_erro(ex))})
         finally:
             _em_andamento = False
-        if sucesso and resposta.get(u"reinicio") != u"nenhum":
-            # Depois da resposta, na thread de API: o recarregamento do pyRevit
-            # não pode competir com a mensagem que avisa o usuário.
-            def recarregar(_uiapp, versao=resposta.get(u"versao"), reinicio=resposta.get(u"reinicio")):
-                if not _recarregar_pyrevit():
-                    # Segunda mensagem: o aviso inicial prometia a recarga.
-                    postar_mensagem(u"ATUALIZACAO_RESULTADO", {
-                        u"ok": True, u"estado": u"aplicada", u"versao": versao,
-                        u"reinicio": reinicio, u"recarga": u"falhou"})
-            fila_acoes.enfileirar(recarregar)
+        # Sem recarregar o pyRevit sozinho: a pessoa precisa salvar o projeto
+        # antes, então a dockpane mostra o botão e pede RECARREGAR_PYREVIT
+        # (tratar_recarregar_pyrevit) quando ela clicar.
 
     threading.Thread(target=trabalho).start()
+
+
+def tratar_recarregar_pyrevit(uiapp, postar_mensagem):
+    """
+    Recarrega o pyRevit a pedido da dockpane (botão da faixa de atualização,
+    depois de a pessoa salvar o projeto). Em caso de sucesso a dockpane é
+    recarregada junto e a mensagem não chega; se falhar, avisa para a pessoa
+    usar o botão Recarregar da aba pyRevit.
+    """
+    if not _recarregar_pyrevit():
+        postar_mensagem(u"ATUALIZACAO_RESULTADO", {
+            u"ok": True, u"estado": u"aplicada", u"reinicio": u"pyrevit",
+            u"recarga": u"falhou"})
 
 
 def _executar(dados, fila_acoes, postar_mensagem):

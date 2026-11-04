@@ -262,7 +262,7 @@
  *     é o texto por estrutura do envio ao site; `erroEnvio` preenchido = o Revit
  *     foi atualizado mas o site não recebeu.
  *
- *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash } }
+ *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash, abrirPasta? } }
  *     JS -> Python: baixa, confere e instala uma versão nova do plugin
  *     (plugin_atualizacao.py). Os links são URLs assinadas do bucket privado
  *     `plugin-releases` (instalador e `<instalador>.sha256`), geradas aqui com
@@ -281,6 +281,11 @@
  *     ATUALIZACAO_RESULTADO com estado "aplicada" e `reinicio`: "revit" (reiniciar o
  *     Revit: mudou algo que a dockpane usa), "pyrevit" (recarregar o pyRevit:
  *     mudou a faixa) ou "nenhum" (já vale).
+ *
+ *   { type: "RECARREGAR_PYREVIT" }
+ *     JS -> Python: recarrega o pyRevit (plugin_pacote.tratar_recarregar_pyrevit), depois
+ *     de um pacote que só pediu isso e de a pessoa salvar o projeto. Se falhar, responde
+ *     ATUALIZACAO_RESULTADO com `recarga: "falhou"`; se der certo, a dockpane é recarregada.
  *
  *   { type: "ATUALIZACAO_PROGRESSO", payload: { etapa: "baixando" | "verificando" | "aplicando",
  *     percentual?: number } }
@@ -387,6 +392,7 @@ export const BridgeMessageTypes = {
   SAIDAS_AMBIENTES_RESULTADO: "SAIDAS_AMBIENTES_RESULTADO",
   INSTALAR_ATUALIZACAO: "INSTALAR_ATUALIZACAO",
   INSTALAR_PACOTE: "INSTALAR_PACOTE",
+  RECARREGAR_PYREVIT: "RECARREGAR_PYREVIT",
   ATUALIZACAO_PROGRESSO: "ATUALIZACAO_PROGRESSO",
   ATUALIZACAO_RESULTADO: "ATUALIZACAO_RESULTADO",
   DIMENSIONAR_HIDRANTES: "DIMENSIONAR_HIDRANTES",

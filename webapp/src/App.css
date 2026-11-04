@@ -3991,9 +3991,44 @@
   font-size: 12px;
 }
 
-.aviso-atualizacao-texto {
+.aviso-atualizacao-corpo {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aviso-atualizacao-texto {
+  min-width: 0;
+}
+
+/* Barra de andamento dentro da faixa: trilho translúcido, preenchimento branco.
+   Sem percentual (preparando, conferindo, instalando) a barra corre sem fim. */
+.aviso-atualizacao-progresso {
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.28);
+  overflow: hidden;
+}
+
+.aviso-atualizacao-progresso-barra {
+  height: 100%;
+  border-radius: 2px;
+  background: #fff;
+  transition: width 0.3s ease;
+}
+
+.aviso-atualizacao-progresso.indeterminado .aviso-atualizacao-progresso-barra {
+  position: absolute;
+  width: 35%;
+  animation: aviso-atualizacao-corre 1.2s ease-in-out infinite;
+}
+
+@keyframes aviso-atualizacao-corre {
+  0% { left: -35%; }
+  100% { left: 100%; }
 }
 
 .aviso-atualizacao-botao,

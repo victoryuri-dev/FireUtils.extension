@@ -137,7 +137,9 @@ def validar_pedido(payload, versao_instalada):
         return None, u"Endereço de download não reconhecido."
 
     return {u"versao": versao, u"nome": nome,
-            u"url_instalador": url_instalador, u"url_hash": url_hash}, None
+            u"url_instalador": url_instalador, u"url_hash": url_hash,
+            # Download automático (sem clique): não abre a pasta de repente.
+            u"abrir_pasta": payload.get(u"abrirPasta", True) is not False}, None
 
 
 def ler_sha256(texto):
@@ -370,9 +372,10 @@ def _executar(dados, fila_acoes, postar_mensagem):
         # Sem instalação automática quem executa é o usuário, então o arquivo
         # vai para onde ele procura: a pasta Downloads (já conferido).
         final = _mover_para_downloads(destino)
-        _mostrar_na_pasta(final)
+        if dados.get(u"abrir_pasta", True):
+            _mostrar_na_pasta(final)
         return {u"ok": True, u"estado": u"manual", u"versao": dados[u"versao"],
-                u"pasta": os.path.dirname(final)}
+                u"pasta": os.path.dirname(final), u"arquivo": os.path.basename(final)}
 
     _agendar_instalacao(pasta, destino, esperado)
     return {u"ok": True, u"estado": u"agendada", u"versao": dados[u"versao"]}

@@ -333,6 +333,12 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             lambda uiapp: plugin_pacote.tratar_instalar_pacote(
                 uiapp, payload, fila_acoes, postar_mensagem)
         )
+    elif tipo == u"RECARREGAR_PYREVIT":
+        # Depois de um pacote que só pede o pyRevit recarregado: a dockpane
+        # manda quando a pessoa clica (já com o projeto salvo).
+        fila_acoes.enfileirar(
+            lambda uiapp: plugin_pacote.tratar_recarregar_pyrevit(uiapp, postar_mensagem)
+        )
     elif tipo == u"INSTALAR_ATUALIZACAO":
         # Baixa, confere e instala uma versão nova do plugin (plugin_atualizacao.py).
         fila_acoes.enfileirar(

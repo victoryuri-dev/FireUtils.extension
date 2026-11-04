@@ -1,12 +1,13 @@
 /**
  * Estado da atualização do plugin feita pela dockpane (plugin_atualizacao.py).
  * `fase`: null (parado) | "preparando" | "baixando" | "verificando" |
- *         "aplicando" | "aplicada" (pacote instalado; falta reiniciar o Revit) |
+ *         "aplicando" | "recarregando" (pyRevit sendo recarregado) |
+ *         "aplicada" (pacote instalado; falta uma ação: `reinicio` diz qual) |
  *         "agendada" (instala quando o Revit fechar) | "manual" (baixado e
  *         conferido; o usuário executa) | "erro".
  */
 
-export const EM_ANDAMENTO = ["preparando", "baixando", "verificando", "aplicando"];
+export const EM_ANDAMENTO = ["preparando", "baixando", "verificando", "aplicando", "recarregando"];
 
 export function emAndamento(estado) {
   return EM_ANDAMENTO.includes(estado?.fase);
@@ -14,44 +15,44 @@ export function emAndamento(estado) {
 
 /**
  * O que a pessoa precisa fazer depois de um pacote aplicado, conforme o que
- * mudou (plugin_pacote.py): reiniciar o Revit, só recarregar o pyRevit ou nada.
- * Sem o campo (plugin que não informa), pede o reinício, que é o caso seguro.
+ * mudou (plugin_pacote.py): reiniciar o Revit, recarregar o pyRevit ou
+ * recarregar só o painel. Sem o campo (plugin que não informa), pede o reinício
+ * do Revit, que é o caso seguro.
  */
-export function textoDaAplicada(reinicio, recarga) {
-  if (reinicio === "nenhum") return "Atualização instalada. Já está valendo, não precisa reiniciar.";
-  if (reinicio === "pyrevit") {
-    return recarga === "falhou"
-      ? "Atualização instalada, mas o pyRevit não recarregou sozinho. Use Recarregar na aba pyRevit."
-      : "Atualização instalada. O pyRevit está sendo recarregado; se a faixa não atualizar, use Recarregar na aba pyRevit.";
-  }
-  return "Atualização instalada. Reinicie o Revit para concluir.";
-}
-
-/** Título do aviso (toast) depois de um pacote aplicado. */
-export function tituloDaAplicada(reinicio) {
-  if (reinicio === "pyrevit") return "Atualização instalada";
-  return reinicio === "nenhum" ? "Atualização instalada" : "Atualização instalada: reinicie o Revit";
+export function precisaReiniciarRevit(estado) {
+  return estado?.fase === "aplicada" && estado.reinicio !== "pyrevit" && estado.reinicio !== "nenhum";
 }
 
 /** Frase para a faixa, a tela de bloqueio e o tooltip do ícone. */
 export function textoDoEstado(estado) {
+  const v = estado?.versao ? ` v${estado.versao}` : "";
   switch (estado?.fase) {
     case "preparando":
-      return "Preparando o download…";
+      return "Preparando a atualização…";
     case "baixando":
       return typeof estado.percentual === "number"
-        ? `Baixando a atualização… ${estado.percentual}%`
-        : "Baixando a atualização…";
+        ? `Baixando a atualização${v}… ${estado.percentual}%`
+        : `Baixando a atualização${v}…`;
     case "verificando":
       return "Conferindo o arquivo baixado…";
     case "aplicando":
-      return "Aplicando a atualização…";
+      return "Instalando a atualização…";
+    case "recarregando":
+      return "Recarregando o pyRevit…";
     case "aplicada":
-      return textoDaAplicada(estado.reinicio, estado.recarga);
+      if (estado.reinicio === "nenhum") {
+        return `Atualização${v} instalada. Recarregue o painel para concluir.`;
+      }
+      if (estado.reinicio === "pyrevit") {
+        return estado.recarga === "falhou"
+          ? "O pyRevit não recarregou sozinho. Salve o projeto e use o botão Recarregar da aba pyRevit, no Revit."
+          : `Atualização${v} pronta. Salve o projeto e reinicie o pyRevit para aplicá-la.`;
+      }
+      return `Atualização${v} instalada. Salve o projeto e reinicie o Revit para aplicá-la.`;
     case "agendada":
-      return "Atualização pronta. Ela será instalada quando você fechar o Revit.";
+      return `Atualização${v} baixada. Ela será instalada quando você fechar o Revit; salve o projeto antes.`;
     case "manual":
-      return "Instalador baixado e conferido. Feche o Revit e execute o arquivo na pasta que foi aberta.";
+      return `Atualização${v} baixada na pasta Downloads. Salve o projeto, feche o Revit e execute o instalador.`;
     case "erro":
       return estado.erro || "Não foi possível atualizar.";
     default:
@@ -64,7 +65,7 @@ export function estadoDaMensagem(tipo, payload) {
   const p = payload || {};
   if (tipo === "ATUALIZACAO_PROGRESSO") {
     const fase = ["verificando", "aplicando"].includes(p.etapa) ? p.etapa : "baixando";
-    return { fase, percentual: p.percentual ?? null };
+    return { fase, percentual: p.percentual ?? null, versao: p.versao };
   }
   if (tipo === "ATUALIZACAO_RESULTADO") {
     return p.ok
