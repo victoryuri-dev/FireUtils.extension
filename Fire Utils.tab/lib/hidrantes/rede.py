@@ -532,6 +532,28 @@ def _resolver_classe_pipe_type():
     return None
 
 
+def _nome_elemento_tipo(elem):
+    """
+    Nome de um elemento de TIPO (ex.: PipeType) — tolerante a uma falha
+    conhecida do IronPython com versões recentes da API do Revit: em
+    algumas classes, "Element.Name" passou a ser implementado via
+    interface explícita, e o acesso dinâmico "elem.Name" do IronPython
+    não encontra o atributo (AttributeError), mesmo o elemento sendo
+    válido e do tipo certo — confirmado com GetType().FullName e
+    isinstance() nesse caso. "Element.Name" (o descritor da classe, não
+    da instância) continua acessível e devolve o valor certo.
+    """
+    try:
+        return elem.Name
+    except AttributeError:
+        pass
+    try:
+        from Autodesk.Revit.DB import Element
+        return Element.Name.GetValue(elem)
+    except Exception:
+        return None
+
+
 def get_pipe_type(elem):
     """
     (id, nome) do PipeType (tipo de tubo) de `elem` — usado pra agrupar
@@ -561,7 +583,7 @@ def get_pipe_type(elem):
         tipo_el = elem.Document.GetElement(tipo_id)
         if not isinstance(tipo_el, PipeType):
             return None
-        return (get_id(tipo_el), tipo_el.Name)
+        return (get_id(tipo_el), _nome_elemento_tipo(tipo_el))
     except Exception:
         return None
 
