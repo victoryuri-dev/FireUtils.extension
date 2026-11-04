@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
+import checkStrokeIconSvg from "../../assets/icons/check-stroke-icon.svg?raw";
 
 // Mesmas chaves curtas que hazen_c usa no perfil normativo (ver
 // ALIAS_MATERIAL_TUBULACAO em perfil.ts, ETOS.FireUtils / MATERIAIS_VALIDOS
@@ -9,12 +10,12 @@ import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 // até o motor. Rótulos copiados do catálogo do site
 // (src/data/hidrantesCatalogos.js, ETOS.FireUtils).
 const MATERIAIS = [
-  { key: "ff_sem_revest", label: "Ferro fundido ou dúctil sem revestimento interno" },
-  { key: "aco_preto_seco", label: "Aço preto (sistema de tubo seco)" },
-  { key: "aco_preto_molhado", label: "Aço preto (sistema de tubo molhado)" },
+  { key: "ff_sem_revest", label: "Ferro fundido/dúctil sem revestimento" },
+  { key: "aco_preto_seco", label: "Aço preto (tubo seco)" },
+  { key: "aco_preto_molhado", label: "Aço preto (tubo molhado)" },
   { key: "galvanizado", label: "Galvanizado" },
   { key: "plastico", label: "Plástico (PVC/PEAD)" },
-  { key: "ff_revest_cimento", label: "Ferro fundido ou dúctil com revestimento interno de cimento" },
+  { key: "ff_revest_cimento", label: "Ferro fundido/dúctil com cimento" },
   { key: "cobre", label: "Cobre" },
 ];
 
@@ -42,20 +43,6 @@ function todasAsChaves(pipeTypesPorEtapa) {
   );
 }
 
-function PillSistema({ active, onClick, children }) {
-  return (
-    <button type="button" className={`hid-pill ${active ? "hid-pill-ativa" : ""}`} onClick={onClick}>
-      {children}
-    </button>
-  );
-}
-
-function rotuloPipeType(grupo) {
-  const diametros = (grupo.diametros || []).map((d) => `DN${Math.round(d)}`).join(", ");
-  const nome = grupo.nome || "Tipo de tubo não identificado";
-  return diametros ? `${nome} (${diametros})` : nome;
-}
-
 function localizarGrupo(eids) {
   if (!eids?.length) return;
   postToHost(BridgeMessageTypes.SELECIONAR_TRECHO_HIDRANTE, { rota: eids });
@@ -66,8 +53,73 @@ function BotaoLocalizar({ eids }) {
     <button type="button" className="hiddim-localizar-btn" onClick={() => localizarGrupo(eids)} title="Selecionar no Revit">
       <Icon svg={searchIconSvg} />
     </button>
-  ) : (
-    <span className="hiddim-td-vazio">—</span>
+  ) : null;
+}
+
+/** Linha "rótulo em cima, campo embaixo" — empilha bem em telas estreitas,
+ * nunca corta texto de select/botão (ao contrário de colunas de tabela). */
+function Campo({ rotulo, children }) {
+  return (
+    <div>
+      <div className="hid-espec-label">{rotulo}</div>
+      {children}
+    </div>
+  );
+}
+
+function SeletorMaterial({ value, onChange }) {
+  return (
+    <select className="se-select" style={{ width: "100%" }} value={value || ""} onChange={(e) => onChange(e.target.value || null)}>
+      <option value="">Galvanizado (padrão)</option>
+      {MATERIAIS.map((m) => (
+        <option key={m.key} value={m.key}>{m.label}</option>
+      ))}
+    </select>
+  );
+}
+
+function SeletorSistema({ value, onChange }) {
+  return (
+    <div className="hid-acionamento-lista">
+      {Object.keys(ROTULO_SISTEMA).map((sistema) => (
+        <button
+          key={sistema}
+          type="button"
+          className={`hid-acionamento-pill ${(value || "bsp") === sistema ? "hid-acionamento-pill-ativa" : ""}`}
+          onClick={() => onChange(sistema)}
+        >
+          {ROTULO_SISTEMA[sistema]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Um grupo (tipo de tubo detectado) dentro de uma etapa — card próprio,
+ * campos empilhados (nunca lado a lado): é o que se comporta bem numa
+ * dockpane estreita, sem truncar o nome do material nem espremer os
+ * botões de sistema. */
+function CartaoGrupo({ grupo, escolha, onEscolher }) {
+  const diametros = grupo.diametros || [];
+  const nome = grupo.nome || "Tipo de tubo não identificado";
+  return (
+    <div className="hiddim-segmento">
+      <div className="hiddim-segmento-topo">
+        {diametros.map((d) => (
+          <span key={d} className="hiddim-dn-badge">DN{Math.round(d)}</span>
+        ))}
+        <span className="hiddim-segmento-tubo" style={{ flex: "1 1 auto" }}>{nome}</span>
+        <BotaoLocalizar eids={grupo.eids} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <Campo rotulo="Material">
+          <SeletorMaterial value={escolha.material} onChange={(v) => onEscolher("material", v)} />
+        </Campo>
+        <Campo rotulo="Sistema de conexão">
+          <SeletorSistema value={escolha.sistema} onChange={(v) => onEscolher("sistema", v)} />
+        </Campo>
+      </div>
+    </div>
   );
 }
 
@@ -83,6 +135,14 @@ function BotaoLocalizar({ eids }) {
  * pai (SistemaHidrantesPage) só o renderiza depois de um mapeamento
  * bem-sucedido (mapeamentoOk) — antes disso ele fica oculto, não aparece
  * nem com um placeholder.
+ *
+ * Layout em cards empilhados (não tabela): a dockpane é estreita, e uma
+ * tabela de 3-4 colunas (tipo de tubo / material / sistema) espreme ou
+ * corta texto sempre que o painel do Revit fica mais estreito. Cada grupo
+ * vira um card com rótulo em cima do campo — mesmo padrão já usado em
+ * "Perdas de Carga por Trecho" (.hiddim-segmento) e no card de
+ * Acionamento da Bomba (.hid-acionamento-lista), pra ficar familiar pra
+ * quem já usa o resto da dockpane todo dia.
  *
  * "Mesmo material/conexão para todos os trechos": simplifica pra um
  * controle só, que grava A MESMA escolha em TODO (etapa, tipo de tubo)
@@ -174,9 +234,10 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
     postToHost(BridgeMessageTypes.SET_MATERIAL_CONEXAO, { porEtapa: novo });
   }
 
-  function alternarMesmoParaTodos(ligado) {
-    setMesmoParaTodos(ligado);
-    if (ligado) aplicarParaTodos(escolhaUnica);
+  function alternarMesmoParaTodos() {
+    const ligando = !mesmoParaTodos;
+    setMesmoParaTodos(ligando);
+    if (ligando) aplicarParaTodos(escolhaUnica);
   }
 
   function escolherUnica(campo, valor) {
@@ -191,8 +252,8 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
     <div className="cartao-info" style={{ marginBottom: 14 }}>
       <h3 style={{ margin: 0 }}>Material e Sistema de Conexão</h3>
       <p className="hid-secao-desc">
-        Define o material da tubulação (coeficiente C) e o sistema de conexão de cotovelo/tê (BSP ou Grooved),
-        por trecho e tipo de tubo. Sem escolha, usa galvanizado (C=120) e BSP.
+        Material (coeficiente C) e sistema de conexão de cotovelo/tê, por trecho e tipo de tubo. Sem escolha,
+        usa galvanizado (C=120) e BSP.
       </p>
       {!carregado ? (
         <p className="vazio">Carregando…</p>
@@ -200,110 +261,40 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
         <p className="vazio">Mapeie a rede (acima) para configurar material e conexão por trecho.</p>
       ) : (
         <>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "10px 0", cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={mesmoParaTodos}
-              onChange={(e) => alternarMesmoParaTodos(e.target.checked)}
-            />
-            <span>Mesmo material e conexão para todos os trechos</span>
-          </label>
+          <button type="button" className={`hid-bomba-cartao ${mesmoParaTodos ? "hid-bomba-cartao-ativa" : ""}`} onClick={alternarMesmoParaTodos} style={{ marginTop: 10 }}>
+            <span className="hid-bomba-cartao-textos">
+              <span className="hid-bomba-cartao-titulo">Mesmo material e conexão para todos os trechos</span>
+            </span>
+            <span className={`hid-bomba-check ${mesmoParaTodos ? "hid-bomba-check-ativo" : ""}`}>
+              {mesmoParaTodos && <Icon svg={checkStrokeIconSvg} />}
+            </span>
+          </button>
 
           {mesmoParaTodos ? (
-            <div className="hiddim-tabela-wrap">
-              <table className="hiddim-tabela">
-                <thead>
-                  <tr>
-                    <th className="hiddim-th hiddim-align-left">Material</th>
-                    <th className="hiddim-th hiddim-align-left">Sistema de conexão</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="hiddim-td hiddim-align-left">
-                      <select
-                        className="se-select"
-                        value={escolhaUnica.material || ""}
-                        onChange={(e) => escolherUnica("material", e.target.value || null)}
-                      >
-                        <option value="">Galvanizado (padrão)</option>
-                        {MATERIAIS.map((m) => (
-                          <option key={m.key} value={m.key}>{m.label}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="hiddim-td hiddim-align-left">
-                      <div style={{ display: "flex", gap: 6 }}>
-                        {Object.keys(ROTULO_SISTEMA).map((sistema) => (
-                          <PillSistema
-                            key={sistema}
-                            active={(escolhaUnica.sistema || "bsp") === sistema}
-                            onClick={() => escolherUnica("sistema", sistema)}
-                          >
-                            {ROTULO_SISTEMA[sistema]}
-                          </PillSistema>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="hid-nota-aviso">Aplicado a todos os trechos e tipos de tubo encontrados no mapeamento.</p>
+            <div className="hiddim-segmento" style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <Campo rotulo="Material">
+                  <SeletorMaterial value={escolhaUnica.material} onChange={(v) => escolherUnica("material", v)} />
+                </Campo>
+                <Campo rotulo="Sistema de conexão">
+                  <SeletorSistema value={escolhaUnica.sistema} onChange={(v) => escolherUnica("sistema", v)} />
+                </Campo>
+              </div>
+              <p className="hid-nota-aviso" style={{ marginBottom: 0 }}>Aplicado a todos os trechos e tipos de tubo encontrados no mapeamento.</p>
             </div>
           ) : (
             etapasComTubo.map((etapa) => (
-              <div key={etapa} style={{ marginTop: 10 }}>
-                <p className="dashboard-subtitulo" style={{ margin: "0 0 6px" }}>{NOME_ETAPA[etapa]}</p>
-                <div className="hiddim-tabela-wrap">
-                  <table className="hiddim-tabela">
-                    <thead>
-                      <tr>
-                        <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
-                        <th className="hiddim-th hiddim-align-left">Tipo de tubo</th>
-                        <th className="hiddim-th hiddim-align-left">Material</th>
-                        <th className="hiddim-th hiddim-align-left">Sistema de conexão</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {pipeTypesPorEtapa[etapa].map((grupo) => {
-                        const chave = chavePipeType(grupo.id);
-                        const escolha = porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" };
-                        return (
-                          <tr key={chave}>
-                            <td className="hiddim-td hiddim-align-center">
-                              <BotaoLocalizar eids={grupo.eids} />
-                            </td>
-                            <td className="hiddim-td hiddim-align-left">{rotuloPipeType(grupo)}</td>
-                            <td className="hiddim-td hiddim-align-left">
-                              <select
-                                className="se-select"
-                                value={escolha.material || ""}
-                                onChange={(e) => escolher(etapa, grupo.id, "material", e.target.value || null)}
-                              >
-                                <option value="">Galvanizado (padrão)</option>
-                                {MATERIAIS.map((m) => (
-                                  <option key={m.key} value={m.key}>{m.label}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="hiddim-td hiddim-align-left">
-                              <div style={{ display: "flex", gap: 6 }}>
-                                {Object.keys(ROTULO_SISTEMA).map((sistema) => (
-                                  <PillSistema
-                                    key={sistema}
-                                    active={(escolha.sistema || "bsp") === sistema}
-                                    onClick={() => escolher(etapa, grupo.id, "sistema", sistema)}
-                                  >
-                                    {ROTULO_SISTEMA[sistema]}
-                                  </PillSistema>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              <div key={etapa} style={{ marginTop: 14 }}>
+                <p className="dashboard-subtitulo" style={{ margin: "0 0 8px" }}>{NOME_ETAPA[etapa]}</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {pipeTypesPorEtapa[etapa].map((grupo) => (
+                    <CartaoGrupo
+                      key={chavePipeType(grupo.id)}
+                      grupo={grupo}
+                      escolha={porEtapa[etapa]?.[chavePipeType(grupo.id)] || { material: null, sistema: "bsp" }}
+                      onEscolher={(campo, valor) => escolher(etapa, grupo.id, campo, valor)}
+                    />
+                  ))}
                 </div>
               </div>
             ))
