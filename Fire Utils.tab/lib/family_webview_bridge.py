@@ -182,20 +182,13 @@ def _carregar_sistemas(uiapp, sistemas, postar_mensagem):
     if uidoc is None:
         return [], [], [(nome, u"Nenhum documento ativo no Revit.") for nome, _ in sistemas]
     for nome, caminho in sistemas:
-        print_seguro(u"[FireUtils] sistema de tubo '{}' (módulo v{}), arquivo: {}".format(
-            nome, sistema_tubo_core.VERSAO_DO_MODULO, caminho))
         try:
             estado, _tipos = sistema_tubo_core.carregar_sistema(uiapp, uidoc.Document, caminho)
             (carregadas if estado == sistema_tubo_core.CARREGADO else ja_existentes).append(nome)
         except Exception as ex:
-            # Com o nome da classe: mensagens curtas como "Name" não dizem nada sozinhas.
-            detalhe = u"{}: {}".format(type(ex).__name__, texto_erro(ex))
-            try:
-                import traceback
-                print_seguro(traceback.format_exc())
-            except Exception:
-                pass
-            print_seguro(u"[AVISO] Falha ao carregar o sistema '{}': {}".format(nome, detalhe))
+            # Sem print no console do pyRevit: o erro vai para a dockpane, no
+            # LOAD_RESULT (e, se for erro do próprio Revit, o Revit mostra o seu aviso).
+            detalhe = texto_erro(ex)
             erros.append((nome, detalhe))
     return carregadas, ja_existentes, erros
 

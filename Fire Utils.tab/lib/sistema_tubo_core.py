@@ -50,10 +50,6 @@ from Autodesk.Revit.DB.Plumbing import Pipe, PipeType
 
 from family_error_utils import texto_erro
 
-# Aparece no console do pyRevit ao carregar um sistema: mostra qual versão deste
-# módulo está de fato rodando (a dockpane só pega código novo ao reiniciar o Revit).
-VERSAO_DO_MODULO = u"2"
-
 CARREGADO = u"carregado"
 JA_EXISTENTE = u"ja_existente"
 
