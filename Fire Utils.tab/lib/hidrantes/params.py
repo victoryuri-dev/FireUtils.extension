@@ -134,9 +134,19 @@ PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
 # (ver hidrantes_classificacao_bridge.py).
 PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
 
+# Guarda, em JSON, o sistema de conexão (BSP roscado x Grooved ranhurado)
+# escolhido na dockpane PARA CADA DIÂMETRO da rede — {"50": "grooved", ...},
+# chave = DN (mm) como string. Usado só pelo motor de cálculo pra decidir
+# qual tabela de Leq aplicar em cada cotovelo/tê (ver get_tipo_conexao em
+# rede.py e leqConexoes.ts do lado do motor) — não dá mais pra inferir isso
+# da família do Revit, já que a classificação é feita pelo PartType nativo,
+# comum aos dois sistemas. Diâmetro sem entrada aqui usa "bsp" (ver
+# hidrantes/sistema_conexao.py).
+PROJECT_INFO_SISTEMA_CONEXAO_PARAM = u"FireUtils - Sistema de Conexao"
+
 PROJECT_INFO_PARAMS = [
     PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
-    PROJECT_INFO_SUCCAO_PARAM,
+    PROJECT_INFO_SUCCAO_PARAM, PROJECT_INFO_SISTEMA_CONEXAO_PARAM,
 ]
 
 

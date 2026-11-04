@@ -144,7 +144,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
         {
           "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos", "ids",
                            "acessorios": [ {nome, qtd, leq_unit, leq_tot} ],
-                           "conexoes": [ {tipo, qtd, angulo_graus, d2_mm} ] } ],
+                           "conexoes": [ {tipo, qtd, angulo_graus, d2_mm, sistema} ] } ],
           "L":   soma dos comprimentos reais,
           "Leq": soma dos acessórios ainda dependentes do parâmetro de
                  família (ver get_leq) — o Leq das conexões em "conexoes"
@@ -191,7 +191,8 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             tipo_conexao = get_tipo_conexao_fn(elem, d_mm) if get_tipo_conexao_fn else None
             if tipo_conexao is not None:
                 s = _seg(d_mm)
-                chave = (tipo_conexao["tipo"], tipo_conexao["angulo_graus"], tipo_conexao["d2_mm"])
+                chave = (tipo_conexao["tipo"], tipo_conexao["angulo_graus"], tipo_conexao["d2_mm"],
+                         tipo_conexao.get("sistema"))
                 if chave in s["conexoes"]:
                     s["conexoes"][chave]["qtd"] += 1
                 else:
@@ -199,6 +200,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
                         "tipo": tipo_conexao["tipo"],
                         "angulo_graus": tipo_conexao["angulo_graus"],
                         "d2_mm": tipo_conexao["d2_mm"],
+                        "sistema": tipo_conexao.get("sistema") or "bsp",
                         "qtd": 1,
                     }
                 continue
@@ -226,7 +228,8 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
                 "leq_tot":  v["leq_tot"],
             })
         acessorios.sort(key=lambda a: a["nome"])
-        conexoes = sorted(s["conexoes"].values(), key=lambda c: (c["tipo"], c["angulo_graus"] or 0, c["d2_mm"] or 0))
+        conexoes = sorted(s["conexoes"].values(),
+                          key=lambda c: (c["tipo"], c["angulo_graus"] or 0, c["d2_mm"] or 0, c["sistema"]))
         segmentos.append({
             "d_mm":       s["d_mm"],
             "L":          s["L"],

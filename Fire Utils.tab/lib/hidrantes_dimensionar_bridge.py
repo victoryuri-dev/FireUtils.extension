@@ -50,6 +50,7 @@ from hidrantes.rede import (
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes import succao as succao_calc
+from hidrantes import sistema_conexao as sistema_conexao_calc
 import motor_nuvem
 from family_error_utils import texto_erro
 
@@ -192,12 +193,17 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
         ids_no_trecho = set(get_id(e) for e in trechos_elems[chave_trecho])
         return lambda e, _ids=ids_no_trecho: get_diametro_no_trecho(e, _ids)
 
+    sistema_por_diametro = sistema_conexao_calc.load_dados(doc)
+
+    def _tipo_conexao_fn(elem, d_mm):
+        return get_tipo_conexao(elem, d_mm, sistema_por_diametro)
+
     try:
         trechos_data = {
-            u"t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id, get_tipo_conexao),
-            u"t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id, get_tipo_conexao),
-            u"t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id, get_tipo_conexao),
-            u"t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id, get_tipo_conexao),
+            u"t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id, _tipo_conexao_fn),
+            u"t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id, _tipo_conexao_fn),
+            u"t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id, _tipo_conexao_fn),
+            u"t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id, _tipo_conexao_fn),
         }
     except ValueError as ex:
         _erro(postar_mensagem, texto_erro(ex))

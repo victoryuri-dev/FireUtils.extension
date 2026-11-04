@@ -400,6 +400,15 @@ export const BridgeMessageTypes = {
   REVIT_LEVELS: "REVIT_LEVELS",
   SET_NIVEIS_CORRELACAO: "SET_NIVEIS_CORRELACAO",
   NIVEIS_CORRELACAO_SAVED: "NIVEIS_CORRELACAO_SAVED",
+  // Sistema de conexão (BSP roscado x Grooved ranhurado), por diâmetro —
+  // decide a tabela de Leq de cotovelo/tê no motor (ver
+  // hidrantes/sistema_conexao.py e leqConexoes.ts). GET devolve o que já
+  // está salvo no projeto (sistemaPorDiametro: {"<DN>": "bsp"|"grooved"});
+  // SET grava a escolha feita na dockpane.
+  GET_SISTEMA_CONEXAO: "GET_SISTEMA_CONEXAO",
+  SISTEMA_CONEXAO: "SISTEMA_CONEXAO",
+  SET_SISTEMA_CONEXAO: "SET_SISTEMA_CONEXAO",
+  SISTEMA_CONEXAO_SAVED: "SISTEMA_CONEXAO_SAVED",
   // Licenças: o Python guarda um token assinado pelo servidor (Edge Function
   // emitir-licenca) e o confere offline — é o que libera as ferramentas de
   // produtividade sem internet.

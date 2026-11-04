@@ -558,7 +558,7 @@ def _angulo_cotovelo(elem):
         return None
 
 
-def get_tipo_conexao(elem, d_mm=None):
+def get_tipo_conexao(elem, d_mm=None, sistema_por_diametro=None):
     """
     Classifica uma conexão/fitting de tubulação (cotovelo, tê, redução,
     tampão, união, luva Y) pelo tipo NATIVO do Revit — o PartType da
@@ -570,8 +570,15 @@ def get_tipo_conexao(elem, d_mm=None):
     esta função devolve — este módulo só mede/classifica.
 
     d_mm, se informado, é o diâmetro nominal (mm) já resolvido pelo
-    chamador pra este elemento (get_diametro_no_trecho) — usado só para
-    decidir qual dos dois lados de uma redução é o "outro" (d2_mm).
+    chamador pra este elemento (get_diametro_no_trecho) — usado pra
+    decidir qual dos dois lados de uma redução é o "outro" (d2_mm), e pra
+    procurar o sistema de conexão configurado pro diâmetro deste elemento.
+
+    sistema_por_diametro, se informado, é o dict {"<DN>": "bsp"|"grooved"}
+    salvo no projeto (ver hidrantes/sistema_conexao.py) — o motor usa isso
+    pra escolher a tabela de Leq certa de cotovelo/tê (roscado e ranhurado
+    têm Leq bem diferentes pro mesmo tipo/diâmetro). Diâmetro sem escolha
+    salva (ou sistema_por_diametro não informado) cai em "bsp".
 
     Retorna None se o elemento não for uma conexão classificável assim
     (categoria diferente de "Conexões de Tubulação", ou PartType sem
@@ -591,7 +598,8 @@ def get_tipo_conexao(elem, d_mm=None):
     Retorna, caso contrário:
         {"tipo": "cotovelo"|"tee"|"transicao"|"tampao"|"uniao"|"luva_y",
          "angulo_graus": float|None,   # só cotovelo
-         "d2_mm": float|None}          # só transição
+         "d2_mm": float|None,          # só transição
+         "sistema": "bsp"|"grooved"}   # vem de sistema_por_diametro, por d_mm
     """
     global _CATS_CONEXAO, _MAPA_PART_TYPE_CONEXAO
 
@@ -656,7 +664,11 @@ def get_tipo_conexao(elem, d_mm=None):
     except Exception:
         return None
 
-    resultado = {u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None}
+    from hidrantes.sistema_conexao import get_sistema
+    resultado = {
+        u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None,
+        u"sistema": get_sistema(sistema_por_diametro, d_mm),
+    }
 
     if tipo == u"cotovelo":
         resultado[u"angulo_graus"] = _angulo_cotovelo(elem)

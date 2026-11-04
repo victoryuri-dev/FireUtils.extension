@@ -11,6 +11,7 @@ import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
 import HidrantesMapeamento, { TITULO_FALHA_MAPEAMENTO } from "./HidrantesMapeamento";
+import SistemaConexaoSelector from "./SistemaConexaoSelector";
 import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
@@ -638,15 +639,18 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               deixar o RT descobrir isso só ao clicar, a seção nem aparece
               até o Tipo estar identificado. */}
           {classificacao?.tipo ? (
-            <HidrantesMapeamento
-              mapeando={mapeando}
-              instrucao={instrucaoMapeamento}
-              pendente={mapeamentoPendente}
-              inconsistencia={inconsistenciaMapeamento}
-              trechos={trechosMapeados ?? resposta.mapeamento}
-              onMapear={mapear}
-              onContinuar={continuarMapeamento}
-            />
+            <>
+              <SistemaConexaoSelector adicionarToast={adicionarToast} />
+              <HidrantesMapeamento
+                mapeando={mapeando}
+                instrucao={instrucaoMapeamento}
+                pendente={mapeamentoPendente}
+                inconsistencia={inconsistenciaMapeamento}
+                trechos={trechosMapeados ?? resposta.mapeamento}
+                onMapear={mapear}
+                onContinuar={continuarMapeamento}
+              />
+            </>
           ) : (
             <div className="hid-aviso" style={{ marginBottom: 14 }}>
               Escolha e aplique o Tipo do sistema acima antes de mapear a rede.
