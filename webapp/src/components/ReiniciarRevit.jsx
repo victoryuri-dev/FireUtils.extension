@@ -10,11 +10,14 @@ import Loader from "./Loader";
 export default function ReiniciarRevit({ versao }) {
   return (
     <div className="reiniciar-revit">
-      <Loader size={48} />
-      <p>
-        Fire Utils{versao ? ` v${versao}` : ""} foi instalado. Salve o projeto, feche o Revit e abra-o novamente.
-        Até lá o painel ficará indisponível.
-      </p>
+      <div className="sem-licenca">
+        <Loader size={48} className="reiniciar-revit-logo" />
+        <h2>Reinicie o Revit para concluir a atualização</h2>
+        <p>
+          Fire Utils{versao ? ` v${versao}` : ""} foi instalado. Salve o projeto, feche o Revit e abra-o novamente.
+          Até lá o painel ficará indisponível.
+        </p>
+      </div>
     </div>
   );
 }
