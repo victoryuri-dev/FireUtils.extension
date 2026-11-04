@@ -507,6 +507,31 @@ def get_diametro_no_trecho(elem, ids_no_trecho):
     return get_diametro(elem)
 
 
+_CLASSE_PIPE_TYPE = None
+
+
+def _resolver_classe_pipe_type():
+    """Acha a classe PipeType tentando os dois namespaces conhecidos — o
+    enum PartType já mostrou que muda de lugar entre instalações do Revit
+    (Autodesk.Revit.DB x Autodesk.Revit.DB.Plumbing; ver
+    _MAPA_PART_TYPE_CONEXAO acima), e PipeType pode ter a mesma variação.
+    Resolve uma vez só e cacheia; None se não achar em nenhum dos dois —
+    get_pipe_type cai para "sem tipo" nesse caso, nunca lança."""
+    global _CLASSE_PIPE_TYPE
+    if _CLASSE_PIPE_TYPE is not None:
+        return _CLASSE_PIPE_TYPE
+    for _modulo_nome in (u"Autodesk.Revit.DB", u"Autodesk.Revit.DB.Plumbing"):
+        try:
+            _mod = __import__(_modulo_nome, fromlist=[u"PipeType"])
+            _classe = getattr(_mod, u"PipeType", None)
+            if _classe is not None:
+                _CLASSE_PIPE_TYPE = _classe
+                return _classe
+        except Exception:
+            continue
+    return None
+
+
 def get_pipe_type(elem):
     """
     (id, nome) do PipeType (tipo de tubo) de `elem` — usado pra agrupar
@@ -519,14 +544,17 @@ def get_pipe_type(elem):
     (_pipe_params) pro mesmo problema, resolvida do mesmo jeito: confirma
     que o elemento resolvido É um PipeType antes de aceitar.
 
-    Retorna None se `elem` não for um Pipe, ou se o tipo não for um
+    Retorna None se `elem` não for um Pipe, se a classe PipeType não for
+    resolvível nesta instalação do Revit, ou se o tipo não for um
     PipeType de verdade.
     """
     if not isinstance(elem, Pipe):
         return None
     try:
-        from Autodesk.Revit.DB.Plumbing import PipeType
         from Autodesk.Revit.DB import ElementId
+        PipeType = _resolver_classe_pipe_type()
+        if PipeType is None:
+            return None
         tipo_id = elem.GetTypeId()
         if tipo_id == ElementId.InvalidElementId:
             return None
