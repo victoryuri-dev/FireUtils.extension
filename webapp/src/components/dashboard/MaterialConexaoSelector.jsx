@@ -111,7 +111,7 @@ function CartaoGrupo({ grupo, escolha, onEscolher }) {
         <span className="hiddim-segmento-tubo" style={{ flex: "1 1 auto" }}>{nome}</span>
         <BotaoLocalizar eids={grupo.eids} />
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <Campo rotulo="Material">
           <SeletorMaterial value={escolha.material} onChange={(v) => onEscolher("material", v)} />
         </Campo>
@@ -251,7 +251,10 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
       <h3 style={{ margin: 0 }}>Material e Sistema de Conexão</h3>
-      <p className="hid-secao-desc">
+      {/* .hid-secao-desc tem margin-top negativo (compensa o line-height de
+          outro card, "Bomba de Incêndio") — sobrescrito aqui pra não colar
+          no título. */}
+      <p className="hid-secao-desc" style={{ marginTop: 6 }}>
         Material (coeficiente C) e sistema de conexão de cotovelo/tê, por trecho e tipo de tubo. Sem escolha,
         usa galvanizado (C=120) e BSP.
       </p>
@@ -261,7 +264,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
         <p className="vazio">Mapeie a rede (acima) para configurar material e conexão por trecho.</p>
       ) : (
         <>
-          <button type="button" className={`hid-bomba-cartao ${mesmoParaTodos ? "hid-bomba-cartao-ativa" : ""}`} onClick={alternarMesmoParaTodos} style={{ marginTop: 10 }}>
+          <button type="button" className={`hid-bomba-cartao ${mesmoParaTodos ? "hid-bomba-cartao-ativa" : ""}`} onClick={alternarMesmoParaTodos} style={{ marginTop: 16 }}>
             <span className="hid-bomba-cartao-textos">
               <span className="hid-bomba-cartao-titulo">Mesmo material e conexão para todos os trechos</span>
             </span>
@@ -271,8 +274,8 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
           </button>
 
           {mesmoParaTodos ? (
-            <div className="hiddim-segmento" style={{ marginTop: 10 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div className="hiddim-segmento" style={{ marginTop: 16 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <Campo rotulo="Material">
                   <SeletorMaterial value={escolhaUnica.material} onChange={(v) => escolherUnica("material", v)} />
                 </Campo>
@@ -283,10 +286,10 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
               <p className="hid-nota-aviso" style={{ marginBottom: 0 }}>Aplicado a todos os trechos e tipos de tubo encontrados no mapeamento.</p>
             </div>
           ) : (
-            etapasComTubo.map((etapa) => (
-              <div key={etapa} style={{ marginTop: 14 }}>
-                <p className="dashboard-subtitulo" style={{ margin: "0 0 8px" }}>{NOME_ETAPA[etapa]}</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            etapasComTubo.map((etapa, i) => (
+              <div key={etapa} style={{ marginTop: i === 0 ? 20 : 24 }}>
+                <p className="dashboard-subtitulo" style={{ margin: "0 0 10px" }}>{NOME_ETAPA[etapa]}</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {pipeTypesPorEtapa[etapa].map((grupo) => (
                     <CartaoGrupo
                       key={chavePipeType(grupo.id)}
