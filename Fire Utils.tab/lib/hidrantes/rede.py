@@ -578,6 +578,16 @@ def get_tipo_conexao(elem, d_mm=None):
     mapeamento aqui) — o chamador cai no fluxo antigo (get_leq, parâmetro
     de família), ainda usado por válvulas/acessórios não migrados.
 
+    IMPORTANTE — compatibilidade com projetos existentes: se a conexão já
+    tem "Perda de Carga" preenchida (> 0) na família, esta função devolve
+    None de propósito, mesmo sendo um PartType reconhecido. Isso faz o
+    valor calibrado que o projeto já usa hoje continuar valendo, bit a
+    bit, sem mudar nenhum resultado de dimensionamento já em uso — a
+    tabela por PartType só entra onde o parâmetro estava vazio (ou seja,
+    onde o Leq daquela conexão já era 0 e passava batido antes). Dimensionar
+    nunca fica "menos seguro" por essa troca: no pior caso, um Leq que
+    antes era esquecido (0) passa a ser contado.
+
     Retorna, caso contrário:
         {"tipo": "cotovelo"|"tee"|"transicao"|"tampao"|"uniao"|"luva_y",
          "angulo_graus": float|None,   # só cotovelo
@@ -586,6 +596,9 @@ def get_tipo_conexao(elem, d_mm=None):
     global _CATS_CONEXAO, _MAPA_PART_TYPE_CONEXAO
 
     if not isinstance(elem, FamilyInstance):
+        return None
+
+    if get_leq(elem) > 0:
         return None
 
     if _CATS_CONEXAO is None:
