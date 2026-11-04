@@ -833,14 +833,19 @@
 /* Barra de ações das famílias selecionadas — só aparece com alguma família
    selecionada; compacta, no mesmo estilo da barra de seleção de ambientes
    (.se-selecao-barra): contagem pequena em cima e botões só com ícone.
-   Flutua no canto inferior esquerdo, por cima da grade. */
+   Flutua centralizada no rodapé, por cima da grade. Fora de foco (mouse longe,
+   sem foco do teclado) fica translúcida para não atrapalhar a visão das
+   famílias que cobre; ao passar o mouse ou focar, volta ao normal. */
 .acoes {
   position: absolute;
-  left: 26px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 20px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
   gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--accent);
@@ -849,6 +854,11 @@
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   z-index: 2;
   animation: surgir .4s;
+}
+
+.acoes:hover,
+.acoes:focus-within {
+  opacity: 1;
 }
 
 .acoes-contagem {
