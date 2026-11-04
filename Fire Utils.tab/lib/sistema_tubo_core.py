@@ -37,6 +37,7 @@ from System.Collections.Generic import List
 from Autodesk.Revit.DB import (
     CopyPasteOptions,
     DuplicateTypeAction,
+    Element,
     ElementId,
     ElementTransformUtils,
     FilteredElementCollector,
@@ -57,9 +58,19 @@ class _ReusarTiposDoDestino(IDuplicateTypeNamesHandler):
         return DuplicateTypeAction.UseDestinationTypes
 
 
+def _nome(elemento):
+    """Nome do elemento. No IronPython, `.Name` de um tipo (ElementType) pode
+    falhar por ambiguidade entre ElementType.Name e Element.Name; a leitura
+    pela propriedade da classe base funciona sempre."""
+    try:
+        return Element.Name.GetValue(elemento)
+    except Exception:
+        return elemento.Name
+
+
 def _tipos_de_tubo(doc):
     """{nome: ElementId} dos PipeType do documento."""
-    return dict((t.Name, t.Id) for t in FilteredElementCollector(doc).OfClass(PipeType))
+    return dict((_nome(t), t.Id) for t in FilteredElementCollector(doc).OfClass(PipeType))
 
 
 def carregar_sistema(uiapp, doc, caminho):
@@ -87,7 +98,7 @@ def carregar_sistema(uiapp, doc, caminho):
         # preferências de roteamento e as conexões, como no copiar/colar.
         trecho_por_tipo = {}
         for tubo in FilteredElementCollector(origem).OfClass(Pipe):
-            nome_tipo = tubo.PipeType.Name
+            nome_tipo = _nome(tubo.PipeType)
             if nome_tipo not in trecho_por_tipo:
                 trecho_por_tipo[nome_tipo] = tubo.Id
 

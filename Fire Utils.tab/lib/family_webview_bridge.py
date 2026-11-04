@@ -186,8 +186,10 @@ def _carregar_sistemas(uiapp, sistemas, postar_mensagem):
             estado, _tipos = sistema_tubo_core.carregar_sistema(uiapp, uidoc.Document, caminho)
             (carregadas if estado == sistema_tubo_core.CARREGADO else ja_existentes).append(nome)
         except Exception as ex:
-            print_seguro(u"[AVISO] Falha ao carregar o sistema '{}': {}".format(nome, texto_erro(ex)))
-            erros.append((nome, texto_erro(ex)))
+            # Com o nome da classe: mensagens curtas como "Name" não dizem nada sozinhas.
+            detalhe = u"{}: {}".format(type(ex).__name__, texto_erro(ex))
+            print_seguro(u"[AVISO] Falha ao carregar o sistema '{}': {}".format(nome, detalhe))
+            erros.append((nome, detalhe))
     return carregadas, ja_existentes, erros
 
 
