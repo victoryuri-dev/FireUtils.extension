@@ -617,15 +617,35 @@ def get_tipo_conexao(elem, d_mm=None):
         return None
 
     if _MAPA_PART_TYPE_CONEXAO is None:
-        from Autodesk.Revit.DB.Plumbing import PartType
-        _MAPA_PART_TYPE_CONEXAO = {
-            int(PartType.Elbow):      u"cotovelo",
-            int(PartType.Tee):        u"tee",
-            int(PartType.Transition): u"transicao",
-            int(PartType.Cap):        u"tampao",
-            int(PartType.Union):      u"uniao",
-            int(PartType.Wye):        u"luva_y",
-        }
+        # O enum PartType muda de namespace entre versões/instalações do
+        # Revit (Autodesk.Revit.DB x Autodesk.Revit.DB.Plumbing) — por
+        # isso tenta os dois, e nunca deixa um ImportError/AttributeError
+        # subir e derrubar o dimensionamento inteiro: se não achar o
+        # enum (ou algum membro dele) nesta instalação, _MAPA_PART_TYPE_CONEXAO
+        # fica {} e toda conexão cai no fluxo antigo (get_leq), como se
+        # esta função não existisse.
+        _MAPA_PART_TYPE_CONEXAO = {}
+        try:
+            PartType = None
+            for _modulo_nome in (u"Autodesk.Revit.DB", u"Autodesk.Revit.DB.Plumbing"):
+                try:
+                    _mod = __import__(_modulo_nome, fromlist=[u"PartType"])
+                    PartType = getattr(_mod, u"PartType", None)
+                    if PartType is not None:
+                        break
+                except Exception:
+                    continue
+            if PartType is not None:
+                for _nome_membro, _rotulo in (
+                    (u"Elbow", u"cotovelo"), (u"Tee", u"tee"),
+                    (u"Transition", u"transicao"), (u"Cap", u"tampao"),
+                    (u"Union", u"uniao"), (u"Wye", u"luva_y"),
+                ):
+                    _valor = getattr(PartType, _nome_membro, None)
+                    if _valor is not None:
+                        _MAPA_PART_TYPE_CONEXAO[int(_valor)] = _rotulo
+        except Exception:
+            _MAPA_PART_TYPE_CONEXAO = {}
 
     try:
         p = elem.Symbol.Family.get_Parameter(BuiltInParameter.FAMILY_CONTENT_PART_TYPE)
