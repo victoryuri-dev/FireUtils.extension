@@ -233,6 +233,42 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
                 else:
                     s["aces"][nome] = {"qtd": 1, "leq_tot": leq, "nome": nome}
 
+    # Junta (d_mm, pipe_type_id) sem NENHUM tubo de verdade — só conexão,
+    # ex. válvula/união bem na entrada da bomba, sem Pipe vizinho dentro
+    # do próprio trecho (ver get_pipe_type_no_trecho em rede.py) — no
+    # grupo do mesmo diâmetro que TEM tubo, quando existe só um. Esse
+    # grupo "fantasma" (mesmo diâmetro, 0 m de tubo) tinha a MESMA
+    # velocidade do segmento real (V só depende de Q/D) e virava uma
+    # linha duplicada na verificação de velocidade e no aviso de limite,
+    # sem acrescentar nada — "tipo de tubo" não identificável pra uma
+    # conexão não deveria virar segmento próprio (combinacoes_pipe_type já
+    # ignora essas conexões na descoberta/UI; isso alinha o cálculo).
+    por_diametro = {}
+    for chave in segs:
+        por_diametro.setdefault(segs[chave]["d_mm"], []).append(chave)
+    for d_mm, chaves in por_diametro.items():
+        if len(chaves) < 2:
+            continue
+        com_tubo = [c for c in chaves if segs[c]["n_tubos"] > 0]
+        sem_tubo = [c for c in chaves if segs[c]["n_tubos"] == 0]
+        if len(com_tubo) != 1 or not sem_tubo:
+            continue
+        alvo = segs[com_tubo[0]]
+        for chave in sem_tubo:
+            origem = segs.pop(chave)
+            alvo["Leq"] += origem["Leq"]
+            for nome, v in origem["aces"].items():
+                if nome in alvo["aces"]:
+                    alvo["aces"][nome]["qtd"]     += v["qtd"]
+                    alvo["aces"][nome]["leq_tot"] += v["leq_tot"]
+                else:
+                    alvo["aces"][nome] = dict(v)
+            for chave_cx, v in origem["conexoes"].items():
+                if chave_cx in alvo["conexoes"]:
+                    alvo["conexoes"][chave_cx]["qtd"] += v["qtd"]
+                else:
+                    alvo["conexoes"][chave_cx] = dict(v)
+
     segmentos = []
     for chave in sorted(segs.keys(), key=lambda c: (c[0], c[1] is None, c[1] or 0)):
         s = segs[chave]
