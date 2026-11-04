@@ -92,12 +92,22 @@ function situacaoHidrante(indice, total) {
   return null;
 }
 
-// Seleciona e enquadra, na view ativa do Revit, todo o trecho (Bomba ->
-// válvula) do hidrante da linha — `rota` só existe em rankings salvos
-// depois que o campo foi adicionado (ver Mapear trechos.pushbutton/
-// script.py); num ranking antigo o botão nem aparece (ver uso abaixo).
-function localizarTrecho(h) {
-  postToHost(BridgeMessageTypes.SELECIONAR_TRECHO_HIDRANTE, { rota: h.rota });
+// Seleciona e enquadra, na view ativa do Revit, uma lista de ElementId —
+// usado tanto pro trecho completo (Bomba -> válvula) do hidrante da linha
+// quanto pro trecho de um segmento de velocidade (ver usos abaixo).
+function localizarIds(eids) {
+  if (!eids?.length) return;
+  postToHost(BridgeMessageTypes.SELECIONAR_TRECHO_HIDRANTE, { rota: eids });
+}
+
+function BotaoLocalizar({ eids }) {
+  return eids?.length > 0 ? (
+    <button type="button" className="hiddim-localizar-btn" onClick={() => localizarIds(eids)} title="Selecionar trecho no Revit">
+      <Icon svg={searchIconSvg} />
+    </button>
+  ) : (
+    <span className="hiddim-td-vazio">—</span>
+  );
 }
 
 export function VerificacaoHidranteDesfavoravel({ ranking }) {
@@ -130,13 +140,7 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
             return (
               <tr key={h.id}>
                 <td className="hiddim-td hiddim-align-center">
-                  {h.rota?.length > 0 ? (
-                    <button type="button" className="hiddim-localizar-btn" onClick={() => localizarTrecho(h)} title="Selecionar trecho no Revit">
-                      <Icon svg={searchIconSvg} />
-                    </button>
-                  ) : (
-                    <span className="hiddim-td-vazio">—</span>
-                  )}
+                  <BotaoLocalizar eids={h.rota} />
                 </td>
                 <TD bold>{h.id}</TD>
                 <TD right bold mono>{fmca(h.score)}</TD>
@@ -247,8 +251,11 @@ export function VerificacaoVelocidade({ d, limites }) {
   const trechos = ORDEM_TRECHOS.map((id) => [id, d.res.j[id]]);
   const linhas = trechos.flatMap(([id, t]) => {
     const vLimite = limiteVelocidade(id, d.succao, limites);
+    // Todos os tubos do trecho (todos os diâmetros), não só os do segmento
+    // desta linha — "Localizar" seleciona o trecho inteiro no Revit.
+    const eidsDoTrecho = t.segmentos.flatMap((seg) => seg.ids || []);
     return t.segmentos.map((seg, i) => ({
-      key: `${id}-${i}`, label: t.label, dn: seg.d_mm, v: seg.V, vLimite,
+      key: `${id}-${i}`, label: t.label, dn: seg.d_mm, v: seg.V, vLimite, eids: eidsDoTrecho,
     }));
   });
   // Sem coluna de limite na tabela — o limite só aparece no texto abaixo,
@@ -256,10 +263,11 @@ export function VerificacaoVelocidade({ d, limites }) {
   const falhas = linhas.filter((l) => l.v > l.vLimite);
   return (
     <div className="hiddim-secao">
-      <h4 className="hiddim-secao-titulo">Verificação de Velocidade</h4>
+      <h4 className="hiddim-secao-titulo">Trechos e Verificação de Velocidade</h4>
       <Tabela>
         <thead>
           <tr>
+            <TH w={32}></TH>
             <TH>Trecho</TH>
             <TH>DN</TH>
             <TH>Velocidade</TH>
@@ -268,6 +276,9 @@ export function VerificacaoVelocidade({ d, limites }) {
         <tbody>
           {linhas.map((l) => (
             <tr key={l.key}>
+              <td className="hiddim-td hiddim-align-center">
+                <BotaoLocalizar eids={l.eids} />
+              </td>
               <TD bold>{l.label}</TD>
               <TD mono muted>DN{Number(l.dn).toFixed(0)}</TD>
               <td className="hiddim-td">

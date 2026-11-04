@@ -3171,9 +3171,10 @@
   justify-content: center;
 }
 
-/* Botão "Localizar" da tabela de ranking (VerificacaoHidranteDesfavoravel)
-   — seleciona o trecho do hidrante da linha no Revit (ver
-   HidrantesDimensionamento.jsx:localizarTrecho). */
+/* Botão "Localizar" das tabelas de ranking e de velocidade
+   (VerificacaoHidranteDesfavoravel/VerificacaoVelocidade) — seleciona o
+   trecho da linha no Revit (ver HidrantesDimensionamento.jsx:
+   localizarIds/BotaoLocalizar). */
 .hiddim-localizar-btn {
   display: inline-flex;
   align-items: center;
