@@ -830,17 +830,85 @@
   color: var(--text-3);
 }
 
-/* Botões de ação — só aparecem quando há alguma família selecionada;
-   flutuam empilhados no canto inferior esquerdo, por cima da grade. */
+/* Barra de ações das famílias selecionadas — só aparece com alguma família
+   selecionada; compacta, no mesmo estilo da barra de seleção de ambientes
+   (.se-selecao-barra): contagem pequena em cima e botões só com ícone.
+   Flutua no canto inferior esquerdo, por cima da grade. */
 .acoes {
   position: absolute;
   left: 26px;
   bottom: 20px;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bg-3);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   z-index: 2;
   animation: surgir .4s;
+}
+
+.acoes-contagem {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.acoes-botoes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acoes-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.acoes-icone .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.acoes-icone:hover:not(:disabled) {
+  border-color: var(--text-2);
+}
+
+.acoes-icone:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.acoes-icone-destaque {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--white);
+}
+
+.acoes-icone-x {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-3);
+}
+
+.acoes-icone-x:hover:not(:disabled) {
+  color: var(--text);
+  border-color: transparent;
 }
 
 .botao {

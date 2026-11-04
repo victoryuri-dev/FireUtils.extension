@@ -892,24 +892,28 @@ export default function App() {
             </div>
 
             {catalogo && selecionadas.size > 0 && (
-              <div className="acoes">
-                <button
-                  type="button"
-                  className="botao accent"
-                  disabled={carregando}
-                  onClick={carregarSelecionadas}
-                >
-                  <Icon svg={carregarIconSvg} />
-                  Carregar no projeto
-                </button>
-                <button type="button" className="botao" onClick={marcarTodosFiltrados}>
-                  <Icon svg={checkIconSvg} />
-                  Selecionar todos
-                </button>
-                <button type="button" className="botao" onClick={desmarcarTodos}>
-                  <Icon svg={xIconSvg} />
-                  Desmarcar todos
-                </button>
+              <div className="acoes" role="toolbar" aria-label="Famílias selecionadas">
+                <span className="acoes-contagem">
+                  {selecionadas.size} selecionada{selecionadas.size > 1 ? "s" : ""}
+                </span>
+                <div className="acoes-botoes">
+                  <button
+                    type="button"
+                    className="acoes-icone acoes-icone-destaque"
+                    disabled={carregando}
+                    onClick={carregarSelecionadas}
+                    title="Carregar no projeto"
+                    aria-label="Carregar no projeto"
+                  >
+                    <Icon svg={carregarIconSvg} />
+                  </button>
+                  <button type="button" className="acoes-icone" onClick={marcarTodosFiltrados} title="Selecionar todos" aria-label="Selecionar todos">
+                    <Icon svg={checkIconSvg} />
+                  </button>
+                  <button type="button" className="acoes-icone acoes-icone-x" onClick={desmarcarTodos} title="Desmarcar todos" aria-label="Desmarcar todos">
+                    <Icon svg={xIconSvg} />
+                  </button>
+                </div>
               </div>
             )}
           </>
