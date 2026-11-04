@@ -4072,6 +4072,47 @@ h1, h2, h3, h4, h5, h6,
   font-size: 13px;
 }
 
+/* Corpo do modal de ocupação: rola sozinho quando passa da altura (o
+   cabeçalho e o rodapé do modal ficam sempre visíveis). */
+.niveis-modal-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Notas específicas: caixa retrátil. */
+.saidas-ocup-notas-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.saidas-ocup-notas-toggle:hover {
+  color: var(--text);
+}
+
+.saidas-ocup-notas-toggle .icon {
+  width: 9px;
+  height: 9px;
+}
+
+.saidas-ocup-notas-corpo {
+  margin-top: 8px;
+}
+
 .saidas-ocup-notas p {
   margin: 0 0 6px;
   font-size: 11px;

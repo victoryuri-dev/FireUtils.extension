@@ -6,6 +6,8 @@ import ocupacaoIconSvg from "../../assets/icons/ocupacao-icon.svg?raw";
 import porNivelIconSvg from "../../assets/icons/pornivel-icon.svg?raw";
 import todosIconSvg from "../../assets/icons/todos-icon.svg?raw";
 import sincronizarIconSvg from "../../assets/icons/sincronizar-ambiente-icon.svg?raw";
+import chevronDownIconSvg from "../../assets/icons/chevron-down-icon.svg?raw";
+import chevronRightIconSvg from "../../assets/icons/chevron-right-icon.svg?raw";
 
 // As quatro ferramentas de ocupação e população, ex-painel "Saídas" da faixa
 // do Revit (ver saidas_ocupacao_bridge.py). Trocam dados com o site, então só
@@ -57,6 +59,7 @@ function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCa
   const [uso, setUso] = useState("");
   const [codigo, setCodigo] = useState("");
   const [niveis, setNiveis] = useState([]);
+  const [notasAbertas, setNotasAbertas] = useState(false);
   const [estruturaId, setEstruturaId] = useState(estruturaPadraoId || estruturas[0]?.id || "");
   const estrutura = estruturas.find((e) => e.id === estruturaId);
 
@@ -77,6 +80,9 @@ function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCa
           <span className="niveis-modal-titulo">{ferramenta.titulo}</span>
         </div>
 
+        {/* Corpo rolável: cabeçalho e botões ficam fixos e o miolo rola quando
+            não cabe na altura do painel. */}
+        <div className="niveis-modal-corpo">
         {!opcoes ? (
           <div className="tela-carregando">
             <Loader size={32} />
@@ -142,10 +148,22 @@ function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCa
                 </div>
                 {item.notas.length > 0 && (
                   <div className="saidas-ocup-notas">
-                    <span>Notas específicas</span>
-                    {item.notas.map((n, i) => (
-                      <p key={i}>{n}</p>
-                    ))}
+                    <button
+                      type="button"
+                      className="saidas-ocup-notas-toggle"
+                      onClick={() => setNotasAbertas((a) => !a)}
+                      aria-expanded={notasAbertas}
+                    >
+                      <Icon svg={notasAbertas ? chevronDownIconSvg : chevronRightIconSvg} />
+                      Notas específicas ({item.notas.length})
+                    </button>
+                    {notasAbertas && (
+                      <div className="saidas-ocup-notas-corpo">
+                        {item.notas.map((n, i) => (
+                          <p key={i}>{n}</p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -165,6 +183,7 @@ function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCa
             )}
           </>
         )}
+        </div>
 
         <div className="niveis-modal-rodape">
           <button type="button" className="se-botao" onClick={onCancelar}>
