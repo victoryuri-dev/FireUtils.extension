@@ -9,11 +9,12 @@ import checkStrokeIconSvg from "../../assets/icons/check-stroke-icon.svg?raw";
 // em material_conexao.py) — evita qualquer tradução de chave no caminho
 // até o motor. Rótulos copiados do catálogo do site
 // (src/data/hidrantesCatalogos.js, ETOS.FireUtils).
+// "galvanizado" não entra aqui — já é a opção padrão do <select> (sem
+// escolha = galvanizado); listar os dois deixava "Galvanizado" duas vezes.
 const MATERIAIS = [
   { key: "ff_sem_revest", label: "Ferro fundido/dúctil sem revestimento" },
   { key: "aco_preto_seco", label: "Aço preto (tubo seco)" },
   { key: "aco_preto_molhado", label: "Aço preto (tubo molhado)" },
-  { key: "galvanizado", label: "Galvanizado" },
   { key: "plastico", label: "Plástico (PVC/PEAD)" },
   { key: "ff_revest_cimento", label: "Ferro fundido/dúctil com cimento" },
   { key: "cobre", label: "Cobre" },
@@ -80,12 +81,13 @@ function SeletorMaterial({ value, onChange }) {
 
 function SeletorSistema({ value, onChange }) {
   return (
-    <div className="hid-acionamento-lista">
+    <div style={{ display: "flex", gap: 6 }}>
       {Object.keys(ROTULO_SISTEMA).map((sistema) => (
         <button
           key={sistema}
           type="button"
           className={`hid-acionamento-pill ${(value || "bsp") === sistema ? "hid-acionamento-pill-ativa" : ""}`}
+          style={{ flex: 1, textAlign: "center" }}
           onClick={() => onChange(sistema)}
         >
           {ROTULO_SISTEMA[sistema]}
