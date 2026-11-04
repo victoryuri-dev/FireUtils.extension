@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import Icon from "../Icon";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
+import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 
 // Mesmas chaves curtas que hazen_c usa no perfil normativo (ver
 // ALIAS_MATERIAL_TUBULACAO em perfil.ts, ETOS.FireUtils / MATERIAIS_VALIDOS
@@ -39,6 +41,21 @@ function rotuloPipeType(grupo) {
   const diametros = (grupo.diametros || []).map((d) => `DN${Math.round(d)}`).join(", ");
   const nome = grupo.nome || "Tipo de tubo não identificado";
   return diametros ? `${nome} (${diametros})` : nome;
+}
+
+function localizarGrupo(eids) {
+  if (!eids?.length) return;
+  postToHost(BridgeMessageTypes.SELECIONAR_TRECHO_HIDRANTE, { rota: eids });
+}
+
+function BotaoLocalizar({ eids }) {
+  return eids?.length > 0 ? (
+    <button type="button" className="hiddim-localizar-btn" onClick={() => localizarGrupo(eids)} title="Selecionar no Revit">
+      <Icon svg={searchIconSvg} />
+    </button>
+  ) : (
+    <span className="hiddim-td-vazio">—</span>
+  );
 }
 
 /**
@@ -124,6 +141,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
               <table className="hiddim-tabela">
                 <thead>
                   <tr>
+                    <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
                     <th className="hiddim-th hiddim-align-left">Tipo de tubo</th>
                     <th className="hiddim-th hiddim-align-left">Material</th>
                     <th className="hiddim-th hiddim-align-left">Sistema de conexão</th>
@@ -135,6 +153,9 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
                     const escolha = porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" };
                     return (
                       <tr key={chave}>
+                        <td className="hiddim-td hiddim-align-center">
+                          <BotaoLocalizar eids={grupo.eids} />
+                        </td>
                         <td className="hiddim-td hiddim-align-left">{rotuloPipeType(grupo)}</td>
                         <td className="hiddim-td hiddim-align-left">
                           <select

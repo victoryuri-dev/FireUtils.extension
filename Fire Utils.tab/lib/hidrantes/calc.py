@@ -268,7 +268,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     }
 
 
-def combinacoes_pipe_type(elems, get_diametro_fn, get_pipe_type_fn):
+def combinacoes_pipe_type(elems, get_diametro_fn, get_pipe_type_fn, get_id_fn=None):
     """
     Lista, SEM calcular nada (só pra descoberta/exibição), as combinações
     (pipe_type_id, pipe_type_nome) encontradas em `elems` e os diâmetros
@@ -282,20 +282,30 @@ def combinacoes_pipe_type(elems, get_diametro_fn, get_pipe_type_fn):
     de vizinhos quando o próprio elemento não tem, ver
     get_diametro_no_trecho/get_pipe_type_no_trecho em rede.py).
 
-    Retorna [ {"id", "nome", "diametros": [d_mm, ...]} ], ordenado por id
-    (grupo sem pipe_type, id None, por último).
+    get_id_fn é opcional (devolve um int, o ElementId do elemento) —
+    habilita o botão "Localizar" de cada grupo na dockpane: "diâmetro sem
+    vizinho Pipe dentro do próprio trecho" é esperado pra conexões bem na
+    ponta do trecho (ligadas a um equipamento, não a outro tubo) e cai no
+    grupo "não identificado" — o botão deixa conferir no Revit quais
+    elementos são esses, em vez de só confiar no rótulo.
+
+    Retorna [ {"id", "nome", "diametros": [d_mm, ...], "eids": [...]} ],
+    ordenado por id (grupo sem pipe_type, id None, por último). "eids"
+    vazio se get_id_fn não foi informado.
     """
     grupos = {}
     ordem = []
     for elem in elems:
         pipe_type_id, pipe_type_nome = get_pipe_type_fn(elem) or (None, None)
         if pipe_type_id not in grupos:
-            grupos[pipe_type_id] = {"id": pipe_type_id, "nome": pipe_type_nome, "diametros": set()}
+            grupos[pipe_type_id] = {"id": pipe_type_id, "nome": pipe_type_nome, "diametros": set(), "eids": []}
             ordem.append(pipe_type_id)
         d_mm = round(get_diametro_fn(elem) * 1000.0, 1)
         grupos[pipe_type_id]["diametros"].add(d_mm)
+        if get_id_fn is not None:
+            grupos[pipe_type_id]["eids"].append(get_id_fn(elem))
 
-    saida = [{"id": g["id"], "nome": g["nome"], "diametros": sorted(g["diametros"])}
+    saida = [{"id": g["id"], "nome": g["nome"], "diametros": sorted(g["diametros"]), "eids": g["eids"]}
              for g in (grupos[pid] for pid in ordem)]
     saida.sort(key=lambda g: (g["id"] is None, g["id"] or 0))
     return saida

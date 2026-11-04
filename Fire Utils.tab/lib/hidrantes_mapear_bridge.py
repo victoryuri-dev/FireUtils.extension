@@ -558,6 +558,7 @@ def _gravar(doc, ctx):
             elems,
             lambda e, _ids=ids_set: get_diametro_no_trecho(e, _ids),
             lambda e, _ids=ids_set: get_pipe_type_no_trecho(e, _ids),
+            get_id,
         )
 
     pipe_types_por_etapa = {
