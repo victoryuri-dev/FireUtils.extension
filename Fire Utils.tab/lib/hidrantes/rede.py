@@ -14,6 +14,7 @@ como calc.py.
 import clr
 clr.AddReference("RevitAPI")
 
+import math
 from collections import deque
 
 from Autodesk.Revit.DB import (
@@ -507,10 +508,139 @@ def get_diametro_no_trecho(elem, ids_no_trecho):
 
 
 def get_leq(elem):
+    """Leq (m) do parâmetro de família "Perda de Carga" — fluxo antigo,
+    ainda usado por válvulas/acessórios (ver get_tipo_conexao: conexões
+    classificáveis por PartType nativo não passam mais por aqui)."""
     try:
         p = elem.LookupParameter(u"Perda de Carga")
         return p.AsDouble() if p else 0.0
     except: return 0.0
+
+
+_CATS_CONEXAO = None
+_MAPA_PART_TYPE_CONEXAO = None
+
+
+def _diametros_conectores_tubo(elem):
+    """Diâmetros (m) dos conectores de tubo (redondos) do elemento, lidos
+    direto do conector (Connector.Radius) — não do parâmetro "Diâmetro" da
+    família, que só dá um valor. É a única forma de pegar os DOIS lados de
+    uma redução/transição."""
+    diams = []
+    try:
+        for conn in get_conectores(elem):
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            try:
+                r = conn.Radius
+                if r and r > 0: diams.append(to_m(r) * 2.0)
+            except Exception: continue
+    except Exception: pass
+    return diams
+
+
+def _angulo_cotovelo(elem):
+    """Ângulo de curva (graus) de um cotovelo, derivado da geometria dos
+    dois conectores (direção de cada um, Connector.CoordinateSystem.BasisZ)
+    — não existe parâmetro nativo pra isso, só o PartType "Elbow", que não
+    distingue 45° de 90°. Conectores apontam para fora do corpo da conexão;
+    num tubo reto (sem curva) ficam opostos (180° entre si), então o ângulo
+    de curva é 180° menos o ângulo entre eles."""
+    try:
+        conns = [c for c in get_conectores(elem) if c.ConnectorType != ConnectorType.Logical]
+        if len(conns) != 2: return None
+        v1 = conns[0].CoordinateSystem.BasisZ
+        v2 = conns[1].CoordinateSystem.BasisZ
+        produto_escalar = v1.X * v2.X + v1.Y * v2.Y + v1.Z * v2.Z
+        produto_escalar = max(-1.0, min(1.0, produto_escalar))
+        angulo_entre_vetores = math.degrees(math.acos(produto_escalar))
+        return 180.0 - angulo_entre_vetores
+    except Exception:
+        return None
+
+
+def get_tipo_conexao(elem, d_mm=None):
+    """
+    Classifica uma conexão/fitting de tubulação (cotovelo, tê, redução,
+    tampão, união, luva Y) pelo tipo NATIVO do Revit — o PartType da
+    família (parâmetro FAMILY_CONTENT_PART_TYPE), que é definido no editor
+    de família e não depende do nome da família nem de parâmetro algum
+    preenchido manualmente no projeto. É a peça que tira a dependência do
+    parâmetro "Perda de Carga" nas conexões: o Leq em si é decidido pelo
+    motor de cálculo (ver leqConexoes.ts, lado servidor), a partir do que
+    esta função devolve — este módulo só mede/classifica.
+
+    d_mm, se informado, é o diâmetro nominal (mm) já resolvido pelo
+    chamador pra este elemento (get_diametro_no_trecho) — usado só para
+    decidir qual dos dois lados de uma redução é o "outro" (d2_mm).
+
+    Retorna None se o elemento não for uma conexão classificável assim
+    (categoria diferente de "Conexões de Tubulação", ou PartType sem
+    mapeamento aqui) — o chamador cai no fluxo antigo (get_leq, parâmetro
+    de família), ainda usado por válvulas/acessórios não migrados.
+
+    Retorna, caso contrário:
+        {"tipo": "cotovelo"|"tee"|"transicao"|"tampao"|"uniao"|"luva_y",
+         "angulo_graus": float|None,   # só cotovelo
+         "d2_mm": float|None}          # só transição
+    """
+    global _CATS_CONEXAO, _MAPA_PART_TYPE_CONEXAO
+
+    if not isinstance(elem, FamilyInstance):
+        return None
+
+    if _CATS_CONEXAO is None:
+        _CATS_CONEXAO = set()
+        bic = getattr(BuiltInCategory, "OST_PipeFitting", None)
+        if bic is not None:
+            _CATS_CONEXAO.add(int(bic))
+    try:
+        cat = elem.Category
+        if not cat: return None
+        cat_id = cat.Id
+        cat_int = cat_id.Value if hasattr(cat_id, "Value") else cat_id.IntegerValue
+        if cat_int not in _CATS_CONEXAO:
+            return None
+    except Exception:
+        return None
+
+    if _MAPA_PART_TYPE_CONEXAO is None:
+        from Autodesk.Revit.DB.Plumbing import PartType
+        _MAPA_PART_TYPE_CONEXAO = {
+            int(PartType.Elbow):      u"cotovelo",
+            int(PartType.Tee):        u"tee",
+            int(PartType.Transition): u"transicao",
+            int(PartType.Cap):        u"tampao",
+            int(PartType.Union):      u"uniao",
+            int(PartType.Wye):        u"luva_y",
+        }
+
+    try:
+        p = elem.Symbol.Family.get_Parameter(BuiltInParameter.FAMILY_CONTENT_PART_TYPE)
+        if p is None: return None
+        tipo = _MAPA_PART_TYPE_CONEXAO.get(p.AsInteger())
+        if tipo is None:
+            return None
+    except Exception:
+        return None
+
+    resultado = {u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None}
+
+    if tipo == u"cotovelo":
+        resultado[u"angulo_graus"] = _angulo_cotovelo(elem)
+    elif tipo == u"transicao":
+        diams_mm = [round(d * 1000.0, 1) for d in _diametros_conectores_tubo(elem)]
+        d2 = None
+        if d_mm is not None:
+            outros = [d for d in diams_mm if abs(d - d_mm) > 0.5]
+            if outros:
+                d2 = max(outros)
+        if d2 is None:
+            distintos = sorted(set(diams_mm))
+            if len(distintos) >= 2:
+                d2 = distintos[-1]
+        resultado[u"d2_mm"] = d2
+
+    return resultado
 
 
 def get_nome(elem):

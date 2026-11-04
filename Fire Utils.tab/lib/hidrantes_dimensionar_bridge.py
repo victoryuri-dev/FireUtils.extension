@@ -46,6 +46,7 @@ from hidrantes.calc import extrair_trecho, salvar_cache, carregar_cache
 from hidrantes.rede import (
     get_id, to_element_id, get_diametro_no_trecho, get_comprimento, get_leq,
     get_nome, get_z, get_cota_conector, get_cota_rti, diagnostico_conectores,
+    get_tipo_conexao,
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes import succao as succao_calc
@@ -193,10 +194,10 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
 
     try:
         trechos_data = {
-            u"t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id),
-            u"t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id),
-            u"t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id),
-            u"t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id),
+            u"t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id, get_tipo_conexao),
+            u"t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id, get_tipo_conexao),
+            u"t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id, get_tipo_conexao),
+            u"t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id, get_tipo_conexao),
         }
     except ValueError as ex:
         _erro(postar_mensagem, texto_erro(ex))

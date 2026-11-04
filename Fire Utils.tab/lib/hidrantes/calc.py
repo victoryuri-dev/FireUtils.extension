@@ -128,7 +128,7 @@ def calc_j_trecho(trecho_data, q_lmin, c, label=u""):
 # ===========================================================================
 
 def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_nome_fn,
-                   get_id_fn=None):
+                   get_id_fn=None, get_tipo_conexao_fn=None):
     """
     Extrai os dados de um trecho AGRUPADOS POR DIÂMETRO NOMINAL (DN), como
     exige o passo a passo: um mesmo trecho pode ter variações de diâmetro, e
@@ -143,16 +143,29 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     tubos do diâmetro que reprovou. Retorna:
         {
           "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos", "ids",
-                           "acessorios": [ {nome, qtd, leq_unit, leq_tot} ] } ],
+                           "acessorios": [ {nome, qtd, leq_unit, leq_tot} ],
+                           "conexoes": [ {tipo, qtd, angulo_graus, d2_mm} ] } ],
           "L":   soma dos comprimentos reais,
-          "Leq": soma dos comprimentos equivalentes,
+          "Leq": soma dos acessórios ainda dependentes do parâmetro de
+                 família (ver get_leq) — o Leq das conexões em "conexoes"
+                 é calculado do outro lado, pelo motor de cálculo.
         }
     "ids": lista de ElementId (int) dos tubos (Pipe) daquele diâmetro —
     vazia se get_id_fn não foi informado.
 
-    Acessórios são agrupados por nome do tipo dentro de cada diâmetro.
-    le_unit é a média exata dos valores acumulados (leq_tot / qtd), garantindo
-    por construção que qtd × le_unit == leq_tot em toda linha do memorial.
+    get_tipo_conexao_fn é opcional (classifica cotovelo/tê/redução/
+    tampão/união/luva Y pelo tipo nativo do Revit — ver get_tipo_conexao
+    em rede.py). Quando devolve algo para um FamilyInstance, o elemento
+    vai para "conexoes" (sem usar get_leq_fn: essas conexões não dependem
+    mais do parâmetro "Perda de Carga"). Quando devolve None — inclusive
+    se get_tipo_conexao_fn não foi passado — o elemento cai no fluxo
+    antigo (get_leq_fn/"acessorios"), ainda usado por válvulas e outros
+    acessórios não migrados.
+
+    Acessórios e conexões são agrupados por (nome do tipo) e (tipo,
+    ângulo, d2) respectivamente, dentro de cada diâmetro. leq_unit é a
+    média exata dos valores acumulados (leq_tot / qtd), garantindo por
+    construção que qtd × leq_unit == leq_tot em toda linha do memorial.
     """
     from Autodesk.Revit.DB.Plumbing import Pipe
     from Autodesk.Revit.DB import FamilyInstance
@@ -162,7 +175,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     def _seg(d_mm):
         if d_mm not in segs:
             segs[d_mm] = {"d_mm": d_mm, "L": 0.0, "Leq": 0.0,
-                          "n_tubos": 0, "ids": [], "aces": {}}
+                          "n_tubos": 0, "ids": [], "aces": {}, "conexoes": {}}
         return segs[d_mm]
 
     for elem in elems:
@@ -174,9 +187,23 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             if get_id_fn is not None:
                 s["ids"].append(get_id_fn(elem))
         elif isinstance(elem, FamilyInstance):
+            d_mm = round(get_diametro_fn(elem) * 1000.0, 1)
+            tipo_conexao = get_tipo_conexao_fn(elem, d_mm) if get_tipo_conexao_fn else None
+            if tipo_conexao is not None:
+                s = _seg(d_mm)
+                chave = (tipo_conexao["tipo"], tipo_conexao["angulo_graus"], tipo_conexao["d2_mm"])
+                if chave in s["conexoes"]:
+                    s["conexoes"][chave]["qtd"] += 1
+                else:
+                    s["conexoes"][chave] = {
+                        "tipo": tipo_conexao["tipo"],
+                        "angulo_graus": tipo_conexao["angulo_graus"],
+                        "d2_mm": tipo_conexao["d2_mm"],
+                        "qtd": 1,
+                    }
+                continue
             leq = get_leq_fn(elem)
             if leq > 0:
-                d_mm = round(get_diametro_fn(elem) * 1000.0, 1)
                 s = _seg(d_mm)
                 s["Leq"] += leq
                 nome = get_nome_fn(elem)
@@ -199,6 +226,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
                 "leq_tot":  v["leq_tot"],
             })
         acessorios.sort(key=lambda a: a["nome"])
+        conexoes = sorted(s["conexoes"].values(), key=lambda c: (c["tipo"], c["angulo_graus"] or 0, c["d2_mm"] or 0))
         segmentos.append({
             "d_mm":       s["d_mm"],
             "L":          s["L"],
@@ -207,6 +235,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             "n_tubos":    s["n_tubos"],
             "ids":        s["ids"],
             "acessorios": acessorios,
+            "conexoes":   conexoes,
         })
 
     return {
