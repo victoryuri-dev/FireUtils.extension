@@ -46,6 +46,7 @@ import quantitativos_bridge
 import atribuir_estrutura_bridge
 import niveis_bridge
 import licenca
+import sistema_tubo_core
 
 
 def _postar_licencas(postar_mensagem, erro=None):
@@ -164,8 +165,48 @@ def _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mens
             pass
 
 
+def _e_sistema_de_tubo(item):
+    """Itens do catálogo que são um .rvt de sistema de tubo (não uma família)."""
+    return (item.get(u"storageKey") or u"").lower().endswith(u".rvt")
+
+
+def _carregar_sistemas(uiapp, sistemas, postar_mensagem):
+    """
+    Carrega cada sistema de tubo (sistema_tubo_core.py) no projeto ativo.
+    `sistemas`: [(nome de exibição, caminho local do .rvt)].
+    Devolve (carregadas, ja_existentes, erros) no mesmo formato das famílias,
+    para entrar no mesmo LOAD_RESULT.
+    """
+    carregadas, ja_existentes, erros = [], [], []
+    uidoc = uiapp.ActiveUIDocument
+    if uidoc is None:
+        return [], [], [(nome, u"Nenhum documento ativo no Revit.") for nome, _ in sistemas]
+    for nome, caminho in sistemas:
+        try:
+            estado, _tipos = sistema_tubo_core.carregar_sistema(uiapp, uidoc.Document, caminho)
+            (carregadas if estado == sistema_tubo_core.CARREGADO else ja_existentes).append(nome)
+        except Exception as ex:
+            print_seguro(u"[AVISO] Falha ao carregar o sistema '{}': {}".format(nome, texto_erro(ex)))
+            erros.append((nome, texto_erro(ex)))
+    return carregadas, ja_existentes, erros
+
+
+def _mesclar_no_resultado(postar_mensagem, carregadas, ja_existentes, erros):
+    """postar_mensagem que acrescenta o resultado dos sistemas de tubo ao
+    LOAD_RESULT das famílias, para a dockpane receber uma resposta só."""
+    def postar(tipo, payload):
+        if tipo == u"LOAD_RESULT":
+            payload = dict(payload)
+            payload[u"carregadas"] = list(payload.get(u"carregadas") or []) + carregadas
+            payload[u"jaExistentes"] = list(payload.get(u"jaExistentes") or []) + ja_existentes
+            payload[u"erros"] = list(payload.get(u"erros") or []) + _formatar_erros(erros)
+        postar_mensagem(tipo, payload)
+    return postar
+
+
 def _baixar_em_background(familias, fila_acoes, postar_mensagem):
     entradas = []
+    sistemas = []
     caminhos_temporarios = []
     erros_download = []
     for item in familias:
@@ -179,9 +220,12 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
             erros_download.append((item.get(u"name") or u"?", mensagem_ex))
             continue
         caminhos_temporarios.append(caminho_local)
-        entradas.append(_montar_entrada(item, caminho_local))
+        if _e_sistema_de_tubo(item):
+            sistemas.append((item[u"name"], caminho_local))
+        else:
+            entradas.append(_montar_entrada(item, caminho_local))
 
-    if not entradas:
+    if not entradas and not sistemas:
         if erros_download:
             fila_acoes.enfileirar(lambda uiapp: postar_mensagem(u"LOAD_RESULT", {
                 u"carregadas": [],
@@ -190,9 +234,14 @@ def _baixar_em_background(familias, fila_acoes, postar_mensagem):
             }))
         return
 
-    fila_acoes.enfileirar(
-        lambda uiapp: _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar_mensagem)
-    )
+    def executar(uiapp):
+        postar = postar_mensagem
+        if sistemas:
+            carregadas_s, ja_s, erros_s = _carregar_sistemas(uiapp, sistemas, postar_mensagem)
+            postar = _mesclar_no_resultado(postar_mensagem, carregadas_s, ja_s, erros_s)
+        _carregar(uiapp, entradas, caminhos_temporarios, erros_download, postar)
+
+    fila_acoes.enfileirar(executar)
 
 
 def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
