@@ -49,7 +49,10 @@ function rotuloPipeType(grupo) {
  * da própria escolha. As combinações (quais tipos de tubo existem em cada
  * etapa) vêm do último "Mapear Trechos" — `pipeTypesPorEtapa` (prop),
  * populado ao vivo pelo resultado do mapeamento ou, depois de reabrir o
- * projeto, pelo cache lido em GET_HIDRANTES_DIMENSIONAMENTO.
+ * projeto, pelo cache lido em GET_HIDRANTES_DIMENSIONAMENTO. O componente
+ * pai (SistemaHidrantesPage) só o renderiza depois de um mapeamento
+ * bem-sucedido (mapeamentoOk) — antes disso ele fica oculto, não aparece
+ * nem com um placeholder.
  *
  * Escolha salva no Project Information do projeto
  * (material_conexao.py); lida pelo "Dimensionar Hidrantes" seguinte — um
@@ -112,7 +115,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
       {!carregado ? (
         <p className="vazio">Carregando…</p>
       ) : etapasComTubo.length === 0 ? (
-        <p className="vazio">Mapeie a rede (abaixo) para configurar material e conexão por trecho.</p>
+        <p className="vazio">Mapeie a rede (acima) para configurar material e conexão por trecho.</p>
       ) : (
         etapasComTubo.map((etapa) => (
           <div key={etapa} style={{ marginTop: 10 }}>

@@ -647,7 +647,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               até o Tipo estar identificado. */}
           {classificacao?.tipo ? (
             <>
-              <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
               <HidrantesMapeamento
                 mapeando={mapeando}
                 instrucao={instrucaoMapeamento}
@@ -657,6 +656,12 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                 onMapear={mapear}
                 onContinuar={continuarMapeamento}
               />
+              {/* Só existe tipo de tubo pra escolher material/conexão depois
+                  de mapear a rede pelo menos uma vez — antes disso fica
+                  oculto, em vez de mostrar um aviso/placeholder. */}
+              {mapeamentoOk && (
+                <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
+              )}
             </>
           ) : (
             <div className="hid-aviso" style={{ marginBottom: 14 }}>
