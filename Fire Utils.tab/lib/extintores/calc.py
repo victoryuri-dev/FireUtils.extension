@@ -8,6 +8,13 @@ Uma instância é considerada extintor quando:
   - sua categoria está em params.CATEGORIAS_EXTINTOR (Proteção contra
     Incêndio); e
   - o parâmetro "Capacidade Extintora" (instância ou tipo) está preenchido.
+
+Cada item carrega "pavimento" (nome cru do Nível do Revit — só pra exibição/
+depuração) e "nivelUniqueId" (ver estrutura_param.py — mesma ideia, mas pra
+Nível): quantitativos_core.py:salvar_todos resolve o "pavimentoId" de cada
+item a partir desse uniqueId, contra a correlação Nível<->Pavimento salva
+em niveis_bridge.py — o nome cru nunca é usado pra decidir o pavimento no
+site (nem sempre bate com o rótulo lá cadastrado).
 """
 
 import re
@@ -78,12 +85,11 @@ def _get_numero(elem, nome_param):
     return float(m.group().replace(u",", u".")) if m else None
 
 
-def _get_pavimento(doc, elem):
+def _get_nivel(doc, elem):
     level_id = getattr(elem, "LevelId", None)
     if not level_id or level_id == ElementId.InvalidElementId:
-        return u""
-    nivel = doc.GetElement(level_id)
-    return nivel.Name if nivel else u""
+        return None
+    return doc.GetElement(level_id)
 
 
 def coletar_itens(doc):
@@ -109,9 +115,11 @@ def coletar_itens(doc):
         if not capacidade.strip():
             continue
 
+        nivel = _get_nivel(doc, elem)
         itens.append({
             u"estruturaNome": ler_estrutura(elem),
-            u"pavimento":   _get_pavimento(doc, elem),
+            u"pavimento":      nivel.Name if nivel else u"",
+            u"nivelUniqueId":  nivel.UniqueId if nivel else None,
             u"ambiente":    _get_texto(elem, u"Ambiente"),
             u"tipo":        _get_texto(elem, u"Tipo"),
             u"formato":     _get_texto(elem, u"Formato"),

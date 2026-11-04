@@ -25,10 +25,14 @@ rodar cada uma no contexto certo:
     agrega ainda (ver salvar_todos pro porquê).
   - salvar_todos(resultados_coleta, projeto_dir): busca a lista de
     estruturas do projeto (rede, uma vez), agrupa os itens brutos de cada
-    medida por estrutura resolvida, só ENTÃO agrega (medida.agrupar — teria
-    que ser por estrutura, nunca antes, senão a contagem de uma mistura com
-    a de outra) e grava/envia um lote por (medida, estrutura) — não toca a
-    API do Revit, então pode (e deve) rodar fora da UI thread.
+    medida por estrutura resolvida, resolve "pavimentoId" de cada item (ver
+    _resolver_pavimentos — contra a correlação Nível<->Pavimento salva em
+    niveis_bridge.py, nunca pelo nome cru do Nível do Revit, que nem sempre
+    bate com o pavimento cadastrado no site), só ENTÃO agrega (medida.agrupar
+    — teria que ser por estrutura/pavimentoId já resolvidos, nunca antes,
+    senão a contagem de uma mistura com a de outra) e grava/envia um lote
+    por (medida, estrutura) — não toca a API do Revit, então pode (e deve)
+    rodar fora da UI thread.
 
 Pra adicionar uma nova medida:
   1. no módulo <medida>/calc.py, exponha coletar_itens(doc) — cada item com
@@ -50,6 +54,7 @@ import iluminacao.calc as iluminacao_calc
 
 from sync import buscar
 from family_error_utils import texto_erro
+from niveis_bridge import mapa_pavimentos
 
 
 # ===========================================================================
@@ -146,6 +151,21 @@ def _mapa_estruturas(projeto_dir):
     return mapa, None
 
 
+def _resolver_pavimentos(itens, projeto_dir, estrutura_id):
+    """Preenche "pavimentoId" em cada item que tiver "nivelUniqueId" (ver
+    extintores/calc.py e iluminacao/calc.py — sinalização não tem esse
+    campo, fica intocada), contra a correlação Nível<->Pavimento já salva
+    pra essa estrutura (niveis_bridge.py — tela "Correlacionar Níveis" da
+    dockpane). Item cujo nível não foi arrastado na tela (ou cuja estrutura
+    nunca foi correlacionada) fica com pavimentoId None — o site cai pros
+    heurísticos de nome que já tinha antes, nunca quebra."""
+    mapa_niveis = mapa_pavimentos(projeto_dir, estrutura_id)
+    for it in itens:
+        if u"nivelUniqueId" in it:
+            it[u"pavimentoId"] = mapa_niveis.get(it.get(u"nivelUniqueId"))
+    return itens
+
+
 def _agrupar_por_estrutura(itens, mapa_nomes):
     """Separa itens brutos em {estruturaId: [itens, ...]} + uma lista à
     parte de nomes não reconhecidos (sem parâmetro preenchido, ou
@@ -212,6 +232,7 @@ def salvar_todos(resultados_coleta, projeto_dir):
             continue
 
         for estrutura_id, itens_brutos in grupos.items():
+            itens_brutos = _resolver_pavimentos(itens_brutos, projeto_dir, estrutura_id)
             itens_finais = medida.agrupar(itens_brutos) if medida.agrupar else itens_brutos
             try:
                 _path, ok, motivo = medida.salvar(itens_finais, projeto_dir, estrutura_id)

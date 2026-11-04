@@ -25,6 +25,13 @@ Todas as funções aqui esperam rodar dentro de uma ação enfileirada via
 family_loader_events.criar_fila_acoes() (mesmo padrão do carregamento de
 família) — precisam de `uiapp` com contexto de API válido pra ler
 doc.PathName e os elementos do documento.
+
+`mapa_pavimentos(projeto_dir, estrutura_id)`, embaixo, é a única função
+daqui que NÃO precisa de `uiapp`/contexto de API — só lê o firedata.json
+local — e é a usada por quantitativos_core.py (Etapa 2, já fora do
+contexto de API) pra resolver o pavimentoId de cada item a partir do
+nivelUniqueId coletado na Etapa 1 (ver extintores/calc.py e
+iluminacao/calc.py — chave "nivelUniqueId" de cada item).
 """
 
 import os
@@ -64,6 +71,20 @@ def _correlacao_salva(projeto_dir, estrutura_id):
     arquivo = carregar_cache(projeto_dir)
     mapa = arquivo.get(u"niveis_pavimentos") or {}
     return mapa.get(estrutura_id) or []
+
+
+def mapa_pavimentos(projeto_dir, estrutura_id):
+    """{nivelUniqueId: pavimentoId} da correlação já salva pra essa
+    estrutura — {} quando o usuário ainda não correlacionou nada (os itens
+    ficam sem pavimentoId; o site cai pros heurísticos de nome que já
+    tinha antes). Pavimentos ainda sem um nível arrastado na tela
+    (ver CorrelacaoNiveisModal.jsx:salvar) não entram aqui."""
+    correlacao = _correlacao_salva(projeto_dir, estrutura_id)
+    return dict(
+        (c.get(u"nivelUniqueId"), c.get(u"pavimentoId"))
+        for c in correlacao
+        if c.get(u"nivelUniqueId") and c.get(u"pavimentoId")
+    )
 
 
 def tratar_get_revit_levels(uiapp, payload, postar_mensagem):

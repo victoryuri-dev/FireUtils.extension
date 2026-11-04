@@ -29,6 +29,12 @@ Granularidade até pavimento (sem ambiente, como o dimensionamento no site)
 — o quantitativo já sai agregado por pavimento + tipo base + fluxo +
 lâmpada, somando todas as instâncias equivalentes do modelo (ver
 agrupar_por_pavimento).
+
+Cada item carrega "pavimento" (nome cru do Nível do Revit) e
+"nivelUniqueId" — quantitativos_core.py:salvar_todos resolve o
+"pavimentoId" de cada item a partir desse uniqueId (correlação salva em
+niveis_bridge.py) ANTES de chamar agrupar_por_pavimento, pra agregação já
+somar pelo pavimento certo, não pelo nome cru do nível.
 """
 
 import re
@@ -123,12 +129,11 @@ def _fluxo_numero(texto):
     return unicode(valor)
 
 
-def _get_pavimento(doc, elem):
+def _get_nivel(doc, elem):
     level_id = getattr(elem, "LevelId", None)
     if not level_id or level_id == ElementId.InvalidElementId:
-        return u""
-    nivel = doc.GetElement(level_id)
-    return nivel.Name if nivel else u""
+        return None
+    return doc.GetElement(level_id)
 
 
 def coletar_itens(doc):
@@ -155,8 +160,10 @@ def coletar_itens(doc):
         if not tipo_base:
             continue
 
+        nivel = _get_nivel(doc, elem)
         itens.append({
-            u"pavimento":       _get_pavimento(doc, elem),
+            u"pavimento":       nivel.Name if nivel else u"",
+            u"nivelUniqueId":   nivel.UniqueId if nivel else None,
             u"tipoBase":        tipo_base,
             u"fluxoLuminosoLm": _fluxo_numero(_get_texto(elem, PARAM_FLUXO)),
             u"tipoLampada":     _get_texto(elem, PARAM_LAMPADA).strip(),
@@ -168,14 +175,17 @@ def coletar_itens(doc):
 
 def agrupar_por_pavimento(itens):
     """Agrega os itens brutos (um por instância, já de UMA estrutura — ver
-    quantitativos_core.py:salvar_todos, que agrupa por estrutura antes de
-    chamar isto) em {pavimento, tipoBase, fluxoLuminosoLm, tipoLampada,
-    quantidade} — soma as instâncias equivalentes (mesmo pavimento + tipo
-    base + fluxo + tipo de lâmpada)."""
+    quantitativos_core.py:salvar_todos, que agrupa por estrutura e resolve
+    o pavimentoId de cada item antes de chamar isto) em {pavimento,
+    pavimentoId, tipoBase, fluxoLuminosoLm, tipoLampada, quantidade} — soma
+    as instâncias equivalentes (mesmo pavimento + tipo base + fluxo + tipo
+    de lâmpada). pavimentoId entra na chave de agrupamento — dois níveis do
+    Revit com o mesmo nome mas correlacionados a pavimentos diferentes (ou
+    vice-versa) nunca podem ser somados juntos."""
     contagem = {}
     ordem = []
     for it in itens:
-        chave = (it[u"pavimento"], it[u"tipoBase"], it[u"fluxoLuminosoLm"], it[u"tipoLampada"])
+        chave = (it[u"pavimento"], it.get(u"pavimentoId"), it[u"tipoBase"], it[u"fluxoLuminosoLm"], it[u"tipoLampada"])
         if chave not in contagem:
             contagem[chave] = 0
             ordem.append(chave)
@@ -183,9 +193,10 @@ def agrupar_por_pavimento(itens):
     return [
         {
             u"pavimento":       chave[0],
-            u"tipoBase":        chave[1],
-            u"fluxoLuminosoLm": chave[2],
-            u"tipoLampada":     chave[3],
+            u"pavimentoId":     chave[1],
+            u"tipoBase":        chave[2],
+            u"fluxoLuminosoLm": chave[3],
+            u"tipoLampada":     chave[4],
             u"quantidade":      contagem[chave],
         }
         for chave in ordem
