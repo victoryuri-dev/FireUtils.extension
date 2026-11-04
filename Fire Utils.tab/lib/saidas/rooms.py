@@ -71,7 +71,12 @@ def get_rooms_classificados(doc):
     O site/dockpane casa ambientes primeiro por esse id (ver
     resolverImportacaoSaidas), então uma reclassificação ou uma edição de
     área no Revit sempre ATUALIZA o mesmo ambiente lá — nunca cria um
-    duplicado nem perde a posição dele na árvore de Acessos/Saídas."""
+    duplicado nem perde a posição dele na árvore de Acessos/Saídas.
+
+    `nivelUniqueId` é o Level.UniqueId do nível do Room — saidas/calc.py o
+    usa pra resolver o pavimento contra a correlação "Nível <-> Pavimento"
+    (ver niveis_bridge.py), em vez do nome do nível (`nivel`, só exibido/
+    informativo daqui pra frente)."""
     colecao = FilteredElementCollector(doc)\
         .OfCategory(DB.BuiltInCategory.OST_Rooms)\
         .WhereElementIsNotElementType()\
@@ -92,9 +97,11 @@ def get_rooms_classificados(doc):
             p_nome = room.get_Parameter(DB.BuiltInParameter.ROOM_NAME)
             p_area = room.get_Parameter(DB.BuiltInParameter.ROOM_AREA)
             nivel  = room.Level.Name if room.Level else u"(sem nível)"
+            nivel_uid = room.Level.UniqueId if room.Level else None
 
             resultado.append({
                 u"nivel": nivel,
+                u"nivelUniqueId": nivel_uid,
                 u"nome":  p_nome.AsString() if (p_nome and p_nome.HasValue) else u"(sem nome)",
                 u"grupo": grupo,
                 u"area":  round(p_area.AsDouble() * 0.092903, 3) if p_area else 0.0,

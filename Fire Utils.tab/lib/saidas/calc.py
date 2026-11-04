@@ -42,8 +42,8 @@ def _cache_path(projeto_dir):
 
 def montar_payload_ambientes(rooms_data, estado, correlacao=None):
     """
-    rooms_data : list de dicts {nivel, nome, grupo, area, pop, uid,
-                 estruturaNome}, já de UMA estrutura (ver
+    rooms_data : list de dicts {nivel, nivelUniqueId, nome, grupo, area,
+                 pop, uid, estruturaNome}, já de UMA estrutura (ver
                  sincronizar_ambientes, que separa por estrutura antes de
                  chamar isto) — ver saidas.rooms.get_rooms_classificados().
     estado     : não usado aqui (mantido só pra não mudar a assinatura nos
@@ -55,39 +55,49 @@ def montar_payload_ambientes(rooms_data, estado, correlacao=None):
                  populacao.puxar_populacao_do_site, caminho oposto).
 
     correlacao : lista salva por "Correlacionar Níveis" (niveis_bridge.py)
-                 [{pavimentoId, nivelNome, ...}]; cada pavimento do payload
-                 ganha `pavimentoId` quando o nível foi correlacionado — a
-                 dockpane usa isso em vez de adivinhar pelo nome.
+                 [{pavimentoId, nivelUniqueId, ...}]; cada pavimento do
+                 payload ganha `pavimentoId` quando o nível (por
+                 nivelUniqueId, nunca por nome) foi correlacionado — sem
+                 isso o site rejeita o pavimento (ver
+                 SaidaEmergenciaPage.jsx:resolverPavimentoSite), nunca
+                 adivinha pelo nome.
 
-    Retorna {"pavimentos": [{"nome": <nível>, "ambientes": [...]}, ...]} —
-    mesmo formato que o site espera (SaidaEmergenciaPage.jsx →
-    resolverImportacaoSaidas), casando cada pavimento pelo NOME do nível e
-    cada ambiente pelo `revitId` (Room.UniqueId, estável mesmo se o nome
-    mudar numa reclassificação ou a área for editada depois).
+    Agrupa por `nivelUniqueId` (o nome do nível, "nivel", vira só o rótulo
+    de exibição do grupo — dois níveis homônimos não são o mesmo nível).
+    Retorna {"pavimentos": [{"nome": <nível>, "pavimentoId"?, "ambientes":
+    [...]}, ...]} — mesmo formato que o site espera (SaidaEmergenciaPage.jsx
+    → resolverImportacaoSaidas): cada ambiente casado pelo `revitId`
+    (Room.UniqueId, estável mesmo se o nome mudar numa reclassificação ou a
+    área for editada depois).
     """
+    pav_por_nivel_uid = dict(
+        (c.get(u"nivelUniqueId"), c.get(u"pavimentoId"))
+        for c in (correlacao or []) if c.get(u"nivelUniqueId") and c.get(u"pavimentoId")
+    )
+
     by_nivel = {}
     ordem    = []
     for r in rooms_data:
-        nivel = r[u"nivel"]
-        if nivel not in by_nivel:
-            by_nivel[nivel] = []
-            ordem.append(nivel)
-        by_nivel[nivel].append(r)
+        chave = r.get(u"nivelUniqueId") or r[u"nivel"]
+        if chave not in by_nivel:
+            by_nivel[chave] = {u"nome": r[u"nivel"], u"itens": []}
+            ordem.append(chave)
+        by_nivel[chave][u"itens"].append(r)
 
-    pav_por_nivel = dict((c.get(u"nivelNome"), c.get(u"pavimentoId"))
-                         for c in (correlacao or []) if c.get(u"nivelNome") and c.get(u"pavimentoId"))
     pavimentos = []
-    for nivel in ordem:
+    for chave in ordem:
+        grupo = by_nivel[chave]
         ambientes = []
-        for r in by_nivel[nivel]:
+        for r in grupo[u"itens"]:
             # `r["nome"]` já vem numerado do Revit (ver populacao.set_occupancy,
             # que grava "NN - <uso>" no parâmetro Nome do Room na hora de
             # classificar) — aqui só repassa, sem recalcular nada.
             ambientes.append({u"nome": r[u"nome"], u"divisao": r[u"grupo"],
                                u"area": r[u"area"], u"revitId": r.get(u"uid")})
-        pav = {u"nome": nivel, u"ambientes": ambientes}
-        if nivel in pav_por_nivel:
-            pav[u"pavimentoId"] = pav_por_nivel[nivel]
+        pav = {u"nome": grupo[u"nome"], u"ambientes": ambientes}
+        pavimento_id = pav_por_nivel_uid.get(chave)
+        if pavimento_id:
+            pav[u"pavimentoId"] = pavimento_id
         pavimentos.append(pav)
 
     return {u"pavimentos": pavimentos}
