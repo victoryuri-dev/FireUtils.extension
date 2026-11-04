@@ -507,6 +507,60 @@ def get_diametro_no_trecho(elem, ids_no_trecho):
     return get_diametro(elem)
 
 
+def get_pipe_type(elem):
+    """
+    (id, nome) do PipeType (tipo de tubo) de `elem` — usado pra agrupar
+    trechos por MATERIAL, o mesmo jeito que get_diametro já agrupa por
+    bitola. Só um Pipe de verdade tem PipeType próprio.
+
+    GetTypeId() de um elemento que NÃO é Pipe (ex.: um fitting/conexão)
+    devolve o tipo da FAMÍLIA dele (ex. "Joelho - Genérico 90°"), não um
+    PipeType de verdade — mesma armadilha documentada em connect_pipe.py
+    (_pipe_params) pro mesmo problema, resolvida do mesmo jeito: confirma
+    que o elemento resolvido É um PipeType antes de aceitar.
+
+    Retorna None se `elem` não for um Pipe, ou se o tipo não for um
+    PipeType de verdade.
+    """
+    if not isinstance(elem, Pipe):
+        return None
+    try:
+        from Autodesk.Revit.DB.Plumbing import PipeType
+        from Autodesk.Revit.DB import ElementId
+        tipo_id = elem.GetTypeId()
+        if tipo_id == ElementId.InvalidElementId:
+            return None
+        tipo_el = elem.Document.GetElement(tipo_id)
+        if not isinstance(tipo_el, PipeType):
+            return None
+        return (get_id(tipo_el), tipo_el.Name)
+    except Exception:
+        return None
+
+
+def get_pipe_type_no_trecho(elem, ids_no_trecho):
+    """Como get_diametro_no_trecho, mas pro PipeType (material): se `elem`
+    não for um Pipe (ou não tiver PipeType resolvível), empresta do Pipe
+    fisicamente conectado que também faz parte deste trecho — mesmo
+    raciocínio e mesmo motivo (fitting não tem material próprio
+    confiável). None se nada for encontrado."""
+    direto = get_pipe_type(elem)
+    if direto is not None:
+        return direto
+    try:
+        for conn in get_conectores(elem):
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected: continue
+            for outro in conn.AllRefs:
+                if outro.ConnectorType == ConnectorType.Logical: continue
+                vizinho = outro.Owner
+                if vizinho is None or not isinstance(vizinho, Pipe): continue
+                if get_id(vizinho) in ids_no_trecho:
+                    return get_pipe_type(vizinho)
+    except Exception: pass
+    return None
+
+
 def get_leq(elem):
     """Leq (m) do parâmetro de família "Perda de Carga" — fluxo antigo,
     ainda usado por válvulas/acessórios (ver get_tipo_conexao: conexões
@@ -558,7 +612,7 @@ def _angulo_cotovelo(elem):
         return None
 
 
-def get_tipo_conexao(elem, d_mm=None, sistema_por_diametro=None):
+def get_tipo_conexao(elem, d_mm=None, sistema=None):
     """
     Classifica uma conexão/fitting de tubulação (cotovelo, tê, redução,
     tampão, união, luva Y) pelo tipo NATIVO do Revit — o PartType da
@@ -570,15 +624,15 @@ def get_tipo_conexao(elem, d_mm=None, sistema_por_diametro=None):
     esta função devolve — este módulo só mede/classifica.
 
     d_mm, se informado, é o diâmetro nominal (mm) já resolvido pelo
-    chamador pra este elemento (get_diametro_no_trecho) — usado pra
-    decidir qual dos dois lados de uma redução é o "outro" (d2_mm), e pra
-    procurar o sistema de conexão configurado pro diâmetro deste elemento.
+    chamador pra este elemento (get_diametro_no_trecho) — usado só pra
+    decidir qual dos dois lados de uma redução é o "outro" (d2_mm).
 
-    sistema_por_diametro, se informado, é o dict {"<DN>": "bsp"|"grooved"}
-    salvo no projeto (ver hidrantes/sistema_conexao.py) — o motor usa isso
-    pra escolher a tabela de Leq certa de cotovelo/tê (roscado e ranhurado
-    têm Leq bem diferentes pro mesmo tipo/diâmetro). Diâmetro sem escolha
-    salva (ou sistema_por_diametro não informado) cai em "bsp".
+    sistema ("bsp"|"grooved", default "bsp" se None) já vem RESOLVIDO pelo
+    chamador — material_conexao.get_escolha(dados, etapa, pipe_type_id),
+    porque sistema de conexão agora é escolhido junto do material, por
+    (etapa, tipo de tubo), não mais por diâmetro isolado (ver
+    hidrantes/material_conexao.py). Esta função só carimba o valor no
+    resultado; não faz lookup nenhum sozinha.
 
     Retorna None se o elemento não for uma conexão classificável assim
     (categoria diferente de "Conexões de Tubulação", ou PartType sem
@@ -664,10 +718,9 @@ def get_tipo_conexao(elem, d_mm=None, sistema_por_diametro=None):
     except Exception:
         return None
 
-    from hidrantes.sistema_conexao import get_sistema
     resultado = {
         u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None,
-        u"sistema": get_sistema(sistema_por_diametro, d_mm),
+        u"sistema": sistema if sistema in (u"bsp", u"grooved") else u"bsp",
     }
 
     if tipo == u"cotovelo":

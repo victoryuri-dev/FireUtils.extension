@@ -11,7 +11,7 @@ import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
 import HidrantesMapeamento, { TITULO_FALHA_MAPEAMENTO } from "./HidrantesMapeamento";
-import SistemaConexaoSelector from "./SistemaConexaoSelector";
+import MaterialConexaoSelector from "./MaterialConexaoSelector";
 import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
 
@@ -131,6 +131,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
   const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
   const [trechosMapeados, setTrechosMapeados] = useState(null);
+  // Combinações (tipo de tubo, diâmetros) por etapa, pro seletor de
+  // material/sistema de conexão (MaterialConexaoSelector) — vem do
+  // resultado do último "Mapear Trechos" (vivo) ou, depois de reabrir o
+  // projeto, de HIDRANTES_DIMENSIONAMENTO (cache).
+  const [pipeTypesPorEtapa, setPipeTypesPorEtapa] = useState(null);
   // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
   // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
   // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
@@ -177,6 +182,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAMENTO) {
         setCarregando(false);
         setResposta(mensagem.payload || null);
+        if (mensagem.payload?.pipeTypesPorEtapa) setPipeTypesPorEtapa(mensagem.payload.pipeTypesPorEtapa);
         return;
       }
 
@@ -215,6 +221,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         if (p.ok) {
           setInconsistenciaMapeamento(null);
           setTrechosMapeados(p.trechos || []);
+          if (p.pipe_types_por_etapa) setPipeTypesPorEtapa(p.pipe_types_por_etapa);
           adicionarToast?.({
             tipo: "sucesso",
             titulo: "Rede mapeada",
@@ -640,7 +647,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               até o Tipo estar identificado. */}
           {classificacao?.tipo ? (
             <>
-              <SistemaConexaoSelector adicionarToast={adicionarToast} />
+              <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
               <HidrantesMapeamento
                 mapeando={mapeando}
                 instrucao={instrucaoMapeamento}

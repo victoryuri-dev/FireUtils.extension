@@ -39,7 +39,7 @@ import hidrantes_classificacao_bridge
 import hidrantes_dimensionamento_bridge
 import hidrantes_dimensionar_bridge
 import hidrantes_mapear_bridge
-import hidrantes_sistema_conexao_bridge
+import hidrantes_material_conexao_bridge
 import plugin_atualizacao
 import plugin_pacote
 import saidas_ocupacao_bridge
@@ -248,14 +248,14 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             lambda uiapp: hidrantes_dimensionamento_bridge.tratar_get_hidrantes_dimensionamento(
                 uiapp, postar_mensagem)
         )
-    elif tipo == u"GET_SISTEMA_CONEXAO":
+    elif tipo == u"GET_MATERIAL_CONEXAO":
         fila_acoes.enfileirar(
-            lambda uiapp: hidrantes_sistema_conexao_bridge.tratar_get_sistema_conexao(
+            lambda uiapp: hidrantes_material_conexao_bridge.tratar_get_material_conexao(
                 uiapp, postar_mensagem)
         )
-    elif tipo == u"SET_SISTEMA_CONEXAO":
+    elif tipo == u"SET_MATERIAL_CONEXAO":
         fila_acoes.enfileirar(
-            lambda uiapp: hidrantes_sistema_conexao_bridge.tratar_set_sistema_conexao(
+            lambda uiapp: hidrantes_material_conexao_bridge.tratar_set_material_conexao(
                 uiapp, payload, postar_mensagem)
         )
     elif tipo == u"DIMENSIONAR_HIDRANTES":
