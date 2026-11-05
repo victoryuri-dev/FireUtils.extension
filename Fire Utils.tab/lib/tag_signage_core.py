@@ -3,7 +3,7 @@
 tag_signage_core.py — Fire Utils · lib/
 Lógica do botão "Identificar Sinalizações": equivalente ao "Identificar
 todos" nativo do Revit, mas com a chamada de detalhe (leader) saindo na
-direção da face do elemento — em SENTIDO OPOSTO a FacingOrientation —
+direção da face do elemento — no sentido de FacingOrientation —
 em vez de sempre pra cima.
 
 Fluxo: janela (tag_signage_opcoes.xaml) com as categorias que têm
@@ -40,9 +40,9 @@ from pyrevit import forms
 from family_error_utils import texto_erro
 
 # Sentido da chamada de detalhe em relação a FacingOrientation do elemento.
-# True = oposto à face (comportamento pedido). Mude pra False pra ir no
-# mesmo sentido da face.
-SENTIDO_OPOSTO = True
+# False = mesmo sentido da face (FacingOrientation). Mude pra True pra ir no
+# sentido oposto à face.
+SENTIDO_OPOSTO = False
 
 DISTANCIA_PADRAO_MM = 15.0
 _MM_POR_FT = 304.8

@@ -3,7 +3,7 @@ __title__ = "Identificar\nSinalizações"
 __doc__ = (
     "Faz o mesmo que o \"Identificar todos\" nativo do Revit, mas a "
     "chamada de detalhe (leader) de cada identificador sai na direção da "
-    "face da sinalização, em sentido oposto, em vez de sempre pra cima. "
+    "face da sinalização, no sentido da face, em vez de sempre pra cima. "
     "Permite escolher as categorias, a família do identificador de cada "
     "uma, a distância e se vale só pra vista ativa ou pro projeto todo. "
     "Elementos já identificados são pulados."
