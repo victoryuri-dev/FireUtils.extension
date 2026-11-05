@@ -1600,7 +1600,8 @@ def _ponto_sobre_corpo(P, pt_A, pt_B, d_ref):
 
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                         ordem_eixos=(u"z", u"par", u"perp"),
-                        modo_conexao_ref=u"auto"):
+                        modo_conexao_ref=u"auto",
+                        diametros_trecho=None):
     """
     Lógica pura de conexão — NÃO abre/fecha transação (fica a cargo de
     quem chama: _conectar, no fluxo direto, ou a janela de prévia, que
@@ -1633,6 +1634,16 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                               corpo de pipe_ref), mesmo perto de uma ponta.
                         "auto"  (compatibilidade, sem diálogo) → heurística
                               antiga por proximidade do clique.
+    diametros_trecho : dict opcional {"z"/"par"/"perp": diam_ft} — diâmetro
+                              a usar no tubo criado para aquele eixo
+                              específico, em vez do diâmetro padrão herdado
+                              de pipe_desc (ver _pipe_params). Eixo ausente
+                              do dict usa o diâmetro padrão. Quando o 1º
+                              trecho acaba sendo uma EXTENSÃO do próprio
+                              pipe_desc (não um tubo novo — ver
+                              _tenta_estender_colinear e a extensão direta
+                              de tubo vertical), o diâmetro escolhido pra
+                              esse eixo é aplicado em pipe_desc também.
     """
 
     eh_fitting_ref = not isinstance(pipe_ref, Pipe)
@@ -1897,6 +1908,9 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         if P_cur.DistanceTo(P_next) <= tol_leg:
             continue
 
+        diam_trecho = (diametros_trecho.get(eixo, diam_ft)
+                       if diametros_trecho else diam_ft)
+
         estendeu = False
         if primeira_perna and eixo == u"z" and _pipe_is_vertical(pipe_desc):
             # pipe_desc já é vertical: estende/encolhe a própria curva até
@@ -1920,8 +1934,11 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             if estendeu:
                 conn_cur = _conn_near(pipe_desc, P_next)
 
-        if not estendeu:
-            seg   = _mk_pipe(doc, P_cur, P_next, pt_id, sys_id, lvl_id, diam_ft)
+        if estendeu:
+            if diametros_trecho and eixo in diametros_trecho:
+                _set_diam(pipe_desc, diam_trecho)
+        else:
+            seg   = _mk_pipe(doc, P_cur, P_next, pt_id, sys_id, lvl_id, diam_trecho)
             c_ini = _conn_near(seg, P_cur)
             c_fim = _conn_near(seg, P_next)
             _elbows_pend.append((conn_cur, c_ini))

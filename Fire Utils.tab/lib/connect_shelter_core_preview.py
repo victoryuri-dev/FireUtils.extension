@@ -65,9 +65,11 @@ from pyrevit import forms, script as pyscript
 try:
     from Autodesk.Revit.DB import UnitTypeId
     def _to_ft(v): return UnitUtils.ConvertToInternalUnits(v, UnitTypeId.Meters)
+    def _ft_para_mm(v): return UnitUtils.ConvertFromInternalUnits(v, UnitTypeId.Millimeters)
 except ImportError:
     from Autodesk.Revit.DB import DisplayUnitType
     def _to_ft(v): return UnitUtils.ConvertToInternalUnits(v, DisplayUnitType.DUT_METERS)
+    def _ft_para_mm(v): return UnitUtils.ConvertFromInternalUnits(v, DisplayUnitType.DUT_MILLIMETERS)
 
 from hydrant_family import garantir_valvula
 from shelter_family  import NOME_FAMILIA_ABRIGO
@@ -89,6 +91,12 @@ from family_loader_events import criar_fila_acoes
 
 _XAML_OPCOES_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), u"connect_shelter_opcoes.xaml")
+
+# Diâmetro da válvula/stub em mm, direto da constante (DIAM_RAMAL_M) — nunca
+# consultado no Revit: é sempre esse valor fixo, por definição (ver
+# docstring do módulo). Usado só pra EXIBIR/COMPARAR com o diâmetro real de
+# pipe_ref na opção de diâmetro por trecho — ver _diametros_disponiveis_mm.
+DIAM_RAMAL_MM = int(round(DIAM_RAMAL_M * 1000))
 
 
 # ===========================================================================
@@ -157,6 +165,15 @@ def _eixos_disponiveis_abrigo(pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face
     return _eixos_necessarios(P_start, P_final, d_ref, _direcao_lado(dir_face, lado))
 
 
+def _diametro_ref_mm(doc, pipe_ref):
+    """Diâmetro de pipe_ref em mm (inteiro arredondado) — consultado de
+    verdade no Revit via _pipe_params. Ao contrário do diâmetro da
+    válvula/stub (sempre DIAM_RAMAL_MM, fixo por definição — ver constante
+    no topo do módulo), esse varia de projeto pra projeto."""
+    _, _, _, diam_ft = _pipe_params(doc, pipe_ref)
+    return int(round(_ft_para_mm(diam_ft)))
+
+
 # ===========================================================================
 # LÓGICA DE CONSTRUÇÃO — válvula + stub + roteamento
 # ===========================================================================
@@ -166,13 +183,20 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
                                     pipe_type_id, sys_type_id, output,
                                     lado=u"direita",
                                     ordem_eixos=(u"z", u"par", u"perp"),
-                                    modo_conexao_ref=u"corpo"):
+                                    modo_conexao_ref=u"corpo",
+                                    diametros_trecho=None):
     """
     Cria a válvula + stub no lado escolhido e roteia até pipe_ref. NÃO abre
     nem fecha transação — quem chama decide (janela de prévia ou o fluxo
     direto de fallback). Propaga _ConexaoError nas validações conhecidas de
     connect_pipe._construir_conexao; erros inesperados propagam como
     Exception normal.
+
+    diametros_trecho : repassado direto a connect_pipe._construir_conexao
+                              — dict opcional {"z"/"par"/"perp": diam_ft},
+                              diâmetro por trecho da rota (ref. x válvula),
+                              só relevante quando os dois diferem — ver
+                              _diametro_ref_mm e _JanelaOpcoesAbrigo.
     """
     dir_pipe = _direcao_lado(dir_face, lado)
 
@@ -241,7 +265,8 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
     # do usuário no diálogo, não mais adivinhada pela distância do clique.
     _construir_conexao(doc, tubo_stub, pipe_ref, pt_stub_end, pt_click_ref,
                         output, ordem_eixos=ordem_eixos,
-                        modo_conexao_ref=modo_conexao_ref)
+                        modo_conexao_ref=modo_conexao_ref,
+                        diametros_trecho=diametros_trecho)
 
 
 # ===========================================================================
@@ -285,6 +310,15 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
     _BOTOES_ORDEM1 = {u"z": u"RbO1Z", u"par": u"RbO1Par", u"perp": u"RbO1Perp"}
     _BOTOES_ORDEM2 = {u"z": u"RbO2Z", u"par": u"RbO2Par", u"perp": u"RbO2Perp"}
 
+    # Diâmetro por trecho (ver _sincronizar_diametros/on_diametro_changed):
+    # eixo -> (nome do botão "diâmetro de pipe_ref", nome do botão
+    # "diâmetro da válvula", nome da linha/StackPanel que agrupa os dois).
+    _BOTOES_DIAM = {
+        u"z":    (u"RbDiamZRef",    u"RbDiamZValvula",    u"LinhaDiamZ"),
+        u"par":  (u"RbDiamParRef",  u"RbDiamParValvula",  u"LinhaDiamPar"),
+        u"perp": (u"RbDiamPerpRef", u"RbDiamPerpValvula", u"LinhaDiamPerp"),
+    }
+
     def __init__(self, doc, uidoc, pipe_ref, pt_click_ref, simbolo,
                  pt_abrigo, nivel, dir_face, pipe_type_id, sys_type_id, output,
                  clicou_ponta_exata=False):
@@ -307,6 +341,12 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self._sincronizando    = False
         self._atualizacao_pendente = False
         self._ordem_pref       = [u"z", u"par", u"perp"]
+        self._diam_pref        = {}
+        # Defaults seguros — _sincronizar_diametros() sempre recalcula
+        # isso antes de qualquer _diametros_trecho_ft() de verdade (ver
+        # _ciclo_preview), mas evita AttributeError se algo chamar antes.
+        self._diametro_ref_ft_atual = _to_ft(DIAM_RAMAL_M)
+        self._diametro_ref_mm_atual = DIAM_RAMAL_MM
         self._elementos_criados = set()
         self.fila_acoes        = criar_fila_acoes()
 
@@ -476,8 +516,78 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 self.TxtOrdemInfo.Text = u"Único ajuste necessário: {}".format(_NOME_EIXO[ordem[0]])
             else:
                 self.TxtOrdemInfo.Text = u"Por último: {}".format(_NOME_EIXO[ordem[-1]])
+
+            self._sincronizar_diametros(necessarios)
         finally:
             self._sincronizando = False
+
+    def _diametro_atual(self, eixo):
+        """"ref" ou "valvula" — preferência atual de diâmetro pra esse
+        trecho (ver _BOTOES_DIAM/_sincronizar_diametros). "valvula"
+        (DIAM_RAMAL_MM, 65mm) é o padrão."""
+        return self._diam_pref.get(eixo, u"valvula")
+
+    def _diametros_trecho_ft(self):
+        """dict {eixo: diam_ft} com a preferência atual de cada trecho —
+        repassado direto a _construir_valvula_stub_e_rota/
+        connect_pipe._construir_conexao. Inclui os 3 eixos sempre (os que
+        não entrarem na rota de verdade são simplesmente ignorados por
+        _construir_conexao). Usa o diâmetro de pipe_ref EXATO (em pés, sem
+        passar pelo mm arredondado da exibição) — ver
+        self._diametro_ref_ft_atual em _sincronizar_diametros."""
+        diam_valvula_ft = _to_ft(DIAM_RAMAL_M)
+        diam_ref_ft      = self._diametro_ref_ft_atual
+        return dict(
+            (eixo, diam_ref_ft if self._diametro_atual(eixo) == u"ref" else diam_valvula_ft)
+            for eixo in self._BOTOES_DIAM
+        )
+
+    def _sincronizar_diametros(self, necessarios):
+        """Mostra a opção "qual diâmetro nesse trecho?" (válvula x
+        pipe_ref) só quando os dois diâmetros realmente diferem — e, nesse
+        caso, só pros trechos que de fato vão existir na rota (mesmo
+        conjunto `necessarios` da ordem). Chamado de dentro do
+        _sincronizando=True de _sincronizar_ordem — não precisa (nem
+        deve) mexer nesse guard de novo."""
+        _, _, _, diam_ref_ft = _pipe_params(self.doc, self.pipe_ref)
+        diam_ref_mm = int(round(_ft_para_mm(diam_ref_ft)))
+        self._diametro_ref_ft_atual = diam_ref_ft
+        self._diametro_ref_mm_atual = diam_ref_mm
+
+        difere = abs(diam_ref_mm - DIAM_RAMAL_MM) >= 1 and len(necessarios) >= 1
+        self.SecaoDiametro.Visibility = (SW.Visibility.Visible if difere
+                                          else SW.Visibility.Collapsed)
+        if not difere:
+            return
+
+        for eixo, (nome_ref, nome_valvula, nome_linha) in self._BOTOES_DIAM.items():
+            mostrar = eixo in necessarios
+            getattr(self, nome_linha).Visibility = (
+                SW.Visibility.Visible if mostrar else SW.Visibility.Collapsed)
+            if not mostrar:
+                continue
+            btn_ref     = getattr(self, nome_ref)
+            btn_valvula = getattr(self, nome_valvula)
+            btn_ref.Content     = u"{}mm".format(diam_ref_mm)
+            btn_valvula.Content = u"{}mm".format(DIAM_RAMAL_MM)
+            if self._diametro_atual(eixo) == u"ref":
+                btn_ref.IsChecked = True
+            else:
+                btn_valvula.IsChecked = True
+
+    def on_diametro_changed(self, sender, args):
+        if self._sincronizando:
+            return
+        nome = sender.Name
+        for eixo, (nome_ref, nome_valvula, _linha) in self._BOTOES_DIAM.items():
+            if nome == nome_ref:
+                self._diam_pref[eixo] = u"ref"
+                self._agendar_atualizacao()
+                return
+            if nome == nome_valvula:
+                self._diam_pref[eixo] = u"valvula"
+                self._agendar_atualizacao()
+                return
 
     def _forcar_render(self):
         """Processa a fila de mensagens do WPF até a prioridade Render.
@@ -525,6 +635,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                     self.pipe_type_id, self.sys_type_id, _OUTPUT_MUDO,
                     lado=self._lado_atual(), ordem_eixos=self._ordem_pref,
                     modo_conexao_ref=self._modo_conexao_ref_atual(),
+                    diametros_trecho=self._diametros_trecho_ft(),
                 )
                 self.doc.Regenerate()
             except _ConexaoError as ex:
@@ -630,7 +741,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
         self.fila_acoes.enfileirar(_acao)
 
 
-def _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face,
+def _escolher_opcoes_abrigo_fallback(doc, pipe_ref, pt_click_ref, pt_abrigo, nivel, dir_face,
                                       clicou_ponta_exata=False):
     if clicou_ponta_exata:
         # Clique já caiu exatamente na ponta de pipe_ref — resposta óbvia,
@@ -697,7 +808,30 @@ def _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel, d
         else:
             ordem_eixos = [primeiro] + restantes
 
-    return lado, ordem_eixos, modo_conexao_ref
+    # Diâmetro por trecho (válvula x pipe_ref) — só pergunta se os dois
+    # diâmetros realmente diferem, um trecho de cada vez (mesma regra da
+    # janela de prévia — ver _JanelaOpcoesAbrigo._sincronizar_diametros).
+    diametros_trecho = None
+    diam_ref_mm = _diametro_ref_mm(doc, pipe_ref)
+    if necessarios and abs(diam_ref_mm - DIAM_RAMAL_MM) >= 1:
+        _, _, _, diam_ref_ft = _pipe_params(doc, pipe_ref)
+        diam_valvula_ft = _to_ft(DIAM_RAMAL_M)
+        opcao_ref     = u"{}mm".format(diam_ref_mm)
+        opcao_valvula = u"{}mm".format(DIAM_RAMAL_MM)
+        diametros_trecho = {}
+        for eixo in necessarios:
+            escolha_diam = forms.SelectFromList.show(
+                [opcao_ref, opcao_valvula],
+                title=u"Fire Utils — Conectar Abrigo",
+                prompt=u"Diâmetro do trecho \"{}\":".format(_NOME_EIXO[eixo]),
+                multiselect=False
+            )
+            if not escolha_diam:
+                return None
+            diametros_trecho[eixo] = (diam_ref_ft if escolha_diam == opcao_ref
+                                       else diam_valvula_ft)
+
+    return lado, ordem_eixos, modo_conexao_ref, diametros_trecho
 
 
 # ===========================================================================
@@ -819,11 +953,11 @@ def conectar_abrigo_preview(doc, uidoc, output):
               u"usando formulário padrão do pyRevit (sem prévia).".format(ex))
 
     # ── Fallback sem prévia ──────────────────────────────────────────────
-    opcoes = _escolher_opcoes_abrigo_fallback(pipe_ref, pt_click_ref, pt_abrigo, nivel,
+    opcoes = _escolher_opcoes_abrigo_fallback(doc, pipe_ref, pt_click_ref, pt_abrigo, nivel,
                                                dir_face, clicou_ponta_exata=clicou_ponta_exata)
     if opcoes is None:
         pyscript.exit()
-    lado, ordem_eixos, modo_conexao_ref = opcoes
+    lado, ordem_eixos, modo_conexao_ref, diametros_trecho = opcoes
 
     with Transaction(doc, u"FireUtils - Conectar Abrigo") as t:
         t.Start()
@@ -834,6 +968,7 @@ def conectar_abrigo_preview(doc, uidoc, output):
                 pipe_type_id, sys_type_id, output,
                 lado=lado, ordem_eixos=ordem_eixos,
                 modo_conexao_ref=modo_conexao_ref,
+                diametros_trecho=diametros_trecho,
             )
             t.Commit()
         except _ConexaoError as ex:

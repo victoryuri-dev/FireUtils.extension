@@ -139,6 +139,50 @@
                                Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap"/>
                 </StackPanel>
 
+                <!-- Diâmetro por trecho (válvula x pipe_ref) — só aparece
+                     quando os dois diâmetros diferem de verdade; cada
+                     linha só quando aquele eixo realmente faz parte da
+                     rota (ver _JanelaOpcoesAbrigo._sincronizar_diametros).
+                     O texto dos botões ("80mm"/"65mm") é preenchido em
+                     Python — o diâmetro real de pipe_ref não é conhecido
+                     em tempo de design. -->
+                <StackPanel x:Name="SecaoDiametro" Margin="0,10,0,0">
+                    <TextBlock Text="Diâmetro de cada trecho" Style="{StaticResource LabelStyle}"/>
+
+                    <StackPanel x:Name="LinhaDiamZ" Margin="0,0,0,10">
+                        <TextBlock Text="Vertical (Z)" FontSize="10"
+                                   Foreground="{StaticResource BrushLabel}" Margin="0,0,0,4"/>
+                        <UniformGrid Columns="2">
+                            <RadioButton x:Name="RbDiamZRef" GroupName="GrupoDiamZ" Margin="0,0,4,0"
+                                         Style="{StaticResource OpcaoBotaoStyle}" Checked="on_diametro_changed"/>
+                            <RadioButton x:Name="RbDiamZValvula" GroupName="GrupoDiamZ" Margin="4,0,0,0"
+                                         Style="{StaticResource OpcaoBotaoStyle}" Checked="on_diametro_changed"/>
+                        </UniformGrid>
+                    </StackPanel>
+
+                    <StackPanel x:Name="LinhaDiamPar" Margin="0,0,0,10">
+                        <TextBlock Text="Paralelo" FontSize="10"
+                                   Foreground="{StaticResource BrushLabel}" Margin="0,0,0,4"/>
+                        <UniformGrid Columns="2">
+                            <RadioButton x:Name="RbDiamParRef" GroupName="GrupoDiamPar" Margin="0,0,4,0"
+                                         Style="{StaticResource OpcaoBotaoStyle}" Checked="on_diametro_changed"/>
+                            <RadioButton x:Name="RbDiamParValvula" GroupName="GrupoDiamPar" Margin="4,0,0,0"
+                                         Style="{StaticResource OpcaoBotaoStyle}" Checked="on_diametro_changed"/>
+                        </UniformGrid>
+                    </StackPanel>
+
+                    <StackPanel x:Name="LinhaDiamPerp">
+                        <TextBlock Text="Perpendicular" FontSize="10"
+                                   Foreground="{StaticResource BrushLabel}" Margin="0,0,0,4"/>
+                        <UniformGrid Columns="2">
+                            <RadioButton x:Name="RbDiamPerpRef" GroupName="GrupoDiamPerp" Margin="0,0,4,0"
+                                         Style="{StaticResource OpcaoBotaoStyle}" Checked="on_diametro_changed"/>
+                            <RadioButton x:Name="RbDiamPerpValvula" GroupName="GrupoDiamPerp" Margin="4,0,0,0"
+                                         Style="{StaticResource OpcaoBotaoStyle}" Checked="on_diametro_changed"/>
+                        </UniformGrid>
+                    </StackPanel>
+                </StackPanel>
+
             </StackPanel>
         </Border>
 
