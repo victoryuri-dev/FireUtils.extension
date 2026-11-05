@@ -507,6 +507,110 @@ def get_diametro_no_trecho(elem, ids_no_trecho):
     return get_diametro(elem)
 
 
+_CLASSE_PIPE_TYPE = None
+
+
+def _resolver_classe_pipe_type():
+    """Acha a classe PipeType tentando os dois namespaces conhecidos — o
+    enum PartType já mostrou que muda de lugar entre instalações do Revit
+    (Autodesk.Revit.DB x Autodesk.Revit.DB.Plumbing; ver
+    _MAPA_PART_TYPE_CONEXAO acima), e PipeType pode ter a mesma variação.
+    Resolve uma vez só e cacheia; None se não achar em nenhum dos dois —
+    get_pipe_type cai para "sem tipo" nesse caso, nunca lança."""
+    global _CLASSE_PIPE_TYPE
+    if _CLASSE_PIPE_TYPE is not None:
+        return _CLASSE_PIPE_TYPE
+    for _modulo_nome in (u"Autodesk.Revit.DB", u"Autodesk.Revit.DB.Plumbing"):
+        try:
+            _mod = __import__(_modulo_nome, fromlist=[u"PipeType"])
+            _classe = getattr(_mod, u"PipeType", None)
+            if _classe is not None:
+                _CLASSE_PIPE_TYPE = _classe
+                return _classe
+        except Exception:
+            continue
+    return None
+
+
+def _nome_elemento_tipo(elem):
+    """
+    Nome de um elemento de TIPO (ex.: PipeType) — tolerante a uma falha
+    conhecida do IronPython com versões recentes da API do Revit: em
+    algumas classes, "Element.Name" passou a ser implementado via
+    interface explícita, e o acesso dinâmico "elem.Name" do IronPython
+    não encontra o atributo (AttributeError), mesmo o elemento sendo
+    válido e do tipo certo — confirmado com GetType().FullName e
+    isinstance() nesse caso. "Element.Name" (o descritor da classe, não
+    da instância) continua acessível e devolve o valor certo.
+    """
+    try:
+        return elem.Name
+    except AttributeError:
+        pass
+    try:
+        from Autodesk.Revit.DB import Element
+        return Element.Name.GetValue(elem)
+    except Exception:
+        return None
+
+
+def get_pipe_type(elem):
+    """
+    (id, nome) do PipeType (tipo de tubo) de `elem` — usado pra agrupar
+    trechos por MATERIAL, o mesmo jeito que get_diametro já agrupa por
+    bitola. Só um Pipe de verdade tem PipeType próprio.
+
+    GetTypeId() de um elemento que NÃO é Pipe (ex.: um fitting/conexão)
+    devolve o tipo da FAMÍLIA dele (ex. "Joelho - Genérico 90°"), não um
+    PipeType de verdade — mesma armadilha documentada em connect_pipe.py
+    (_pipe_params) pro mesmo problema, resolvida do mesmo jeito: confirma
+    que o elemento resolvido É um PipeType antes de aceitar.
+
+    Retorna None se `elem` não for um Pipe, se a classe PipeType não for
+    resolvível nesta instalação do Revit, ou se o tipo não for um
+    PipeType de verdade.
+    """
+    if not isinstance(elem, Pipe):
+        return None
+    try:
+        from Autodesk.Revit.DB import ElementId
+        PipeType = _resolver_classe_pipe_type()
+        if PipeType is None:
+            return None
+        tipo_id = elem.GetTypeId()
+        if tipo_id == ElementId.InvalidElementId:
+            return None
+        tipo_el = elem.Document.GetElement(tipo_id)
+        if not isinstance(tipo_el, PipeType):
+            return None
+        return (get_id(tipo_el), _nome_elemento_tipo(tipo_el))
+    except Exception:
+        return None
+
+
+def get_pipe_type_no_trecho(elem, ids_no_trecho):
+    """Como get_diametro_no_trecho, mas pro PipeType (material): se `elem`
+    não for um Pipe (ou não tiver PipeType resolvível), empresta do Pipe
+    fisicamente conectado que também faz parte deste trecho — mesmo
+    raciocínio e mesmo motivo (fitting não tem material próprio
+    confiável). None se nada for encontrado."""
+    direto = get_pipe_type(elem)
+    if direto is not None:
+        return direto
+    try:
+        for conn in get_conectores(elem):
+            if conn.ConnectorType == ConnectorType.Logical: continue
+            if not conn.IsConnected: continue
+            for outro in conn.AllRefs:
+                if outro.ConnectorType == ConnectorType.Logical: continue
+                vizinho = outro.Owner
+                if vizinho is None or not isinstance(vizinho, Pipe): continue
+                if get_id(vizinho) in ids_no_trecho:
+                    return get_pipe_type(vizinho)
+    except Exception: pass
+    return None
+
+
 def get_leq(elem):
     """Leq (m) do parâmetro de família "Perda de Carga" — fluxo antigo,
     ainda usado por válvulas/acessórios (ver get_tipo_conexao: conexões
@@ -558,7 +662,7 @@ def _angulo_cotovelo(elem):
         return None
 
 
-def get_tipo_conexao(elem, d_mm=None):
+def get_tipo_conexao(elem, d_mm=None, sistema=None):
     """
     Classifica uma conexão/fitting de tubulação (cotovelo, tê, redução,
     tampão, união, luva Y) pelo tipo NATIVO do Revit — o PartType da
@@ -570,8 +674,15 @@ def get_tipo_conexao(elem, d_mm=None):
     esta função devolve — este módulo só mede/classifica.
 
     d_mm, se informado, é o diâmetro nominal (mm) já resolvido pelo
-    chamador pra este elemento (get_diametro_no_trecho) — usado só para
+    chamador pra este elemento (get_diametro_no_trecho) — usado só pra
     decidir qual dos dois lados de uma redução é o "outro" (d2_mm).
+
+    sistema ("bsp"|"grooved", default "bsp" se None) já vem RESOLVIDO pelo
+    chamador — material_conexao.get_escolha(dados, etapa, pipe_type_id),
+    porque sistema de conexão agora é escolhido junto do material, por
+    (etapa, tipo de tubo), não mais por diâmetro isolado (ver
+    hidrantes/material_conexao.py). Esta função só carimba o valor no
+    resultado; não faz lookup nenhum sozinha.
 
     Retorna None se o elemento não for uma conexão classificável assim
     (categoria diferente de "Conexões de Tubulação", ou PartType sem
@@ -591,7 +702,8 @@ def get_tipo_conexao(elem, d_mm=None):
     Retorna, caso contrário:
         {"tipo": "cotovelo"|"tee"|"transicao"|"tampao"|"uniao"|"luva_y",
          "angulo_graus": float|None,   # só cotovelo
-         "d2_mm": float|None}          # só transição
+         "d2_mm": float|None,          # só transição
+         "sistema": "bsp"|"grooved"}   # vem de sistema_por_diametro, por d_mm
     """
     global _CATS_CONEXAO, _MAPA_PART_TYPE_CONEXAO
 
@@ -656,7 +768,10 @@ def get_tipo_conexao(elem, d_mm=None):
     except Exception:
         return None
 
-    resultado = {u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None}
+    resultado = {
+        u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None,
+        u"sistema": sistema if sistema in (u"bsp", u"grooved") else u"bsp",
+    }
 
     if tipo == u"cotovelo":
         resultado[u"angulo_graus"] = _angulo_cotovelo(elem)
