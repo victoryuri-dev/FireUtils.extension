@@ -8,12 +8,23 @@ import { fmtNum } from "../../lib/numero";
 
 // Mesmos formatadores da seção equivalente do site (ETOS.FireUtils,
 // src/pages/medidas/HidrantesPage.jsx) — ver docstring de lib/numero.js.
+// Vazão, pressão e velocidade sempre com 2 casas — comprimentos (L/Leq/
+// Ltotal, medidos no modelo) continuam com mais precisão, não é a mesma
+// categoria de "resultado hidráulico calculado".
 const f2 = (n) => fmtNum(n, 2, "0");
-const f3 = (n) => fmtNum(n, 3, "0");
 const f4 = (n) => fmtNum(n, 4, "0");
-const fmca = (n) => `${f4(n)} mca`;
+const fmca = (n) => `${f2(n)} mca`;
 const lmin = (n) => `${f2(n)} L/min`;
-const ms = (n) => `${f3(n)} m/s`;
+const ms = (n) => `${f2(n)} m/s`;
+
+// Verificação de velocidade: tolerância de 0,049 m/s acima do limite
+// normativo antes de reprovar — evita reprovar por causa de ruído
+// numérico (ex. 2,018 m/s calculado contra um limite de 2 m/s). Fica bem
+// abaixo de 0,05 de propósito (não exatos 0,05), pra nunca cair num valor
+// que arredonde de forma ambígua pra 2 casas — resultado sempre previsível.
+// Quando o valor passa só por causa dessa tolerância, mostra o limite
+// (ex. "2,00 m/s"), não o valor real calculado — ver VelChip.
+const TOLERANCIA_VELOCIDADE_M_S = 0.049;
 
 // Pressão de referência no hidrante (o que se compara contra Pmin): na
 // ponta do esguicho quando o método é "Ponta do Esguicho Regulável", na
@@ -56,10 +67,14 @@ function TD({ children, red, green, bold, muted, right, center, mono }) {
   );
 }
 function VelChip({ v, limite }) {
-  const ok = v <= limite;
+  const ok = v <= limite + TOLERANCIA_VELOCIDADE_M_S;
+  // Passou só por causa da tolerância (v > limite, mas dentro dela): mostra
+  // o limite normativo ("2,00 m/s"), não o valor real calculado — o RT não
+  // precisa ver "2,02" explicado só pra entender que passou.
+  const vExibido = ok ? Math.min(v, limite) : v;
   return (
     <span className={`hiddim-chip ${ok ? "hiddim-chip-ok" : "hiddim-chip-bad"}`}>
-      {ok ? "✓" : "✗"} {ms(v)}
+      {ok ? "✓" : "✗"} {ms(vExibido)}
     </span>
   );
 }
@@ -260,7 +275,7 @@ export function VerificacaoVelocidade({ d, limites }) {
   });
   // Sem coluna de limite na tabela — o limite só aparece no texto abaixo,
   // junto da orientação do que fazer, quando algum trecho não atende.
-  const falhas = linhas.filter((l) => l.v > l.vLimite);
+  const falhas = linhas.filter((l) => l.v > l.vLimite + TOLERANCIA_VELOCIDADE_M_S);
   return (
     <div className="hiddim-secao">
       <h4 className="hiddim-secao-titulo">Trechos e Verificação de Velocidade</h4>
