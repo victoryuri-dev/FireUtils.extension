@@ -36,7 +36,7 @@
 
         <TextBlock Text="Identificar sinalizações" FontSize="15" FontWeight="SemiBold"
                    Foreground="{StaticResource BrushAccent}" Margin="0,0,0,4"/>
-        <TextBlock Text="Marque as categorias e escolha o identificador de cada uma. A chamada de detalhe sai na direção da face do elemento, em sentido oposto. Elementos já identificados são pulados."
+        <TextBlock Text="Marque as categorias e escolha o identificador de cada uma. A chamada de detalhe sai na direção da face do elemento, no sentido da face. Elementos já identificados são pulados."
                    FontSize="11" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,0,0,12"/>
 
         <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorder}"
