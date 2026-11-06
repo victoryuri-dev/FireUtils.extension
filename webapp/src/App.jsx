@@ -36,6 +36,9 @@ import libraryIconSvg from "./assets/icons/library-icon.svg?raw";
 // sempre se o host nunca responder (ex.: falha inesperada do lado Python).
 const TIMEOUT_CARREGAMENTO_MS = 30000;
 
+// De quanto em quanto tempo a dockpane volta a procurar versão nova publicada.
+const INTERVALO_CONSULTA_VERSOES_MS = 20 * 60 * 1000;
+
 // Título da seção usa o mesmo rótulo curto exibido no pill (ex.: "Extintor"
 // -> "EXTINTOR"), conforme o mockup — categorias sem rótulo curto caem no
 // nome cheio do catálogo, só em maiúsculas.
@@ -260,13 +263,52 @@ export default function App() {
 
   // Última versão publicada, para avisar de atualização. Só dentro do Revit:
   // no navegador comum não há plugin instalado para comparar.
+  //
+  // Consulta na abertura e de novo a cada 20 minutos e sempre que a janela volta
+  // ao foco, para uma versão publicada com o Revit já aberto aparecer (e baixar
+  // sozinha) sem recarregar a página. Uma consulta por vez; se uma consulta
+  // falhar (sem rede), mantém a lista anterior em vez de apagá-la.
   const logado = !!sessao;
   useEffect(() => {
-    if (!logado || !estaDentroDoWebView2()) return;
-    listarVersoesPublicadas().then((r) => {
-      setArquivosPublicados(r?.arquivos ?? null);
-      setNotasPublicadas(r?.notas ?? []);
-    });
+    if (!logado || !estaDentroDoWebView2()) return undefined;
+    let consultando = false;
+    let ativo = true;
+
+    async function consultar() {
+      if (consultando) return;
+      consultando = true;
+      try {
+        const r = await listarVersoesPublicadas();
+        if (!ativo) return;
+        if (r) {
+          // Só troca o estado se a lista mudou: evita refazer o cálculo da
+          // atualização a cada consulta sem novidade.
+          setArquivosPublicados((anterior) =>
+            anterior && JSON.stringify(anterior) === JSON.stringify(r.arquivos) ? anterior : r.arquivos
+          );
+          setNotasPublicadas(r.notas ?? []);
+        } else {
+          setArquivosPublicados((anterior) => anterior ?? null);
+        }
+      } finally {
+        consultando = false;
+      }
+    }
+
+    function aoVoltarOFoco() {
+      if (document.visibilityState === "visible") consultar();
+    }
+
+    consultar();
+    const intervalo = window.setInterval(consultar, INTERVALO_CONSULTA_VERSOES_MS);
+    document.addEventListener("visibilitychange", aoVoltarOFoco);
+    window.addEventListener("focus", aoVoltarOFoco);
+    return () => {
+      ativo = false;
+      window.clearInterval(intervalo);
+      document.removeEventListener("visibilitychange", aoVoltarOFoco);
+      window.removeEventListener("focus", aoVoltarOFoco);
+    };
   }, [logado]);
 
   // A atualização a oferecer: pacote rápido (só Python) se servir a esta
