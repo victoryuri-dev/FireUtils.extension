@@ -620,7 +620,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
             self.doc.Regenerate()
             self._sincronizar_ordem()
 
-            _iniciar_rastreamento()
+            _iniciar_rastreamento(self.doc)
             erro = None
             try:
                 # _OUTPUT_MUDO (não self.output): ver docstring da classe,
@@ -642,7 +642,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
                 erro = u"{}".format(ex)
             except Exception as ex:
                 erro = u"Erro na prévia: {}".format(ex)
-            self._elementos_criados = _parar_rastreamento()
+            self._elementos_criados = _parar_rastreamento(self.doc)
 
             if erro is not None:
                 self._desfazer_elementos_criados()
