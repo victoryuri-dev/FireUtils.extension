@@ -109,6 +109,7 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
     # trecho), para a dockpane mostrar o mapeamento mesmo depois de reabrir.
     rotas, _erro_rotas = hidrantes_calc.carregar_cache(projeto_dir, chave=u"rotas")
     mapeamento = (rotas or {}).get(u"resumo")
+    pipe_types_por_etapa = (rotas or {}).get(u"pipe_types_por_etapa")
 
     try:
         limites = {
@@ -126,6 +127,7 @@ def tratar_get_hidrantes_dimensionamento(uiapp, postar_mensagem):
         u"norma": perfil.get(u"norma"),
         u"limites": limites,
         u"mapeamento": mapeamento,
+        u"pipeTypesPorEtapa": pipe_types_por_etapa,
         u"dimensionamento": cache,
         u"erroDimensionamento": None if cache else erro_cache,
     })

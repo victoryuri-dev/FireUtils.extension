@@ -46,10 +46,11 @@ from hidrantes.calc import extrair_trecho, salvar_cache, carregar_cache
 from hidrantes.rede import (
     get_id, to_element_id, get_diametro_no_trecho, get_comprimento, get_leq,
     get_nome, get_z, get_cota_conector, get_cota_rti, diagnostico_conectores,
-    get_tipo_conexao,
+    get_tipo_conexao, get_pipe_type_no_trecho,
 )
 from hidrantes.params import PROJECT_INFO_METODO_PARAM
 from hidrantes import succao as succao_calc
+from hidrantes import material_conexao as material_conexao_calc
 import motor_nuvem
 from family_error_utils import texto_erro
 
@@ -186,19 +187,52 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
 
     dados_succao = succao_calc.load_dados(doc) or succao_calc.default_dados()
 
-    # Etapa 4: extrair dados dos trechos (por diâmetro). O motor recalcula
-    # Ltotal e os totais de cada trecho — vai só o que o modelo informa.
-    def _diametro_fn(chave_trecho):
-        ids_no_trecho = set(get_id(e) for e in trechos_elems[chave_trecho])
+    # Etapa 4: extrair dados dos trechos (por diâmetro E por tipo de tubo —
+    # ver extrair_trecho/get_pipe_type_no_trecho). O motor recalcula Ltotal
+    # e os totais de cada trecho — vai só o que o modelo informa.
+    def _diametro_fn(nome_trecho):
+        ids_no_trecho = set(get_id(e) for e in trechos_elems[nome_trecho])
         return lambda e, _ids=ids_no_trecho: get_diametro_no_trecho(e, _ids)
 
+    def _pipe_type_fn(nome_trecho):
+        ids_no_trecho = set(get_id(e) for e in trechos_elems[nome_trecho])
+        return lambda e, _ids=ids_no_trecho: get_pipe_type_no_trecho(e, _ids)
+
+    # Material/sistema de conexão são escolhidos na dockpane por (etapa,
+    # pipe_type) — ver material_conexao.py. Pipe sem PipeType resolvível
+    # (ou trecho nunca configurado) usa material None/sistema "bsp", o
+    # mesmo comportamento de antes desta funcionalidade existir.
+    dados_material = material_conexao_calc.load_dados(doc)
+
+    def _tipo_conexao_fn(chave_t, pipe_type_fn):
+        def fn(elem, d_mm):
+            pipe_type_id, _nome = pipe_type_fn(elem) or (None, None)
+            _material, sistema = material_conexao_calc.get_escolha(dados_material, chave_t, pipe_type_id)
+            return get_tipo_conexao(elem, d_mm, sistema)
+        return fn
+
+    _TRECHOS_ORDEM = (
+        (u"t1", u"RTI - Bomba"),
+        (u"t2", u"Bomba - Ponto A"),
+        (u"t3", u"Ponto A - Hid 01"),
+        (u"t4", u"Ponto A - Hid 02"),
+    )
+
     try:
-        trechos_data = {
-            u"t1": extrair_trecho(trechos_elems[u"RTI - Bomba"],      get_comprimento, _diametro_fn(u"RTI - Bomba"),      get_leq, get_nome, get_id, get_tipo_conexao),
-            u"t2": extrair_trecho(trechos_elems[u"Bomba - Ponto A"],  get_comprimento, _diametro_fn(u"Bomba - Ponto A"),  get_leq, get_nome, get_id, get_tipo_conexao),
-            u"t3": extrair_trecho(trechos_elems[u"Ponto A - Hid 01"], get_comprimento, _diametro_fn(u"Ponto A - Hid 01"), get_leq, get_nome, get_id, get_tipo_conexao),
-            u"t4": extrair_trecho(trechos_elems[u"Ponto A - Hid 02"], get_comprimento, _diametro_fn(u"Ponto A - Hid 02"), get_leq, get_nome, get_id, get_tipo_conexao),
-        }
+        trechos_data = {}
+        for chave_t, nome_trecho in _TRECHOS_ORDEM:
+            pipe_type_fn = _pipe_type_fn(nome_trecho)
+            resultado = extrair_trecho(
+                trechos_elems[nome_trecho], get_comprimento, _diametro_fn(nome_trecho),
+                get_leq, get_nome, get_id, _tipo_conexao_fn(chave_t, pipe_type_fn), pipe_type_fn,
+            )
+            # O material é do TUBO (segmento), não da conexão — a conexão só
+            # herda o sistema de conexão (já resolvido acima, por conexão).
+            for seg in resultado[u"segmentos"]:
+                material, _sistema = material_conexao_calc.get_escolha(
+                    dados_material, chave_t, seg.get(u"pipe_type_id"))
+                seg[u"material"] = material
+            trechos_data[chave_t] = resultado
     except ValueError as ex:
         _erro(postar_mensagem, texto_erro(ex))
         return

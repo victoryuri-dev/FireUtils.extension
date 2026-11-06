@@ -97,7 +97,7 @@ import System.Windows as SW
 
 from Autodesk.Revit.DB import (
     Transaction, XYZ, Line, LocationCurve,
-    BuiltInParameter, FilteredElementCollector,
+    BuiltInParameter, BuiltInCategory, FilteredElementCollector,
     ElementId, UnitUtils, FamilyInstance,
 )
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
@@ -876,23 +876,55 @@ class _FiltroPipeRef(ISelectionFilter):
 # connect_shelter_core_preview) já registram o Id assim que criam,
 # enquanto o rastreamento está ativo — custo proporcional ao que ESTE
 # ciclo cria (poucos elementos), não ao tamanho do documento inteiro.
-_rastreador_ativo   = False
-_rastreador_criados = []
+_rastreador_ativo          = False
+_rastreador_criados        = []
+_rastreador_fittings_antes = set()
 
 
-def _iniciar_rastreamento():
+def _ids_pipe_fittings(doc):
+    """Ids de todos os FamilyInstance de categoria OST_PipeFitting no
+    documento agora — usado só por _iniciar_rastreamento/
+    _parar_rastreamento, pra pegar fittings de TRANSIÇÃO (redução/
+    ampliação) que o Revit insere sozinho (ver docstring de
+    _iniciar_rastreamento). Uma varredura filtrada por categoria (não o
+    documento inteiro) e só 2x por ciclo — não reintroduz o custo que o
+    bloco de comentário acima descreve."""
+    return set(
+        FilteredElementCollector(doc)
+        .OfCategory(BuiltInCategory.OST_PipeFitting)
+        .WhereElementIsNotElementType()
+        .ToElementIds()
+    )
+
+
+def _iniciar_rastreamento(doc):
     """Chamado no início de um ciclo de prévia (_ciclo_preview) — zera e
-    liga o rastreamento antes de construir a conexão."""
-    global _rastreador_ativo, _rastreador_criados
-    _rastreador_ativo   = True
-    _rastreador_criados = []
+    liga o rastreamento antes de construir a conexão. Também guarda quais
+    fittings de tubo já existiam ANTES — ver _parar_rastreamento."""
+    global _rastreador_ativo, _rastreador_criados, _rastreador_fittings_antes
+    _rastreador_ativo          = True
+    _rastreador_criados        = []
+    _rastreador_fittings_antes = _ids_pipe_fittings(doc)
 
 
-def _parar_rastreamento():
+def _parar_rastreamento(doc):
     """Desliga o rastreamento e retorna o conjunto de Ids registrados
-    nesta rodada — chamado no fim de _ciclo_preview."""
+    nesta rodada — chamado no fim de _ciclo_preview.
+
+    Além dos Ids registrados explicitamente via _rastrear, inclui
+    qualquer fitting de TRANSIÇÃO (redução/ampliação) que o Revit tenha
+    inserido sozinho ao ligar (ConnectTo/NewElbowFitting/NewTeeFitting)
+    dois conectores de diâmetros diferentes — ver connect_shelter's
+    diâmetro por trecho. Esse fitting nunca passa por _rastrear() porque
+    não vem de uma chamada explícita nossa (é efeito colateral do próprio
+    Revit), então ficava órfão no modelo — sem conexão com nada — assim
+    que um ciclo seguinte desfazia só os elementos que a gente sabia ter
+    criado (ex.: usuário iguala os diâmetros de novo, ou cancela a
+    ferramenta). Detectado comparando os fittings de tubo do documento
+    antes/depois deste ciclo (_rastreador_fittings_antes)."""
     global _rastreador_ativo
-    ids = set(_rastreador_criados)
+    ids  = set(_rastreador_criados)
+    ids |= (_ids_pipe_fittings(doc) - _rastreador_fittings_antes)
     _rastreador_ativo = False
     return ids
 
@@ -1170,7 +1202,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
             self.doc.Regenerate()
             self._sincronizar_ordem()
 
-            _iniciar_rastreamento()
+            _iniciar_rastreamento(self.doc)
             erro = None
             try:
                 # _OUTPUT_MUDO (não self.output): ver docstring da classe —
@@ -1189,7 +1221,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
                 erro = u"{}".format(ex)
             except Exception as ex:
                 erro = u"Erro na prévia: {}".format(ex)
-            self._elementos_criados = _parar_rastreamento()
+            self._elementos_criados = _parar_rastreamento(self.doc)
 
             if erro is not None:
                 self._desfazer_elementos_criados()
@@ -1600,7 +1632,8 @@ def _ponto_sobre_corpo(P, pt_A, pt_B, d_ref):
 
 def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                         ordem_eixos=(u"z", u"par", u"perp"),
-                        modo_conexao_ref=u"auto"):
+                        modo_conexao_ref=u"auto",
+                        diametros_trecho=None):
     """
     Lógica pura de conexão — NÃO abre/fecha transação (fica a cargo de
     quem chama: _conectar, no fluxo direto, ou a janela de prévia, que
@@ -1633,6 +1666,16 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
                               corpo de pipe_ref), mesmo perto de uma ponta.
                         "auto"  (compatibilidade, sem diálogo) → heurística
                               antiga por proximidade do clique.
+    diametros_trecho : dict opcional {"z"/"par"/"perp": diam_ft} — diâmetro
+                              a usar no tubo criado para aquele eixo
+                              específico, em vez do diâmetro padrão herdado
+                              de pipe_desc (ver _pipe_params). Eixo ausente
+                              do dict usa o diâmetro padrão. Quando o 1º
+                              trecho acaba sendo uma EXTENSÃO do próprio
+                              pipe_desc (não um tubo novo — ver
+                              _tenta_estender_colinear e a extensão direta
+                              de tubo vertical), o diâmetro escolhido pra
+                              esse eixo é aplicado em pipe_desc também.
     """
 
     eh_fitting_ref = not isinstance(pipe_ref, Pipe)
@@ -1897,6 +1940,9 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
         if P_cur.DistanceTo(P_next) <= tol_leg:
             continue
 
+        diam_trecho = (diametros_trecho.get(eixo, diam_ft)
+                       if diametros_trecho else diam_ft)
+
         estendeu = False
         if primeira_perna and eixo == u"z" and _pipe_is_vertical(pipe_desc):
             # pipe_desc já é vertical: estende/encolhe a própria curva até
@@ -1920,8 +1966,11 @@ def _construir_conexao(doc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, ou
             if estendeu:
                 conn_cur = _conn_near(pipe_desc, P_next)
 
-        if not estendeu:
-            seg   = _mk_pipe(doc, P_cur, P_next, pt_id, sys_id, lvl_id, diam_ft)
+        if estendeu:
+            if diametros_trecho and eixo in diametros_trecho:
+                _set_diam(pipe_desc, diam_trecho)
+        else:
+            seg   = _mk_pipe(doc, P_cur, P_next, pt_id, sys_id, lvl_id, diam_trecho)
             c_ini = _conn_near(seg, P_cur)
             c_fim = _conn_near(seg, P_next)
             _elbows_pend.append((conn_cur, c_ini))

@@ -67,12 +67,13 @@ from projeto import carregar_dados_projeto, salvar_ponteiro
 from hidrantes.params import create_hydrant_params
 from hidrantes.norm_profiles import get_profile, req, NormProfileError
 from hidrantes.sistema import resolver_dados_sistema_puro
-from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache
+from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache, combinacoes_pipe_type
 from hidrantes.rede import (
     get_id, to_element_id, get_primeiro_tubo, bfs_ate,
     percorre_rotas_hidrantes, get_pontas_abertas, descricao_curta_elemento,
     todas_valvulas_hidrante, get_cota_conector, diagnostico_conectores,
     get_comprimento, get_diametro_no_trecho, get_leq, get_nome,
+    get_pipe_type_no_trecho,
 )
 from family_error_utils import texto_erro
 
@@ -546,16 +547,43 @@ def _gravar(doc, ctx):
             nome = u"{}º hidrante mais desfavorável (H-{:02d})".format(i + 1, i + 1)
         trechos.append({u"nome": nome, u"eids": list(c[u"rota"]), u"perda": c[u"J"]})
 
+    # Combinações (tipo de tubo, diâmetros) por etapa — pra dockpane desenhar
+    # o seletor de material/sistema de conexão (ver material_conexao.py).
+    # Mesmos 4 conjuntos de elementos que "Dimensionar" vai usar depois
+    # (payload_rotas.t1-t4 na próxima chamada são exatamente estes ids).
+    def _combinacoes(ids):
+        elems = [doc.GetElement(to_element_id(eid)) for eid in ids]
+        ids_set = set(ids)
+        return combinacoes_pipe_type(
+            elems,
+            lambda e, _ids=ids_set: get_diametro_no_trecho(e, _ids),
+            lambda e, _ids=ids_set: get_pipe_type_no_trecho(e, _ids),
+            get_id,
+        )
+
+    pipe_types_por_etapa = {
+        u"t1": _combinacoes(ids_succao),
+        u"t2": _combinacoes(ids_rec_comum),
+        u"t3": _combinacoes(ids_ramal_h1),
+        u"t4": _combinacoes(ids_ramal_h2),
+    }
+
     # Cache 'rotas': lido pelo dimensionamento por ElementId, sem depender dos
-    # parâmetros. `resumo` é só para a dockpane reexibir o mapeamento depois.
+    # parâmetros. `resumo`/`pipe_types_por_etapa` são só para a dockpane
+    # reexibir o mapeamento (e o seletor de material/conexão) depois de
+    # reabrir, sem precisar mapear de novo.
     salvar_cache({
-        u"t1":         list(ids_succao),
-        u"t2":         list(ids_rec_comum),
-        u"t3":         list(ids_ramal_h1),
-        u"t4":         list(ids_ramal_h2),
-        u"ponto_a_id": ponto_a_id,
-        u"ranking":    ranking_hidrantes,
-        u"resumo":     trechos,
+        u"t1":                  list(ids_succao),
+        u"t2":                  list(ids_rec_comum),
+        u"t3":                  list(ids_ramal_h1),
+        u"t4":                  list(ids_ramal_h2),
+        u"ponto_a_id":          ponto_a_id,
+        u"ranking":             ranking_hidrantes,
+        u"resumo":              trechos,
+        u"pipe_types_por_etapa": pipe_types_por_etapa,
     }, ctx[u"projeto_dir"], chave=u"rotas")
 
-    return {u"ok": True, u"trechos": trechos, u"ignorados": ctx[u"ignorados"]}
+    return {
+        u"ok": True, u"trechos": trechos, u"ignorados": ctx[u"ignorados"],
+        u"pipe_types_por_etapa": pipe_types_por_etapa,
+    }
