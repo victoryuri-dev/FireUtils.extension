@@ -88,6 +88,18 @@ function rotuloRisco(cargaIncendio) {
  * CNAE por pavimento (depende da tabela normativa própria do site,
  * data/normas — aqui só confere se a divisão foi preenchida). */
 function calcCompletude(dados) {
+  // Projeto "Dimensionamento de hidrantes" (formulário único do site): só
+  // nome, área, ocupação, carga de cada divisão e o Tipo classificado.
+  if (dados.tipoProjeto === "hidrantes") {
+    const checks = [!!dados.nome, !!(dados.hidrantes && dados.hidrantes.tipo)];
+    (dados.estruturas || []).forEach((e) => {
+      const pavs = (dados.pavimentos || []).filter((p) => p.estruturaId === e.id);
+      const divs = Array.from(new Set(pavs.flatMap((p) => [p.divisao, ...(p.acess || []).map((a) => a.divisao)]).filter(Boolean)));
+      checks.push(paraNumero(e.areaTotal) > 0, divs.length > 0);
+      divs.forEach((d) => checks.push(cargaDaDivisao(d, dados.cargaState && dados.cargaState[e.id]) != null));
+    });
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }
   const areaEstruturas = (dados.estruturas || []).reduce((soma, e) => soma + (paraNumero(e.areaTotal) || 0), 0);
   const area = paraNumero(dados.areaConstruidaTotal) || areaEstruturas;
   const checks = [
@@ -122,7 +134,7 @@ export function resumoProjeto(linha) {
     ocupacao: rotuloOcupacao(dados.pavimentos) || "—",
     risco: rotuloRisco(maiorCargaIncendio(dados.cargaState)),
     pavimentosLabel: rotuloPavimentos(dados.estruturas),
-    tipoProjetoLabel: dados.tipoProjeto === "dimensionamento" ? "Dimensionamento" : "Técnico",
+    tipoProjetoLabel: dados.tipoProjeto === "dimensionamento" ? "Dimensionamento" : dados.tipoProjeto === "hidrantes" ? "Hidrantes" : "Técnico",
     completude: { pct, tom: tomPorCompletude(pct) },
     createdAt: dados.createdAt || linha.created_at || null,
     updatedAt: dados.updatedAt || linha.updated_at,
