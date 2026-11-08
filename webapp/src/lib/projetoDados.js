@@ -90,6 +90,11 @@ function rotuloRisco(cargaIncendio) {
 function calcCompletude(dados) {
   // Projeto "Dimensionamento de hidrantes" (formulário único do site): só
   // nome, área, ocupação, carga de cada divisão e o Tipo classificado.
+  if (dados.tipoProjeto === "hidrantes" && dados.avulso) {
+    // Avulso: só nome, Tipo e RTI (sem área/ocupação/carga).
+    const checks = [!!dados.nome, !!(dados.hidrantes && dados.hidrantes.tipo), paraNumero(dados.hidrantes && dados.hidrantes.rti) > 0];
+    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  }
   if (dados.tipoProjeto === "hidrantes") {
     const checks = [!!dados.nome, !!(dados.hidrantes && dados.hidrantes.tipo)];
     (dados.estruturas || []).forEach((e) => {
@@ -129,7 +134,7 @@ export function resumoProjeto(linha) {
   return {
     id: linha.id,
     nome: dados.nome || linha.nome,
-    uf: dados.uf || null,
+    uf: dados.avulso ? "Avulso" : dados.uf || null,
     areaConstruida: paraNumero(dados.areaConstruidaTotal),
     ocupacao: rotuloOcupacao(dados.pavimentos) || "—",
     risco: rotuloRisco(maiorCargaIncendio(dados.cargaState)),
