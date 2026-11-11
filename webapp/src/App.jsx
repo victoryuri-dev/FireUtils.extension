@@ -181,6 +181,12 @@ export default function App() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params}${window.location.hash}`);
   }, [abaAtual]);
 
+  // Disparado sozinho (sem botão próprio) assim que ESTRUTURA_ATRIBUIDA
+  // confirma o sucesso de atribuirEstrutura — ver o listener logo abaixo.
+  // O botão "Atribuir e Gravar" da dockpane (DashboardEstrutura.jsx)
+  // encadeia as duas ações num clique só: não há razão pra separar
+  // "marcar a seleção" de "gravar e enviar", já que quem atribui estrutura
+  // é justamente quem está preparando os dados pra mandar em seguida.
   function gravarQuantitativos() {
     if (gravandoQuantitativos) return;
     setGravandoQuantitativos(true);
@@ -617,6 +623,11 @@ export default function App() {
           mensagem: `${marcados} elemento(s) marcado(s)${ignorados ? ` • ${ignorados} ignorado(s) (categoria sem o parâmetro)` : ""}`,
           duracaoMs: 7000,
         });
+        // Atribuir e gravar são um botão só (ver AtribuirEstruturaCartao em
+        // DashboardEstrutura.jsx) — assim que a atribuição confirma, já
+        // encadeia a gravação/envio dos quantitativos do projeto inteiro,
+        // sem esperar um segundo clique.
+        gravarQuantitativos();
         return;
       }
 
@@ -868,7 +879,6 @@ export default function App() {
             modo={abaAtual}
             onAbrirSaidaEmergencia={() => setAbaAtual("saidas")}
             onAbrirHidrantes={() => setAbaAtual("hidrantes")}
-            onGravarQuantitativos={gravarQuantitativos}
             gravandoQuantitativos={gravandoQuantitativos}
             onAtribuirEstrutura={atribuirEstrutura}
             atribuindoEstrutura={atribuindoEstrutura}

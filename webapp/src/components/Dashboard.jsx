@@ -81,7 +81,6 @@ export default function Dashboard({
   modo,
   onAbrirSaidaEmergencia,
   onAbrirHidrantes,
-  onGravarQuantitativos,
   gravandoQuantitativos,
   onAtribuirEstrutura,
   atribuindoEstrutura,
@@ -279,7 +278,6 @@ export default function Dashboard({
       modo={modo}
       onAbrirSaidaEmergencia={onAbrirSaidaEmergencia}
       onAbrirHidrantes={onAbrirHidrantes}
-      onGravarQuantitativos={onGravarQuantitativos}
       gravandoQuantitativos={gravandoQuantitativos}
       onAtribuirEstrutura={onAtribuirEstrutura}
       atribuindoEstrutura={atribuindoEstrutura}

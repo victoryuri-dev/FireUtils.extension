@@ -198,12 +198,6 @@ function rotuloPavimentosEstrutura(estrutura) {
   return `${nPav} pav.${nSub ? ` + ${nSub} subsolo${nSub !== 1 ? "s" : ""}` : ""}`;
 }
 
-// `dimensionado` cobre o caso comum (status persistente: Pendente/
-// Dimensionado/Verificando...). "Gravar Quantitativos" não tem esse
-// conceito — é uma ação disparável de novo a qualquer momento, não um
-// estado que fica "concluído" — por isso usa `dimensionado={null}` (sem
-// badge nenhum, só o botão) + `carregando` (status "Gravando..." enquanto
-// o host processa, mesmo "Verificando..." visual dos outros cartões).
 function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotuloConcluido = "Dimensionado", carregando = false, rotuloCarregando = "Verificando..." }) {
   const Tag = onClick ? "button" : "div";
   return (
@@ -232,14 +226,25 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotulo
  * precisa de um valor escolhido antes de poder agir, então não cabe no
  * padrão de clique único dos outros cartões (CartaoDimensionamento). Lista
  * só as estruturas vinculadas a este arquivo (`estruturasVinculadas`, ver
- * Dashboard.jsx) — nunca escreve nada sozinho: só quando "Atribuir" é
- * clicado. */
-function AtribuirEstruturaCartao({ estruturas, onAtribuir, atribuindo }) {
+ * Dashboard.jsx) — nunca escreve nada sozinho: só quando o botão é
+ * clicado.
+ *
+ * Um clique só faz as duas coisas: atribui a estrutura escolhida à seleção
+ * atual do Revit e, se der certo, já grava e envia os quantitativos do
+ * projeto inteiro pro site — dois cliques separados (atribuir, depois
+ * gravar) nunca tiveram razão de ser: quem atribui estrutura é justamente
+ * quem está preparando os dados pra mandar em seguida. O encadeamento
+ * mora em App.jsx (ver handler de ESTRUTURA_ATRIBUIDA, que dispara
+ * gravarQuantitativos() sozinho) — aqui só reflete as duas fases de
+ * carregamento (`atribuindo` e `gravando`) num botão só. */
+function AtribuirEstruturaCartao({ estruturas, onAtribuir, atribuindo, gravando }) {
   const [escolhidaId, setEscolhidaId] = useState(estruturas[0]?.id || "");
 
   if (estruturas.length === 0) return null;
 
   const estruturaEscolhida = estruturas.find((e) => e.id === escolhidaId);
+  const processando = atribuindo || gravando;
+  const rotuloBotao = atribuindo ? "Atribuindo..." : gravando ? "Gravando..." : "Atribuir e Gravar";
 
   return (
     <div className="cartao-dimensionamento cartao-atribuir-estrutura">
@@ -248,7 +253,7 @@ function AtribuirEstruturaCartao({ estruturas, onAtribuir, atribuindo }) {
       </span>
       <span className="cartao-dimensionamento-titulo">Atribuir seleção à estrutura</span>
       <div className="cartao-atribuir-estrutura-controles">
-        <select value={escolhidaId} onChange={(e) => setEscolhidaId(e.target.value)} disabled={atribuindo}>
+        <select value={escolhidaId} onChange={(e) => setEscolhidaId(e.target.value)} disabled={processando}>
           {estruturas.map((e) => (
             <option key={e.id} value={e.id}>
               {e.nome}
@@ -258,10 +263,10 @@ function AtribuirEstruturaCartao({ estruturas, onAtribuir, atribuindo }) {
         <button
           type="button"
           className="botao accent"
-          disabled={atribuindo || !estruturaEscolhida}
+          disabled={processando || !estruturaEscolhida}
           onClick={() => onAtribuir(estruturaEscolhida.nome)}
         >
-          {atribuindo ? "Atribuindo..." : "Atribuir"}
+          {rotuloBotao}
         </button>
       </div>
     </div>
@@ -279,7 +284,6 @@ export default function DashboardEstrutura({
   modo = "dashboard",
   onAbrirSaidaEmergencia,
   onAbrirHidrantes,
-  onGravarQuantitativos,
   gravandoQuantitativos,
   onAtribuirEstrutura,
   atribuindoEstrutura,
@@ -443,18 +447,11 @@ export default function DashboardEstrutura({
           rotuloConcluido="Correlacionado"
           onClick={() => setMostrarCorrelacaoNiveis(true)}
         />
-        <CartaoDimensionamento
-          titulo="Gravar Quantitativos"
-          iconeSvg={saveIconSvg}
-          dimensionado={null}
-          carregando={gravandoQuantitativos}
-          rotuloCarregando="Gravando..."
-          onClick={onGravarQuantitativos}
-        />
         <AtribuirEstruturaCartao
           estruturas={estruturasVinculadas}
           onAtribuir={onAtribuirEstrutura}
           atribuindo={atribuindoEstrutura}
+          gravando={gravandoQuantitativos}
         />
       </div>
 
