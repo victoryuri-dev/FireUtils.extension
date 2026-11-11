@@ -97,24 +97,55 @@ def eh_equipamento(elem):
     except: return False
 
 
+P_ID_HIDRANTE = u"FireUtils - ID Hidrante"
+ID_HIDRANTE_PENDENTE = u"H-?"   # marcador até o ranking numerar (H-01, H-02...)
+
+
+def eh_acessorio_tubulacao(elem):
+    """True se `elem` for da categoria Acessórios de tubulação."""
+    try:
+        cat = elem.Category
+        if not cat: return False
+        cat_id = cat.Id
+        cat_int = cat_id.Value if hasattr(cat_id, "Value") else cat_id.IntegerValue
+        return cat_int == int(BuiltInCategory.OST_PipeAccessory)
+    except: return False
+
+
+def tem_id_hidrante(elem):
+    """True se o parâmetro 'FireUtils - ID Hidrante' existe e está preenchido."""
+    try:
+        p = elem.LookupParameter(P_ID_HIDRANTE)
+        return bool(p and p.AsString())
+    except: return False
+
+
 def eh_valvula_hidrante(elem):
-    """True se `elem` for uma instância da família 'Valvula para Hidrante'
-    (lib/family_library/Hidrantes/) - fim de uma rota de recalque na
-    travessia em árvore (percorre_rotas_hidrantes)."""
+    """True se `elem` for uma válvula de hidrante - fim de uma rota de
+    recalque na travessia em árvore (percorre_rotas_hidrantes).
+
+    Critério principal, independente da família do template: Acessório de
+    tubulação com 'FireUtils - ID Hidrante' preenchido (gravado por "Mapear
+    Trechos", inclusive nas válvulas que o usuário clica quando o projeto
+    ainda não tem nenhuma marcada). Mantém por compatibilidade a família
+    'Valvula para Hidrante' (lib/family_library/Hidrantes/), que vale
+    mesmo sem o parâmetro preenchido."""
     if not isinstance(elem, FamilyInstance):
         return False
+    if eh_acessorio_tubulacao(elem) and tem_id_hidrante(elem):
+        return True
     try:
         return elem.Symbol.Family.Name == _NOME_FAMILIA_VALVULA
     except: return False
 
 
 def todas_valvulas_hidrante(doc):
-    """Todas as instâncias de 'Valvula para Hidrante' no projeto inteiro,
-    independente de estarem conectadas à rede de recalque - usado por
-    "Mapear Trechos" pra achar válvulas que existem no modelo mas nunca
-    foram alcançadas por percorre_rotas_hidrantes (sinal de que a rede
-    está quebrada em algum ponto antes delas, não só um galho morto sem
-    válvula nenhuma)."""
+    """Todas as válvulas de hidrante do projeto inteiro (ver
+    eh_valvula_hidrante), independente de estarem conectadas à rede de
+    recalque - usado por "Mapear Trechos" pra achar válvulas que existem
+    no modelo mas nunca foram alcançadas por percorre_rotas_hidrantes
+    (sinal de que a rede está quebrada em algum ponto antes delas, não só
+    um galho morto sem válvula nenhuma)."""
     return [e for e in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements()
             if eh_valvula_hidrante(e)]
 

@@ -73,7 +73,7 @@ from hidrantes.rede import (
     percorre_rotas_hidrantes, get_pontas_abertas, descricao_curta_elemento,
     todas_valvulas_hidrante, get_cota_conector, diagnostico_conectores,
     get_comprimento, get_diametro_no_trecho, get_leq, get_nome,
-    get_pipe_type_no_trecho,
+    get_pipe_type_no_trecho, eh_acessorio_tubulacao, ID_HIDRANTE_PENDENTE,
 )
 from family_error_utils import texto_erro
 
@@ -114,6 +114,58 @@ class _FiltroEquipamento(ISelectionFilter):
 
     def AllowReference(self, r, p):
         return False
+
+
+class _FiltroAcessorio(ISelectionFilter):
+    """Só Acessórios de tubulação (categoria onde mora 'ID Hidrante')."""
+    def AllowElement(self, e):
+        return isinstance(e, FamilyInstance) and eh_acessorio_tubulacao(e)
+
+    def AllowReference(self, r, p):
+        return False
+
+
+def _marcar_valvulas_clicadas(uidoc, postar_mensagem):
+    """O projeto não tem nenhuma válvula identificada (nenhum Acessório de
+    tubulação com 'ID Hidrante' preenchido e nenhuma família conhecida):
+    pede para o usuário clicar nas válvulas de hidrante no Revit e grava
+    o parâmetro nelas. O valor é provisório (H-?); o ranking numera
+    H-01, H-02... em _gravar. Esc cancela o mapeamento."""
+    doc = uidoc.Document
+    postar_mensagem(_TIPO_PROGRESSO, {
+        u"instrucao": u"Nenhuma válvula de hidrante identificada no projeto. "
+                      u"Clique em TODAS as válvulas de hidrante (Acessórios de "
+                      u"tubulação) no Revit e clique em Concluir.",
+    })
+    try:
+        refs = uidoc.Selection.PickObjects(
+            ObjectType.Element, _FiltroAcessorio(),
+            u"Selecione as válvulas de hidrante e clique em Concluir")
+    except OperationCanceledException:
+        raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
+
+    valvulas = [doc.GetElement(r.ElementId) for r in refs]
+    if not valvulas:
+        raise _Interrompido(u"Nenhuma válvula foi selecionada.")
+
+    sem_param = []
+    with Transaction(doc, u"FireUtils - Marcar Válvulas de Hidrante") as t:
+        t.Start()
+        try:
+            for v in valvulas:
+                if not _set_param(v, P_ID_HIDRANTE, ID_HIDRANTE_PENDENTE):
+                    sem_param.append(v)
+            t.Commit()
+        except Exception as ex:
+            t.RollBack()
+            raise _Interrompido(
+                u"Erro ao marcar as válvulas: {}".format(texto_erro(ex)), u"servidor")
+    if sem_param:
+        raise _Interrompido(
+            u"Não foi possível gravar '{}' em {} válvula(s) (ex.: ID {}). "
+            u"Verifique se o parâmetro está vinculado a Acessórios de tubulação "
+            u"e não é somente leitura.".format(
+                P_ID_HIDRANTE, len(sem_param), sem_param[0].Id))
 
 
 def _selecionar(uidoc, postar_mensagem, instrucao, prompt, filtro):
@@ -276,6 +328,11 @@ def _mapear(uiapp, postar_mensagem):
             u"Tubo de recalque da bomba", _FiltroTubo())
         interm_recalque_bomba = []
 
+    # Válvulas de hidrante: identificadas por 'ID Hidrante' (Acessórios de
+    # tubulação), não mais só pela família. Sem nenhuma, o usuário clica.
+    if not todas_valvulas_hidrante(doc):
+        _marcar_valvulas_clicadas(uidoc, postar_mensagem)
+
     postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": u"Percorrendo a rede…"})
 
     eid_rti = get_id(tubo_rti)
@@ -363,7 +420,7 @@ def _mapear(uiapp, postar_mensagem):
                 u"Corrija a tubulação nos pontos abaixo.",
                 u"inconsistencia", itens_recalque)
         raise _Interrompido(
-            u"Nenhuma válvula de hidrante ('Valvula para Hidrante') foi encontrada "
+            u"Nenhuma válvula de hidrante (Acessório com 'FireUtils - ID Hidrante') foi encontrada "
             u"percorrendo a rede a partir da saída da bomba. Verifique se a tubulação "
             u"de recalque está conectada até as válvulas.")
 
@@ -491,7 +548,13 @@ def _gravar(doc, ctx):
                 for nome_p in (P_TRECHO, P_IDENTIFICADOR, P_ID_HIDRANTE):
                     p = elem.LookupParameter(nome_p)
                     if p and not p.IsReadOnly and p.AsString():
-                        p.Set(u"")
+                        # 'ID Hidrante' de um Acessório é o que o identifica
+                        # como válvula: nunca zera, só volta a "pendente"
+                        # (o ranking abaixo renumera as alcançadas).
+                        if nome_p == P_ID_HIDRANTE and eh_acessorio_tubulacao(elem):
+                            p.Set(ID_HIDRANTE_PENDENTE)
+                        else:
+                            p.Set(u"")
 
             # RTI e bomba marcados na própria família, para o dimensionamento
             # achar o elemento sem percorrer a rede. Se a RTI não foi achada

@@ -86,6 +86,18 @@ PARAMS_CONFIG = [
         "instancia":  True,
         "grupo_ui":   "PG_DATA",
     },
+    {
+        # Também é o MARCADOR de "este acessório é uma válvula de hidrante":
+        # "Mapear Trechos" reconhece como válvula qualquer Acessório de
+        # tubulação com este parâmetro preenchido (ver eh_valvula_hidrante em
+        # rede.py) e, se não achar nenhuma, pede para o usuário clicar nelas.
+        "nome":       u"FireUtils - ID Hidrante",
+        "tipo_novo":  "Text",
+        "tipo_legado": "Text",
+        "categorias": [BuiltInCategory.OST_PipeAccessory],
+        "instancia":  True,
+        "grupo_ui":   "PG_DATA",
+    },
     # Parâmetros de mapeamento de trechos
     # Aplicados a tubos, acessórios e conexões de tubo
     {
