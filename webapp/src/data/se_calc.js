@@ -28,13 +28,29 @@ export function capPavimento(pav, taxaPopulacional) {
   return capAmbientes(pav.ambientes, taxaPopulacional)
 }
 
-/** Calcula a população de um ambiente */
-export function calcPopAmb(amb, taxaPopulacional) {
+/** Taxa da arquibancada (nota Q): 1 pessoa por 0,50 m linear de banco. */
+export const ARQUIBANCADA_TAXA = { M: 0.5, obs: '1 pessoa por 0,50 m linear' }
+
+/** Só a ocupação F-3 (centro esportivo e de exibição) tem arquibancada. */
+export const divisaoComArquibancada = divisao => divisao === 'F-3'
+
+/** População da arquibancada: comprimento de banco (m) / 0,50 m por pessoa. */
+export function calcPopArquibancada(amb) {
+  if (!amb.arquibancada || !divisaoComArquibancada(amb.divisao)) return 0
+  return Math.ceil((parseFloat(amb.arquibancadaComprimento) || 0) / ARQUIBANCADA_TAXA.M)
+}
+
+function calcPopBase(amb, taxaPopulacional) {
   if (amb.popTipo === 'fixo')   return Math.max(0, parseInt(amb.assentos)  || 0)
   if (amb.popTipo === 'manual') return Math.max(0, parseInt(amb.popManual) || 0)
   const taxa = taxaPopulacional[amb.divisao]
   if (!taxa || taxa.A === null) return Math.max(0, parseInt(amb.popManual) || 0)
   return Math.ceil((parseFloat(amb.area) || 0) / taxa.A)
+}
+
+/** Calcula a população de um ambiente (+ arquibancada, quando houver) */
+export function calcPopAmb(amb, taxaPopulacional) {
+  return calcPopBase(amb, taxaPopulacional) + calcPopArquibancada(amb)
 }
 
 /** Calcula a população total de um pavimento */

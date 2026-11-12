@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Icon from "../Icon";
-import { taxaOpcoes, popTipoPadrao, calcPT } from "../../data/se_calc";
+import { taxaOpcoes, popTipoPadrao, calcPT, calcPopArquibancada, divisaoComArquibancada, ARQUIBANCADA_TAXA } from "../../data/se_calc";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 import xIconSvg from "../../assets/icons/x-icon.svg?raw";
 
@@ -60,7 +60,7 @@ function DivisaoSelect({ value, onChange, ocupacoes }) {
 // rodapé.
 export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, larguras }) {
   const { TAXA_POPULACIONAL, NOTAS_NORMATIVAS } = seNorma;
-  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", popManual: "" };
+  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" };
   const [form, setForm] = useState(() =>
     initial
       ? {
@@ -69,6 +69,8 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           area: initial.area ? String(initial.area) : "",
           assentos: initial.assentos ? String(initial.assentos) : "",
           popManual: initial.popManual ? String(initial.popManual) : "",
+          arquibancada: !!initial.arquibancada,
+          arquibancadaComprimento: initial.arquibancadaComprimento ? String(initial.arquibancadaComprimento) : "",
         }
       : blank
   );
@@ -79,14 +81,18 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
   const isFixo = form.popTipo === "fixo";
   const isArea = form.popTipo === "area";
 
+  const temArquibancada = divisaoComArquibancada(form.divisao);
+  const arquibancadaOn = temArquibancada && form.arquibancada;
+
   const popCalc = () => {
-    if (isFixo) return parseInt(form.assentos) || 0;
-    if (isManual) return parseInt(form.popManual) || 0;
-    return taxa?.A && form.area ? Math.ceil(parseFloat(form.area) / taxa.A) : 0;
+    const arq = calcPopArquibancada({ divisao: form.divisao, arquibancada: form.arquibancada, arquibancadaComprimento: form.arquibancadaComprimento });
+    if (isFixo) return (parseInt(form.assentos) || 0) + arq;
+    if (isManual) return (parseInt(form.popManual) || 0) + arq;
+    return (taxa?.A && form.area ? Math.ceil(parseFloat(form.area) / taxa.A) : 0) + arq;
   };
 
   const setDivisao = (div) =>
-    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), area: "", assentos: "", popManual: "" }));
+    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), area: "", assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" }));
   const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, area: "", assentos: "", popManual: "" }));
 
   const canSave = () => {
@@ -94,6 +100,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
     if (isArea && !form.area) return false;
     if (isFixo && !form.assentos) return false;
     if (isManual && !form.popManual) return false;
+    if (arquibancadaOn && !(parseFloat(form.arquibancadaComprimento) > 0)) return false;
     return true;
   };
 
@@ -105,6 +112,8 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
       area: parseFloat(form.area) || 0,
       assentos: parseInt(form.assentos) || 0,
       popManual: parseInt(form.popManual) || 0,
+      arquibancada: arquibancadaOn,
+      arquibancadaComprimento: arquibancadaOn ? parseFloat(form.arquibancadaComprimento) || 0 : 0,
     });
   };
 
@@ -170,6 +179,37 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
                 onKeyDown={(e) => e.key === "Enter" && handleSave()}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {temArquibancada && (
+        <div>
+          <Toggle
+            label="Possui arquibancada?"
+            checked={form.arquibancada}
+            onChange={(v) => setForm((f) => ({ ...f, arquibancada: v, arquibancadaComprimento: "" }))}
+          />
+        </div>
+      )}
+
+      {arquibancadaOn && (
+        <div className="se-form-row">
+          <div>
+            <div className="se-label">Taxa normativa (arquibancada)</div>
+            <div className="se-select se-select-fixo">{ARQUIBANCADA_TAXA.obs}</div>
+          </div>
+          <div>
+            <div className="se-label">Comprimento de banco (m)</div>
+            <input
+              className="se-input"
+              type="number"
+              min="0"
+              placeholder="ex.: 40"
+              value={form.arquibancadaComprimento}
+              onChange={(e) => setForm((f) => ({ ...f, arquibancadaComprimento: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            />
           </div>
         </div>
       )}
