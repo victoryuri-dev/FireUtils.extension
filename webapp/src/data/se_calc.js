@@ -286,6 +286,9 @@ export function getDistanciaPavimento(pav, nSaidas, temChuveiros, temDeteccao, d
   return getDistancia(pav.divisao, pav.pisoDescarga, nSaidas, temChuveiros, temDeteccao, distanciasMaximas)
 }
 
+/** Rótulo da taxa global "população estimada" (popTipo 'manual'). */
+export const POPULACAO_ESTIMADA_LABEL = 'População estimada'
+
 /** Retorna as opções de taxa disponíveis para a divisão */
 export function taxaOpcoes(divisao, taxaPopulacional) {
   const taxa = taxaPopulacional[divisao]
@@ -294,6 +297,8 @@ export function taxaOpcoes(divisao, taxaPopulacional) {
   if (taxa.A !== null) opts.push({ value:'area',   label: taxa.obs })
   if (taxa.notas?.includes('N')) opts.push({ value:'fixo', label:'Assentos fixos' })
   if (taxa.A === null)  opts.push({ value:'manual', label: taxa.obs })
+  // Taxa global, vale pra qualquer ocupação: o usuário informa direto a população.
+  else opts.push({ value:'manual', label: POPULACAO_ESTIMADA_LABEL })
   return opts
 }
 

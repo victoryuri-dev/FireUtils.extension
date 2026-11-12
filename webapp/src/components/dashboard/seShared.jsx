@@ -117,7 +117,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
     });
   };
 
-  const inputLabel = isArea ? "Área (m²)" : isFixo ? "Assentos" : "N° de pessoas";
+  const inputLabel = isArea ? "Área (m²)" : isFixo ? "Assentos" : "População estimada (pessoas)";
   const pop = popCalc();
   const nUP = larguras ? calcPT(pop, taxa?.PT ?? 100, larguras).n : null;
 
