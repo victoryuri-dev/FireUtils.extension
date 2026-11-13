@@ -50,8 +50,21 @@
     </Window.Resources>
 
     <StackPanel Margin="10,10,10,4">
-        <TextBlock x:Name="TxtTitulo" Text="" FontSize="11" FontWeight="SemiBold"
-                   Foreground="{StaticResource BrushAccent}" TextWrapping="Wrap" Margin="2,0,0,10"/>
+        <Grid Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtTitulo" Text="" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{StaticResource BrushAccent}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" Margin="2,0,0,0"/>
+            <!-- Reduzir/expandir: só ícones x ícones com nomes. -->
+            <Button x:Name="BtnReduzir" Grid.Column="1" Content="«" Width="24" Height="22"
+                    FontSize="14" FontWeight="Bold" Padding="0,0,0,2" Cursor="Hand"
+                    Foreground="{StaticResource BrushTexto}" Background="{StaticResource BrushCard}"
+                    BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
+                    HorizontalAlignment="Right" ToolTip="Reduzir (só ícones)"/>
+        </Grid>
         <StackPanel x:Name="Botoes"/>
     </StackPanel>
 </Window>

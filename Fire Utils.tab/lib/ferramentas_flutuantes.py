@@ -52,6 +52,7 @@ _TIPO_CLIQUE = u"FERRAMENTA_FLUTUANTE"
 # Largura da janela (XAML) e folga deixada à direita para a dockpane no
 # posicionamento inicial.
 _LARGURA = 220
+_LARGURA_REDUZIDA = 84
 _FOLGA_DOCKPANE = 470
 
 # grupo -> título e ferramentas (acao, texto do botão, arquivo do ícone). As ações são as que a
@@ -67,6 +68,10 @@ GRUPOS = {
         ],
     },
 }
+
+# Reduzida (só ícones) ou expandida: lembrado só enquanto o Revit estiver
+# aberto, para a barra reaberta manter o modo que o usuário deixou.
+_estado = {u"reduzida": False}
 
 # Uma janela por grupo, enquanto aberta. Vive no engine do dockpane (a bridge
 # é importada de lá), então sobrevive entre mensagens.
@@ -89,8 +94,41 @@ class _JanelaFerramentas(forms.WPFWindow):
         forms.WPFWindow.__init__(self, _XAML_PATH)
         self.grupo = grupo
         self.TxtTitulo.Text = definicao[u"titulo"]
+        # Partes que mudam entre os modos (preenchidas por _criar_botao).
+        self._colunas_icone = []
+        self._colunas_texto = []
+        self._imagens = []
+        self._rotulos = []
         for acao, texto, icone in definicao[u"ferramentas"]:
             self.Botoes.Children.Add(self._criar_botao(acao, texto, icone, ao_clicar))
+        self.BtnReduzir.Click += self._ao_alternar_reducao
+        self._aplicar_reducao(_estado[u"reduzida"])
+
+    def _ao_alternar_reducao(self, sender, args):
+        _estado[u"reduzida"] = not _estado[u"reduzida"]
+        self._aplicar_reducao(_estado[u"reduzida"])
+
+    def _aplicar_reducao(self, reduzida):
+        """Reduzida: só os ícones (centralizados, nome fica no tooltip).
+        Expandida: ícone + nome."""
+        from System.Windows import GridLength, GridUnitType, HorizontalAlignment, Visibility
+        from System.Windows.Controls import Grid
+
+        for coluna in self._colunas_icone:
+            coluna.Width = GridLength(1, GridUnitType.Star) if reduzida else GridLength(26)
+        for coluna in self._colunas_texto:
+            coluna.Width = GridLength(0) if reduzida else GridLength(1, GridUnitType.Star)
+        for imagem in self._imagens:
+            imagem.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Left
+        for rotulo in self._rotulos:
+            rotulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
+
+        self.TxtTitulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
+        Grid.SetColumnSpan(self.BtnReduzir, 2 if reduzida else 1)
+        self.BtnReduzir.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Right
+        self.BtnReduzir.Content = u"»" if reduzida else u"«"
+        self.BtnReduzir.ToolTip = u"Expandir (ícones e nomes)" if reduzida else u"Reduzir (só ícones)"
+        self.Width = _LARGURA_REDUZIDA if reduzida else _LARGURA
 
     def _criar_botao(self, acao, texto, icone, ao_clicar):
         from System import Uri, UriKind
@@ -108,6 +146,8 @@ class _JanelaFerramentas(forms.WPFWindow):
         coluna_texto = ColumnDefinition()
         coluna_texto.Width = GridLength(1, GridUnitType.Star)
         conteudo.ColumnDefinitions.Add(coluna_icone)
+        self._colunas_icone.append(coluna_icone)
+        self._colunas_texto.append(coluna_texto)
         conteudo.ColumnDefinitions.Add(coluna_texto)
 
         caminho = os.path.join(_ICONES_DIR, icone + u".png")
@@ -125,6 +165,7 @@ class _JanelaFerramentas(forms.WPFWindow):
             imagem.Height = 20
             imagem.VerticalAlignment = VerticalAlignment.Center
             Grid.SetColumn(imagem, 0)
+            self._imagens.append(imagem)
             conteudo.Children.Add(imagem)
 
         # TextBlock próprio: é ele que quebra a linha (TextWrapping não é
@@ -135,6 +176,7 @@ class _JanelaFerramentas(forms.WPFWindow):
         rotulo.VerticalAlignment = VerticalAlignment.Center
         rotulo.Margin = Thickness(0, 0, 0, 0)
         Grid.SetColumn(rotulo, 1)
+        self._rotulos.append(rotulo)
         conteudo.Children.Add(rotulo)
         botao.Content = conteudo
 
@@ -147,7 +189,8 @@ class _JanelaFerramentas(forms.WPFWindow):
 def _posicionar(janela):
     from System.Windows import SystemParameters
     area = SystemParameters.WorkArea
-    janela.Left = max(area.Left, area.Right - _LARGURA - _FOLGA_DOCKPANE)
+    largura = _LARGURA_REDUZIDA if _estado[u"reduzida"] else _LARGURA
+    janela.Left = max(area.Left, area.Right - largura - _FOLGA_DOCKPANE)
     janela.Top = area.Top + 140
 
 
