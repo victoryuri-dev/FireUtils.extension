@@ -1,0 +1,124 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fire Utils"
+        Width="460"
+        SizeToContent="Height"
+        MaxHeight="760"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen"
+        Background="Transparent">
+
+    <!-- Seletor de ocupação das ferramentas de Saídas (mesmo conteúdo do
+         modal da dockpane), em janela própria: dá para usar as ferramentas
+         sem deixar a dockpane aberta. Visual igual ao das barras flutuantes. -->
+    <Window.Resources>
+        <SolidColorBrush x:Key="BrushFundo"  Color="#101014"/>
+        <SolidColorBrush x:Key="BrushCard"   Color="#17171C"/>
+        <SolidColorBrush x:Key="BrushBorda"  Color="#2C2C33"/>
+        <SolidColorBrush x:Key="BrushTexto"  Color="#F5F5F7"/>
+        <SolidColorBrush x:Key="BrushSuave"  Color="#87878D"/>
+        <SolidColorBrush x:Key="BrushAccent" Color="#C0152A"/>
+
+        <Style x:Key="Rotulo" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushSuave}"/>
+            <Setter Property="Margin" Value="0,10,0,4"/>
+        </Style>
+
+        <Style x:Key="Botao" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource BrushTexto}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Padding" Value="14,7,14,7"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{StaticResource BrushCard}"
+                                BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{StaticResource BrushFundo}" BorderBrush="{StaticResource BrushBorda}"
+            BorderThickness="1" CornerRadius="0">
+        <DockPanel Margin="18">
+            <!-- Rodapé fixo; o miolo rola quando não cabe na altura. -->
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right"
+                        Margin="0,14,0,0">
+                <Button x:Name="BtnCancelar" Content="CANCELAR" Style="{StaticResource Botao}"/>
+                <Button x:Name="BtnOk" Content="IDENTIFICAR" Style="{StaticResource Botao}"
+                        Margin="8,0,0,0" BorderBrush="{StaticResource BrushAccent}"
+                        Foreground="{StaticResource BrushAccent}"/>
+            </StackPanel>
+
+            <TextBlock x:Name="TxtTitulo" DockPanel.Dock="Top" Text="" FontSize="17" FontWeight="SemiBold"
+                       Foreground="{StaticResource BrushTexto}" Cursor="SizeAll" Margin="0,0,0,8"/>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock x:Name="TxtAjuda" Foreground="{StaticResource BrushTexto}" FontSize="12"
+                               TextWrapping="Wrap" Margin="0,0,0,6"/>
+                    <TextBlock Text="Ambientes sem estrutura no parâmetro &quot;Estrutura&quot; recebem a estrutura escolhida; os que já têm mantêm a sua."
+                               Foreground="{StaticResource BrushSuave}" FontSize="11" TextWrapping="Wrap"/>
+
+                    <TextBlock Text="ESTRUTURA" Style="{StaticResource Rotulo}"/>
+                    <ComboBox x:Name="CbEstrutura" Padding="6,5,6,5"/>
+                    <TextBlock Text="GRUPO" Style="{StaticResource Rotulo}"/>
+                    <ComboBox x:Name="CbGrupo" Padding="6,5,6,5"/>
+                    <TextBlock Text="TIPO" Style="{StaticResource Rotulo}"/>
+                    <ComboBox x:Name="CbTipo" Padding="6,5,6,5"/>
+
+                    <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorda}"
+                            BorderThickness="1" Padding="12" Margin="0,14,0,0">
+                        <StackPanel>
+                            <TextBlock x:Name="TxtTaxa" Foreground="{StaticResource BrushTexto}" FontSize="12"
+                                       TextWrapping="Wrap"/>
+                            <UniformGrid Columns="3" Margin="0,10,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="AD / UP" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource BrushSuave}"/>
+                                    <TextBlock x:Name="TxtAD" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource BrushAccent}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="ER / UP" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource BrushSuave}"/>
+                                    <TextBlock x:Name="TxtER" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource BrushAccent}"/>
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Text="PT / UP" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource BrushSuave}"/>
+                                    <TextBlock x:Name="TxtPT" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource BrushAccent}"/>
+                                </StackPanel>
+                            </UniformGrid>
+                            <Expander x:Name="ExpNotas" Header="Notas específicas" Foreground="{StaticResource BrushSuave}"
+                                      FontSize="11" Margin="0,10,0,0">
+                                <TextBlock x:Name="TxtNotas" Foreground="{StaticResource BrushTexto}" FontSize="11"
+                                           TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </Expander>
+                        </StackPanel>
+                    </Border>
+
+                    <StackPanel x:Name="PainelNiveis" Visibility="Collapsed">
+                        <TextBlock Text="NÍVEIS" Style="{StaticResource Rotulo}"/>
+                        <StackPanel x:Name="ListaNiveis"/>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</Window>

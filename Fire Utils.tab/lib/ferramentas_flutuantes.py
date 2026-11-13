@@ -58,14 +58,17 @@ _FOLGA_DOCKPANE = 470
 
 # grupo -> título, destino e ferramentas (acao, texto do botão, arquivo do
 # ícone em assets/ferramentas/).
+#   destino "nativo": Saídas — seletor em janela WPF própria (saidas_dialogo.py)
+#     e execução pela bridge de ocupação, sem precisar da dockpane aberta.
 #   destino "dockpane": o clique vai para a dockpane, que tem os seletores da
 #     ferramenta (webapp/src/components/dashboard/SaidasFerramentas.jsx).
+#     Hoje nenhum grupo usa; o caminho continua disponível.
 #   destino "python": a ferramenta roda aqui mesmo (ver _rodar_comando_python),
 #     como o botão equivalente da faixa de opções.
 GRUPOS = {
     u"saidas": {
         u"titulo": u"SAÍDAS DE EMERGÊNCIA",
-        u"destino": u"dockpane",
+        u"destino": u"nativo",
         u"ferramentas": [
             (u"selecao", u"Identificar por ambiente", u"ocupacao"),
             (u"niveis", u"Identificar por nível", u"pornivel"),
@@ -296,6 +299,100 @@ def _rodar_comando_python(uiapp, grupo, acao):
         pass  # pyscript.exit() / forms.alert(exitscript) / exigir(): fim normal
 
 
+# modo -> (título, ajuda, pede níveis): mesmos textos do modal da dockpane.
+_SAIDAS_MODOS = {
+    u"selecao": (u"Identificar por ambiente", u"Você clica nos ambientes no Revit.", False),
+    u"niveis": (u"Identificar por nível", u"Todos os ambientes dos níveis que você escolher.", True),
+    u"todos": (u"Identificar todos sem ocupação", u"Todos os ambientes que ainda não têm ocupação.", False),
+}
+
+
+def _mostrar_resultado_saidas(r):
+    """Resultado de identificar/sincronizar como um aviso do Revit (o que a
+    dockpane mostra em notificações). Mesmos campos de
+    SAIDAS_AMBIENTES_RESULTADO (saidas_ocupacao_bridge.py)."""
+    sincronizar = r.get(u"acao") == u"sincronizar"
+    rotulo = u"sincronizar ambientes" if sincronizar else u"identificar ambientes"
+    if not r.get(u"ok"):
+        forms.alert(r.get(u"erro") or u"Falha ao {}.".format(rotulo),
+                    title=u"FireUtils", warn_icon=True)
+        return
+
+    linhas = list(r.get(u"resumoOk") or [])
+    falhas = list(r.get(u"resumoFalhas") or [])
+    erro_envio = r.get(u"erroEnvio")
+    if erro_envio and erro_envio not in falhas:
+        falhas.append(erro_envio)
+    populacao = r.get(u"populacao")
+    if populacao:
+        if populacao.get(u"erro"):
+            falhas.append(u"População não sincronizada: {}".format(populacao[u"erro"]))
+        else:
+            linhas.append(u"{} ambiente(s) com população atualizada a partir do site.".format(
+                populacao.get(u"atualizados", 0)))
+            if populacao.get(u"naoEncontrados", 0) > 0:
+                falhas.append(u"{} ambiente(s) do site não foram encontrados neste modelo "
+                              u"(apagados ou em outro arquivo).".format(populacao[u"naoEncontrados"]))
+    manuais = r.get(u"populacaoManual") or []
+    if manuais:
+        falhas.append(u"{} ambiente(s) sem taxa por área: informe a população no parâmetro "
+                      u"\"População\" do ambiente.".format(len(manuais)))
+    if not linhas and not falhas:
+        linhas.append(r.get(u"resumo") or u"Concluído.")
+
+    texto = u"\n".join(linhas)
+    if falhas:
+        texto += u"\n\nAtenção:\n" + u"\n".join(falhas)
+    forms.alert(texto, title=u"Ambientes sincronizados" if sincronizar else u"Ambientes identificados",
+                warn_icon=bool(falhas))
+
+
+def _rodar_saidas(uiapp, acao, fila_acoes):
+    """Ferramentas de Saídas sem a dockpane: o seletor é a janela WPF de
+    saidas_dialogo.py e a execução é a mesma bridge que a dockpane usa — só
+    que as respostas viram avisos do Revit em vez de mensagens ao React."""
+    import os
+    import saidas_ocupacao_bridge as ponte
+
+    def responder(tipo, payload):
+        # SAIDAS_AMBIENTES_PROGRESSO é ignorado: o próprio Revit mostra o
+        # prompt da seleção na barra de status.
+        if tipo == u"SAIDAS_AMBIENTES_RESULTADO":
+            _mostrar_resultado_saidas(payload)
+
+    if acao == u"sincronizar":
+        ponte.tratar_sincronizar_ambientes(uiapp, fila_acoes, responder)
+        return
+
+    modo = _SAIDAS_MODOS.get(acao)
+    if modo is None:
+        print_seguro(u"[AVISO] Ferramenta de saídas desconhecida: {}".format(acao))
+        return
+    titulo, ajuda, pede_niveis = modo
+
+    opcoes = {}
+    ponte.tratar_get_saidas_opcoes(uiapp, lambda tipo, payload: opcoes.update(payload))
+    if not opcoes.get(u"ok"):
+        forms.alert(opcoes.get(u"erro") or u"Sem resposta do Revit.", title=u"FireUtils", warn_icon=True)
+        return
+
+    from sync import estruturas_vinculadas
+    projeto_dir = os.path.dirname(uiapp.ActiveUIDocument.Document.PathName)
+    estruturas = estruturas_vinculadas(projeto_dir)
+    if not estruturas:
+        forms.alert(u"Este arquivo não tem estrutura vinculada. Vincule o projeto e a "
+                    u"estrutura no Dashboard da dockpane (uma vez) e tente de novo.",
+                    title=u"FireUtils", warn_icon=True)
+        return
+
+    from saidas_dialogo import pedir_ocupacao
+    pedido = pedir_ocupacao(uiapp, titulo, ajuda, opcoes, estruturas, pede_niveis)
+    if pedido is None:
+        return
+    pedido[u"modo"] = acao
+    ponte.tratar_identificar_ambientes(uiapp, pedido, fila_acoes, responder)
+
+
 def _posicionar(janela):
     from System.Windows import SystemParameters
     area = SystemParameters.WorkArea
@@ -333,6 +430,9 @@ def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
         return
 
     def ao_clicar(acao):
+        if definicao[u"destino"] == u"nativo":
+            fila_acoes.enfileirar(lambda uiapp: _rodar_saidas(uiapp, acao, fila_acoes))
+            return
         if definicao[u"destino"] == u"python":
             fila_acoes.enfileirar(lambda uiapp: _rodar_comando_python(uiapp, grupo, acao))
             return
