@@ -53,7 +53,7 @@
 
         <!-- Botões pequenos do cabeçalho (reduzir / fechar). -->
         <Style x:Key="BotaoTopo" TargetType="Button">
-            <Setter Property="Width" Value="24"/>
+            <Setter Property="Width" Value="20"/>
             <Setter Property="Height" Value="22"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="Bold"/>
@@ -110,7 +110,7 @@
                     <Button x:Name="BtnReduzir" Content="«" Style="{StaticResource BotaoTopo}"
                             ToolTip="Reduzir (só ícones)"/>
                     <Button x:Name="BtnFechar" Content="✕" Style="{StaticResource BotaoTopo}"
-                            Margin="4,0,0,0" ToolTip="Fechar"/>
+                            Margin="0" ToolTip="Fechar"/>
                 </StackPanel>
             </Grid>
             <StackPanel x:Name="Botoes" Margin="0,0,0,-6"/>

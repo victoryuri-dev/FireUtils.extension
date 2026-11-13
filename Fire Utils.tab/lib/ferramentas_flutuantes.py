@@ -53,7 +53,7 @@ _TIPO_CLIQUE = u"FERRAMENTA_FLUTUANTE"
 # Largura da janela (XAML) e folga deixada à direita para a dockpane no
 # posicionamento inicial.
 _LARGURA = 220
-_LARGURA_REDUZIDA = 74  # 52 do botão + 10 de cada lado + 2 da borda
+_LARGURA_REDUZIDA = 62  # 40 do botão + 10 de cada lado + 2 da borda
 _FOLGA_DOCKPANE = 470
 
 # grupo -> título, destino e ferramentas (acao, texto do botão, arquivo do
@@ -157,15 +157,15 @@ class _JanelaFerramentas(forms.WPFWindow):
             coluna.Width = GridLength(0) if reduzida else GridLength(1, GridUnitType.Star)
         for imagem in self._imagens:
             imagem.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Left
-        # Reduzida: botões quadrados (52x52) e ícone maior; expandida: botão
+        # Reduzida: botões quadrados (40x40) e ícone maior; expandida: botão
         # na largura toda, altura do conteúdo (NaN = automático).
         for botao in self._botoes:
-            botao.Width = 52 if reduzida else Double.NaN
-            botao.Height = 52 if reduzida else Double.NaN
+            botao.Width = 40 if reduzida else Double.NaN
+            botao.Height = 40 if reduzida else Double.NaN
             botao.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Stretch
         for imagem in self._imagens:
-            imagem.Width = 28 if reduzida else 20
-            imagem.Height = 28 if reduzida else 20
+            imagem.Width = 26 if reduzida else 22
+            imagem.Height = 26 if reduzida else 22
         for rotulo in self._rotulos:
             rotulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
 
