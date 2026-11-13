@@ -30,6 +30,7 @@ class _JanelaOcupacao(forms.WPFWindow):
         self._grupos = opcoes.get(u"grupos") or []
         self._estruturas = estruturas
         self._checks_niveis = []
+        self._notas = []
 
         self.TxtTitulo.Text = titulo
         self.TxtAjuda.Text = u"{} Ocupação ({}):".format(ajuda, opcoes.get(u"estadoNome", u""))
@@ -67,6 +68,7 @@ class _JanelaOcupacao(forms.WPFWindow):
         self.TxtTitulo.MouseLeftButtonDown += self._ao_arrastar
         self.BtnCancelar.Click += lambda s, a: self.Close()
         self.BtnOk.Click += self._ao_confirmar
+        self.BtnNotas.Click += self._ao_alternar_notas
 
     def _ao_arrastar(self, sender, args):
         try:
@@ -100,10 +102,22 @@ class _JanelaOcupacao(forms.WPFWindow):
         self.TxtAD.Text = item[u"ad"]
         self.TxtER.Text = item[u"er"]
         self.TxtPT.Text = item[u"pt"]
-        notas = item.get(u"notas") or []
-        self.ExpNotas.Visibility = Visibility.Visible if notas else Visibility.Collapsed
-        self.ExpNotas.Header = u"Notas específicas ({})".format(len(notas))
-        self.TxtNotas.Text = u"\n\n".join(notas)
+        self._notas = item.get(u"notas") or []
+        self.BtnNotas.Visibility = Visibility.Visible if self._notas else Visibility.Collapsed
+        self.TxtNotas.Text = u"\n\n".join(self._notas)
+        self.TxtNotas.Visibility = Visibility.Collapsed
+        self._atualizar_botao_notas()
+
+    def _atualizar_botao_notas(self):
+        from System.Windows import Visibility
+        aberta = self.TxtNotas.Visibility == Visibility.Visible
+        self.BtnNotas.Content = u"{} Notas específicas ({})".format(u"▾" if aberta else u"▸", len(self._notas))
+
+    def _ao_alternar_notas(self, sender, args):
+        from System.Windows import Visibility
+        aberta = self.TxtNotas.Visibility == Visibility.Visible
+        self.TxtNotas.Visibility = Visibility.Collapsed if aberta else Visibility.Visible
+        self._atualizar_botao_notas()
 
     def _ao_confirmar(self, sender, args):
         item = self._item_atual()
