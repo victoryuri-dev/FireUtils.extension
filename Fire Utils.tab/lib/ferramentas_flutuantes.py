@@ -39,26 +39,31 @@ from pyrevit import forms
 
 from family_error_utils import texto_erro, print_seguro
 
-_XAML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"ferramentas_flutuantes.xaml")
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_XAML_PATH = os.path.join(_LIB_DIR, u"ferramentas_flutuantes.xaml")
+# PNGs dos ícones, renderizados dos mesmos SVGs da dockpane
+# (webapp/src/assets/icons/*-icon.svg) com o claro do duotone em #F5F5F7, a
+# cor que o tema escuro dá a eles lá. O WPF não lê SVG com máscara.
+_ICONES_DIR = os.path.join(_LIB_DIR, u"assets", u"ferramentas")
 
 _TIPO_ESTADO = u"JANELA_FERRAMENTAS_ESTADO"
 _TIPO_CLIQUE = u"FERRAMENTA_FLUTUANTE"
 
 # Largura da janela (XAML) e folga deixada à direita para a dockpane no
 # posicionamento inicial.
-_LARGURA = 196
+_LARGURA = 220
 _FOLGA_DOCKPANE = 470
 
-# grupo -> título e ferramentas (acao, texto do botão). As ações são as que a
+# grupo -> título e ferramentas (acao, texto do botão, arquivo do ícone). As ações são as que a
 # dockpane entende em webapp/src/components/dashboard/SaidasFerramentas.jsx.
 GRUPOS = {
     u"saidas": {
         u"titulo": u"SAÍDAS DE EMERGÊNCIA",
         u"ferramentas": [
-            (u"selecao", u"Identificar por ambiente"),
-            (u"niveis", u"Identificar por nível"),
-            (u"todos", u"Identificar todos sem ocupação"),
-            (u"sincronizar", u"Sincronizar ambientes"),
+            (u"selecao", u"Identificar por ambiente", u"ocupacao"),
+            (u"niveis", u"Identificar por nível", u"pornivel"),
+            (u"todos", u"Identificar todos sem ocupação", u"todos"),
+            (u"sincronizar", u"Sincronizar ambientes", u"sincronizar-ambiente"),
         ],
     },
 }
@@ -84,21 +89,55 @@ class _JanelaFerramentas(forms.WPFWindow):
         forms.WPFWindow.__init__(self, _XAML_PATH)
         self.grupo = grupo
         self.TxtTitulo.Text = definicao[u"titulo"]
-        for acao, texto in definicao[u"ferramentas"]:
-            self.Botoes.Children.Add(self._criar_botao(acao, texto, ao_clicar))
+        for acao, texto, icone in definicao[u"ferramentas"]:
+            self.Botoes.Children.Add(self._criar_botao(acao, texto, icone, ao_clicar))
 
-    def _criar_botao(self, acao, texto, ao_clicar):
-        from System.Windows import TextWrapping
-        from System.Windows.Controls import Button, TextBlock
+    def _criar_botao(self, acao, texto, icone, ao_clicar):
+        from System import Uri, UriKind
+        from System.Windows import GridLength, GridUnitType, TextWrapping, Thickness, VerticalAlignment
+        from System.Windows.Controls import Button, ColumnDefinition, Grid, Image, TextBlock
+        from System.Windows.Media.Imaging import BitmapCacheOption, BitmapImage
+
         botao = Button()
+        botao.Style = self.FindResource(u"BotaoFerramenta")
+        botao.ToolTip = texto
+
+        conteudo = Grid()
+        coluna_icone = ColumnDefinition()
+        coluna_icone.Width = GridLength(26)
+        coluna_texto = ColumnDefinition()
+        coluna_texto.Width = GridLength(1, GridUnitType.Star)
+        conteudo.ColumnDefinitions.Add(coluna_icone)
+        conteudo.ColumnDefinitions.Add(coluna_texto)
+
+        caminho = os.path.join(_ICONES_DIR, icone + u".png")
+        if os.path.isfile(caminho):
+            imagem_fonte = BitmapImage()
+            imagem_fonte.BeginInit()
+            imagem_fonte.UriSource = Uri(caminho, UriKind.Absolute)
+            # OnLoad: lê o arquivo na hora e solta — sem isso o PNG ficaria
+            # travado enquanto a janela existe (atrapalha atualizar o plugin).
+            imagem_fonte.CacheOption = BitmapCacheOption.OnLoad
+            imagem_fonte.EndInit()
+            imagem = Image()
+            imagem.Source = imagem_fonte
+            imagem.Width = 20
+            imagem.Height = 20
+            imagem.VerticalAlignment = VerticalAlignment.Center
+            Grid.SetColumn(imagem, 0)
+            conteudo.Children.Add(imagem)
+
         # TextBlock próprio: é ele que quebra a linha (TextWrapping não é
         # propriedade anexável, então não dá para pôr no ContentPresenter).
         rotulo = TextBlock()
         rotulo.Text = texto
         rotulo.TextWrapping = TextWrapping.Wrap
-        botao.Content = rotulo
-        botao.Style = self.FindResource(u"BotaoFerramenta")
-        botao.ToolTip = texto
+        rotulo.VerticalAlignment = VerticalAlignment.Center
+        rotulo.Margin = Thickness(0, 0, 0, 0)
+        Grid.SetColumn(rotulo, 1)
+        conteudo.Children.Add(rotulo)
+        botao.Content = conteudo
+
         # O lambda fica dentro deste método (não direto no laço de __init__):
         # cada chamada tem a sua `acao`, sem o bug do closure compartilhado.
         botao.Click += lambda sender, args: ao_clicar(acao)
