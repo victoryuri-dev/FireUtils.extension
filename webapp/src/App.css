@@ -293,6 +293,15 @@
   flex: 1;
 }
 
+/* Divisor entre as abas e os botões das janelas flutuantes. */
+.sidebar-divisor {
+  width: 28px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
 .sidebar-rodape {
   display: flex;
   flex-direction: column;

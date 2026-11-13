@@ -11,6 +11,7 @@ import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
 import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
+import janelaFerramentasIconSvg from "../assets/icons/janela-ferramentas-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
@@ -25,6 +26,12 @@ const ITENS_NAV = [
   { id: "dashboard", label: "Dashboard", svg: dashboardIconSvg },
   { id: "hidrantes", label: "Sistema de Hidrantes", svg: hydrantIconSvg },
   { id: "saidas", label: "Saídas de Emergência", svg: exitIconSvg },
+];
+
+// Janelas flutuantes de ferramentas (ferramentas_flutuantes.py): abaixo do
+// divisor, um botão por grupo. Abre/fecha a barra modeless do grupo.
+const ITENS_JANELAS = [
+  { id: "saidas", label: "Janela flutuante: Saídas de Emergência", svg: janelaFerramentasIconSvg },
 ];
 
 // Duração até a barra de maior delay (loader-bar-1: 0.28s) terminar de
@@ -47,6 +54,8 @@ export default function Sidebar({
   modulosLiberados,
   atualizacao,
   versaoPlugin,
+  janelasAbertas,
+  onAlternarJanela,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -112,6 +121,25 @@ export default function Sidebar({
               // mais do que um botão que não responde.
               onClick={() => onSelecionarAba?.(item.id)}
               title={bloqueada ? `${item.label} (fora da sua assinatura)` : item.label}
+            >
+              <Icon svg={item.svg} title={item.label} />
+            </button>
+          );
+        })}
+
+        <div className="sidebar-divisor" role="separator" />
+
+        {ITENS_JANELAS.map((item) => {
+          const aberta = !!janelasAbertas?.[item.id];
+          const bloqueada = modulosLiberados != null && !abaLiberada(modulosLiberados, item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`sidebar-item ${aberta ? "ativa" : ""} ${bloqueada ? "bloqueada" : ""}`}
+              onClick={() => onAlternarJanela?.(item.id)}
+              title={bloqueada ? `${item.label} (fora da sua assinatura)` : item.label}
+              aria-pressed={aberta}
             >
               <Icon svg={item.svg} title={item.label} />
             </button>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
+import { consumirFerramenta, observarFerramenta } from "../../lib/ferramentasFlutuantes";
 import ocupacaoIconSvg from "../../assets/icons/ocupacao-icon.svg?raw";
 import porNivelIconSvg from "../../assets/icons/pornivel-icon.svg?raw";
 import todosIconSvg from "../../assets/icons/todos-icon.svg?raw";
@@ -317,6 +318,27 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
   }
 
   const ocupado = !!executando;
+
+  // Cliques da barra flutuante (ferramentas_flutuantes.py) chegam como se o
+  // usuário tivesse clicado no cartão. A ref aponta sempre para a versão mais
+  // recente das funções acima (elas fecham sobre o estado atual) e o efeito
+  // roda uma vez só: ao montar também consome o pedido que chegou antes.
+  const executarPedidoRef = useRef(null);
+  executarPedidoRef.current = () => {
+    const acao = consumirFerramenta();
+    if (!acao || ocupado) return;
+    if (acao === "sincronizar") {
+      sincronizar();
+      return;
+    }
+    const f = FERRAMENTAS.find((item) => item.modo === acao);
+    if (f) abrir(f);
+  };
+  useEffect(() => {
+    const executar = () => executarPedidoRef.current?.();
+    executar();
+    return observarFerramenta(executar);
+  }, []);
 
   return (
     <section className="saidas-secao">

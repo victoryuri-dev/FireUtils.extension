@@ -265,6 +265,20 @@
  *     é o texto por estrutura do envio ao site; `erroEnvio` preenchido = o Revit
  *     foi atualizado mas o site não recebeu.
  *
+ *   { type: "ABRIR_JANELA_FERRAMENTAS", payload: { grupo: "saidas" } }
+ *     JS -> Python: abre (ou fecha, se já aberta) a barra flutuante modeless com
+ *     um botão por ferramenta do grupo (ferramentas_flutuantes.py).
+ *
+ *   { type: "JANELA_FERRAMENTAS_ESTADO", payload: { grupo, aberta: boolean } }
+ *     Python -> JS: a barra do grupo abriu ou fechou (inclusive pelo X da própria
+ *     janela) — a sidebar usa para marcar o ícone como ativo.
+ *
+ *   { type: "FERRAMENTA_FLUTUANTE", payload: { grupo: "saidas",
+ *     acao: "selecao" | "niveis" | "todos" | "sincronizar" } }
+ *     Python -> JS: botão clicado na barra flutuante. A dockpane (já mostrada pelo
+ *     Python) vai para a página do grupo e abre a mesma ferramenta que o cartão
+ *     correspondente.
+ *
  *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash, abrirPasta? } }
  *     JS -> Python: baixa, confere e instala uma versão nova do plugin
  *     (plugin_atualizacao.py). Os links são URLs assinadas do bucket privado
@@ -396,6 +410,9 @@ export const BridgeMessageTypes = {
   SINCRONIZAR_AMBIENTES: "SINCRONIZAR_AMBIENTES",
   SAIDAS_AMBIENTES_PROGRESSO: "SAIDAS_AMBIENTES_PROGRESSO",
   SAIDAS_AMBIENTES_RESULTADO: "SAIDAS_AMBIENTES_RESULTADO",
+  ABRIR_JANELA_FERRAMENTAS: "ABRIR_JANELA_FERRAMENTAS",
+  JANELA_FERRAMENTAS_ESTADO: "JANELA_FERRAMENTAS_ESTADO",
+  FERRAMENTA_FLUTUANTE: "FERRAMENTA_FLUTUANTE",
   INSTALAR_ATUALIZACAO: "INSTALAR_ATUALIZACAO",
   INSTALAR_PACOTE: "INSTALAR_PACOTE",
   RECARREGAR_PYREVIT: "RECARREGAR_PYREVIT",

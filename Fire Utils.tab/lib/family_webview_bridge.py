@@ -43,6 +43,7 @@ import hidrantes_material_conexao_bridge
 import plugin_atualizacao
 import plugin_pacote
 import saidas_ocupacao_bridge
+import ferramentas_flutuantes
 import quantitativos_bridge
 import atribuir_estrutura_bridge
 import niveis_bridge
@@ -337,6 +338,11 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         fila_acoes.enfileirar(
             lambda uiapp: saidas_ocupacao_bridge.tratar_sincronizar_ambientes(
                 uiapp, fila_acoes, postar_mensagem)
+        )
+    elif tipo == u"ABRIR_JANELA_FERRAMENTAS":
+        fila_acoes.enfileirar(
+            lambda uiapp: ferramentas_flutuantes.tratar_abrir_janela(
+                uiapp, payload, fila_acoes, postar_mensagem)
         )
     elif tipo == u"INSTALAR_PACOTE":
         # Atualização rápida: só o código Python, por pacote assinado.

@@ -5,6 +5,7 @@ import { fetchCatalog } from "./lib/catalog";
 import { postToHost, escutarMensagensDoHost, estaDentroDoWebView2, BridgeMessageTypes } from "./lib/bridge";
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
+import { solicitarFerramenta } from "./lib/ferramentasFlutuantes";
 import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
@@ -109,6 +110,8 @@ function lerAvisoDispensado() {
 export default function App() {
   const [sessao, setSessao] = useState(undefined); // undefined = ainda verificando
   const [abaAtual, setAbaAtual] = useState(lerAbaDaUrl);
+  // Barras flutuantes de ferramentas abertas, por grupo ({ saidas: true }).
+  const [janelasAbertas, setJanelasAbertas] = useState({});
   const [catalogo, setCatalogo] = useState(null);
   const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
   const [busca, setBusca] = useState("");
@@ -452,6 +455,24 @@ export default function App() {
           }
           // Guarda a ação pendente: sobrevive a um recarregamento da página.
           guardarAvisoPosAtualizacao({ versao: novo.versao, reinicio: novo.reinicio, recarga: novo.recarga });
+        }
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.JANELA_FERRAMENTAS_ESTADO) {
+        const { grupo, aberta } = mensagem.payload || {};
+        if (grupo) setJanelasAbertas((atual) => ({ ...atual, [grupo]: !!aberta }));
+        return;
+      }
+
+      if (mensagem.type === BridgeMessageTypes.FERRAMENTA_FLUTUANTE) {
+        // Clique na barra flutuante: vai para a página do grupo e deixa o
+        // pedido guardado para o componente que o executa (ver
+        // lib/ferramentasFlutuantes.js).
+        const { grupo, acao } = mensagem.payload || {};
+        if (grupo && acao) {
+          setAbaAtual(grupo);
+          solicitarFerramenta(acao);
         }
         return;
       }
@@ -809,6 +830,8 @@ export default function App() {
         email={sessao?.user?.email}
         modulosLiberados={modulosLiberados}
         versaoPlugin={versaoPlugin}
+        janelasAbertas={janelasAbertas}
+        onAlternarJanela={(grupo) => postToHost(BridgeMessageTypes.ABRIR_JANELA_FERRAMENTAS, { grupo })}
         atualizacao={
           avaliacaoVersao.estado === "disponivel" || avaliacaoVersao.estado === "obrigatoria"
             ? {
