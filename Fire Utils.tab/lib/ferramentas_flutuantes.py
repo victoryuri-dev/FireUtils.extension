@@ -93,13 +93,22 @@ GRUPOS = {
     },
 }
 
-# Reduzida (só ícones) ou expandida: lembrado só enquanto o Revit estiver
-# aberto, para a barra reaberta manter o modo que o usuário deixou.
-_estado = {u"reduzida": False}
+# Estado compartilhado entre engines do pyRevit: a barra pode ser aberta pela
+# dockpane (engine longo dela) ou por um botão da faixa de opções (engine novo
+# a cada clique), e os dois precisam enxergar as mesmas janelas abertas — senão
+# o segundo clique abriria uma barra duplicada em vez de fechar a primeira.
+#   janelas   grupo -> janela aberta
+#   reduzida  só ícones ou ícones com nomes; lembrado até fechar o Revit
+_CHAVE_ESTADO = u"FIREUTILS_BARRAS_FLUTUANTES"
 
-# Uma janela por grupo, enquanto aberta. Vive no engine do dockpane (a bridge
-# é importada de lá), então sobrevive entre mensagens.
-_janelas = {}
+
+def _compartilhado():
+    from pyrevit import script
+    dados = script.get_envvar(_CHAVE_ESTADO)
+    if dados is None:
+        dados = {u"janelas": {}, u"reduzida": False}
+        script.set_envvar(_CHAVE_ESTADO, dados)
+    return dados
 
 
 def _mostrar_dockpane():
@@ -132,7 +141,7 @@ class _JanelaFerramentas(forms.WPFWindow):
         # botões tratam o próprio clique, então não iniciam o arrasto.
         self.Cabecalho.MouseLeftButtonDown += self._ao_arrastar
         self.AlcaArrastar.MouseLeftButtonDown += self._ao_arrastar
-        self._aplicar_reducao(_estado[u"reduzida"])
+        self._aplicar_reducao(_compartilhado()[u"reduzida"])
 
     def _ao_arrastar(self, sender, args):
         try:
@@ -141,8 +150,9 @@ class _JanelaFerramentas(forms.WPFWindow):
             pass  # DragMove lança se o botão já foi solto; sem importância.
 
     def _ao_alternar_reducao(self, sender, args):
-        _estado[u"reduzida"] = not _estado[u"reduzida"]
-        self._aplicar_reducao(_estado[u"reduzida"])
+        dados = _compartilhado()
+        dados[u"reduzida"] = not dados[u"reduzida"]
+        self._aplicar_reducao(dados[u"reduzida"])
 
     def _aplicar_reducao(self, reduzida):
         """Reduzida: só os ícones (centralizados, nome fica no tooltip).
@@ -289,10 +299,10 @@ def _rodar_comando_python(uiapp, grupo, acao):
 def _posicionar(janela):
     from System.Windows import SystemParameters
     area = SystemParameters.WorkArea
-    largura = _LARGURA_REDUZIDA if _estado[u"reduzida"] else _LARGURA
+    largura = _LARGURA_REDUZIDA if _compartilhado()[u"reduzida"] else _LARGURA
     # Cada barra já aberta empurra a nova um pouco para a esquerda, para não
     # nascerem uma em cima da outra.
-    deslocamento = len(_janelas) * (largura + 12)
+    deslocamento = len(_compartilhado()[u"janelas"]) * (largura + 12)
     janela.Left = max(area.Left, area.Right - largura - _FOLGA_DOCKPANE - deslocamento)
     janela.Top = area.Top + 140
 
@@ -311,9 +321,10 @@ def _definir_dona(janela, uiapp):
 def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
     """Abre a barra do grupo, ou fecha se já estiver aberta. Chamar na thread
     de API (via fila_acoes), de onde há o uiapp para pegar o handle do Revit."""
-    existente = _janelas.get(grupo)
+    janelas = _compartilhado()[u"janelas"]
+    existente = janelas.get(grupo)
     if existente is not None:
-        existente.Close()  # o evento Closed limpa _janelas e avisa a dockpane
+        existente.Close()  # o evento Closed limpa o registro e avisa a dockpane
         return
 
     definicao = GRUPOS.get(grupo)
@@ -336,14 +347,14 @@ def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
     _posicionar(janela)
 
     def ao_fechar(sender, args):
-        _janelas.pop(grupo, None)
+        janelas.pop(grupo, None)
         try:
             postar_mensagem(_TIPO_ESTADO, {u"grupo": grupo, u"aberta": False})
         except Exception as ex:
             print_seguro(u"[AVISO] Falha ao avisar o fechamento da barra: {}".format(texto_erro(ex)))
 
     janela.Closed += ao_fechar
-    _janelas[grupo] = janela
+    janelas[grupo] = janela
     janela.Show()
     postar_mensagem(_TIPO_ESTADO, {u"grupo": grupo, u"aberta": True})
 
@@ -356,3 +367,12 @@ def tratar_abrir_janela(uiapp, payload, fila_acoes, postar_mensagem):
     except Exception as ex:
         print_seguro(u"[AVISO] Falha ao abrir a barra de ferramentas: {}".format(texto_erro(ex)))
         postar_mensagem(_TIPO_ESTADO, {u"grupo": (payload or {}).get(u"grupo"), u"aberta": False})
+
+
+def alternar_pelo_botao(uiapp, grupo):
+    """Para um botão da faixa de opções (engine próprio, contexto de API
+    válido): abre/fecha a barra do grupo sem depender da dockpane. A fila de
+    ações é criada aqui, onde o ExternalEvent pode ser criado; o aviso de
+    estado à dockpane é dispensado (ela não é alcançável deste engine)."""
+    from family_loader_events import criar_fila_acoes
+    alternar(uiapp, grupo, criar_fila_acoes(), lambda tipo, payload: None)

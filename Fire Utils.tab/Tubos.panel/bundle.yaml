@@ -1,11 +1,6 @@
 title: Ferramentas de Tubos
-tooltip: Inserção e conexão de componentes na modelagem de tubulações
+tooltip: Barra flutuante com as ferramentas de inserção e conexão de tubulações
 author: Fire Utils
-# Os nomes abaixo são os das pastas .pushbutton, não os títulos exibidos:
-# é por eles que o pyRevit casa o layout. "Conectar Tubo" (o título) estava
-# listado aqui antes e não correspondia a pasta nenhuma, então este layout
-# era ignorado — passava despercebido porque havia um único botão.
+# Os nomes abaixo são os das pastas .pushbutton, não os títulos exibidos.
 layout:
-  - Inserir Hidrante por Nivel
-  - Conectar Abrigo
-  - Conectar Tubulação
+  - Ferramentas de Tubos
