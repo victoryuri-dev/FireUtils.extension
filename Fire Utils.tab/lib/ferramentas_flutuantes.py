@@ -152,7 +152,7 @@ class _JanelaFerramentas(forms.WPFWindow):
         from System.Windows.Controls import Grid
 
         for coluna in self._colunas_icone:
-            coluna.Width = GridLength(1, GridUnitType.Star) if reduzida else GridLength(26)
+            coluna.Width = GridLength(1, GridUnitType.Star) if reduzida else GridLength(34)
         for coluna in self._colunas_texto:
             coluna.Width = GridLength(0) if reduzida else GridLength(1, GridUnitType.Star)
         for imagem in self._imagens:
@@ -164,8 +164,8 @@ class _JanelaFerramentas(forms.WPFWindow):
             botao.Height = 46 if reduzida else Double.NaN
             botao.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Stretch
         for imagem in self._imagens:
-            imagem.Width = 28 if reduzida else 22
-            imagem.Height = 28 if reduzida else 22
+            imagem.Width = 28
+            imagem.Height = 28
         for rotulo in self._rotulos:
             rotulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
 
@@ -208,8 +208,8 @@ class _JanelaFerramentas(forms.WPFWindow):
             imagem_fonte.EndInit()
             imagem = Image()
             imagem.Source = imagem_fonte
-            imagem.Width = 20
-            imagem.Height = 20
+            imagem.Width = 28
+            imagem.Height = 28
             imagem.VerticalAlignment = VerticalAlignment.Center
             Grid.SetColumn(imagem, 0)
             self._imagens.append(imagem)
