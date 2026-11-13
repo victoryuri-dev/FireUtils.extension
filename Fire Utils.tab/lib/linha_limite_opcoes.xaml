@@ -1,0 +1,60 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fire Utils — Inserir Linha com Limite"
+        Width="380"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F5">
+
+    <!-- Escrito no tema claro dos demais diálogos: tema_dialogos.py o escurece. -->
+    <Window.Resources>
+        <SolidColorBrush x:Key="BrushLabel"   Color="#646464"/>
+        <SolidColorBrush x:Key="BrushValor"   Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="BrushAccent"  Color="#CC1A32"/>
+        <SolidColorBrush x:Key="BrushBranco"  Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="BrushCancela" Color="#E1E1E1"/>
+        <SolidColorBrush x:Key="BrushWarn"    Color="#B03A2E"/>
+
+        <Style x:Key="BotaoStyle" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Margin" Value="8,0,0,0"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="LabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushLabel}"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="22,8,22,18">
+
+        <TextBlock Text="Inserir linha com limite" FontSize="15" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushValor}" Margin="0,0,0,4"/>
+        <TextBlock Text="As linhas são desenhadas clique a clique; a última é encurtada para fechar exatamente no limite."
+                   FontSize="11" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
+        <StackPanel x:Name="SecaoEstilo">
+            <TextBlock Text="Estilo da linha" Style="{StaticResource LabelStyle}"/>
+            <ComboBox x:Name="CmbEstilo" Height="28" FontSize="12" Margin="0,0,0,14"/>
+        </StackPanel>
+
+        <TextBlock Text="Comprimento máximo da linha (m)" Style="{StaticResource LabelStyle}"/>
+        <TextBox x:Name="TxtComprimento" Height="30" FontSize="12" Margin="0,0,0,10"/>
+
+        <TextBlock x:Name="TxtErro" Text="" FontSize="11" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushWarn}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="BtnCancelar" Content="Cancelar" Width="100" Style="{StaticResource BotaoStyle}"
+                    Background="{StaticResource BrushCancela}" Foreground="{StaticResource BrushValor}"/>
+            <Button x:Name="BtnOk" Content="Inserir" Width="100" Style="{StaticResource BotaoStyle}"
+                    Background="{StaticResource BrushAccent}" Foreground="{StaticResource BrushBranco}"
+                    IsDefault="True"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

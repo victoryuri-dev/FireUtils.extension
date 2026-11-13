@@ -1,0 +1,86 @@
+<!-- Fragmento (não é um XAML completo): estilos escuros injetados em
+     <Window.Resources> de cada diálogo por tema_dialogos.py. Brushes com
+     prefixo Tema* para não colidir com as chaves de cada janela. -->
+<SolidColorBrush x:Key="TemaCampo"  Color="#17171C"/>
+<SolidColorBrush x:Key="TemaBorda"  Color="#2C2C33"/>
+<SolidColorBrush x:Key="TemaTexto"  Color="#F5F5F7"/>
+<SolidColorBrush x:Key="TemaSuave"  Color="#87878D"/>
+<SolidColorBrush x:Key="TemaAccent" Color="#C0152A"/>
+<SolidColorBrush x:Key="TemaHover"  Color="#1D1E24"/>
+
+<ControlTemplate x:Key="TemaSetaTemplate" TargetType="ToggleButton">
+    <Border Background="{StaticResource TemaCampo}" BorderBrush="{StaticResource TemaBorda}" BorderThickness="1">
+        <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"
+              Data="M0,0 L4,4 L8,0" Stroke="{StaticResource TemaTexto}" StrokeThickness="1.5"/>
+    </Border>
+</ControlTemplate>
+
+<Style TargetType="ComboBoxItem">
+    <Setter Property="Foreground" Value="{StaticResource TemaTexto}"/>
+    <Setter Property="Template">
+        <Setter.Value>
+            <ControlTemplate TargetType="ComboBoxItem">
+                <Border x:Name="Bd" Background="Transparent" Padding="8,5,8,5">
+                    <ContentPresenter/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter TargetName="Bd" Property="Background" Value="{StaticResource TemaHover}"/>
+                    </Trigger>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Foreground" Value="{StaticResource TemaAccent}"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value>
+    </Setter>
+</Style>
+
+<Style TargetType="ComboBox">
+    <Setter Property="Foreground" Value="{StaticResource TemaTexto}"/>
+    <Setter Property="Template">
+        <Setter.Value>
+            <ControlTemplate TargetType="ComboBox">
+                <Grid>
+                    <ToggleButton Template="{StaticResource TemaSetaTemplate}" Focusable="False" ClickMode="Press"
+                                  IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+                    <ContentPresenter IsHitTestVisible="False" Margin="10,2,28,2" VerticalAlignment="Center"
+                                      HorizontalAlignment="Left"
+                                      Content="{TemplateBinding SelectionBoxItem}"
+                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+                    <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                           AllowsTransparency="True" Focusable="False" PopupAnimation="None">
+                        <Border MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                                Background="{StaticResource TemaCampo}" BorderBrush="{StaticResource TemaBorda}"
+                                BorderThickness="1">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                </Grid>
+            </ControlTemplate>
+        </Setter.Value>
+    </Setter>
+</Style>
+
+<Style TargetType="TextBox">
+    <Setter Property="Foreground" Value="{StaticResource TemaTexto}"/>
+    <Setter Property="CaretBrush" Value="{StaticResource TemaTexto}"/>
+    <Setter Property="Padding" Value="8,4,8,4"/>
+    <Setter Property="Template">
+        <Setter.Value>
+            <ControlTemplate TargetType="TextBox">
+                <Border x:Name="Bd" Background="{StaticResource TemaCampo}" BorderBrush="{StaticResource TemaBorda}"
+                        BorderThickness="1" Padding="{TemplateBinding Padding}">
+                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsKeyboardFocused" Value="True">
+                        <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource TemaAccent}"/>
+                    </Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate>
+        </Setter.Value>
+    </Setter>
+</Style>

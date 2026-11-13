@@ -103,6 +103,7 @@ from Autodesk.Revit.DB import (
 from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
+from tema_dialogos import JanelaFireUtils
 
 from family_loader_events import criar_fila_acoes
 
@@ -954,7 +955,7 @@ def _desrastrear(elemento_id):
 # FORM — preferências de roteamento (altura + ordem dos eixos X/Y)
 # ============================================================================
 
-class _JanelaOpcoesRota(forms.WPFWindow):
+class _JanelaOpcoesRota(JanelaFireUtils):
     """Janela WPF MODELESS (connect_pipe_opcoes.xaml) com PRÉVIA AO VIVO: a
     cada troca de opção (onde conectar / ordem dos eixos), o tubo é
     reconstruído no modelo para o usuário ver o resultado antes de
@@ -994,7 +995,7 @@ class _JanelaOpcoesRota(forms.WPFWindow):
 
     def __init__(self, doc, uidoc, pipe_desc, pipe_ref, pt_click_desc, pt_click_ref, output,
                  clicou_ponta_exata=False):
-        forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
+        JanelaFireUtils.__init__(self, _XAML_OPCOES_PATH)
         self.doc           = doc
         self.uidoc         = uidoc
         self.pipe_desc     = pipe_desc

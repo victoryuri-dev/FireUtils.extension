@@ -62,6 +62,7 @@ from Autodesk.Revit.DB.Plumbing import Pipe, PipingSystemType, PlumbingUtils
 from Autodesk.Revit.DB.Structure import StructuralType
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
+from tema_dialogos import JanelaFireUtils
 
 from family_loader_events import criar_fila_acoes
 from shelter_family import garantir_abrigo
@@ -1311,7 +1312,7 @@ def _construir_coluna(doc, ctx, niveis_sel, dir_saida, inserir_abrigo, dir_abrig
 _CHAVE_JANELA_COLUNA = u"FireUtils_InserirHidranteColuna_JanelaAtiva"
 
 
-class _JanelaOpcoesColuna(forms.WPFWindow):
+class _JanelaOpcoesColuna(JanelaFireUtils):
     """Janela MODELESS (hydrant_coluna_opcoes.xaml) com PRÉVIA AO VIVO —
     mesmo padrão de connect_pipe.py/_JanelaOpcoesRota: níveis (checkbox
     por nível, criados dinamicamente porque o número varia por projeto —
@@ -1324,7 +1325,7 @@ class _JanelaOpcoesColuna(forms.WPFWindow):
     coluna inteira com 2+ — ver _construir_coluna)."""
 
     def __init__(self, doc, uidoc, ctx, output):
-        forms.WPFWindow.__init__(self, _XAML_COLUNA_PATH)
+        JanelaFireUtils.__init__(self, _XAML_COLUNA_PATH)
         self.doc    = doc
         self.uidoc  = uidoc
         self.ctx    = ctx

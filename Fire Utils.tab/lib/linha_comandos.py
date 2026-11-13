@@ -14,7 +14,10 @@ import clr
 clr.AddReference("RevitAPI")
 clr.AddReference("RevitAPIUI")
 
+import os
+
 from pyrevit import forms
+from tema_dialogos import JanelaFireUtils, mensagem
 from Autodesk.Revit.DB import (
     TextNote, TextNoteOptions, Transaction, UnitUtils, CurveElement,
     HorizontalTextAlignment
@@ -27,42 +30,59 @@ from comprimento_linha_config import (
 )
 
 
+_XAML_LINHA_LIMITE = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"linha_limite_opcoes.xaml")
+
+
+class _JanelaLinhaLimite(JanelaFireUtils):
+    """Estilo da linha (só se não houver um padrão salvo em Configurar) e
+    comprimento máximo, numa janela só — antes eram duas caixas nativas."""
+
+    def __init__(self, nomes_estilos, estilo_padrao):
+        JanelaFireUtils.__init__(self, _XAML_LINHA_LIMITE)
+        self.resultado = None
+        for nome in nomes_estilos:
+            self.CmbEstilo.Items.Add(nome)
+        self.CmbEstilo.SelectedIndex = 0
+        if estilo_padrao:
+            # Padrão salvo: não pergunta de novo, como antes.
+            from System.Windows import Visibility
+            self.CmbEstilo.SelectedItem = estilo_padrao
+            self.SecaoEstilo.Visibility = Visibility.Collapsed
+        self.TxtComprimento.Text = u"10"
+        self.BtnCancelar.Click += lambda s, a: self.Close()
+        self.BtnOk.Click += self._ao_confirmar
+        self.TxtComprimento.Focus()
+        self.TxtComprimento.SelectAll()
+
+    def _ao_confirmar(self, sender, args):
+        try:
+            comprimento = float((self.TxtComprimento.Text or u"").replace(u",", u".").strip())
+        except ValueError:
+            comprimento = -1
+        if comprimento <= 0:
+            self.TxtErro.Text = u"Comprimento inválido: {}".format(self.TxtComprimento.Text)
+            return
+        self.resultado = (self.CmbEstilo.SelectedItem, comprimento)
+        self.Close()
+
+
 def inserir_linha_com_limite_comando(doc, uidoc):
     view = uidoc.ActiveView
 
     estilos = listar_estilos_de_linha(doc)
     if not estilos:
-        forms.alert(u"Nenhum estilo de linha encontrado no projeto.", exitscript=True)
+        mensagem(u"Nenhum estilo de linha encontrado no projeto.", aviso=True, sair=True)
 
     estilo_padrao, _prefixo_nao_usado, _tipo_texto_nao_usado = carregar_config(doc)
-    if estilo_padrao and estilo_padrao in estilos:
-        nome_escolhido = estilo_padrao
-    else:
-        nome_escolhido = forms.SelectFromList.show(
-            sorted(estilos.keys()),
-            title=u"Inserir Linha com Limite",
-            prompt=u"Escolha o estilo da linha:",
-            multiselect=False,
-        )
-        if not nome_escolhido:
-            forms.alert(u"Nenhum estilo selecionado.", exitscript=True)
+    if not (estilo_padrao and estilo_padrao in estilos):
+        estilo_padrao = None
 
-    comprimento_str = forms.ask_for_string(
-        default=u"10",
-        prompt=u"Comprimento máximo da linha (m):",
-        title=u"Inserir Linha com Limite",
-    )
-    if not comprimento_str:
-        forms.alert(u"Nenhum comprimento informado.", exitscript=True)
+    janela = _JanelaLinhaLimite(sorted(estilos.keys()), estilo_padrao)
+    janela.ShowDialog()
+    if janela.resultado is None:
+        return  # cancelado
 
-    try:
-        comprimento_max = float(comprimento_str.replace(u",", u"."))
-    except ValueError:
-        comprimento_max = -1
-
-    if comprimento_max <= 0:
-        forms.alert(u"Comprimento inválido: {}".format(comprimento_str), exitscript=True)
-
+    nome_escolhido, comprimento_max = janela.resultado
     inserir_linha_com_limite(doc, uidoc, view, estilos[nome_escolhido], comprimento_max)
 
 
@@ -99,13 +119,13 @@ def medir_e_inserir_texto_comando(doc, uidoc):
                 "Selecione as linhas (ENTER para confirmar)"
             )
             if not refs:
-                forms.alert("Nenhuma linha selecionada.", exitscript=True)
+                mensagem(u"Nenhuma linha selecionada.", aviso=True, sair=True)
             elements = [doc.GetElement(r.ElementId) for r in refs]
 
         _, prefixo, tipo_texto_nome = carregar_config(doc)
         tipo_texto_id = resolver_tipo_texto(doc, tipo_texto_nome)
         if tipo_texto_id is None:
-            forms.alert("Nenhum estilo de texto (TextNoteType) encontrado.", exitscript=True)
+            mensagem(u"Nenhum estilo de texto (TextNoteType) encontrado.", aviso=True, sair=True)
 
         total_length = sum(get_length_meters(e) for e in elements)
         text_content = u"{}{:.2f} m".format(prefixo, total_length)
@@ -122,7 +142,7 @@ def medir_e_inserir_texto_comando(doc, uidoc):
     except Exception as e:
         err = str(e)
         if "Cancel" not in err and "cancel" not in err:
-            forms.alert("Erro: {}".format(err))
+            mensagem(u"Erro: {}".format(err), aviso=True)
 
 
 def configurar_comando(doc, uidoc=None):

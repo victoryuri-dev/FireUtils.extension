@@ -19,6 +19,7 @@ clr.AddReference(u"PresentationCore")
 clr.AddReference(u"WindowsBase")
 
 from pyrevit import forms
+from tema_dialogos import mensagem
 
 _XAML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"saidas_dialogo.xaml")
 
@@ -155,13 +156,12 @@ class _JanelaOcupacao(forms.WPFWindow):
         if tipo != u"area":
             texto = (self.TxtValor.Text or u"").strip()
             if not texto.isdigit():
-                forms.alert(u"Informe um número inteiro (zero ou mais) no campo de valor.",
-                            title=u"FireUtils", warn_icon=True)
+                mensagem(u"Informe um número inteiro (zero ou mais) no campo de valor.", aviso=True)
                 return
             populacao = int(texto)
         niveis = [c.Content for c in self._checks_niveis if c.IsChecked]
         if self._pede_niveis and not niveis:
-            forms.alert(u"Escolha pelo menos um nível.", title=u"FireUtils", warn_icon=True)
+            mensagem(u"Escolha pelo menos um nível.", aviso=True)
             return
         self.resultado = {
             u"ocupacao": item[u"codigo"],

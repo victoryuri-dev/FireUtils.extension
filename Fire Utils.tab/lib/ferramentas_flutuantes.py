@@ -37,6 +37,7 @@ clr.AddReference(u"PresentationCore")
 clr.AddReference(u"WindowsBase")
 
 from pyrevit import forms
+from tema_dialogos import mensagem
 
 from family_error_utils import texto_erro, print_seguro
 
@@ -280,8 +281,7 @@ def _rodar_comando_python(uiapp, grupo, acao):
 
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None:
-        forms.alert(u"Abra um projeto no Revit antes de usar esta ferramenta.",
-                    title=u"FireUtils", warn_icon=True)
+        mensagem(u"Abra um projeto no Revit antes de usar esta ferramenta.", aviso=True)
         return
     try:
         # Mesma trava de licença dos botões da faixa: exigir() encerra o
@@ -296,7 +296,7 @@ def _rodar_comando_python(uiapp, grupo, acao):
             return
         executar(uidoc.Document, uidoc, script.get_output())
     except SystemExit:
-        pass  # pyscript.exit() / forms.alert(exitscript) / exigir(): fim normal
+        pass  # pyscript.exit() / mensagem(sair=True) / exigir(): fim normal
 
 
 # modo -> (título, ajuda, pede níveis): mesmos textos do modal da dockpane.
@@ -314,8 +314,7 @@ def _mostrar_resultado_saidas(r):
     sincronizar = r.get(u"acao") == u"sincronizar"
     rotulo = u"sincronizar ambientes" if sincronizar else u"identificar ambientes"
     if not r.get(u"ok"):
-        forms.alert(r.get(u"erro") or u"Falha ao {}.".format(rotulo),
-                    title=u"FireUtils", warn_icon=True)
+        forms.alert(r.get(u"erro") or u"Falha ao {}.".format(rotulo), aviso=True)
         return
 
     linhas = list(r.get(u"resumoOk") or [])
@@ -343,8 +342,8 @@ def _mostrar_resultado_saidas(r):
     texto = u"\n".join(linhas)
     if falhas:
         texto += u"\n\nAtenção:\n" + u"\n".join(falhas)
-    forms.alert(texto, title=u"Ambientes sincronizados" if sincronizar else u"Ambientes identificados",
-                warn_icon=bool(falhas))
+    mensagem(texto, titulo=u"Ambientes sincronizados" if sincronizar else u"Ambientes identificados",
+             aviso=bool(falhas))
 
 
 def _rodar_saidas(uiapp, acao, fila_acoes):
@@ -373,16 +372,15 @@ def _rodar_saidas(uiapp, acao, fila_acoes):
     opcoes = {}
     ponte.tratar_get_saidas_opcoes(uiapp, lambda tipo, payload: opcoes.update(payload))
     if not opcoes.get(u"ok"):
-        forms.alert(opcoes.get(u"erro") or u"Sem resposta do Revit.", title=u"FireUtils", warn_icon=True)
+        mensagem(opcoes.get(u"erro") or u"Sem resposta do Revit.", aviso=True)
         return
 
     from sync import estruturas_vinculadas
     projeto_dir = os.path.dirname(uiapp.ActiveUIDocument.Document.PathName)
     estruturas = estruturas_vinculadas(projeto_dir)
     if not estruturas:
-        forms.alert(u"Este arquivo não tem estrutura vinculada. Vincule o projeto e a "
-                    u"estrutura no Dashboard da dockpane (uma vez) e tente de novo.",
-                    title=u"FireUtils", warn_icon=True)
+        mensagem(u"Este arquivo não tem estrutura vinculada. Vincule o projeto e a "
+                 u"estrutura no Dashboard da dockpane (uma vez) e tente de novo.", aviso=True)
         return
 
     from saidas_dialogo import pedir_ocupacao
@@ -403,8 +401,7 @@ def _rodar_saidas_seguro(uiapp, acao, fila_acoes):
         pass
     except Exception as ex:
         print_seguro(u"[AVISO] Ferramenta de saídas falhou: {}".format(texto_erro(ex)))
-        forms.alert(u"Não foi possível executar a ferramenta:\n\n{}".format(texto_erro(ex)),
-                    title=u"FireUtils", warn_icon=True)
+        mensagem(u"Não foi possível executar a ferramenta:\n\n{}".format(texto_erro(ex)), aviso=True)
 
 
 def _posicionar(janela):
