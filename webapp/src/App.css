@@ -293,6 +293,18 @@
   flex: 1;
 }
 
+/* Botões das janelas flutuantes: ícone colorido próprio; barra aberta = fundo
+   de hover fixo (não dá para tingir um PNG com `color`). */
+.sidebar-item-img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+.sidebar-item.janela-aberta {
+  background: var(--sidebar-bg-hover);
+}
+
 /* Divisor entre as abas e os botões das janelas flutuantes. */
 .sidebar-divisor {
   width: 28px;

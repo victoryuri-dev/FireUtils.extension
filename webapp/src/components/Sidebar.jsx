@@ -11,9 +11,9 @@ import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
 import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
-import janelaFerramentasIconSvg from "../assets/icons/janela-ferramentas-icon.svg?raw";
-import janelaTubosIconSvg from "../assets/icons/janela-tubos-icon.svg?raw";
-import janelaLinhaIconSvg from "../assets/icons/janela-linha-icon.svg?raw";
+import ocupacaoIconSvg from "../assets/icons/ocupacao-icon.svg?raw";
+import janelaTubosIconPng from "../assets/icons/janela-tubos-icon.png";
+import janelaLinhaIconPng from "../assets/icons/janela-linha-icon.png";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
@@ -31,13 +31,14 @@ const ITENS_NAV = [
 ];
 
 // Janelas flutuantes de ferramentas (ferramentas_flutuantes.py): abaixo do
-// divisor, um botão por grupo. Abre/fecha a barra modeless do grupo.
+// divisor, um botão por grupo. Abre/fecha a barra modeless do grupo. O ícone é
+// o do primeiro botão da própria barra (cores próprias, não herdam `color`).
 const ITENS_JANELAS = [
-  { id: "saidas", label: "Janela flutuante: Saídas de Emergência", svg: janelaFerramentasIconSvg },
+  { id: "saidas", label: "Janela flutuante: Saídas de Emergência", svg: ocupacaoIconSvg },
   // Sem entrada em MODULO_POR_ABA: cada ferramenta de tubos confere a
   // licença PRO por conta própria (licenca_guard), como o botão da faixa.
-  { id: "tubos", label: "Janela flutuante: Ferramentas de Tubos", svg: janelaTubosIconSvg },
-  { id: "linha", label: "Janela flutuante: Ferramentas de Linha", svg: janelaLinhaIconSvg },
+  { id: "tubos", label: "Janela flutuante: Ferramentas de Tubos", png: janelaTubosIconPng },
+  { id: "linha", label: "Janela flutuante: Ferramentas de Linha", png: janelaLinhaIconPng },
 ];
 
 // Duração até a barra de maior delay (loader-bar-1: 0.28s) terminar de
@@ -142,12 +143,16 @@ export default function Sidebar({
             <button
               key={item.id}
               type="button"
-              className={`sidebar-item ${aberta ? "ativa" : ""} ${bloqueada ? "bloqueada" : ""}`}
+              className={`sidebar-item ${aberta ? "janela-aberta" : ""} ${bloqueada ? "bloqueada" : ""}`}
               onClick={() => onAlternarJanela?.(item.id)}
               title={bloqueada ? `${item.label} (fora da sua assinatura)` : item.label}
               aria-pressed={aberta}
             >
-              <Icon svg={item.svg} title={item.label} />
+              {item.png ? (
+                <img className="sidebar-item-img" src={item.png} alt={item.label} />
+              ) : (
+                <Icon svg={item.svg} title={item.label} />
+              )}
             </button>
           );
         })}
