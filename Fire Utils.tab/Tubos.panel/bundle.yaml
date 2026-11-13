@@ -1,7 +1,8 @@
 title: Ferramentas flutuantes
-tooltip: Abre as barras flutuantes de ferramentas (hidrantes e população dos ambientes)
+tooltip: Abre as barras flutuantes de ferramentas (hidrantes, população dos ambientes e linhas)
 author: Fire Utils
 # Os nomes abaixo são os das pastas .pushbutton, não os títulos exibidos.
 layout:
   - Hidrantes
   - População
+  - Linhas
