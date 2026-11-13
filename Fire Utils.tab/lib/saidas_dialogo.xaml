@@ -164,6 +164,30 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Foreground" Value="{StaticResource BrushTexto}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource BrushTexto}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{StaticResource BrushCard}"
+                                BorderBrush="{StaticResource BrushBorda}" BorderThickness="1" Padding="10,6,10,6">
+                            <ScrollViewer x:Name="PART_ContentHost"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource BrushSuave}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Border Background="{StaticResource BrushFundo}" BorderBrush="{StaticResource BrushBorda}"
@@ -207,31 +231,29 @@
                         </StackPanel>
                     </Grid>
 
-                    <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorda}"
-                            BorderThickness="1" Padding="12" Margin="0,14,0,0">
-                        <StackPanel>
-                            <TextBlock x:Name="TxtTaxa" Foreground="{StaticResource BrushTexto}" FontSize="12"
-                                       TextWrapping="Wrap"/>
-                            <UniformGrid Columns="3" Margin="0,10,0,0">
-                                <StackPanel>
-                                    <TextBlock Text="AD / UP" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource BrushSuave}"/>
-                                    <TextBlock x:Name="TxtAD" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource BrushAccent}"/>
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Text="ER / UP" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource BrushSuave}"/>
-                                    <TextBlock x:Name="TxtER" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource BrushAccent}"/>
-                                </StackPanel>
-                                <StackPanel>
-                                    <TextBlock Text="PT / UP" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource BrushSuave}"/>
-                                    <TextBlock x:Name="TxtPT" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource BrushAccent}"/>
-                                </StackPanel>
-                            </UniformGrid>
-                            <Button x:Name="BtnNotas" Content="" Style="{StaticResource BotaoTexto}" Margin="0,10,0,0"
-                                    HorizontalAlignment="Left"/>
-                            <TextBlock x:Name="TxtNotas" Foreground="{StaticResource BrushTexto}" FontSize="11"
-                                       TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
+                    <!-- Taxa normativa + valor: área é automática (do ambiente);
+                         assentos e população estimada são digitados. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="TAXA NORMATIVA" Style="{StaticResource Rotulo}"/>
+                            <ComboBox x:Name="CbTaxa" Padding="6,5,6,5"/>
                         </StackPanel>
-                    </Border>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock x:Name="LblValor" Text="ÁREA (M²)" Style="{StaticResource Rotulo}"/>
+                            <TextBox x:Name="TxtValor"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Notas retráteis. -->
+                    <Button x:Name="BtnNotas" Content="" Style="{StaticResource BotaoTexto}" Margin="0,14,0,0"
+                            HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="TxtNotas" Foreground="{StaticResource BrushTexto}" FontSize="11"
+                               TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
 
                     <StackPanel x:Name="PainelNiveis" Visibility="Collapsed">
                         <TextBlock Text="NÍVEIS" Style="{StaticResource Rotulo}"/>

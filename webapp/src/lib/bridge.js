@@ -249,6 +249,9 @@
  *     ambientes escolhidos e envia ao site. "selecao": o usuário clica nos
  *     ambientes no Revit; "niveis": os dos níveis em `niveis` (nomes); "todos":
  *     os que ainda não têm Grupo. Substitui os 3 botões "Identificar..." da faixa.
+ *     Opcionais (usados pela janela WPF da barra flutuante): popTipo: "area" (padrão) |
+ *     "fixo" | "manual" e populacao: number — com "fixo"/"manual" esse valor é gravado
+ *     em cada ambiente em vez do cálculo por área.
  *
  *   { type: "SINCRONIZAR_AMBIENTES" }
  *     JS -> Python: Revit -> site (nome/grupo/área) e site -> Revit (população e

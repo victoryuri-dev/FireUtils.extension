@@ -43,6 +43,8 @@ class _JanelaOcupacao(forms.WPFWindow):
             self.CbGrupo.Items.Add(grupo[u"uso"])
         self.CbGrupo.SelectionChanged += self._ao_trocar_grupo
         self.CbTipo.SelectionChanged += self._ao_trocar_tipo
+        self.CbTaxa.SelectionChanged += self._ao_trocar_taxa
+        self._taxas = []
         self.CbGrupo.SelectedIndex = 0
 
         if pede_niveis:
@@ -94,19 +96,40 @@ class _JanelaOcupacao(forms.WPFWindow):
         return itens[indice] if 0 <= indice < len(itens) else None
 
     def _ao_trocar_tipo(self, sender, args):
+        """Trocou a divisão: recarrega as taxas normativas dela e as notas."""
         item = self._item_atual()
         if item is None:
             return
         from System.Windows import Visibility
-        self.TxtTaxa.Text = u"Taxa: {}".format(item[u"taxa"])
-        self.TxtAD.Text = item[u"ad"]
-        self.TxtER.Text = item[u"er"]
-        self.TxtPT.Text = item[u"pt"]
+        self._taxas = item.get(u"taxas") or []
+        self.CbTaxa.Items.Clear()
+        for taxa in self._taxas:
+            self.CbTaxa.Items.Add(taxa[u"rotulo"])
+        if self.CbTaxa.Items.Count > 0:
+            self.CbTaxa.SelectedIndex = 0
+
         self._notas = item.get(u"notas") or []
         self.BtnNotas.Visibility = Visibility.Visible if self._notas else Visibility.Collapsed
         self.TxtNotas.Text = u"\n\n".join(self._notas)
         self.TxtNotas.Visibility = Visibility.Collapsed
         self._atualizar_botao_notas()
+
+    def _tipo_de_taxa(self):
+        indice = self.CbTaxa.SelectedIndex
+        return self._taxas[indice][u"tipo"] if 0 <= indice < len(self._taxas) else u"area"
+
+    def _ao_trocar_taxa(self, sender, args):
+        """Por área: a área vem do ambiente (campo travado). Assentos e
+        população estimada não dependem da área: campo livre."""
+        tipo = self._tipo_de_taxa()
+        self.TxtValor.Text = u""
+        if tipo == u"area":
+            self.LblValor.Text = u"ÁREA (M²)"
+            self.TxtValor.Text = u"Automática (do ambiente)"
+            self.TxtValor.IsEnabled = False
+        else:
+            self.LblValor.Text = u"ASSENTOS (POR AMBIENTE)" if tipo == u"fixo" else u"POPULAÇÃO ESTIMADA (POR AMBIENTE)"
+            self.TxtValor.IsEnabled = True
 
     def _atualizar_botao_notas(self):
         from System.Windows import Visibility
@@ -124,6 +147,15 @@ class _JanelaOcupacao(forms.WPFWindow):
         indice = self.CbEstrutura.SelectedIndex
         if item is None or indice < 0:
             return
+        tipo = self._tipo_de_taxa()
+        populacao = None
+        if tipo != u"area":
+            texto = (self.TxtValor.Text or u"").strip()
+            if not texto.isdigit():
+                forms.alert(u"Informe um número inteiro (zero ou mais) no campo de valor.",
+                            title=u"FireUtils", warn_icon=True)
+                return
+            populacao = int(texto)
         niveis = [c.Content for c in self._checks_niveis if c.IsChecked]
         if self._pede_niveis and not niveis:
             forms.alert(u"Escolha pelo menos um nível.", title=u"FireUtils", warn_icon=True)
@@ -132,6 +164,8 @@ class _JanelaOcupacao(forms.WPFWindow):
             u"ocupacao": item[u"codigo"],
             u"estruturaNome": self._estruturas[indice].get(u"nome"),
             u"niveis": niveis,
+            u"popTipo": tipo,
+            u"populacao": populacao,
         }
         self.Close()
 

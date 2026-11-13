@@ -131,6 +131,26 @@ def _grupo_e_descricoes(estado, codigo):
     return letra, nome, divisoes.get(codigo, u"")
 
 
+_ROTULO_POP_ESTIMADA = u"População estimada"
+_ROTULO_ASSENTOS = u"Assentos fixos"
+
+
+def _opcoes_de_taxa(entrada):
+    """Taxas normativas escolhíveis para a divisão — mesma regra de
+    taxaOpcoes (webapp/src/data/se_calc.js): por área (se a norma tem taxa por
+    área), assentos fixos (nota N) e população informada (a própria taxa se
+    ela não é por área; senão a taxa global "população estimada")."""
+    area = entrada.get(u"A")
+    obs = entrada.get(u"obs", u"—")
+    opcoes = []
+    if area is not None:
+        opcoes.append({u"tipo": u"area", u"rotulo": obs})
+    if u"N" in (entrada.get(u"notas") or []):
+        opcoes.append({u"tipo": u"fixo", u"rotulo": _ROTULO_ASSENTOS})
+    opcoes.append({u"tipo": u"manual", u"rotulo": obs if area is None else _ROTULO_POP_ESTIMADA})
+    return opcoes
+
+
 def _grupos_de_ocupacao(estado):
     """Ocupações agrupadas por grupo ("C - Comercial"), com a divisão descrita
     ("C-1 — Comércio ...") — mesmo formato pra qualquer estado."""
@@ -148,6 +168,7 @@ def _grupos_de_ocupacao(estado):
             u"er": u"{}".format(entrada.get(u"ER") or u"—"),
             u"pt": u"{}".format(entrada.get(u"PT") or u"—"),
             u"notas": _notas(estado, codigo),
+            u"taxas": _opcoes_de_taxa(entrada),
         })
     return [{u"uso": rotulo, u"itens": grupos[(letra, rotulo)]}
             for (letra, rotulo) in sorted(grupos.keys())]
@@ -243,6 +264,20 @@ def _identificar(uiapp, payload, fila_acoes, postar_mensagem):
     if not estrutura_nome:
         raise _Falha(u"Escolha a estrutura a que os ambientes pertencem.")
 
+    # Como a população é obtida: "area" (padrão — a da dockpane), "fixo"
+    # (assentos) ou "manual" (população estimada), os dois com `populacao`.
+    pop_tipo = payload.get(u"popTipo") or u"area"
+    populacao = None
+    if pop_tipo not in (u"area", u"fixo", u"manual"):
+        raise _Falha(u"Tipo de população inválido.")
+    if pop_tipo != u"area":
+        try:
+            populacao = int(payload.get(u"populacao"))
+        except (TypeError, ValueError):
+            populacao = -1
+        if populacao < 0:
+            raise _Falha(u"Informe a população (número inteiro, zero ou mais).")
+
     doc, projeto_dir, estado = _contexto(uiapp)
     if codigo not in estado[u"tabela"]:
         raise _Falha(u"A ocupação '{}' não existe na norma deste estado.".format(codigo))
@@ -263,7 +298,7 @@ def _identificar(uiapp, payload, fila_acoes, postar_mensagem):
         if marcados < len(sem_estrutura):
             raise _Falha(u"Não foi possível gravar o parâmetro Estrutura em todos os ambientes.")
 
-    ok, saida = _capturando_saida(set_occupancy, rooms, codigo, estado, doc)
+    ok, saida = _capturando_saida(set_occupancy, rooms, codigo, estado, doc, pop_tipo, populacao)
     if not ok:
         raise _Falha(u"Não foi possível gravar a ocupação nos ambientes.")
     manuais = [linha.strip() for linha in saida.splitlines() if u"[POP MANUAL]" in linha]

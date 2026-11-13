@@ -139,9 +139,14 @@ def garantir_parametros(doc=None):
 # FUNÇÃO PRINCIPAL — grava ocupação, taxa e população
 # ============================================================
 
-def set_occupancy(rooms, occupancy_value, estado, doc=None):
+def set_occupancy(rooms, occupancy_value, estado, doc=None, pop_tipo=u"area", populacao=None):
     """
     Grava ocupação, taxa populacional e população nos ambientes informados.
+
+    pop_tipo : "area" (padrão: área x taxa da norma), "fixo" (assentos) ou
+             "manual" (população estimada). Nos dois últimos, `populacao` é o
+             valor gravado em cada ambiente e a Taxa Populacional passa a
+             descrever essa escolha, não a taxa por área.
 
     estado : dict retornado por normas.get_estado(). Se fornecido, os dados
              são lidos de estado["tabela"] e estado["ocupacoes"].
@@ -165,6 +170,12 @@ def set_occupancy(rooms, occupancy_value, estado, doc=None):
     taxa_obs   = entry.get(u"obs", u"")
     ocup_entry = estado.get(u"ocupacoes", {}).get(occupancy_value, {})
     ocupacao   = ocup_entry.get(u"uso", u"")
+
+    informada = pop_tipo in (u"fixo", u"manual") and populacao is not None
+    if pop_tipo == u"fixo":
+        taxa_obs = u"Assentos fixos"
+    elif pop_tipo == u"manual" and taxa_a:
+        taxa_obs = u"População estimada"  # taxa global: vale para qualquer ocupação
 
     # ------------------------------------------------------------------
     # Gravar parâmetros nos ambientes
@@ -205,7 +216,9 @@ def set_occupancy(rooms, occupancy_value, estado, doc=None):
             # População calculada
             param_pop = room.LookupParameter(u"População")
             if param_pop:
-                if taxa_a and taxa_a > 0:
+                if informada:
+                    param_pop.Set(int(populacao))
+                elif taxa_a and taxa_a > 0:
                     param_pop.Set(int(population_calc(area, float(taxa_a))))
                 else:
                     # A = None: cálculo não é por área (vagas, leitos, etc.)
