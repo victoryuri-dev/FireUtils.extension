@@ -102,7 +102,17 @@ class _JanelaFerramentas(forms.WPFWindow):
         for acao, texto, icone in definicao[u"ferramentas"]:
             self.Botoes.Children.Add(self._criar_botao(acao, texto, icone, ao_clicar))
         self.BtnReduzir.Click += self._ao_alternar_reducao
+        self.BtnFechar.Click += lambda sender, args: self.Close()
+        # Sem barra de título nativa, o cabeçalho é a alça de arrastar. Os
+        # botões tratam o próprio clique, então não iniciam o arrasto.
+        self.Cabecalho.MouseLeftButtonDown += self._ao_arrastar
         self._aplicar_reducao(_estado[u"reduzida"])
+
+    def _ao_arrastar(self, sender, args):
+        try:
+            self.DragMove()
+        except Exception:
+            pass  # DragMove lança se o botão já foi solto; sem importância.
 
     def _ao_alternar_reducao(self, sender, args):
         _estado[u"reduzida"] = not _estado[u"reduzida"]
@@ -124,8 +134,8 @@ class _JanelaFerramentas(forms.WPFWindow):
             rotulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
 
         self.TxtTitulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
-        Grid.SetColumnSpan(self.BtnReduzir, 2 if reduzida else 1)
-        self.BtnReduzir.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Right
+        Grid.SetColumnSpan(self.PainelBotoesTopo, 2 if reduzida else 1)
+        self.PainelBotoesTopo.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Right
         self.BtnReduzir.Content = u"»" if reduzida else u"«"
         self.BtnReduzir.ToolTip = u"Expandir (ícones e nomes)" if reduzida else u"Reduzir (só ícones)"
         self.Width = _LARGURA_REDUZIDA if reduzida else _LARGURA
