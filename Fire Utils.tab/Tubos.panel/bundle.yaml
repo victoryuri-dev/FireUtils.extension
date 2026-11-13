@@ -1,0 +1,6 @@
+title: Ferramentas de Tubos
+tooltip: Barra flutuante com as ferramentas de inserção e conexão de tubulações
+author: Fire Utils
+# Os nomes abaixo são os das pastas .pushbutton, não os títulos exibidos.
+layout:
+  - Ferramentas de Tubos
