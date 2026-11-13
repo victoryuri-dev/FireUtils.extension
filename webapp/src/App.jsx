@@ -22,13 +22,13 @@ import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
 import { useToasts } from "./lib/toasts";
-import CategoryPills, { TODAS_ID, ROTULO_CURTO_POR_CATEGORIA } from "./components/CategoryPills";
+import FiltrosBiblioteca from "./components/FiltrosBiblioteca";
+import { ROTULO_CURTO_POR_CATEGORIA, ordenarFamilias } from "./lib/categorias";
 import FamilyCard from "./components/FamilyCard";
 import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
 import checkIconSvg from "./assets/icons/check-icon.svg?raw";
 import xIconSvg from "./assets/icons/x-icon.svg?raw";
 import searchIconSvg from "./assets/icons/search-icon.svg?raw";
-import filterIconSvg from "./assets/icons/filter-icon.svg?raw";
 import libraryIconSvg from "./assets/icons/library-icon.svg?raw";
 
 // Tempo máximo esperando o LOAD_RESULT antes de desistir do indicador de
@@ -66,9 +66,11 @@ function enviarSessaoAoHost(sessao) {
   }
 }
 
-function tituloDaSecao(categorias, categoriaAtual) {
-  if (categoriaAtual === TODAS_ID) return "FAMÍLIAS";
-  const categoria = categorias.find((c) => c.id === categoriaAtual);
+// Título da lista: o nome da categoria quando só uma está marcada; senão, "Famílias".
+function tituloDaSecao(categorias, categoriasMarcadas) {
+  if (categoriasMarcadas.size !== 1) return "FAMÍLIAS";
+  const [idMarcado] = categoriasMarcadas;
+  const categoria = categorias.find((c) => c.id === idMarcado);
   if (!categoria) return "FAMÍLIAS";
   return (ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name).toUpperCase();
 }
@@ -112,10 +114,10 @@ export default function App() {
   // Barras flutuantes de ferramentas abertas, por grupo ({ saidas: true }).
   const [janelasAbertas, setJanelasAbertas] = useState({});
   const [catalogo, setCatalogo] = useState(null);
-  const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
+  // Categorias marcadas no filtro (vazio = todas) e ordem da lista ("az" | "recentes").
+  const [categoriasMarcadas, setCategoriasMarcadas] = useState(() => new Set());
+  const [ordemLista, setOrdemLista] = useState("az");
   const [busca, setBusca] = useState("");
-  // Categorias (pills) começam recolhidas: o botão de filtro ao lado da busca as abre.
-  const [categoriasAbertas, setCategoriasAbertas] = useState(false);
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [carregando, setCarregando] = useState(false);
   const [vinculo, setVinculo] = useState(undefined); // undefined = ainda não respondeu
@@ -749,29 +751,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adicionarToast]);
 
-  const secoesVisiveis = useMemo(() => {
+  // Famílias que passam na busca e nas categorias marcadas, já na ordem escolhida.
+  const familiasFiltradas = useMemo(() => {
     if (!catalogo) return [];
     const textoFiltro = busca.trim().toLowerCase();
-    const porCategoria = new Map();
-
-    for (const familia of catalogo.families) {
-      if (categoriaAtual !== TODAS_ID && familia.category_id !== categoriaAtual) continue;
-      if (textoFiltro && !familia.name.toLowerCase().includes(textoFiltro)) continue;
-      if (!porCategoria.has(familia.category)) porCategoria.set(familia.category, []);
-      porCategoria.get(familia.category).push(familia);
-    }
-
-    for (const lista of porCategoria.values()) {
-      lista.sort((a, b) => a.name.localeCompare(b.name));
-    }
-
-    return Array.from(porCategoria.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [catalogo, categoriaAtual, busca]);
-
-  const familiasFiltradas = useMemo(
-    () => secoesVisiveis.flatMap(([, familias]) => familias),
-    [secoesVisiveis]
-  );
+    const posicaoNoCatalogo = new Map(catalogo.families.map((f, i) => [f.id, i]));
+    const visiveis = catalogo.families.filter((familia) => {
+      if (categoriasMarcadas.size > 0 && !categoriasMarcadas.has(familia.category_id)) return false;
+      return !textoFiltro || familia.name.toLowerCase().includes(textoFiltro);
+    });
+    return ordenarFamilias(visiveis, ordemLista, posicaoNoCatalogo);
+  }, [catalogo, categoriasMarcadas, busca, ordemLista]);
 
   function alternarSelecao(familia) {
     setSelecionadas((atual) => {
@@ -967,35 +957,23 @@ export default function App() {
                     onChange={(e) => setBusca(e.target.value)}
                   />
                 </div>
-                <button
-                  type="button"
-                  className={`botao-filtro ${categoriasAbertas ? "aberto" : ""} ${
-                    categoriaAtual !== TODAS_ID ? "com-filtro" : ""
-                  }`}
-                  onClick={() => setCategoriasAbertas((v) => !v)}
-                  aria-expanded={categoriasAbertas}
-                  aria-label="Filtrar por categoria"
-                  title="Filtrar por categoria"
-                >
-                  <Icon svg={filterIconSvg} />
-                </button>
+                {catalogo && (
+                  <FiltrosBiblioteca
+                    categorias={catalogo.categories}
+                    selecionadas={categoriasMarcadas}
+                    onSelecionadas={setCategoriasMarcadas}
+                    ordem={ordemLista}
+                    onOrdem={setOrdemLista}
+                  />
+                )}
               </div>
-
               {!catalogo ? (
                 <p className="vazio">Carregando catálogo...</p>
               ) : (
                 <>
-                  {categoriasAbertas && (
-                    <CategoryPills
-                      categorias={catalogo.categories}
-                      todasIconKey={catalogo.todas_icon_key}
-                      categoriaAtual={categoriaAtual}
-                      onSelect={setCategoriaAtual}
-                    />
-                  )}
                 <div>
                   <div className="secao-titulo-linha">
-                    <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
+                    <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriasMarcadas)}</h2>
                     {selecionadas.size > 0 && (
                       <div className="contadores">
                         <span className="contador">

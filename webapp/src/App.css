@@ -4359,6 +4359,7 @@ h1, h2, h3, h4, h5, h6,
   top: 0;
   z-index: 5;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   gap: 10px;
   /* Fundo sólido: sem ele a lista de famílias aparece entre a busca e o botão
@@ -4817,4 +4818,158 @@ h1, h2, h3, h4, h5, h6,
 .se-pavimentos-lista .se-card-header-dir {
   flex-wrap: wrap;
   gap: 14px 32px;
+}
+
+/* Filtros da Biblioteca (FiltrosBiblioteca.jsx): sempre visíveis abaixo da busca,
+   dentro do bloco fixo (.busca-biblioteca). */
+.filtros-biblioteca {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.filtro-categorias {
+  position: relative;
+}
+
+.filtro-botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--pill-bg);
+  border: solid 1px var(--border-2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filtro-botao:hover,
+.filtro-botao.aberto,
+.filtro-botao.ativo {
+  color: var(--text);
+  border-color: var(--text-2);
+}
+
+.filtro-contagem {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.filtro-seta {
+  width: 10px;
+  height: 10px;
+  transform: rotate(90deg);
+  transition: transform 0.2s;
+}
+
+.filtro-botao.aberto .filtro-seta {
+  transform: rotate(-90deg);
+}
+
+.filtro-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-3);
+  border: solid 1px var(--border-2);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.filtro-opcao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.filtro-opcao:hover {
+  background: var(--pill-bg);
+}
+
+.filtro-opcao input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.filtro-limpar {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: none;
+  border-top: solid 1px var(--border-2);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.filtro-limpar:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.filtro-limpar:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Ordem: dois botões lado a lado, o escolhido destacado. */
+.filtro-ordem {
+  display: inline-flex;
+  border: solid 1px var(--border-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.filtro-ordem button {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  background: var(--pill-bg);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filtro-ordem button + button {
+  border-left: solid 1px var(--border-2);
+}
+
+.filtro-ordem button.ativo {
+  background: var(--accent);
+  color: #fff;
 }
