@@ -88,9 +88,15 @@ class _JanelaFerramentas(forms.WPFWindow):
             self.Botoes.Children.Add(self._criar_botao(acao, texto, ao_clicar))
 
     def _criar_botao(self, acao, texto, ao_clicar):
-        from System.Windows.Controls import Button
+        from System.Windows import TextWrapping
+        from System.Windows.Controls import Button, TextBlock
         botao = Button()
-        botao.Content = texto
+        # TextBlock próprio: é ele que quebra a linha (TextWrapping não é
+        # propriedade anexável, então não dá para pôr no ContentPresenter).
+        rotulo = TextBlock()
+        rotulo.Text = texto
+        rotulo.TextWrapping = TextWrapping.Wrap
+        botao.Content = rotulo
         botao.Style = self.FindResource(u"BotaoFerramenta")
         botao.ToolTip = texto
         # O lambda fica dentro deste método (não direto no laço de __init__):

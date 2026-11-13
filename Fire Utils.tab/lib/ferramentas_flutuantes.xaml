@@ -32,8 +32,7 @@
                         <Border x:Name="Bd" Background="{StaticResource BrushCard}"
                                 BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
                                 CornerRadius="4" Padding="10,10,10,10" SnapsToDevicePixels="True">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"
-                                              TextBlock.TextWrapping="Wrap"/>
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
