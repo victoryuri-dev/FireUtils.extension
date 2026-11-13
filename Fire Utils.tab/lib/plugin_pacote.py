@@ -183,6 +183,39 @@ def _podar_pastas_vazias(raiz):
     return apagadas
 
 
+_limpeza_de_pastas_feita = False
+
+
+def limpar_pastas_orfas(postar_mensagem):
+    """
+    Uma vez por sessão, ao abrir a dockpane: apaga as pastas de botões que
+    ficaram vazias de pacotes aplicados antes de `_podar_pastas_vazias` existir
+    (o pacote só passou a limpá-las junto com os arquivos órfãos agora). Sem
+    isso, o primeiro pacote com a correção não as removeria, pois quem aplica o
+    pacote é o código que já estava instalado.
+
+    As pastas saem do disco, mas os botões só somem da faixa quando o pyRevit
+    recarrega: se algo foi apagado, a dockpane recebe o mesmo aviso do pacote
+    de nível "pyrevit" (botão "Reiniciar pyRevit e aplicar").
+    Não faz nada em ambiente de desenvolvimento (sem VERSION).
+    """
+    global _limpeza_de_pastas_feita
+    if _limpeza_de_pastas_feita:
+        return
+    _limpeza_de_pastas_feita = True
+    versao = plugin_versao.versao_instalada()
+    if not re.match(r"^\d+(\.\d+){0,3}$", versao or u""):
+        return
+    try:
+        apagadas = _podar_pastas_vazias(plugin_versao.raiz_da_extensao())
+    except Exception:
+        return
+    if apagadas:
+        postar_mensagem(u"ATUALIZACAO_RESULTADO", {
+            u"ok": True, u"estado": u"aplicada", u"versao": versao,
+            u"reinicio": u"pyrevit"})
+
+
 def validar_manifesto(manifesto, nome, versao_instalada, base_instalada):
     """O manifesto assinado bate com o nome e com o que está instalado?
     Devolve texto de erro ou None."""
