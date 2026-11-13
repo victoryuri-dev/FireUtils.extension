@@ -119,17 +119,20 @@ class _JanelaOcupacao(forms.WPFWindow):
         return self._taxas[indice][u"tipo"] if 0 <= indice < len(self._taxas) else u"area"
 
     def _ao_trocar_taxa(self, sender, args):
-        """Por área: a área vem do ambiente (campo travado). Assentos e
-        população estimada não dependem da área: campo livre."""
+        """Por área: nada a digitar (a área vem de cada ambiente), então o
+        campo some e a taxa ocupa a linha toda. Assentos e população estimada
+        não dependem da área: aparece o campo livre."""
+        from System.Windows import Visibility
+        from System.Windows.Controls import Grid
         tipo = self._tipo_de_taxa()
         self.TxtValor.Text = u""
         if tipo == u"area":
-            self.LblValor.Text = u"ÁREA (M²)"
-            self.TxtValor.Text = u"Automática (do ambiente)"
-            self.TxtValor.IsEnabled = False
+            self.PainelValor.Visibility = Visibility.Collapsed
+            Grid.SetColumnSpan(self.PainelTaxa, 3)
         else:
             self.LblValor.Text = u"ASSENTOS (POR AMBIENTE)" if tipo == u"fixo" else u"POPULAÇÃO ESTIMADA (POR AMBIENTE)"
-            self.TxtValor.IsEnabled = True
+            self.PainelValor.Visibility = Visibility.Visible
+            Grid.SetColumnSpan(self.PainelTaxa, 1)
 
     def _atualizar_botao_notas(self):
         from System.Windows import Visibility

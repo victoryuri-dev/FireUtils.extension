@@ -231,19 +231,19 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Taxa normativa + valor: área é automática (do ambiente);
-                         assentos e população estimada são digitados. -->
+                    <!-- Taxa normativa; só assentos e população estimada pedem um valor
+                         (por área, a área vem do ambiente e nada é mostrado). -->
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="12"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0">
+                        <StackPanel x:Name="PainelTaxa" Grid.Column="0">
                             <TextBlock Text="TAXA NORMATIVA" Style="{StaticResource Rotulo}"/>
                             <ComboBox x:Name="CbTaxa" Padding="6,5,6,5"/>
                         </StackPanel>
-                        <StackPanel Grid.Column="2">
+                        <StackPanel x:Name="PainelValor" Grid.Column="2" Visibility="Collapsed">
                             <TextBlock x:Name="LblValor" Text="ÁREA (M²)" Style="{StaticResource Rotulo}"/>
                             <TextBox x:Name="TxtValor"/>
                         </StackPanel>
