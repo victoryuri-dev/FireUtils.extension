@@ -10,14 +10,13 @@ import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import AtualizacoesPage from "./components/AtualizacoesPage";
-import ReiniciarRevit from "./components/ReiniciarRevit";
 import {
   ATRASO_RECARGA_MS, guardarAvisoPosAtualizacao, lerAvisoPosAtualizacao, limparAvisoPosAtualizacao,
 } from "./lib/avisoPosAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarVersoesPublicadas, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
-import { emAndamento, estadoDaMensagem, precisaReiniciarRevit } from "./lib/atualizacaoEstado";
+import { emAndamento, estadoDaMensagem } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken, tokenRecusado } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
@@ -146,6 +145,7 @@ export default function App() {
   });
   const [faixaConcluidaOculta, setFaixaConcluidaOculta] = useState(false);
   const recargaPyrevitRef = useRef(null);
+  const reinicioPendenteRef = useRef(null);
   const tentouAutomaticaRef = useRef(null);
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
@@ -347,9 +347,6 @@ export default function App() {
   const mostrarFaixa = estadoAtualizacao
     ? !(concluidaSemAcao && faixaConcluidaOculta)
     : avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova;
-  // Pacote aplicado que pede reiniciar o Revit: o código novo está no disco e o
-  // antigo na memória; o painel fica indisponível até o reinício.
-  const bloqueadoParaReinicio = precisaReiniciarRevit(estadoAtualizacao);
 
   // O Python baixa, confere e instala (plugin_atualizacao.py) — com a sessão
   // daqui só se geram os links do bucket privado. Plugin sem esse suporte, ou
@@ -397,8 +394,12 @@ export default function App() {
 
   // Pacote que só pede o pyRevit recarregado: a pessoa salva o projeto e clica.
   // O painel recarrega junto, para pegar a versão nova.
+  // Se a atualização também pede reiniciar o Revit (reinicio "revit"), o aviso
+  // continua depois do recarregamento: o pyRevit recarrega, mas o código da
+  // dockpane só muda quando o Revit reinicia.
   function recarregarPyrevit() {
-    limparAvisoPosAtualizacao();
+    reinicioPendenteRef.current = estadoAtualizacao?.reinicio;
+    if (estadoAtualizacao?.reinicio !== "revit") limparAvisoPosAtualizacao();
     setEstadoAtualizacao((anterior) => ({ ...anterior, fase: "recarregando" }));
     postToHost(BridgeMessageTypes.RECARREGAR_PYREVIT, {});
     recargaPyrevitRef.current = window.setTimeout(() => window.location.reload(), ATRASO_RECARGA_MS);
@@ -442,6 +443,11 @@ export default function App() {
         mensagem.type === BridgeMessageTypes.ATUALIZACAO_RESULTADO
       ) {
         const novo = estadoDaMensagem(mensagem.type, mensagem.payload);
+        // Recarga do pyRevit que falhou: o Python só sabe do pyRevit; mantém o
+        // que a atualização realmente pede (ex.: reiniciar o Revit).
+        if (novo?.recarga === "falhou" && reinicioPendenteRef.current) {
+          novo.reinicio = reinicioPendenteRef.current;
+        }
         if (novo) {
           // O Python não repete a versão a cada andamento: mantém a anterior.
           setEstadoAtualizacao((anterior) => ({ ...novo, versao: novo.versao ?? anterior?.versao }));
@@ -790,12 +796,6 @@ export default function App() {
   }
   if (!sessao) {
     return <LoginScreen onLogin={setSessao} />;
-  }
-
-  // Pacote que exige reiniciar o Revit: tela inteira só com a mensagem, sem
-  // menu, perfil nem faixa.
-  if (bloqueadoParaReinicio) {
-    return <ReiniciarRevit versao={estadoAtualizacao.versao} />;
   }
 
   return (

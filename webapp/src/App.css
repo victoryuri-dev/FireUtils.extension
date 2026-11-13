@@ -4818,20 +4818,3 @@ h1, h2, h3, h4, h5, h6,
   flex-wrap: wrap;
   gap: 14px 32px;
 }
-
-/* Tela de "reinicie o Revit" (ReiniciarRevit.jsx): na dockpane inteira, sem menu,
-   com o mesmo bloco de título e texto das telas de bloqueio (.sem-licenca) e a
-   logo animada em vermelho no topo. */
-.reiniciar-revit {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100vh;
-  box-sizing: border-box;
-  background: var(--bg);
-}
-
-.reiniciar-revit-logo {
-  color: var(--accent);
-  margin-bottom: 12px;
-}

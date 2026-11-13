@@ -13,16 +13,6 @@ export function emAndamento(estado) {
   return EM_ANDAMENTO.includes(estado?.fase);
 }
 
-/**
- * O que a pessoa precisa fazer depois de um pacote aplicado, conforme o que
- * mudou (plugin_pacote.py): reiniciar o Revit, recarregar o pyRevit ou
- * recarregar só o painel. Sem o campo (plugin que não informa), pede o reinício
- * do Revit, que é o caso seguro.
- */
-export function precisaReiniciarRevit(estado) {
-  return estado?.fase === "aplicada" && estado.reinicio !== "pyrevit" && estado.reinicio !== "nenhum";
-}
-
 /** Frase para a faixa, a tela de bloqueio e o tooltip do ícone. */
 export function textoDoEstado(estado) {
   const v = estado?.versao ? ` v${estado.versao}` : "";
@@ -48,7 +38,7 @@ export function textoDoEstado(estado) {
           ? "O pyRevit não recarregou sozinho. Salve o projeto e use o botão Recarregar da aba pyRevit, no Revit."
           : `Atualização${v} pronta. Salve o projeto e reinicie o pyRevit para aplicá-la.`;
       }
-      return `Atualização${v} instalada. Salve o projeto e reinicie o Revit para aplicá-la.`;
+      return `Atualização${v} instalada. Salve o projeto e reinicie o Revit para concluir. Até lá, o painel continua funcionando.`;
     case "agendada":
       return `Atualização${v} baixada. Ela será instalada quando você fechar o Revit; salve o projeto antes.`;
     case "manual":
