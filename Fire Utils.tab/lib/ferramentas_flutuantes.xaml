@@ -16,11 +16,12 @@
          partir da definição do grupo, então esta janela serve a qualquer
          grupo futuro (hidrantes, extintores...) sem XAML novo. -->
     <Window.Resources>
-        <SolidColorBrush x:Key="BrushCard"   Color="#1E1E1E"/>
-        <SolidColorBrush x:Key="BrushHover"  Color="#2A2A2A"/>
-        <SolidColorBrush x:Key="BrushBorda"  Color="#333333"/>
-        <SolidColorBrush x:Key="BrushTexto"  Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="BrushAccent" Color="#E02A3C"/>
+        <SolidColorBrush x:Key="BrushCard"   Color="#17171C"/>
+        <SolidColorBrush x:Key="BrushHover"  Color="#1D1E24"/>
+        <SolidColorBrush x:Key="BrushBorda"  Color="#2C2C33"/>
+        <SolidColorBrush x:Key="BrushTexto"  Color="#F5F5F7"/>
+        <SolidColorBrush x:Key="BrushAccent" Color="#C0152A"/>
+        <SolidColorBrush x:Key="BrushTitulo" Color="#87878D"/>
 
         <Style x:Key="BotaoFerramenta" TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource BrushTexto}"/>
@@ -79,7 +80,7 @@
 
     <!-- Moldura própria (sem a barra branca nativa do Windows): borda
          arredondada escura, cabeçalho arrastável e botões reduzir/fechar. -->
-    <Border Background="#141414" BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
+    <Border Background="#101014" BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
             CornerRadius="8">
         <StackPanel Margin="10,6,10,4">
             <Grid x:Name="Cabecalho" Background="Transparent" Margin="0,0,0,10" Cursor="SizeAll">
@@ -88,7 +89,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock x:Name="TxtTitulo" Text="" FontSize="11" FontWeight="SemiBold"
-                           Foreground="{StaticResource BrushAccent}" TextWrapping="Wrap"
+                           Foreground="{StaticResource BrushTitulo}" TextWrapping="Wrap"
                            VerticalAlignment="Center" Margin="2,0,0,0"/>
                 <StackPanel x:Name="PainelBotoesTopo" Grid.Column="1" Orientation="Horizontal"
                             HorizontalAlignment="Right">
