@@ -4328,12 +4328,21 @@ h1, h2, h3, h4, h5, h6,
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   margin: 0;
   padding: 8px 16px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  user-select: text;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.avatar-popover-versao:hover {
+  color: var(--white);
 }
 
 .avatar-popover-versao .icon {

@@ -1,6 +1,7 @@
 import Icon from "./Icon";
 import { emAndamento, textoDoEstado } from "../lib/atualizacaoEstado";
 import { notasDaAtualizacao } from "../lib/patchNotes";
+import { compararVersoes, versaoValida } from "../lib/versoes";
 import { mesclarNotas } from "../lib/versoesPublicadas";
 import { PATCH_NOTES } from "../data/patchNotes";
 import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
@@ -24,9 +25,14 @@ function formatarData(texto) {
  *   prevalecem sobre as de data/patchNotes.js, que cobrem só as versões ausentes do painel
  */
 export default function AtualizacoesPage({ instalada, atualizacao, estado, notasPublicadas = [], onAtualizar }) {
+  const todasAsNotas = mesclarNotas(notasPublicadas, PATCH_NOTES);
+  // Sem versão nova, a página mostra as novidades da versão instalada (é para
+  // onde leva o clique na versão do menu do perfil).
   const notas = atualizacao
-    ? notasDaAtualizacao(mesclarNotas(notasPublicadas, PATCH_NOTES), instalada, atualizacao.versao)
-    : [];
+    ? notasDaAtualizacao(todasAsNotas, instalada, atualizacao.versao)
+    : versaoValida(instalada)
+      ? todasAsNotas.filter((n) => compararVersoes(n.versao, instalada) === 0)
+      : [];
   const fase = estado?.fase;
   const ocupado = emAndamento(estado);
   const concluido = ["agendada", "manual", "aplicada"].includes(fase);
@@ -67,32 +73,32 @@ export default function AtualizacoesPage({ instalada, atualizacao, estado, notas
               )}
             </div>
           </section>
-
-          <p className="dashboard-subtitulo se-secao-titulo-pagina">O que há de novo</p>
-          {notas.length === 0 ? (
-            <p className="vazio">Esta versão ainda não tem notas de atualização.</p>
-          ) : (
-            <div className="atualizacoes-lista">
-              {notas.map((nota) => (
-                <article key={nota.versao} className="atualizacoes-nota">
-                  <header>
-                    <h2>v{nota.versao}</h2>
-                    {nota.data && <span className="atualizacoes-data">{formatarData(nota.data)}</span>}
-                  </header>
-                  {nota.titulo && <p className="atualizacoes-titulo-nota">{nota.titulo}</p>}
-                  <ul>
-                    {nota.itens.map((item, i) => (
-                      <li key={i}>
-                        <span className={`atualizacoes-tag atualizacoes-tag-${item.tipo}`}>{ROTULO_TIPO[item.tipo] || "Novo"}</span>
-                        <span>{item.texto}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-              ))}
-            </div>
-          )}
         </>
+      )}
+
+      <p className="dashboard-subtitulo se-secao-titulo-pagina">{atualizacao ? "O que há de novo" : `Novidades da versão${instalada ? ` v${instalada}` : ""}`}</p>
+      {notas.length === 0 ? (
+        <p className="vazio">Esta versão ainda não tem notas de atualização.</p>
+      ) : (
+        <div className="atualizacoes-lista">
+          {notas.map((nota) => (
+            <article key={nota.versao} className="atualizacoes-nota">
+              <header>
+                <h2>v{nota.versao}</h2>
+                {nota.data && <span className="atualizacoes-data">{formatarData(nota.data)}</span>}
+              </header>
+              {nota.titulo && <p className="atualizacoes-titulo-nota">{nota.titulo}</p>}
+              <ul>
+                {nota.itens.map((item, i) => (
+                  <li key={i}>
+                    <span className={`atualizacoes-tag atualizacoes-tag-${item.tipo}`}>{ROTULO_TIPO[item.tipo] || "Novo"}</span>
+                    <span>{item.texto}</span>
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
       )}
     </div>
   );

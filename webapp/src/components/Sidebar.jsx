@@ -209,10 +209,18 @@ export default function Sidebar({
           {menuAberto && (
             <div className="avatar-popover">
               <p className="avatar-popover-email">{email}</p>
-              <p className="avatar-popover-versao" title="Versão do plugin instalado">
+              <button
+                type="button"
+                className="avatar-popover-versao"
+                title="Ver as novidades desta versão"
+                onClick={() => {
+                  setMenuAberto(false);
+                  onSelecionarAba?.("atualizacoes");
+                }}
+              >
                 <Icon svg={logoSvg} />
                 <span>Fire Utils {textoDaVersao(versaoPlugin)}</span>
-              </p>
+              </button>
               <button type="button" className="avatar-popover-sair" onClick={sair}>
                 <Icon svg={exitIconSvg} />
                 Sair
