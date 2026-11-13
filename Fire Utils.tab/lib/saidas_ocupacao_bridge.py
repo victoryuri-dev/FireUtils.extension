@@ -113,25 +113,44 @@ def _notas(estado, codigo):
     return [notas[c] for c in chaves if c in notas]
 
 
+def _grupo_e_descricoes(estado, codigo):
+    """(letra do grupo, nome do grupo, descrição da divisão) de uma divisão.
+    Usa estado["ocupacoes"] (base central) quando traz a divisão; senão, a
+    tabela local por estado (normas/ocupacoes_fallback.py) — a PB não tem o
+    bloco "ocupacoes" na base de saídas."""
+    letra = codigo.split(u"-")[0]
+    ocup = estado.get(u"ocupacoes", {}).get(codigo)
+    if ocup:
+        return ocup.get(u"grupo") or letra, ocup.get(u"uso", u""), ocup.get(u"descricao", u"")
+    try:
+        from normas.ocupacoes_fallback import OCUPACOES
+    except Exception:
+        OCUPACOES = {}
+    tabela_uf = OCUPACOES.get(estado.get(u"sigla", u"")) or OCUPACOES.get(u"MA", {})
+    nome, divisoes = tabela_uf.get(letra, (u"", {}))
+    return letra, nome, divisoes.get(codigo, u"")
+
+
 def _grupos_de_ocupacao(estado):
-    """Ocupações agrupadas por uso, como o antigo formulário WPF."""
+    """Ocupações agrupadas por grupo ("C - Comercial"), com a divisão descrita
+    ("C-1 — Comércio ...") — mesmo formato pra qualquer estado."""
     tabela = estado.get(u"tabela", {})
-    ocups = estado.get(u"ocupacoes", {})
     grupos = {}
     for codigo in sorted(tabela.keys()):
         entrada = tabela[codigo]
-        ocup = ocups.get(codigo, {})
-        uso = ocup.get(u"uso", u"Outros")
-        grupos.setdefault(uso, []).append({
+        letra, nome, descricao = _grupo_e_descricoes(estado, codigo)
+        rotulo = u"{} - {}".format(letra, nome) if nome else letra
+        grupos.setdefault((letra, rotulo), []).append({
             u"codigo": codigo,
-            u"descricao": ocup.get(u"descricao", u""),
+            u"descricao": descricao,
             u"taxa": entrada.get(u"obs", u"—"),
             u"ad": u"{}".format(entrada.get(u"AD") or u"—"),
             u"er": u"{}".format(entrada.get(u"ER") or u"—"),
             u"pt": u"{}".format(entrada.get(u"PT") or u"—"),
             u"notas": _notas(estado, codigo),
         })
-    return [{u"uso": uso, u"itens": grupos[uso]} for uso in sorted(grupos.keys())]
+    return [{u"uso": rotulo, u"itens": grupos[(letra, rotulo)]}
+            for (letra, rotulo) in sorted(grupos.keys())]
 
 
 def tratar_get_saidas_opcoes(uiapp, postar_mensagem):
