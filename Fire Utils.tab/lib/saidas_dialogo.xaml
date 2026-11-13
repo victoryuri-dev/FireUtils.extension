@@ -190,10 +190,22 @@
 
                     <TextBlock Text="ESTRUTURA" Style="{StaticResource Rotulo}"/>
                     <ComboBox x:Name="CbEstrutura" Padding="6,5,6,5"/>
-                    <TextBlock Text="GRUPO" Style="{StaticResource Rotulo}"/>
-                    <ComboBox x:Name="CbGrupo" Padding="6,5,6,5"/>
-                    <TextBlock Text="TIPO" Style="{StaticResource Rotulo}"/>
-                    <ComboBox x:Name="CbTipo" Padding="6,5,6,5"/>
+                    <!-- Grupo e divisão lado a lado (a divisão é a lista de tipos do grupo). -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="GRUPO" Style="{StaticResource Rotulo}"/>
+                            <ComboBox x:Name="CbGrupo" Padding="6,5,6,5"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="DIVISÃO" Style="{StaticResource Rotulo}"/>
+                            <ComboBox x:Name="CbTipo" Padding="6,5,6,5"/>
+                        </StackPanel>
+                    </Grid>
 
                     <Border Background="{StaticResource BrushCard}" BorderBrush="{StaticResource BrushBorda}"
                             BorderThickness="1" Padding="12" Margin="0,14,0,0">
