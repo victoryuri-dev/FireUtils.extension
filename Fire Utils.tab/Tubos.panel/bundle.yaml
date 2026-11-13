@@ -1,6 +1,7 @@
-title: Modelagem de Hidrantes
-tooltip: Barra flutuante com as ferramentas de inserção e conexão de tubulações
+title: Ferramentas flutuantes
+tooltip: Abre as barras flutuantes de ferramentas (hidrantes e população dos ambientes)
 author: Fire Utils
 # Os nomes abaixo são os das pastas .pushbutton, não os títulos exibidos.
 layout:
-  - Ferramentas de Tubos
+  - Hidrantes
+  - População

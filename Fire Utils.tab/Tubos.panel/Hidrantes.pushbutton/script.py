@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__title__ = "Abrir\nferramentas"
+__title__ = "Hidrantes"
 __doc__ = (
     "Abre (ou fecha) a barra flutuante com as ferramentas de tubos: inserir "
     "hidrante por nível, conectar abrigo e conectar tubo. A barra fica acima "
