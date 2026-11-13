@@ -368,11 +368,3 @@ def tratar_abrir_janela(uiapp, payload, fila_acoes, postar_mensagem):
         print_seguro(u"[AVISO] Falha ao abrir a barra de ferramentas: {}".format(texto_erro(ex)))
         postar_mensagem(_TIPO_ESTADO, {u"grupo": (payload or {}).get(u"grupo"), u"aberta": False})
 
-
-def alternar_pelo_botao(uiapp, grupo):
-    """Para um botão da faixa de opções (engine próprio, contexto de API
-    válido): abre/fecha a barra do grupo sem depender da dockpane. A fila de
-    ações é criada aqui, onde o ExternalEvent pode ser criado; o aviso de
-    estado à dockpane é dispensado (ela não é alcançável deste engine)."""
-    from family_loader_events import criar_fila_acoes
-    alternar(uiapp, grupo, criar_fila_acoes(), lambda tipo, payload: None)
