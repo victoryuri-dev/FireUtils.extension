@@ -2,7 +2,7 @@
 """
 ferramentas_flutuantes.py — Fire Utils · lib/
 Barra flutuante de ferramentas: janela WPF modeless, estreita e vertical, com
-um botão por ferramenta de um grupo ("saidas", "tubos"). Abre a partir da
+um botão por ferramenta de um grupo ("saidas", "tubos", "linha"). Abre a partir da
 sidebar da dockpane (ícones abaixo do divisor), fica acima do Revit, é
 arrastável pelo cabeçalho (moldura própria, sem barra nativa) e fecha quando o
 usuário quiser. Pode ser reduzida a só ícones. Não grava posição nem estado: a
@@ -60,7 +60,7 @@ _FOLGA_DOCKPANE = 470
 # ícone em assets/ferramentas/).
 #   destino "dockpane": o clique vai para a dockpane, que tem os seletores da
 #     ferramenta (webapp/src/components/dashboard/SaidasFerramentas.jsx).
-#   destino "python": a ferramenta roda aqui mesmo (ver _rodar_comando_tubos),
+#   destino "python": a ferramenta roda aqui mesmo (ver _rodar_comando_python),
 #     como o botão equivalente da faixa de opções.
 GRUPOS = {
     u"saidas": {
@@ -80,6 +80,15 @@ GRUPOS = {
             (u"hidrante", u"Inserir hidrante por nível", u"tubos-hidrante"),
             (u"abrigo", u"Conectar abrigo", u"tubos-abrigo"),
             (u"tubo", u"Conectar tubo", u"tubos-tubo"),
+        ],
+    },
+    u"linha": {
+        u"titulo": u"LINHAS",
+        u"destino": u"python",
+        u"ferramentas": [
+            (u"limite", u"Inserir linha com limite", u"linha-limite"),
+            (u"medir", u"Inserir comprimento de linhas", u"linha-medir"),
+            (u"configurar", u"Configurar", u"linha-configurar"),
         ],
     },
 }
@@ -224,11 +233,36 @@ class _JanelaFerramentas(forms.WPFWindow):
         return botao
 
 
-def _rodar_comando_tubos(uiapp, acao):
-    """Roda a ferramenta de tubos como o botão da faixa de opções roda (os
-    script.py de Fire Utils.tab/Tubos.panel são só estas chamadas), já no
-    contexto de API desta fila. As ferramentas abrem as próprias janelas
-    modeless e pedem seleção no modelo, o que o ExternalEvent permite."""
+def _carregar_comando(grupo, acao):
+    """Função(doc, uidoc, output) da ferramenta, ou None. Imports aqui dentro:
+    cada módulo puxa a API do Revit e só interessa quando a ferramenta roda."""
+    if grupo == u"tubos":
+        if acao == u"hidrante":
+            from hydrant_insert_core import run_coluna_multilevel
+            return run_coluna_multilevel
+        if acao == u"abrigo":
+            from connect_shelter_core_preview import conectar_abrigo_preview
+            return conectar_abrigo_preview
+        if acao == u"tubo":
+            from connect_pipe import run
+            return run
+    elif grupo == u"linha":
+        import linha_comandos
+        comando = {
+            u"limite": linha_comandos.inserir_linha_com_limite_comando,
+            u"medir": linha_comandos.medir_e_inserir_texto_comando,
+            u"configurar": linha_comandos.configurar_comando,
+        }.get(acao)
+        if comando is not None:
+            return lambda doc, uidoc, output: comando(doc, uidoc)
+    return None
+
+
+def _rodar_comando_python(uiapp, grupo, acao):
+    """Roda a ferramenta como o botão da faixa de opções roda (os script.py
+    são só estas chamadas), já no contexto de API desta fila. As ferramentas
+    abrem as próprias janelas modeless e pedem seleção no modelo, o que o
+    ExternalEvent permite."""
     from pyrevit import script
 
     uidoc = uiapp.ActiveUIDocument
@@ -243,18 +277,13 @@ def _rodar_comando_tubos(uiapp, acao):
         from licenca_guard import exigir
         exigir(u"pro")
 
-        if acao == u"hidrante":
-            from hydrant_insert_core import run_coluna_multilevel as executar
-        elif acao == u"abrigo":
-            from connect_shelter_core_preview import conectar_abrigo_preview as executar
-        elif acao == u"tubo":
-            from connect_pipe import run as executar
-        else:
-            print_seguro(u"[AVISO] Ferramenta de tubos desconhecida: {}".format(acao))
+        executar = _carregar_comando(grupo, acao)
+        if executar is None:
+            print_seguro(u"[AVISO] Ferramenta desconhecida: {}/{}".format(grupo, acao))
             return
         executar(uidoc.Document, uidoc, script.get_output())
     except SystemExit:
-        pass  # pyscript.exit() / exigir(): fim normal da ferramenta
+        pass  # pyscript.exit() / forms.alert(exitscript) / exigir(): fim normal
 
 
 def _posicionar(janela):
@@ -294,7 +323,7 @@ def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
 
     def ao_clicar(acao):
         if definicao[u"destino"] == u"python":
-            fila_acoes.enfileirar(lambda uiapp: _rodar_comando_tubos(uiapp, acao))
+            fila_acoes.enfileirar(lambda uiapp: _rodar_comando_python(uiapp, grupo, acao))
             return
 
         def executar(_uiapp):

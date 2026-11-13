@@ -265,9 +265,9 @@
  *     é o texto por estrutura do envio ao site; `erroEnvio` preenchido = o Revit
  *     foi atualizado mas o site não recebeu.
  *
- *   { type: "ABRIR_JANELA_FERRAMENTAS", payload: { grupo: "saidas" | "tubos" } }
+ *   { type: "ABRIR_JANELA_FERRAMENTAS", payload: { grupo: "saidas" | "tubos" | "linha" } }
  *     JS -> Python: abre (ou fecha, se já aberta) a barra flutuante modeless com
- *     um botão por ferramenta do grupo (ferramentas_flutuantes.py). "tubos" roda as ferramentas no Python; "saidas" devolve o clique à dockpane (FERRAMENTA_FLUTUANTE).
+ *     um botão por ferramenta do grupo (ferramentas_flutuantes.py). "tubos" e "linha" rodam as ferramentas no Python; "saidas" devolve o clique à dockpane (FERRAMENTA_FLUTUANTE).
  *
  *   { type: "JANELA_FERRAMENTAS_ESTADO", payload: { grupo, aberta: boolean } }
  *     Python -> JS: a barra do grupo abriu ou fechou (inclusive pelo X da própria

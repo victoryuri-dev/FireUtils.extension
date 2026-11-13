@@ -13,45 +13,7 @@ __doc__ = (
 from licenca_guard import exigir
 exigir(u"pro")
 
-from pyrevit import revit, forms
-from linha_limite_core import listar_estilos_de_linha, inserir_linha_com_limite
-from comprimento_linha_config import carregar as carregar_config
+from linha_comandos import inserir_linha_com_limite_comando
+from pyrevit import revit
 
-doc = revit.doc
-uidoc = revit.uidoc
-view = uidoc.ActiveView
-
-estilos = listar_estilos_de_linha(doc)
-if not estilos:
-    forms.alert(u"Nenhum estilo de linha encontrado no projeto.", exitscript=True)
-
-estilo_padrao, _prefixo_nao_usado, _tipo_texto_nao_usado = carregar_config(doc)
-if estilo_padrao and estilo_padrao in estilos:
-    nome_escolhido = estilo_padrao
-else:
-    nome_escolhido = forms.SelectFromList.show(
-        sorted(estilos.keys()),
-        title=u"Inserir Linha com Limite",
-        prompt=u"Escolha o estilo da linha:",
-        multiselect=False,
-    )
-    if not nome_escolhido:
-        forms.alert(u"Nenhum estilo selecionado.", exitscript=True)
-
-comprimento_str = forms.ask_for_string(
-    default=u"10",
-    prompt=u"Comprimento máximo da linha (m):",
-    title=u"Inserir Linha com Limite",
-)
-if not comprimento_str:
-    forms.alert(u"Nenhum comprimento informado.", exitscript=True)
-
-try:
-    comprimento_max = float(comprimento_str.replace(u",", u"."))
-except ValueError:
-    comprimento_max = -1
-
-if comprimento_max <= 0:
-    forms.alert(u"Comprimento inválido: {}".format(comprimento_str), exitscript=True)
-
-inserir_linha_com_limite(doc, uidoc, view, estilos[nome_escolhido], comprimento_max)
+inserir_linha_com_limite_comando(revit.doc, revit.uidoc)

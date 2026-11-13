@@ -12,7 +12,7 @@ __doc__ = (
 from licenca_guard import exigir
 exigir(u"pro")
 
+from linha_comandos import configurar_comando
 from pyrevit import revit
-from comprimento_linha_config import abrir_configuracao
 
-abrir_configuracao(revit.doc)
+configurar_comando(revit.doc)
