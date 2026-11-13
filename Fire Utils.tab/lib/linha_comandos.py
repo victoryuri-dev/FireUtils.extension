@@ -86,6 +86,25 @@ def inserir_linha_com_limite_comando(doc, uidoc):
     inserir_linha_com_limite(doc, uidoc, view, estilos[nome_escolhido], comprimento_max)
 
 
+_XAML_LINHA_MEDIDA = os.path.join(os.path.dirname(os.path.abspath(__file__)), u"linha_medida_opcoes.xaml")
+
+
+class _JanelaLinhaMedida(JanelaFireUtils):
+    """Mostra só o comprimento medido. Inserir segue para colocar o texto no
+    desenho; Cancelar encerra sem inserir (quem só queria saber o valor)."""
+
+    def __init__(self, comprimento_m):
+        JanelaFireUtils.__init__(self, _XAML_LINHA_MEDIDA)
+        self.inserir = False
+        self.TxtComprimento.Text = u"{:.2f} m".format(comprimento_m)
+        self.BtnCancelar.Click += lambda s, a: self.Close()
+        self.BtnInserir.Click += self._ao_inserir
+
+    def _ao_inserir(self, sender, args):
+        self.inserir = True
+        self.Close()
+
+
 class LineSelectionFilter(ISelectionFilter):
     def AllowElement(self, element):
         return isinstance(element, CurveElement)
@@ -129,6 +148,11 @@ def medir_e_inserir_texto_comando(doc, uidoc):
 
         total_length = sum(get_length_meters(e) for e in elements)
         text_content = u"{}{:.2f} m".format(prefixo, total_length)
+
+        medida = _JanelaLinhaMedida(total_length)
+        medida.ShowDialog()
+        if not medida.inserir:
+            return
 
         insert_point = uidoc.Selection.PickPoint("Clique para inserir o texto")
 
