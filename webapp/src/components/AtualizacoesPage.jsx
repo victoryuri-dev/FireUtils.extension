@@ -33,6 +33,12 @@ export default function AtualizacoesPage({ instalada, atualizacao, estado, notas
     : versaoValida(instalada)
       ? todasAsNotas.filter((n) => compararVersoes(n.versao, instalada) === 0)
       : [];
+  // Histórico: as versões anteriores à instalada, da mais nova para a mais antiga.
+  const anteriores = !atualizacao && versaoValida(instalada)
+    ? todasAsNotas
+        .filter((n) => versaoValida(n.versao) && compararVersoes(n.versao, instalada) < 0)
+        .sort((a, b) => compararVersoes(b.versao, a.versao))
+    : [];
   const fase = estado?.fase;
   const ocupado = emAndamento(estado);
   const concluido = ["agendada", "manual", "aplicada"].includes(fase);
@@ -80,26 +86,39 @@ export default function AtualizacoesPage({ instalada, atualizacao, estado, notas
       {notas.length === 0 ? (
         <p className="vazio">Esta versão ainda não tem notas de atualização.</p>
       ) : (
-        <div className="atualizacoes-lista">
-          {notas.map((nota) => (
-            <article key={nota.versao} className="atualizacoes-nota">
-              <header>
-                <h2>v{nota.versao}</h2>
-                {nota.data && <span className="atualizacoes-data">{formatarData(nota.data)}</span>}
-              </header>
-              {nota.titulo && <p className="atualizacoes-titulo-nota">{nota.titulo}</p>}
-              <ul>
-                {nota.itens.map((item, i) => (
-                  <li key={i}>
-                    <span className={`atualizacoes-tag atualizacoes-tag-${item.tipo}`}>{ROTULO_TIPO[item.tipo] || "Novo"}</span>
-                    <span>{item.texto}</span>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ))}
-        </div>
+        <ListaDeNotas notas={notas} />
       )}
+
+      {anteriores.length > 0 && (
+        <>
+          <p className="dashboard-subtitulo se-secao-titulo-pagina">Versões anteriores</p>
+          <ListaDeNotas notas={anteriores} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ListaDeNotas({ notas }) {
+  return (
+    <div className="atualizacoes-lista">
+      {notas.map((nota) => (
+        <article key={nota.versao} className="atualizacoes-nota">
+          <header>
+            <h2>v{nota.versao}</h2>
+            {nota.data && <span className="atualizacoes-data">{formatarData(nota.data)}</span>}
+          </header>
+          {nota.titulo && <p className="atualizacoes-titulo-nota">{nota.titulo}</p>}
+          <ul>
+            {nota.itens.map((item, i) => (
+              <li key={i}>
+                <span className={`atualizacoes-tag atualizacoes-tag-${item.tipo}`}>{ROTULO_TIPO[item.tipo] || "Novo"}</span>
+                <span>{item.texto}</span>
+              </li>
+            ))}
+          </ul>
+        </article>
+      ))}
     </div>
   );
 }
