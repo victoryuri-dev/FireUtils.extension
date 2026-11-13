@@ -81,9 +81,10 @@ _PROTEGIDOS = (u"fire utils.tab/lib/webview2_runtime/", u"fire utils.tab/lib/fam
 
 _LIMITE_ZIP = 100 * 1024 * 1024
 _LIMITE_DESCOMPACTADO = 300 * 1024 * 1024
-# Recarrega o pyRevit sozinho depois de aplicar (níveis "pyrevit" e "revit"). Se
-# a chamada falhar, a dockpane recebe um aviso e pede o recarregamento manual
-# (aba pyRevit > Recarregar). Desligue (False) se o recarregamento travar o Revit.
+# Permite à dockpane recarregar o pyRevit quando a pessoa clica no botão da faixa
+# de atualização (RECARREGAR_PYREVIT). Se a chamada falhar, a dockpane avisa e pede
+# o recarregamento manual (aba pyRevit > Recarregar). Desligue (False) se o
+# recarregamento travar o Revit.
 _RECARREGAR_PYREVIT = True
 
 _em_andamento = False
@@ -141,6 +142,45 @@ def codigo_gerenciado(rel):
     if u"/__pycache__/" in minusculo:
         return False
     return minusculo.endswith(_EXTENSOES)
+
+
+def _so_gerado(nomes_e_tipos):
+    """True se a pasta só tem o que o próprio Python gera (__pycache__, .pyc/.pyo):
+    nenhum arquivo da extensão. `nomes_e_tipos`: [(nome, e_pasta)]."""
+    for nome, e_pasta in nomes_e_tipos:
+        if e_pasta:
+            if nome.lower() != u"__pycache__":
+                return False
+        elif not nome.lower().endswith((u".pyc", u".pyo")):
+            return False
+    return True
+
+
+def _podar_pastas_vazias(raiz):
+    """
+    Apaga as pastas de `Fire Utils.tab` que ficaram sem nenhum arquivo da
+    extensão depois de os órfãos serem removidos (ou só com __pycache__/.pyc).
+    Sem isso, uma pasta `.pushbutton` de um botão que saiu da versão continua
+    ali, vazia, e o pyRevit a mostra na faixa como um botão em branco, só com o
+    nome. As áreas protegidas e a própria `Fire Utils.tab` nunca são tocadas.
+    Devolve quantas pastas foram apagadas.
+    """
+    base = os.path.join(raiz, u"Fire Utils.tab")
+    apagadas = 0
+    for pasta, _subpastas, _nomes in os.walk(base, topdown=False):
+        if os.path.normcase(os.path.abspath(pasta)) == os.path.normcase(os.path.abspath(base)):
+            continue
+        rel = os.path.relpath(pasta, raiz).replace(u"\\", u"/").lower() + u"/"
+        if any(rel.startswith(p) for p in _PROTEGIDOS) or rel == u"fire utils.tab/lib/":
+            continue
+        try:
+            conteudo = [(n, os.path.isdir(os.path.join(pasta, n))) for n in os.listdir(pasta)]
+            if _so_gerado(conteudo):
+                shutil.rmtree(pasta)
+                apagadas += 1
+        except (IOError, OSError):
+            pass  # em uso: fica; some na próxima aplicação
+    return apagadas
 
 
 def validar_manifesto(manifesto, nome, versao_instalada, base_instalada):
@@ -444,6 +484,11 @@ def _aplicar(preparo, arquivos, raiz, versao):
                     os.remove(completo)
                 except (IOError, OSError):
                     pass  # em uso: fica; some na próxima aplicação
+
+    # Pastas de botões que saíram da versão: sem arquivos, o pyRevit ainda as
+    # mostraria como botão em branco. Apagá-las muda a faixa.
+    if _podar_pastas_vazias(raiz) and nivel == u"nenhum":
+        nivel = u"pyrevit"
 
     with io.open(os.path.join(raiz, u"VERSION"), u"w", encoding=u"utf-8") as arquivo:
         arquivo.write(versao)
