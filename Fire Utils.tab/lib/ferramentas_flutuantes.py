@@ -393,6 +393,20 @@ def _rodar_saidas(uiapp, acao, fila_acoes):
     ponte.tratar_identificar_ambientes(uiapp, pedido, fila_acoes, responder)
 
 
+def _rodar_saidas_seguro(uiapp, acao, fila_acoes):
+    """Falha ao montar o seletor ou rodar a ferramenta vira aviso na tela: sem
+    isso o erro só iria para a janela de saída do pyRevit e o clique pareceria
+    não fazer nada."""
+    try:
+        _rodar_saidas(uiapp, acao, fila_acoes)
+    except SystemExit:
+        pass
+    except Exception as ex:
+        print_seguro(u"[AVISO] Ferramenta de saídas falhou: {}".format(texto_erro(ex)))
+        forms.alert(u"Não foi possível executar a ferramenta:\n\n{}".format(texto_erro(ex)),
+                    title=u"FireUtils", warn_icon=True)
+
+
 def _posicionar(janela):
     from System.Windows import SystemParameters
     area = SystemParameters.WorkArea
@@ -431,7 +445,7 @@ def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
 
     def ao_clicar(acao):
         if definicao[u"destino"] == u"nativo":
-            fila_acoes.enfileirar(lambda uiapp: _rodar_saidas(uiapp, acao, fila_acoes))
+            fila_acoes.enfileirar(lambda uiapp: _rodar_saidas_seguro(uiapp, acao, fila_acoes))
             return
         if definicao[u"destino"] == u"python":
             fila_acoes.enfileirar(lambda uiapp: _rodar_comando_python(uiapp, grupo, acao))
