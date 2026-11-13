@@ -12,6 +12,7 @@ import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
 import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
 import janelaFerramentasIconSvg from "../assets/icons/janela-ferramentas-icon.svg?raw";
+import janelaTubosIconSvg from "../assets/icons/janela-tubos-icon.svg?raw";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
@@ -32,6 +33,9 @@ const ITENS_NAV = [
 // divisor, um botão por grupo. Abre/fecha a barra modeless do grupo.
 const ITENS_JANELAS = [
   { id: "saidas", label: "Janela flutuante: Saídas de Emergência", svg: janelaFerramentasIconSvg },
+  // Sem entrada em MODULO_POR_ABA: cada ferramenta de tubos confere a
+  // licença PRO por conta própria (licenca_guard), como o botão da faixa.
+  { id: "tubos", label: "Janela flutuante: Ferramentas de Tubos", svg: janelaTubosIconSvg },
 ];
 
 // Duração até a barra de maior delay (loader-bar-1: 0.28s) terminar de

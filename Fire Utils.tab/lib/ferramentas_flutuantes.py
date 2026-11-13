@@ -2,23 +2,24 @@
 """
 ferramentas_flutuantes.py — Fire Utils · lib/
 Barra flutuante de ferramentas: janela WPF modeless, estreita e vertical, com
-um botão por ferramenta de um grupo (hoje só "saidas"). Abre a partir da
-sidebar da dockpane (ícone abaixo do divisor), fica acima do Revit, é
-arrastável pela barra de título e fecha quando o usuário quiser. Não grava
-posição nem estado: a cada sessão do Revit começa fechada e no canto padrão.
+um botão por ferramenta de um grupo ("saidas", "tubos"). Abre a partir da
+sidebar da dockpane (ícones abaixo do divisor), fica acima do Revit, é
+arrastável pelo cabeçalho (moldura própria, sem barra nativa) e fecha quando o
+usuário quiser. Pode ser reduzida a só ícones. Não grava posição nem estado: a
+cada sessão do Revit começa fechada e no canto padrão.
 
 Mesmo padrão das janelas de prévia do plugin (forms.WPFWindow com Show(), não
-ShowDialog()), com uma diferença deliberada: os botões NÃO executam a
-ferramenta aqui. Cada clique manda FERRAMENTA_FLUTUANTE para a dockpane, que
-já tem os seletores (estrutura, ocupação, níveis), o envio ao site e as
-notificações das ferramentas — reaproveitar essa UI evita uma segunda cópia
-dela em WPF. Por isso o clique também mostra a dockpane se ela estiver
-escondida.
+ShowDialog()). Para onde vai o clique depende do grupo (GRUPOS[...]["destino"]):
+  "dockpane"  Saídas: o clique manda FERRAMENTA_FLUTUANTE para a dockpane, que
+              já tem os seletores (estrutura, ocupação, níveis), o envio ao
+              site e as notificações — reaproveitar essa UI evita uma segunda
+              cópia dela em WPF. O clique também mostra a dockpane escondida.
+  "python"    Tubos: a ferramenta roda aqui, como o botão da faixa de opções.
 
 Contexto de API: um clique numa janela modeless acontece fora do contexto
-válido do Revit, então o que depende da API (mostrar o DockablePane, pegar o
-handle da janela do Revit para ser dona desta) vai por fila_acoes
-(family_loader_events — ExternalEvent), nunca direto do evento de clique.
+válido do Revit, então o que depende da API (rodar a ferramenta, mostrar o
+DockablePane, pegar o handle da janela do Revit para ser dona desta) vai por
+fila_acoes (family_loader_events — ExternalEvent), nunca direto do clique.
 
 Mensagens (contrato em webapp/src/lib/bridge.js):
   ABRIR_JANELA_FERRAMENTAS {grupo}  JS -> Python: abre/fecha a barra do grupo.
@@ -55,16 +56,30 @@ _LARGURA = 220
 _LARGURA_REDUZIDA = 84
 _FOLGA_DOCKPANE = 470
 
-# grupo -> título e ferramentas (acao, texto do botão, arquivo do ícone). As ações são as que a
-# dockpane entende em webapp/src/components/dashboard/SaidasFerramentas.jsx.
+# grupo -> título, destino e ferramentas (acao, texto do botão, arquivo do
+# ícone em assets/ferramentas/).
+#   destino "dockpane": o clique vai para a dockpane, que tem os seletores da
+#     ferramenta (webapp/src/components/dashboard/SaidasFerramentas.jsx).
+#   destino "python": a ferramenta roda aqui mesmo (ver _rodar_comando_tubos),
+#     como o botão equivalente da faixa de opções.
 GRUPOS = {
     u"saidas": {
         u"titulo": u"SAÍDAS DE EMERGÊNCIA",
+        u"destino": u"dockpane",
         u"ferramentas": [
             (u"selecao", u"Identificar por ambiente", u"ocupacao"),
             (u"niveis", u"Identificar por nível", u"pornivel"),
             (u"todos", u"Identificar todos sem ocupação", u"todos"),
             (u"sincronizar", u"Sincronizar ambientes", u"sincronizar-ambiente"),
+        ],
+    },
+    u"tubos": {
+        u"titulo": u"TUBOS",
+        u"destino": u"python",
+        u"ferramentas": [
+            (u"hidrante", u"Inserir hidrante por nível", u"tubos-hidrante"),
+            (u"abrigo", u"Conectar abrigo", u"tubos-abrigo"),
+            (u"tubo", u"Conectar tubo", u"tubos-tubo"),
         ],
     },
 }
@@ -98,6 +113,7 @@ class _JanelaFerramentas(forms.WPFWindow):
         self._colunas_icone = []
         self._colunas_texto = []
         self._imagens = []
+        self._botoes = []
         self._rotulos = []
         for acao, texto, icone in definicao[u"ferramentas"]:
             self.Botoes.Children.Add(self._criar_botao(acao, texto, icone, ao_clicar))
@@ -121,6 +137,7 @@ class _JanelaFerramentas(forms.WPFWindow):
     def _aplicar_reducao(self, reduzida):
         """Reduzida: só os ícones (centralizados, nome fica no tooltip).
         Expandida: ícone + nome."""
+        from System import Double
         from System.Windows import GridLength, GridUnitType, HorizontalAlignment, Visibility
         from System.Windows.Controls import Grid
 
@@ -130,6 +147,15 @@ class _JanelaFerramentas(forms.WPFWindow):
             coluna.Width = GridLength(0) if reduzida else GridLength(1, GridUnitType.Star)
         for imagem in self._imagens:
             imagem.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Left
+        # Reduzida: botões quadrados (52x52) e ícone maior; expandida: botão
+        # na largura toda, altura do conteúdo (NaN = automático).
+        for botao in self._botoes:
+            botao.Width = 52 if reduzida else Double.NaN
+            botao.Height = 52 if reduzida else Double.NaN
+            botao.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Stretch
+        for imagem in self._imagens:
+            imagem.Width = 28 if reduzida else 20
+            imagem.Height = 28 if reduzida else 20
         for rotulo in self._rotulos:
             rotulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
 
@@ -149,6 +175,7 @@ class _JanelaFerramentas(forms.WPFWindow):
         botao = Button()
         botao.Style = self.FindResource(u"BotaoFerramenta")
         botao.ToolTip = texto
+        self._botoes.append(botao)
 
         conteudo = Grid()
         coluna_icone = ColumnDefinition()
@@ -196,11 +223,47 @@ class _JanelaFerramentas(forms.WPFWindow):
         return botao
 
 
+def _rodar_comando_tubos(uiapp, acao):
+    """Roda a ferramenta de tubos como o botão da faixa de opções roda (os
+    script.py de Fire Utils.tab/Tubos.panel são só estas chamadas), já no
+    contexto de API desta fila. As ferramentas abrem as próprias janelas
+    modeless e pedem seleção no modelo, o que o ExternalEvent permite."""
+    from pyrevit import script
+
+    uidoc = uiapp.ActiveUIDocument
+    if uidoc is None:
+        forms.alert(u"Abra um projeto no Revit antes de usar esta ferramenta.",
+                    title=u"FireUtils", warn_icon=True)
+        return
+    try:
+        # Mesma trava de licença dos botões da faixa: exigir() encerra o
+        # "script" com SystemExit, que aqui só pode encerrar a ferramenta —
+        # deixá-lo subir chegaria ao Revit como exceção de ExternalEvent.
+        from licenca_guard import exigir
+        exigir(u"pro")
+
+        if acao == u"hidrante":
+            from hydrant_insert_core import run_coluna_multilevel as executar
+        elif acao == u"abrigo":
+            from connect_shelter_core_preview import conectar_abrigo_preview as executar
+        elif acao == u"tubo":
+            from connect_pipe import run as executar
+        else:
+            print_seguro(u"[AVISO] Ferramenta de tubos desconhecida: {}".format(acao))
+            return
+        executar(uidoc.Document, uidoc, script.get_output())
+    except SystemExit:
+        pass  # pyscript.exit() / exigir(): fim normal da ferramenta
+
+
 def _posicionar(janela):
     from System.Windows import SystemParameters
     area = SystemParameters.WorkArea
     largura = _LARGURA_REDUZIDA if _estado[u"reduzida"] else _LARGURA
-    janela.Left = max(area.Left, area.Right - largura - _FOLGA_DOCKPANE)
+    # Cada barra já aberta empurra a nova um pouco para a esquerda, para não
+    # nascerem uma em cima da outra.
+    deslocamento = len(_janelas) * (largura + 12)
+    janela.Left = max(area.Left, area.Right - largura - _FOLGA_DOCKPANE - deslocamento)
     janela.Top = area.Top + 140
 
 
@@ -229,6 +292,10 @@ def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
         return
 
     def ao_clicar(acao):
+        if definicao[u"destino"] == u"python":
+            fila_acoes.enfileirar(lambda uiapp: _rodar_comando_tubos(uiapp, acao))
+            return
+
         def executar(_uiapp):
             _mostrar_dockpane()
             postar_mensagem(_TIPO_CLIQUE, {u"grupo": grupo, u"acao": acao})
