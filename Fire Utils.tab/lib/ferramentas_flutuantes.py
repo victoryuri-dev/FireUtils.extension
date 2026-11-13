@@ -53,7 +53,7 @@ _TIPO_CLIQUE = u"FERRAMENTA_FLUTUANTE"
 # Largura da janela (XAML) e folga deixada à direita para a dockpane no
 # posicionamento inicial.
 _LARGURA = 220
-_LARGURA_REDUZIDA = 84
+_LARGURA_REDUZIDA = 74  # 52 do botão + 10 de cada lado + 2 da borda
 _FOLGA_DOCKPANE = 470
 
 # grupo -> título, destino e ferramentas (acao, texto do botão, arquivo do

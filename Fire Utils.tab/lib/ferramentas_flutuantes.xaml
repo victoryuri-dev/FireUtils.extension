@@ -33,7 +33,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bd" Background="{StaticResource BrushCard}"
                                 BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
-                                CornerRadius="4" Padding="10,8,10,8" SnapsToDevicePixels="True">
+                                CornerRadius="0" Padding="10,8,10,8" SnapsToDevicePixels="True">
                             <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -63,7 +63,7 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="Bd" Background="{StaticResource BrushCard}"
                                 BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
-                                CornerRadius="4">
+                                CornerRadius="0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -81,8 +81,8 @@
     <!-- Moldura própria (sem a barra branca nativa do Windows): borda
          arredondada escura, cabeçalho arrastável e botões reduzir/fechar. -->
     <Border Background="#101014" BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
-            CornerRadius="8">
-        <StackPanel Margin="10,6,10,4">
+            CornerRadius="0">
+        <StackPanel Margin="10">
             <Grid x:Name="Cabecalho" Background="Transparent" Margin="0,0,0,10" Cursor="SizeAll">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -99,7 +99,7 @@
                             Margin="4,0,0,0" ToolTip="Fechar"/>
                 </StackPanel>
             </Grid>
-            <StackPanel x:Name="Botoes"/>
+            <StackPanel x:Name="Botoes" Margin="0,0,0,-6"/>
         </StackPanel>
     </Border>
 </Window>
