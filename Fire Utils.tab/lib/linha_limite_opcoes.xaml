@@ -30,20 +30,15 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel Margin="22,8,22,18">
-
-        <TextBlock Text="Inserir linha com limite" FontSize="15" FontWeight="SemiBold"
-                   Foreground="{StaticResource BrushValor}" Margin="0,0,0,4"/>
-        <TextBlock Text="As linhas são desenhadas clique a clique; a última é encurtada para fechar exatamente no limite."
-                   FontSize="11" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,0,0,16"/>
+    <StackPanel Margin="22,12,22,18">
 
         <StackPanel x:Name="SecaoEstilo">
             <TextBlock Text="Estilo da linha" Style="{StaticResource LabelStyle}"/>
             <ComboBox x:Name="CmbEstilo" Height="28" FontSize="12" Margin="0,0,0,14"/>
         </StackPanel>
 
-        <TextBlock Text="Comprimento máximo da linha (m)" Style="{StaticResource LabelStyle}"/>
-        <TextBox x:Name="TxtComprimento" Height="30" FontSize="12" Margin="0,0,0,10"/>
+        <TextBlock Text="Insira o comprimento máximo da linha (m)." Style="{StaticResource LabelStyle}"/>
+        <TextBox x:Name="TxtComprimento" Height="36" FontSize="13" Padding="8,0,8,0" Margin="0,0,0,10"/>
 
         <TextBlock x:Name="TxtErro" Text="" FontSize="11" FontWeight="SemiBold"
                    Foreground="{StaticResource BrushWarn}" TextWrapping="Wrap" Margin="0,0,0,10"/>
@@ -51,7 +46,7 @@
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button x:Name="BtnCancelar" Content="Cancelar" Width="100" Style="{StaticResource BotaoStyle}"
                     Background="{StaticResource BrushCancela}" Foreground="{StaticResource BrushValor}"/>
-            <Button x:Name="BtnOk" Content="Inserir" Width="100" Style="{StaticResource BotaoStyle}"
+            <Button x:Name="BtnOk" Content="Continuar" Width="100" Style="{StaticResource BotaoStyle}"
                     Background="{StaticResource BrushAccent}" Foreground="{StaticResource BrushBranco}"
                     IsDefault="True"/>
         </StackPanel>
