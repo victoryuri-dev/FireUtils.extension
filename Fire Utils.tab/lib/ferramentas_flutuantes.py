@@ -122,6 +122,7 @@ class _JanelaFerramentas(forms.WPFWindow):
         # Sem barra de título nativa, o cabeçalho é a alça de arrastar. Os
         # botões tratam o próprio clique, então não iniciam o arrasto.
         self.Cabecalho.MouseLeftButtonDown += self._ao_arrastar
+        self.AlcaArrastar.MouseLeftButtonDown += self._ao_arrastar
         self._aplicar_reducao(_estado[u"reduzida"])
 
     def _ao_arrastar(self, sender, args):

@@ -83,6 +83,22 @@
     <Border Background="#101014" BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
             CornerRadius="0">
         <StackPanel Margin="10">
+            <!-- Alça de arrastar: faixa pontilhada no topo, centralizada. -->
+            <Border x:Name="AlcaArrastar" Background="Transparent" Cursor="SizeAll"
+                    Margin="0,0,0,6" ToolTip="Arrastar">
+                <UniformGrid Rows="2" Columns="8" HorizontalAlignment="Center">
+                    <UniformGrid.Resources>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Width" Value="3"/>
+                            <Setter Property="Height" Value="3"/>
+                            <Setter Property="Margin" Value="2"/>
+                            <Setter Property="Fill" Value="{StaticResource BrushTitulo}"/>
+                        </Style>
+                    </UniformGrid.Resources>
+                    <Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/>
+                    <Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/><Ellipse/>
+                </UniformGrid>
+            </Border>
             <Grid x:Name="Cabecalho" Background="Transparent" Margin="0,0,0,10" Cursor="SizeAll">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
