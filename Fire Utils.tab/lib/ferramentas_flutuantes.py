@@ -87,7 +87,7 @@ GRUPOS = {
         u"destino": u"python",
         u"ferramentas": [
             (u"limite", u"Inserir linha com limite", u"linha-limite"),
-            (u"medir", u"Inserir comprimento de linhas", u"linha-medir"),
+            (u"medir", u"Medir comprimento de linhas", u"linha-medir"),
             (u"configurar", u"Configurar", u"linha-configurar"),
         ],
     },

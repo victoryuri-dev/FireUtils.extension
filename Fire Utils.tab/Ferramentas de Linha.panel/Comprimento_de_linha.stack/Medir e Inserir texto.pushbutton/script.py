@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__title__ = "Inserir Comprimento de linhas"
+__title__ = "Medir comprimento de linhas"
 __doc__ = "Calcula o comprimento total de linhas selecionadas ou permite nova seleção."
 
 # Trava de licenca: as Ferramentas de Linha fazem parte do FireUtils BIM,
