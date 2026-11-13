@@ -145,7 +145,12 @@ export default function App() {
   });
   const [faixaConcluidaOculta, setFaixaConcluidaOculta] = useState(false);
   const recargaPyrevitRef = useRef(null);
-  const reinicioPendenteRef = useRef(null);
+  // O que a atualização já aplicada ainda pede ("nenhum" < "pyrevit" < "revit"):
+  // uma atualização seguinte soma a esse nível em vez de apagá-lo.
+  // Versão do último pacote aplicado nesta sessão (já no disco; o Revit ainda
+  // roda a anterior até reiniciar).
+  const [versaoAplicada, setVersaoAplicada] = useState(() => lerAvisoPosAtualizacao()?.versao ?? null);
+  const reinicioPendenteRef = useRef(lerAvisoPosAtualizacao()?.reinicio ?? null);
   const tentouAutomaticaRef = useRef(null);
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
@@ -322,21 +327,28 @@ export default function App() {
 
   // A atualização a oferecer: pacote rápido (só Python) se servir a esta
   // instalação, senão o instalador. { tipo, versao, arquivo } ou null.
+  // Versão que está no disco: depois de um pacote aplicado (ainda esperando
+  // reinício), `versaoPlugin` — lida na abertura — fica velha. A atualização a
+  // oferecer parte da versão do disco, para uma versão publicada logo depois (ex.:
+  // 3.3.0 e, em seguida, 3.3.1) ser baixada na hora em vez de esperar o próximo
+  // reinício e virar uma segunda atualização.
+  const versaoNoDisco = versaoAplicada ?? versaoPlugin;
+
   const versaoPublicada = useMemo(
     () =>
-      arquivosPublicados && versaoPlugin !== undefined
+      arquivosPublicados && versaoNoDisco !== undefined
         ? escolherAtualizacao(arquivosPublicados, {
-            instalada: versaoPlugin,
+            instalada: versaoNoDisco,
             base: baseInstalador,
             suportaPacote,
           })
         : null,
-    [arquivosPublicados, versaoPlugin, baseInstalador, suportaPacote]
+    [arquivosPublicados, versaoNoDisco, baseInstalador, suportaPacote]
   );
 
   const avaliacaoVersao = useMemo(
-    () => avaliarVersao({ instalada: versaoPlugin, publicada: versaoPublicada }),
-    [versaoPlugin, versaoPublicada]
+    () => avaliarVersao({ instalada: versaoNoDisco, publicada: versaoPublicada }),
+    [versaoNoDisco, versaoPublicada]
   );
 
   // Faixa vermelha de atualização: aparece enquanto há andamento ou ação
@@ -359,25 +371,42 @@ export default function App() {
   }
 
   async function baixarAtualizacao(pelaPessoa = true) {
-    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada", "manual"].includes(estadoAtualizacao?.fase)) return;
+    // "aplicada" não impede: uma versão publicada depois da aplicada também baixa.
+    if (emAndamento(estadoAtualizacao) || ["agendada", "manual"].includes(estadoAtualizacao?.fase)) return;
     if (!suportaAtualizacao || !versaoPublicada) {
       if (pelaPessoa) abrirPerfilNoSite();
       return;
     }
-    const versao = versaoPublicada.versao;
+    const pendente = estadoAtualizacao?.fase === "aplicada";
     setFaixaConcluidaOculta(false);
-    setEstadoAtualizacao({ fase: "preparando", versao });
-    const links = await gerarLinksDaAtualizacao(versaoPublicada);
+    if (!pendente) setEstadoAtualizacao({ fase: "preparando", versao: versaoPublicada.versao });
+
+    // Confere a lista de novo, na hora: se uma versão mais nova foi publicada
+    // desde a última consulta, baixa essa e não a antiga.
+    let alvo = versaoPublicada;
+    const atual = await listarVersoesPublicadas();
+    if (atual?.arquivos) {
+      const maisNova = escolherAtualizacao(atual.arquivos, {
+        instalada: versaoNoDisco,
+        base: baseInstalador,
+        suportaPacote,
+      });
+      if (maisNova) alvo = maisNova;
+      setArquivosPublicados(atual.arquivos);
+      setNotasPublicadas(atual.notas ?? []);
+    }
+    if (tentouAutomaticaRef.current !== alvo.versao) tentouAutomaticaRef.current = alvo.versao;
+    if (!pendente) setEstadoAtualizacao({ fase: "preparando", versao: alvo.versao });
+
+    const links = await gerarLinksDaAtualizacao(alvo);
     if (links.erro) {
-      setEstadoAtualizacao({ fase: "erro", erro: links.erro, versao });
+      setEstadoAtualizacao({ fase: "erro", erro: links.erro, versao: alvo.versao });
       return;
     }
     postToHost(
-      versaoPublicada.tipo === "pacote"
-        ? BridgeMessageTypes.INSTALAR_PACOTE
-        : BridgeMessageTypes.INSTALAR_ATUALIZACAO,
+      alvo.tipo === "pacote" ? BridgeMessageTypes.INSTALAR_PACOTE : BridgeMessageTypes.INSTALAR_ATUALIZACAO,
       // Download automático não abre a pasta do instalador de repente.
-      { versao, arquivo: versaoPublicada.arquivo, ...links, abrirPasta: pelaPessoa }
+      { versao: alvo.versao, arquivo: alvo.arquivo, ...links, abrirPasta: pelaPessoa }
     );
   }
 
@@ -385,7 +414,8 @@ export default function App() {
   // a faixa mostra o erro e "Tentar de novo"; não fica insistindo em laço).
   useEffect(() => {
     if (avaliacaoVersao.estado !== "disponivel" && avaliacaoVersao.estado !== "obrigatoria") return;
-    if (!suportaAtualizacao || !versaoPublicada || estadoAtualizacao) return;
+    if (!suportaAtualizacao || !versaoPublicada) return;
+    if (estadoAtualizacao && estadoAtualizacao.fase !== "aplicada") return;
     if (tentouAutomaticaRef.current === versaoPublicada.versao) return;
     tentouAutomaticaRef.current = versaoPublicada.versao;
     baixarAtualizacao(false);
@@ -398,7 +428,6 @@ export default function App() {
   // continua depois do recarregamento: o pyRevit recarrega, mas o código da
   // dockpane só muda quando o Revit reinicia.
   function recarregarPyrevit() {
-    reinicioPendenteRef.current = estadoAtualizacao?.reinicio;
     if (estadoAtualizacao?.reinicio !== "revit") limparAvisoPosAtualizacao();
     setEstadoAtualizacao((anterior) => ({ ...anterior, fase: "recarregando" }));
     postToHost(BridgeMessageTypes.RECARREGAR_PYREVIT, {});
@@ -447,6 +476,17 @@ export default function App() {
         // que a atualização realmente pede (ex.: reiniciar o Revit).
         if (novo?.recarga === "falhou" && reinicioPendenteRef.current) {
           novo.reinicio = reinicioPendenteRef.current;
+        }
+        if (novo?.fase === "aplicada") {
+          // Soma ao que uma atualização anterior (ainda não aplicada de fato) já
+          // pedia: vale o nível mais alto.
+          const ordem = ["nenhum", "pyrevit", "revit"];
+          const anterior = reinicioPendenteRef.current;
+          if (anterior && ordem.indexOf(anterior) > ordem.indexOf(novo.reinicio ?? "revit")) {
+            novo.reinicio = anterior;
+          }
+          reinicioPendenteRef.current = novo.reinicio ?? "revit";
+          setVersaoAplicada(novo.versao ?? null);
         }
         if (novo) {
           // O Python não repete a versão a cada andamento: mantém a anterior.
