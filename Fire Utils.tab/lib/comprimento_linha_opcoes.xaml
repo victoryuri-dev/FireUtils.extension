@@ -32,10 +32,7 @@
     <StackPanel Margin="22,18,22,18">
 
         <TextBlock Text="Configurar Comprimento de Linhas" FontSize="15" FontWeight="SemiBold"
-                   Foreground="{StaticResource BrushAccent}" Margin="0,0,0,4"/>
-        <TextBlock Text="Pré-configura o estilo de linha e o estilo de texto usados por &quot;Inserir Linha com Limite&quot; e &quot;Medir e Inserir Texto&quot; (pra não precisar escolher toda vez), e o texto inserido antes do valor do comprimento — pode deixar em branco."
-                   FontSize="11" Foreground="{StaticResource BrushLabel}" TextWrapping="Wrap" Margin="0,0,0,16"/>
-
+                   Foreground="{StaticResource BrushAccent}" Margin="0,0,0,16"/>
         <TextBlock Text="Estilo de linha padrão" Style="{StaticResource LabelStyle}"/>
         <ComboBox x:Name="CmbEstilo" Height="28" FontSize="12" Margin="0,0,0,14"/>
 
