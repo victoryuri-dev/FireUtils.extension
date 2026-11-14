@@ -4328,12 +4328,21 @@ h1, h2, h3, h4, h5, h6,
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   margin: 0;
   padding: 8px 16px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  background: transparent;
+  border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-  user-select: text;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.avatar-popover-versao:hover {
+  color: var(--white);
 }
 
 .avatar-popover-versao .icon {
@@ -4350,6 +4359,7 @@ h1, h2, h3, h4, h5, h6,
   top: 0;
   z-index: 5;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   gap: 10px;
   /* Fundo sólido: sem ele a lista de famílias aparece entre a busca e o botão
@@ -4547,22 +4557,25 @@ h1, h2, h3, h4, h5, h6,
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 12px;
 }
 
 .atualizacoes-nota h2 {
   margin: 0;
   font-family: var(--font-titulo);
   font-size: 17px;
+  line-height: 1.2;
   color: var(--text);
 }
 
 .atualizacoes-data {
   font-size: 11px;
   color: var(--text-3);
+  white-space: nowrap;
 }
 
 .atualizacoes-titulo-nota {
-  margin: 6px 0 12px;
+  margin: -4px 0 12px;
   font-size: 13px;
   color: var(--text-2);
 }
@@ -4579,33 +4592,52 @@ h1, h2, h3, h4, h5, h6,
 .atualizacoes-nota li {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text);
 }
 
+/* Etiquetas de tipo: mesma largura e altura para o texto começar alinhado em
+   todas as linhas; cor sutil (fundo translúcido + texto colorido), uma por tipo. */
 .atualizacoes-tag {
-  flex-shrink: 0;
-  min-width: 62px;
-  padding: 2px 8px;
+  flex: 0 0 78px;
+  box-sizing: border-box;
+  margin-top: 1px;
+  padding: 3px 0;
   border-radius: 4px;
   text-align: center;
   font-size: 10px;
   font-weight: 700;
+  line-height: 1.3;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  background: var(--pill-bg);
-  color: var(--text-2);
+  white-space: nowrap;
+  background: rgba(59, 130, 246, 0.14);
+  color: #3b82f6;
 }
 
 .atualizacoes-tag-novo {
-  background: var(--accent);
-  color: #fff;
+  background: rgba(204, 26, 50, 0.14);
+  color: var(--accent);
 }
 
 .atualizacoes-tag-correcao {
+  background: rgba(245, 158, 11, 0.16);
   color: var(--amber);
+}
+
+/* Títulos de seção e aviso da página: respiro entre o cabeçalho, o aviso e as listas. */
+.atualizacoes-pagina > .vazio {
+  margin: 0 0 8px;
+}
+
+.atualizacoes-pagina .se-secao-titulo-pagina {
+  margin: 24px 2px 12px;
+}
+
+.atualizacoes-pagina > .vazio + .se-secao-titulo-pagina {
+  margin-top: 16px;
 }
 
 /* Saídas de Emergência: árvore de acessos e ambientes em largura reduzida ----
@@ -4788,19 +4820,156 @@ h1, h2, h3, h4, h5, h6,
   gap: 14px 32px;
 }
 
-/* Tela de "reinicie o Revit" (ReiniciarRevit.jsx): na dockpane inteira, sem menu,
-   com o mesmo bloco de título e texto das telas de bloqueio (.sem-licenca) e a
-   logo animada em vermelho no topo. */
-.reiniciar-revit {
+/* Filtros da Biblioteca (FiltrosBiblioteca.jsx): sempre visíveis abaixo da busca,
+   dentro do bloco fixo (.busca-biblioteca). */
+.filtros-biblioteca {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  height: 100vh;
-  box-sizing: border-box;
-  background: var(--bg);
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
-.reiniciar-revit-logo {
+.filtro-categorias {
+  position: relative;
+}
+
+.filtro-botao {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--pill-bg);
+  border: solid 1px var(--border-2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filtro-botao:hover,
+.filtro-botao.aberto,
+.filtro-botao.ativo {
+  color: var(--text);
+  border-color: var(--text-2);
+}
+
+.filtro-contagem {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.filtro-seta {
+  width: 10px;
+  height: 10px;
+  transform: rotate(90deg);
+  transition: transform 0.2s;
+}
+
+.filtro-botao.aberto .filtro-seta {
+  transform: rotate(-90deg);
+}
+
+.filtro-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-3);
+  border: solid 1px var(--border-2);
+  border-radius: 6px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.filtro-opcao {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.filtro-opcao:hover {
+  background: var(--pill-bg);
+}
+
+.filtro-opcao input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.filtro-limpar {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: none;
+  border-top: solid 1px var(--border-2);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.filtro-limpar:hover:not(:disabled) {
   color: var(--accent);
-  margin-bottom: 12px;
+}
+
+.filtro-limpar:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Ordem: dois botões lado a lado, o escolhido destacado. */
+.filtro-ordem {
+  display: inline-flex;
+  border: solid 1px var(--border-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.filtro-ordem button {
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  background: var(--pill-bg);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filtro-ordem button + button {
+  border-left: solid 1px var(--border-2);
+}
+
+.filtro-ordem button.ativo {
+  background: var(--accent);
+  color: #fff;
 }

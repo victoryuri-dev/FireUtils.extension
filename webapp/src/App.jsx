@@ -10,26 +10,25 @@ import Dashboard from "./components/Dashboard";
 import SemLicenca from "./components/SemLicenca";
 import AvisoAtualizacao from "./components/AvisoAtualizacao";
 import AtualizacoesPage from "./components/AtualizacoesPage";
-import ReiniciarRevit from "./components/ReiniciarRevit";
 import {
   ATRASO_RECARGA_MS, guardarAvisoPosAtualizacao, lerAvisoPosAtualizacao, limparAvisoPosAtualizacao,
 } from "./lib/avisoPosAtualizacao";
 import AtualizacaoNecessaria from "./components/AtualizacaoNecessaria";
 import { avaliarVersao, escolherAtualizacao } from "./lib/versoes";
 import { listarVersoesPublicadas, gerarLinksDaAtualizacao, abrirPerfilNoSite } from "./lib/atualizacao";
-import { emAndamento, estadoDaMensagem, precisaReiniciarRevit } from "./lib/atualizacaoEstado";
+import { emAndamento, estadoDaMensagem } from "./lib/atualizacaoEstado";
 import { buscarTokenDeLicenca, precisaRenovarToken, tokenRecusado } from "./lib/licencaToken";
 import { abaLiberada, rotuloDoModuloDaAba } from "./lib/licencas";
 import Icon from "./components/Icon";
 import ToastStack from "./components/ToastStack";
 import { useToasts } from "./lib/toasts";
-import CategoryPills, { TODAS_ID, ROTULO_CURTO_POR_CATEGORIA } from "./components/CategoryPills";
+import FiltrosBiblioteca from "./components/FiltrosBiblioteca";
+import { ROTULO_CURTO_POR_CATEGORIA, ordenarFamilias } from "./lib/categorias";
 import FamilyCard from "./components/FamilyCard";
 import carregarIconSvg from "./assets/icons/carregado-icon-placeholder.svg?raw";
 import checkIconSvg from "./assets/icons/check-icon.svg?raw";
 import xIconSvg from "./assets/icons/x-icon.svg?raw";
 import searchIconSvg from "./assets/icons/search-icon.svg?raw";
-import filterIconSvg from "./assets/icons/filter-icon.svg?raw";
 import libraryIconSvg from "./assets/icons/library-icon.svg?raw";
 
 // Tempo máximo esperando o LOAD_RESULT antes de desistir do indicador de
@@ -67,9 +66,11 @@ function enviarSessaoAoHost(sessao) {
   }
 }
 
-function tituloDaSecao(categorias, categoriaAtual) {
-  if (categoriaAtual === TODAS_ID) return "FAMÍLIAS";
-  const categoria = categorias.find((c) => c.id === categoriaAtual);
+// Título da lista: o nome da categoria quando só uma está marcada; senão, "Famílias".
+function tituloDaSecao(categorias, categoriasMarcadas) {
+  if (categoriasMarcadas.size !== 1) return "FAMÍLIAS";
+  const [idMarcado] = categoriasMarcadas;
+  const categoria = categorias.find((c) => c.id === idMarcado);
   if (!categoria) return "FAMÍLIAS";
   return (ROTULO_CURTO_POR_CATEGORIA[categoria.id] || categoria.name).toUpperCase();
 }
@@ -113,10 +114,10 @@ export default function App() {
   // Barras flutuantes de ferramentas abertas, por grupo ({ saidas: true }).
   const [janelasAbertas, setJanelasAbertas] = useState({});
   const [catalogo, setCatalogo] = useState(null);
-  const [categoriaAtual, setCategoriaAtual] = useState(TODAS_ID);
+  // Categorias marcadas no filtro (vazio = todas) e ordem da lista ("az" | "recentes").
+  const [categoriasMarcadas, setCategoriasMarcadas] = useState(() => new Set());
+  const [ordemLista, setOrdemLista] = useState("az");
   const [busca, setBusca] = useState("");
-  // Categorias (pills) começam recolhidas: o botão de filtro ao lado da busca as abre.
-  const [categoriasAbertas, setCategoriasAbertas] = useState(false);
   const [selecionadas, setSelecionadas] = useState(() => new Set());
   const [carregando, setCarregando] = useState(false);
   const [vinculo, setVinculo] = useState(undefined); // undefined = ainda não respondeu
@@ -146,6 +147,12 @@ export default function App() {
   });
   const [faixaConcluidaOculta, setFaixaConcluidaOculta] = useState(false);
   const recargaPyrevitRef = useRef(null);
+  // O que a atualização já aplicada ainda pede ("nenhum" < "pyrevit" < "revit"):
+  // uma atualização seguinte soma a esse nível em vez de apagá-lo.
+  // Versão do último pacote aplicado nesta sessão (já no disco; o Revit ainda
+  // roda a anterior até reiniciar).
+  const [versaoAplicada, setVersaoAplicada] = useState(() => lerAvisoPosAtualizacao()?.versao ?? null);
+  const reinicioPendenteRef = useRef(lerAvisoPosAtualizacao()?.reinicio ?? null);
   const tentouAutomaticaRef = useRef(null);
   const [avisoDispensado, setAvisoDispensado] = useState(lerAvisoDispensado);
   const [dimensionamentos, setDimensionamentos] = useState(undefined);
@@ -322,21 +329,28 @@ export default function App() {
 
   // A atualização a oferecer: pacote rápido (só Python) se servir a esta
   // instalação, senão o instalador. { tipo, versao, arquivo } ou null.
+  // Versão que está no disco: depois de um pacote aplicado (ainda esperando
+  // reinício), `versaoPlugin` — lida na abertura — fica velha. A atualização a
+  // oferecer parte da versão do disco, para uma versão publicada logo depois (ex.:
+  // 3.3.0 e, em seguida, 3.3.1) ser baixada na hora em vez de esperar o próximo
+  // reinício e virar uma segunda atualização.
+  const versaoNoDisco = versaoAplicada ?? versaoPlugin;
+
   const versaoPublicada = useMemo(
     () =>
-      arquivosPublicados && versaoPlugin !== undefined
+      arquivosPublicados && versaoNoDisco !== undefined
         ? escolherAtualizacao(arquivosPublicados, {
-            instalada: versaoPlugin,
+            instalada: versaoNoDisco,
             base: baseInstalador,
             suportaPacote,
           })
         : null,
-    [arquivosPublicados, versaoPlugin, baseInstalador, suportaPacote]
+    [arquivosPublicados, versaoNoDisco, baseInstalador, suportaPacote]
   );
 
   const avaliacaoVersao = useMemo(
-    () => avaliarVersao({ instalada: versaoPlugin, publicada: versaoPublicada }),
-    [versaoPlugin, versaoPublicada]
+    () => avaliarVersao({ instalada: versaoNoDisco, publicada: versaoPublicada }),
+    [versaoNoDisco, versaoPublicada]
   );
 
   // Faixa vermelha de atualização: aparece enquanto há andamento ou ação
@@ -347,9 +361,6 @@ export default function App() {
   const mostrarFaixa = estadoAtualizacao
     ? !(concluidaSemAcao && faixaConcluidaOculta)
     : avaliacaoVersao.estado === "disponivel" && avisoDispensado !== avaliacaoVersao.versaoNova;
-  // Pacote aplicado que pede reiniciar o Revit: o código novo está no disco e o
-  // antigo na memória; o painel fica indisponível até o reinício.
-  const bloqueadoParaReinicio = precisaReiniciarRevit(estadoAtualizacao);
 
   // O Python baixa, confere e instala (plugin_atualizacao.py) — com a sessão
   // daqui só se geram os links do bucket privado. Plugin sem esse suporte, ou
@@ -362,25 +373,42 @@ export default function App() {
   }
 
   async function baixarAtualizacao(pelaPessoa = true) {
-    if (emAndamento(estadoAtualizacao) || ["agendada", "aplicada", "manual"].includes(estadoAtualizacao?.fase)) return;
+    // "aplicada" não impede: uma versão publicada depois da aplicada também baixa.
+    if (emAndamento(estadoAtualizacao) || ["agendada", "manual"].includes(estadoAtualizacao?.fase)) return;
     if (!suportaAtualizacao || !versaoPublicada) {
       if (pelaPessoa) abrirPerfilNoSite();
       return;
     }
-    const versao = versaoPublicada.versao;
+    const pendente = estadoAtualizacao?.fase === "aplicada";
     setFaixaConcluidaOculta(false);
-    setEstadoAtualizacao({ fase: "preparando", versao });
-    const links = await gerarLinksDaAtualizacao(versaoPublicada);
+    if (!pendente) setEstadoAtualizacao({ fase: "preparando", versao: versaoPublicada.versao });
+
+    // Confere a lista de novo, na hora: se uma versão mais nova foi publicada
+    // desde a última consulta, baixa essa e não a antiga.
+    let alvo = versaoPublicada;
+    const atual = await listarVersoesPublicadas();
+    if (atual?.arquivos) {
+      const maisNova = escolherAtualizacao(atual.arquivos, {
+        instalada: versaoNoDisco,
+        base: baseInstalador,
+        suportaPacote,
+      });
+      if (maisNova) alvo = maisNova;
+      setArquivosPublicados(atual.arquivos);
+      setNotasPublicadas(atual.notas ?? []);
+    }
+    if (tentouAutomaticaRef.current !== alvo.versao) tentouAutomaticaRef.current = alvo.versao;
+    if (!pendente) setEstadoAtualizacao({ fase: "preparando", versao: alvo.versao });
+
+    const links = await gerarLinksDaAtualizacao(alvo);
     if (links.erro) {
-      setEstadoAtualizacao({ fase: "erro", erro: links.erro, versao });
+      setEstadoAtualizacao({ fase: "erro", erro: links.erro, versao: alvo.versao });
       return;
     }
     postToHost(
-      versaoPublicada.tipo === "pacote"
-        ? BridgeMessageTypes.INSTALAR_PACOTE
-        : BridgeMessageTypes.INSTALAR_ATUALIZACAO,
+      alvo.tipo === "pacote" ? BridgeMessageTypes.INSTALAR_PACOTE : BridgeMessageTypes.INSTALAR_ATUALIZACAO,
       // Download automático não abre a pasta do instalador de repente.
-      { versao, arquivo: versaoPublicada.arquivo, ...links, abrirPasta: pelaPessoa }
+      { versao: alvo.versao, arquivo: alvo.arquivo, ...links, abrirPasta: pelaPessoa }
     );
   }
 
@@ -388,7 +416,8 @@ export default function App() {
   // a faixa mostra o erro e "Tentar de novo"; não fica insistindo em laço).
   useEffect(() => {
     if (avaliacaoVersao.estado !== "disponivel" && avaliacaoVersao.estado !== "obrigatoria") return;
-    if (!suportaAtualizacao || !versaoPublicada || estadoAtualizacao) return;
+    if (!suportaAtualizacao || !versaoPublicada) return;
+    if (estadoAtualizacao && estadoAtualizacao.fase !== "aplicada") return;
     if (tentouAutomaticaRef.current === versaoPublicada.versao) return;
     tentouAutomaticaRef.current = versaoPublicada.versao;
     baixarAtualizacao(false);
@@ -397,8 +426,11 @@ export default function App() {
 
   // Pacote que só pede o pyRevit recarregado: a pessoa salva o projeto e clica.
   // O painel recarrega junto, para pegar a versão nova.
+  // Se a atualização também pede reiniciar o Revit (reinicio "revit"), o aviso
+  // continua depois do recarregamento: o pyRevit recarrega, mas o código da
+  // dockpane só muda quando o Revit reinicia.
   function recarregarPyrevit() {
-    limparAvisoPosAtualizacao();
+    if (estadoAtualizacao?.reinicio !== "revit") limparAvisoPosAtualizacao();
     setEstadoAtualizacao((anterior) => ({ ...anterior, fase: "recarregando" }));
     postToHost(BridgeMessageTypes.RECARREGAR_PYREVIT, {});
     recargaPyrevitRef.current = window.setTimeout(() => window.location.reload(), ATRASO_RECARGA_MS);
@@ -442,6 +474,22 @@ export default function App() {
         mensagem.type === BridgeMessageTypes.ATUALIZACAO_RESULTADO
       ) {
         const novo = estadoDaMensagem(mensagem.type, mensagem.payload);
+        // Recarga do pyRevit que falhou: o Python só sabe do pyRevit; mantém o
+        // que a atualização realmente pede (ex.: reiniciar o Revit).
+        if (novo?.recarga === "falhou" && reinicioPendenteRef.current) {
+          novo.reinicio = reinicioPendenteRef.current;
+        }
+        if (novo?.fase === "aplicada") {
+          // Soma ao que uma atualização anterior (ainda não aplicada de fato) já
+          // pedia: vale o nível mais alto.
+          const ordem = ["nenhum", "pyrevit", "revit"];
+          const anterior = reinicioPendenteRef.current;
+          if (anterior && ordem.indexOf(anterior) > ordem.indexOf(novo.reinicio ?? "revit")) {
+            novo.reinicio = anterior;
+          }
+          reinicioPendenteRef.current = novo.reinicio ?? "revit";
+          setVersaoAplicada(novo.versao ?? null);
+        }
         if (novo) {
           // O Python não repete a versão a cada andamento: mantém a anterior.
           setEstadoAtualizacao((anterior) => ({ ...novo, versao: novo.versao ?? anterior?.versao }));
@@ -703,29 +751,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adicionarToast]);
 
-  const secoesVisiveis = useMemo(() => {
+  // Famílias que passam na busca e nas categorias marcadas, já na ordem escolhida.
+  const familiasFiltradas = useMemo(() => {
     if (!catalogo) return [];
     const textoFiltro = busca.trim().toLowerCase();
-    const porCategoria = new Map();
-
-    for (const familia of catalogo.families) {
-      if (categoriaAtual !== TODAS_ID && familia.category_id !== categoriaAtual) continue;
-      if (textoFiltro && !familia.name.toLowerCase().includes(textoFiltro)) continue;
-      if (!porCategoria.has(familia.category)) porCategoria.set(familia.category, []);
-      porCategoria.get(familia.category).push(familia);
-    }
-
-    for (const lista of porCategoria.values()) {
-      lista.sort((a, b) => a.name.localeCompare(b.name));
-    }
-
-    return Array.from(porCategoria.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [catalogo, categoriaAtual, busca]);
-
-  const familiasFiltradas = useMemo(
-    () => secoesVisiveis.flatMap(([, familias]) => familias),
-    [secoesVisiveis]
-  );
+    const posicaoNoCatalogo = new Map(catalogo.families.map((f, i) => [f.id, i]));
+    const visiveis = catalogo.families.filter((familia) => {
+      if (categoriasMarcadas.size > 0 && !categoriasMarcadas.has(familia.category_id)) return false;
+      return !textoFiltro || familia.name.toLowerCase().includes(textoFiltro);
+    });
+    return ordenarFamilias(visiveis, ordemLista, posicaoNoCatalogo);
+  }, [catalogo, categoriasMarcadas, busca, ordemLista]);
 
   function alternarSelecao(familia) {
     setSelecionadas((atual) => {
@@ -790,12 +826,6 @@ export default function App() {
   }
   if (!sessao) {
     return <LoginScreen onLogin={setSessao} />;
-  }
-
-  // Pacote que exige reiniciar o Revit: tela inteira só com a mensagem, sem
-  // menu, perfil nem faixa.
-  if (bloqueadoParaReinicio) {
-    return <ReiniciarRevit versao={estadoAtualizacao.versao} />;
   }
 
   return (
@@ -927,35 +957,23 @@ export default function App() {
                     onChange={(e) => setBusca(e.target.value)}
                   />
                 </div>
-                <button
-                  type="button"
-                  className={`botao-filtro ${categoriasAbertas ? "aberto" : ""} ${
-                    categoriaAtual !== TODAS_ID ? "com-filtro" : ""
-                  }`}
-                  onClick={() => setCategoriasAbertas((v) => !v)}
-                  aria-expanded={categoriasAbertas}
-                  aria-label="Filtrar por categoria"
-                  title="Filtrar por categoria"
-                >
-                  <Icon svg={filterIconSvg} />
-                </button>
+                {catalogo && (
+                  <FiltrosBiblioteca
+                    categorias={catalogo.categories}
+                    selecionadas={categoriasMarcadas}
+                    onSelecionadas={setCategoriasMarcadas}
+                    ordem={ordemLista}
+                    onOrdem={setOrdemLista}
+                  />
+                )}
               </div>
-
               {!catalogo ? (
                 <p className="vazio">Carregando catálogo...</p>
               ) : (
                 <>
-                  {categoriasAbertas && (
-                    <CategoryPills
-                      categorias={catalogo.categories}
-                      todasIconKey={catalogo.todas_icon_key}
-                      categoriaAtual={categoriaAtual}
-                      onSelect={setCategoriaAtual}
-                    />
-                  )}
                 <div>
                   <div className="secao-titulo-linha">
-                    <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriaAtual)}</h2>
+                    <h2 className="secao-titulo">{tituloDaSecao(catalogo.categories, categoriasMarcadas)}</h2>
                     {selecionadas.size > 0 && (
                       <div className="contadores">
                         <span className="contador">

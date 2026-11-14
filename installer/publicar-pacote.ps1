@@ -23,6 +23,7 @@
 .PARAMETER Versao        Versao do pacote (ex: 3.2.0). Maior que a instalada.
 .PARAMETER BaseMinima    Menor versao de instalador que aceita o pacote.
 .PARAMETER ChavePrivada  Arquivo da chave privada. Padrao: %USERPROFILE%\fireutils-pacote-privada.xml
+.PARAMETER PermitirNaoRastreados  Empacota mesmo com arquivos em Fire Utils.tab que o git nao conhece.
 
 .EXAMPLE
     .\publicar-pacote.ps1 -Versao 3.2.0 -BaseMinima 3.1.0
@@ -30,7 +31,8 @@
 param(
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+(\.\d+){0,3}$')][string]$Versao,
     [Parameter(Mandatory = $true)][ValidatePattern('^\d+(\.\d+){0,3}$')][string]$BaseMinima,
-    [string]$ChavePrivada = (Join-Path $env:USERPROFILE 'fireutils-pacote-privada.xml')
+    [string]$ChavePrivada = (Join-Path $env:USERPROFILE 'fireutils-pacote-privada.xml'),
+    [switch]$PermitirNaoRastreados
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +46,28 @@ $Codigo       = Join-Path $RepoRoot 'Fire Utils.tab'
 
 $Extensoes  = @('.py', '.xaml', '.yaml', '.json', '.png', '.svg', '.ico', '.txt', '.md', '.ps1')
 $Protegidos = @('fire utils.tab/lib/webview2_runtime/', 'fire utils.tab/lib/family_library/')
+
+
+# Arquivos de "Fire Utils.tab" que o git nao conhece (nem ignora): sobras de outra
+# branch ou de botoes antigos. Sem esta conferencia eles entrariam no
+# pacote e reapareceriam como botoes velhos na faixa do Revit. -PermitirNaoRastreados
+# libera quando sao arquivos novos que voce de fato quer levar.
+function Test-NaoRastreados {
+    if ($PermitirNaoRastreados) { return }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Warning 'git nao encontrado: nao deu para conferir arquivos soltos em "Fire Utils.tab".'
+        return
+    }
+    $soltos = @(& git -C $RepoRoot ls-files --others --exclude-standard -- 'Fire Utils.tab' 2>$null)
+    if ($soltos.Count -gt 0) {
+        $lista = ($soltos | ForEach-Object { "    $_" }) -join [Environment]::NewLine
+        throw ("Ha arquivos em 'Fire Utils.tab' que o git nao conhece (provavelmente sobras de botoes antigos ou de outra branch):" +
+               [Environment]::NewLine + $lista + [Environment]::NewLine +
+               "Apague-os (ou faca commit, se forem novos de verdade) e rode de novo. Para levar assim mesmo: -PermitirNaoRastreados.")
+    }
+}
+
+Test-NaoRastreados
 
 if (-not (Test-Path -LiteralPath $ChavePrivada)) {
     throw "Chave privada nao encontrada: $ChavePrivada. Rode scripts\gerar-chave-pacote.ps1 primeiro."

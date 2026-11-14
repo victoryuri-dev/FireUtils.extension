@@ -405,5 +405,10 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         _postar_licencas(postar_mensagem)
     elif tipo == u"GET_LICENCAS":
         _postar_licencas(postar_mensagem)
+        # Aproveita a abertura da dockpane (uma vez por sessão) para apagar
+        # pastas de botões que sobraram de pacotes antigos.
+        fila_acoes.enfileirar(
+            lambda uiapp: plugin_pacote.limpar_pastas_orfas(postar_mensagem)
+        )
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))
