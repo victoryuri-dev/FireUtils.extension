@@ -50,6 +50,7 @@ _ICONES_DIR = os.path.join(_LIB_DIR, u"assets", u"ferramentas")
 
 _TIPO_ESTADO = u"JANELA_FERRAMENTAS_ESTADO"
 _TIPO_CLIQUE = u"FERRAMENTA_FLUTUANTE"
+_TIPO_AMBIENTES_ATUALIZADOS = u"SAIDAS_AMBIENTES_ATUALIZADOS"
 
 # Largura da janela (XAML) e folga deixada à direita para a dockpane no
 # posicionamento inicial.
@@ -346,7 +347,7 @@ def _mostrar_resultado_saidas(r):
              aviso=bool(falhas))
 
 
-def _rodar_saidas(uiapp, acao, fila_acoes):
+def _rodar_saidas(uiapp, acao, fila_acoes, postar_mensagem):
     """Ferramentas de Saídas sem a dockpane: o seletor é a janela WPF de
     saidas_dialogo.py e a execução é a mesma bridge que a dockpane usa — só
     que as respostas viram avisos do Revit em vez de mensagens ao React."""
@@ -357,6 +358,14 @@ def _rodar_saidas(uiapp, acao, fila_acoes):
         # SAIDAS_AMBIENTES_PROGRESSO é ignorado: o próprio Revit mostra o
         # prompt da seleção na barra de status.
         if tipo == u"SAIDAS_AMBIENTES_RESULTADO":
+            # Antes do aviso (que é modal): a dockpane recarrega os ambientes
+            # do Revit enquanto o aviso está na tela, como fazia quando o
+            # botão era dela. Só se o site recebeu — mesma condição de antes.
+            if payload.get(u"ok") and not payload.get(u"erroEnvio"):
+                try:
+                    postar_mensagem(_TIPO_AMBIENTES_ATUALIZADOS, {u"acao": payload.get(u"acao")})
+                except Exception as ex:
+                    print_seguro(u"[AVISO] Falha ao avisar a dockpane: {}".format(texto_erro(ex)))
             _mostrar_resultado_saidas(payload)
 
     if acao == u"sincronizar":
@@ -391,12 +400,12 @@ def _rodar_saidas(uiapp, acao, fila_acoes):
     ponte.tratar_identificar_ambientes(uiapp, pedido, fila_acoes, responder)
 
 
-def _rodar_saidas_seguro(uiapp, acao, fila_acoes):
+def _rodar_saidas_seguro(uiapp, acao, fila_acoes, postar_mensagem):
     """Falha ao montar o seletor ou rodar a ferramenta vira aviso na tela: sem
     isso o erro só iria para a janela de saída do pyRevit e o clique pareceria
     não fazer nada."""
     try:
-        _rodar_saidas(uiapp, acao, fila_acoes)
+        _rodar_saidas(uiapp, acao, fila_acoes, postar_mensagem)
     except SystemExit:
         pass
     except Exception as ex:
@@ -442,7 +451,7 @@ def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
 
     def ao_clicar(acao):
         if definicao[u"destino"] == u"nativo":
-            fila_acoes.enfileirar(lambda uiapp: _rodar_saidas_seguro(uiapp, acao, fila_acoes))
+            fila_acoes.enfileirar(lambda uiapp: _rodar_saidas_seguro(uiapp, acao, fila_acoes, postar_mensagem))
             return
         if definicao[u"destino"] == u"python":
             fila_acoes.enfileirar(lambda uiapp: _rodar_comando_python(uiapp, grupo, acao))
