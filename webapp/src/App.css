@@ -1655,15 +1655,6 @@
   height: 13px;
 }
 
-.se-vermelho {
-  color: var(--accent);
-}
-
-.se-sep {
-  opacity: 0.35;
-}
-
-
 .se-modal-overlay {
   position: fixed;
   inset: 0;
@@ -1674,56 +1665,6 @@
   padding: 24px;
   z-index: 300;
   animation: surgir 0.15s;
-}
-
-/* Cabeçalho da tela de detalhe do pavimento (botão voltar + nome + switch
-   de piso de descarga) — não mora mais dentro de uma caixa de modal, mas
-   mantém a mesma barra com borda inferior. */
-.se-detalhe-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 0 14px;
-  border-bottom: 1px solid var(--border-2);
-  margin-bottom: 14px;
-  flex-shrink: 0;
-}
-
-.se-modal-header-esq {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.se-modal-titulo {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.se-salvando {
-  font-size: 11px;
-  color: var(--text-3);
-}
-
-.se-modal-corpo {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.se-qtd-saidas {
-  font-size: 11px;
-  color: var(--text-3);
-}
-
-.se-qtd-saidas strong {
-  color: var(--text);
 }
 
 /* Piso de descarga switch -------------------------------------------------- */
@@ -1816,45 +1757,6 @@
   left: 14px;
 }
 
-/* Árvore -------------------------------------------------------------------- */
-.se-arvore {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.se-raizes {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.se-centralizado {
-  display: flex;
-  justify-content: center;
-}
-
-.se-centralizado .se-botao {
-  flex: 1 1 0;
-  justify-content: center;
-}
-
-.se-vazio-grande {
-  padding: 34px;
-  text-align: center;
-  color: var(--text-3);
-  font-size: 13px;
-  border: 1px dashed var(--border-2);
-  border-radius: 8px;
-}
-
-.se-vazio-italico {
-  font-size: 11px;
-  color: var(--text-3);
-  font-style: italic;
-  padding: 4px 0;
-}
-
 /* Card base compartilhado — Acesso/Saída/Escada-Rampa e Ambiente usam a
    mesma estrutura (cabeçalho dividido em esquerda/direita + corpo
    opcional). O Ambiente é só o cabeçalho (sem corpo próprio): aplica
@@ -1868,25 +1770,6 @@
 
 .se-card:hover {
   border-color: var(--text-3);
-}
-
-.se-card.se-card-over {
-  border-color: var(--accent);
-  background: rgba(234, 19, 48, 0.04);
-}
-
-.se-card.se-dragging {
-  opacity: 0.4;
-}
-
-/* Ambiente (folha) — fundo levemente diferenciado do Acesso (container). */
-.se-card-leaf {
-  background: var(--bg-3);
-  cursor: pointer;
-}
-
-.se-acesso-card-filho {
-  margin-left: 4px;
 }
 
 /* Cabeçalho: flex-wrap quebra em coluna (esquerda em cima, direita
@@ -1932,143 +1815,11 @@
   padding: 0px 0;
 }
 
-.se-card-lixeira {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-}
-
-.se-chevron {
-  color: var(--text-3);
-  flex-shrink: 0;
-}
-
-.se-chevron .icon,
-.se-chevron.icon {
-  width: 14px;
-  height: 14px;
-}
-
 .se-acesso-nome {
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
   min-width: 0;
-}
-
-/* População somada de todos os ambientes do nó (ver calcDimsAcesso em
-   data/se_calc.js), ao lado do nome — mesmo padrão da população da
-   AmbienteChip. */
-.se-acesso-populacao {
-  font-size: 11px;
-  color: var(--text-3);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.se-card-body {
-  padding: 10px 10px;
-  border-top: 1px solid var(--border-2);
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.se-acesso-acoes {
-  display: flex;
-  justify-content: center;
-  gap: 6px;
-  padding-top: 2px;
-}
-
-/* Os botões de criar dividem toda a largura do card. */
-.se-acesso-acoes .se-botao {
-  flex: 1 1 0;
-  justify-content: center;
-}
-
-/* Grade de estatísticas de um Acesso/Saída/Escada-Rampa — duas linhas
-   (Acesso/Descarga ou Escada/Rampa em cima, Portas embaixo), colunas
-   alinhadas entre as duas via grid (mesmas 5 colunas pras duas linhas,
-   preenchidas em ordem de leitura — a própria grid quebra em 2 linhas
-   sozinha). Não é o mesmo elemento que .se-card-header-dir (compartilhado
-   com AmbienteChip, que continua de uma linha só). --------------------- */
-.se-acesso-stats-grid {
-  display: grid;
-  grid-template-columns: 78px 42px 38px 38px 68px;
-  align-items: center;
-  gap: 4px 14px;
-}
-
-.se-acesso-stats-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  text-align: center;
-  line-height: 1.15;
-}
-
-/* Botões de dimensionamento (AD/ER/PT) no cabeçalho de Acesso/Saída — liga/
-   desliga qual dimensionamento se aplica àquele nó especificamente (ver
-   calcDimsAcesso em data/se_calc.js) — um nó pode precisar de mais de um ao
-   mesmo tempo (ex.: o piso de descarga que é ao mesmo tempo corredor de
-   saída e chegada da escada). Vermelho preenchido = ligado; cinza neutro =
-   desligado. padding-right reserva o espaço da lixeira (position:absolute,
-   ver .se-card-lixeira). */
-.se-card-header-dims {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  padding-right: 30px;
-}
-
-.se-dim-botao {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 7px;
-  border-radius: 4px;
-  border: 1px solid var(--border-2);
-  background: var(--bg-3);
-  color: var(--text-3);
-  transition: 0.15s;
-}
-
-.se-dim-botao.se-dim-botao-ativo {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--white);
-}
-
-/* Linha de larguras mínimas de um Acesso/Saída (ex.: "ACESSO/DESCARGA
-   1,20 m") — só os dimensionamentos ligados aparecem, sempre na ordem
-   AD, Portas, Escada/Rampa. */
-.se-dim-entradas {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 0 10px 12px;
-  background-color: var(--bg-3);
-}
-
-.se-dim-entrada {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 0;
-}
-
-.se-dim-entrada-valor {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--accent);
-  white-space: nowrap;
 }
 
 /* Estatística compacta (POP./C/U.P./LARGURA MÍN.) --------------------------- */
@@ -2095,42 +1846,8 @@
   color: var(--accent);
 }
 
-/* Card de ambiente ------------------------------------------------------------ */
-.se-ambiente-nome {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-
-/* Borda vermelha do card quando o ambiente está marcado na seleção em
-   massa (ver Checkbox/toggleSelecaoAmbiente) — sobrepõe .se-card-leaf. */
-.se-card-leaf.se-card-selecionado {
-  border-color: var(--accent);
-}
-
-.se-ambiente-portas {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.se-ambiente-portas-valor {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--accent);
-  text-transform: none;
-  letter-spacing: normal;
-}
-
 /* Checkbox próprio (em vez de <input type="checkbox"> nativo, que herda a
-   cor de fundo do tema do SO) — ver Checkbox em AcessosDescargasView.jsx. */
+   cor de fundo do tema do SO) — ver Checkbox em FluxogramaSaidas.jsx. */
 .se-checkbox {
   display: inline-flex;
   align-items: center;
@@ -2163,180 +1880,10 @@
   color: var(--white);
 }
 
-.se-ambiente-up {
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.se-grip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--text-3);
-  padding: 2px;
-  cursor: grab;
-  flex-shrink: 0;
-  touch-action: none;
-}
-
-.se-grip:active {
-  cursor: grabbing;
-}
-
-.se-grip .icon {
-  width: 14px;
-  height: 14px;
-}
-
-.se-sem-acesso {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px dashed var(--text-3);
-  min-height: 56px;
-  transition: border-color 0.15s, background-color 0.15s;
-}
-
-.se-sem-acesso.se-sem-acesso-over {
-  border-color: var(--accent);
-  background: rgba(234, 19, 48, 0.04);
-}
-
-.se-secao-titulo-linha {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
 .se-secao-titulo {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
-}
-
-/* Barra de seleção em massa — sticky no rodapé do scroll de .se-pagina
-   (a ancestral rolável mais próxima), fica sempre visível enquanto houver
-   ambientes selecionados (ver AcessosDescargasView.jsx). */
-.se-selecao-barra {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
-  /* Largura = a do conteúdo (fit-content). O JS mede o conteúdo e aplica em px
-     (+ padding e borda) para a troca de modo animar, já que "auto" não anima. */
-  width: fit-content;
-  max-width: 100%;
-  align-self: center;
-  /* Sem isto a barra (item de um flex column com rolagem) encolhia abaixo da
-     altura do conteúdo e o overflow:hidden cortava os botões. */
-  flex-shrink: 0;
-  box-sizing: border-box;
-  margin-top: 14px;
-  padding: 12px 16px;
-  border: 1px solid var(--accent);
-  border-radius: 8px;
-  background: var(--bg-3);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.se-selecao-conteudo {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  width: max-content;
-}
-
-/* Linha de cima, isolada: só a contagem, pequena e acinzentada. */
-.se-selecao-contagem {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--text-3);
-  white-space: nowrap;
-}
-
-.se-selecao-acoes {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.se-selecao-select {
-  width: 220px;
-  height: 34px;
-  box-sizing: border-box;
-  font-size: 12px;
-  padding: 0 10px;
-}
-
-/* Botões só com ícone (mover, apagar, cancelar). */
-.se-selecao-icone {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  background: var(--bg-2);
-  border: 1px solid var(--border-2);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
-  transition: 0.15s;
-}
-
-.se-selecao-icone .icon {
-  width: 16px;
-  height: 16px;
-}
-
-.se-selecao-icone:hover:not(:disabled) {
-  border-color: var(--text-2);
-}
-
-.se-selecao-icone:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.se-selecao-icone-destaque:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--white);
-}
-
-.se-selecao-icone-apagar {
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.se-selecao-icone-apagar:hover:not(:disabled) {
-  background: var(--accent);
-  color: var(--white);
-}
-
-.se-selecao-icone-x {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text-3);
-}
-
-.se-selecao-icone-x:hover:not(:disabled) {
-  color: var(--text);
-  border-color: transparent;
-}
-
-/* O X de "cancelar seleção" fica separado dos botões de ação. */
-.se-selecao-fim {
-  margin-left: 6px;
 }
 
 /* Nome editável inline -------------------------------------------------------- */
@@ -2701,25 +2248,6 @@
   font-size: 10px;
   font-weight: normal;
   flex-shrink: 0;
-}
-
-/* Indicador de ambiente criado manualmente (não veio do Revit) —
-   ver AmbienteChip em AcessosDescargasView.jsx. */
-.se-badge-manual {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  border: 1px solid var(--border-2);
-  color: var(--text-3);
-  flex-shrink: 0;
-}
-
-.se-badge-manual .icon {
-  width: 11px;
-  height: 11px;
 }
 
 /* Página de Saída de Emergência (SaidaEmergenciaPage.jsx) ------------------- */
@@ -4117,9 +3645,7 @@ h1, h2, h3, h4, h5, h6,
 .login-titulo,
 .niveis-coluna-titulo,
 .niveis-modal-titulo,
-.se-modal-titulo,
 .se-secao-titulo,
-.se-secao-titulo-linha,
 .secao-titulo,
 .secao-titulo-linha,
 .toast-titulo,
@@ -4315,7 +3841,6 @@ h1, h2, h3, h4, h5, h6,
   margin: 14px 0 0;
 }
 
-
 /* Ícones de duas cores (ocupacao/pornivel/todos/sincronizar): o vermelho da
    marca vem fixo no arquivo; a parte clara e o recorte seguem o tema, senão
    somem sobre fundo claro. */
@@ -4457,7 +3982,6 @@ h1, h2, h3, h4, h5, h6,
   justify-content: flex-end;
   gap: 8px;
 }
-
 
 /* Página Atualizações (AtualizacoesPage.jsx) --------------------------------- */
 .atualizacoes-pagina .se-pagina-header {
@@ -4654,15 +4178,6 @@ h1, h2, h3, h4, h5, h6,
   overflow-wrap: anywhere;
 }
 
-.se-detalhe-header {
-  flex-wrap: wrap;
-  row-gap: 10px;
-}
-
-.se-detalhe-header .se-modal-header-esq {
-  flex: 1 1 auto;
-}
-
 .se-piso-descarga {
   flex-shrink: 1;
   white-space: normal;
@@ -4673,11 +4188,6 @@ h1, h2, h3, h4, h5, h6,
   row-gap: 6px;
 }
 
-/* Reserva o canto da lixeira (posição absoluta) para ela não cobrir o conteúdo. */
-.se-card-header:has(> .se-card-lixeira) {
-  padding-right: 40px;
-}
-
 /* Com flex-wrap ligado, "width: 100%" quebraria a linha mesmo em tela larga:
    o bloco do meio (pessoas | porta) cresce a partir de 220px e só desce de
    linha quando realmente não cabe ao lado do nome. */
@@ -4686,31 +4196,13 @@ h1, h2, h3, h4, h5, h6,
   flex: 1 1 220px;
 }
 
-.se-secao-titulo-linha {
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.se-acesso-acoes {
-  flex-wrap: wrap;
-}
-
 @media (max-width: 640px) {
   .se-pagina-header h1 {
     font-size: 18px;
   }
 
-  .se-detalhe-header .se-piso-descarga {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .se-card-header {
     padding: 12px;
-  }
-
-  .se-card-header:has(> .se-card-lixeira) {
-    padding-right: 40px;
   }
 
   .se-card-header-esq {
@@ -4728,44 +4220,8 @@ h1, h2, h3, h4, h5, h6,
     gap: 4px 12px;
   }
 
-  /* Em linhas separadas e na mesma margem esquerda: nome / pessoas / botões
-     AD-PT-ER / resultados (que quebram de linha se não couberem). */
-  .se-card-header-dims {
-    flex: 1 1 100%;
-    flex-wrap: wrap;
-    gap: 8px 6px;
-    padding: 0 0 0 2px;
-  }
-
-  .se-card-header-dims .se-acesso-populacao {
-    flex: 0 0 100%;
-  }
-
   .se-card-header-dir {
     padding-left: 2px;
-  }
-
-  .se-dim-entradas {
-    justify-content: flex-start;
-    gap: 6px 18px;
-    padding: 0 14px 12px;
-  }
-
-  .se-dim-entrada {
-    padding: 2px 0;
-  }
-
-  /* Sem a linha reta entre os valores: ao quebrar, ela ficaria no fim da linha. */
-  .se-dim-entradas .se-sep {
-    display: none;
-  }
-
-  .se-card-body {
-    padding: 8px 6px;
-  }
-
-  .se-acesso-card-filho {
-    margin-left: 0;
   }
 }
 
@@ -4774,29 +4230,15 @@ h1, h2, h3, h4, h5, h6,
    recuo extra de 28px à esquerda nas linhas centralizadas equilibra os dois
    lados (12 + 28 = 40), então o centro delas é o centro do cartão. */
 @media (max-width: 640px) {
-  .se-card-header:has(> .se-card-lixeira) {
-    padding-left: 12px;
-    padding-right: 40px;
-  }
 
   .se-card-header-esq {
     justify-content: flex-start;
   }
 
-  .se-card-header-dims,
   .se-card-header-dir {
     justify-content: center;
     padding-left: 28px;
     padding-right: 0;
-  }
-
-  .se-dim-entradas {
-    justify-content: center;
-    padding: 0 14px 12px;
-  }
-
-  .se-card-header-dims .se-acesso-populacao {
-    text-align: center;
   }
 }
 

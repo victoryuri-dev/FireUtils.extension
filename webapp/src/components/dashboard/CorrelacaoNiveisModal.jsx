@@ -43,7 +43,7 @@ function montarOrdemInicial(levels, pavimentos, correlacaoSalva) {
 
 /** Move um item de `de` pra `para`, deslocando os demais — mesmo
  * resultado de @dnd-kit/sortable:arrayMove, escrito à mão aqui porque o
- * resto do app só usa @dnd-kit/core (ver AcessosDescargasView.jsx). */
+ * resto do app só usa @dnd-kit/core (ver FluxogramaSaidas.jsx). */
 function mover(lista, de, para) {
   const nova = [...lista];
   const [item] = nova.splice(de, 1);

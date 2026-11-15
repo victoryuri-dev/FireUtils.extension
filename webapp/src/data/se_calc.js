@@ -108,50 +108,59 @@ export function calcPT(pop, capPT, larguras) {
   return { n, lc, la, lMin: ptInfo.largura, tipo: ptInfo.tipo }
 }
 
-// ── Rede de saída (Ambiente -> Acesso -> Acesso/Descarga ou Escada/Rampa) ────
+// ── Rede de saída (Ambiente -> Acesso -> Saída ou Escada/Rampa) ──────────────
 //
-// Substitui o modelo antigo de "um AD e um ER por pavimento inteiro" por uma
-// árvore montada pelo usuário, sem limite de profundidade:
+// Fluxograma montado pelo usuário por pavimento (ver pages/medidas/
+// FluxogramaSaidas.jsx), sem limite de profundidade:
 //
 //   ambiente.acessoId : string|null
-//     -- a qual nó de Acesso este ambiente alimenta (null = ainda não
-//        posicionado na árvore).
+//     -- a qual nó (acesso/saída/escada) este ambiente alimenta. Derivado do
+//        grupo de ambientes (`grupo`) em que o ambiente está: o reducer mantém
+//        `ambiente.acessoId === grupo.acessoId` — null = grupo ainda sem
+//        ligação (ou ambiente fora de qualquer grupo).
 //
-//   acesso = { id, nome, alimentaEm: string|null }
-//     -- `alimentaEm` aponta pro id de outro acesso (cascata: a população
-//        deste nó soma na do próximo) ou é null quando este acesso É a
-//        RAIZ da árvore daquele pavimento.
+//   acesso = { id, nome, tipo, alimentaEm: string|null, dims }
+//     -- `tipo`: 'acesso' (nó intermediário, corredor/porta de passagem),
+//        'saida' ou 'escada' (Escada/Rampa) — o usuário escolhe por nó.
+//     -- `alimentaEm` aponta pro id do nó seguinte (cascata: a população
+//        deste nó soma na do próximo). Saída e escada são as RAÍZES do
+//        fluxo (alimentaEm null); um 'acesso' sem `alimentaEm` ainda não
+//        foi ligado a nenhuma saída/escada e não conta como raiz.
+//     -- Nós salvos antes de `tipo` existir (sem o campo): raiz vira
+//        saída/escada conforme `pavimento.pisoDescarga`, o resto é acesso.
 //     -- A "quantidade de saídas" do pavimento NÃO é um campo armazenado —
-//        é sempre a contagem de raízes (ver contarSaidasPavimento), já que
-//        a criação de saídas é dinâmica.
+//        é sempre a contagem de raízes (ver contarSaidasPavimento).
 //
-// O tipo de cálculo de um nó (ver tipoDoNo) depende só da posição na árvore
-// e de `pavimento.pisoDescarga`:
-//   - Nó raiz (alimentaEm=null) num piso de descarga        -> AD (Saída)
-//   - Nó raiz (alimentaEm=null) num pavimento QUALQUER OUTRO -> ER (a raiz
-//     ali é a escada/rampa que desce até o piso de descarga — cada
-//     pavimento dimensiona a própria escada pela população que chega até
-//     ela pela SUA árvore, não mais pelo "pavimento mais populoso da
-//     estrutura" fixo).
-//   - Qualquer nó que NÃO é raiz (alimenta outro acesso) -> sempre AD,
-//     em qualquer pavimento (é sempre um "acesso" interno, corredor/porta
-//     de passagem, nunca a escada em si).
+// O dimensionamento padrão de um nó (ver dimsPadrao) vem do `tipo`: escada
+// -> ER, saída/acesso -> AD. Cada nó ainda liga/desliga AD/ER/PT à parte
+// (`dims`).
 //
-// Portas (PT) não passam por essa árvore: são por ambiente, direto —
+// Portas (PT) não passam por essa rede: são por ambiente, direto —
 // ver calcNoAmbientePT.
 
-/** Quantidade de saídas de um pavimento = quantidade de raízes da árvore
- * (acessos com alimentaEm null) — nunca um campo indicado manualmente. */
-export function contarSaidasPavimento(acessos) {
-  return (acessos || []).filter(ac => ac.alimentaEm === null).length
+/** Raiz do fluxo = saída ou escada/rampa (nó que não alimenta outro).
+ * Acesso solto (tipo 'acesso' sem `alimentaEm`) não é raiz. */
+export function ehRaiz(acesso) {
+  return acesso.alimentaEm === null && acesso.tipo !== 'acesso'
 }
 
-/** Decide o tipo de cálculo/rótulo de um nó da árvore — ver explicação
- * acima. `pisoDescarga` é o campo do pavimento (não do nó). */
-export function tipoDoNo(acesso, pisoDescarga) {
-  const isRaiz = acesso.alimentaEm === null
-  if (isRaiz && !pisoDescarga) return { tipo: 'ER', label: 'ESCADA/RAMPA' }
-  return { tipo: 'AD', label: 'ACESSO/DESCARGA' }
+/** Raízes do pavimento (saídas e escadas/rampas). */
+export function raizesDoPavimento(acessos) {
+  return (acessos || []).filter(ehRaiz)
+}
+
+/** Quantidade de saídas de um pavimento = quantidade de raízes do
+ * fluxo — nunca um campo indicado manualmente. */
+export function contarSaidasPavimento(acessos) {
+  return raizesDoPavimento(acessos).length
+}
+
+/** Tipo do nó ('acesso'|'saida'|'escada'), com fallback pros nós antigos
+ * sem o campo — ver explicação acima. `pisoDescarga` é do pavimento. */
+export function tipoNo(acesso, pisoDescarga) {
+  if (acesso.tipo) return acesso.tipo
+  if (acesso.alimentaEm !== null) return 'acesso'
+  return pisoDescarga ? 'saida' : 'escada'
 }
 
 function ambientesDiretosDoAcesso(acessoId, ambientes) {
@@ -203,26 +212,21 @@ export function calcNoAmbientePT(amb, taxaPopulacional, larguras) {
   return { pop, capPT, pt }
 }
 
-/** Dimensionamentos padrão de um nó recém-criado — raiz num piso de
- * descarga nasce só com AD; raiz em outro pavimento nasce só com ER;
- * qualquer nó que não é raiz nasce só com AD (nunca é a escada em si) —
- * mesmo critério que tipoDoNo. PT sempre nasce ligado. O usuário pode
- * depois ligar/desligar cada um independente (ver SET_ACESSO_DIM) —
- * ex.: o ponto de descarga que recebe tanto o corredor (AD) quanto a
- * escada que desce até ali (ER) precisa dos dois ao mesmo tempo. */
-export function dimsPadrao(acesso, pisoDescarga) {
-  const isRaiz = acesso.alimentaEm === null
-  if (isRaiz) return pisoDescarga ? { AD: true, ER: false, PT: true } : { AD: false, ER: true, PT: true }
-  return { AD: true, ER: false, PT: true }
+/** Dimensionamentos padrão de um nó pelo `tipo` ('acesso'|'saida'|
+ * 'escada'): escada/rampa nasce só com ER; saída e acesso só com AD. PT
+ * sempre nasce ligado. O usuário pode depois ligar/desligar cada um
+ * independente (ver SET_ACESSO_DIM) — ex.: o ponto de descarga que recebe
+ * tanto o corredor (AD) quanto a escada que desce até ali (ER) precisa dos
+ * dois ao mesmo tempo. */
+export function dimsPadrao(tipo) {
+  return tipo === 'escada' ? { AD: false, ER: true, PT: true } : { AD: true, ER: false, PT: true }
 }
 
-/** `acesso.dims` com fallback pro padrão de tipoDoNo — projetos criados
- * antes deste campo existir não têm `dims` gravado; sem isso, um nó
- * antigo apareceria sem nenhum dimensionamento marcado. */
+/** `acesso.dims` com fallback pro padrão do tipo — projetos criados antes
+ * deste campo existir não têm `dims` gravado; sem isso, um nó antigo
+ * apareceria sem nenhum dimensionamento marcado. */
 export function dimsDoAcesso(acesso, pisoDescarga) {
-  if (acesso.dims) return acesso.dims
-  const { tipo } = tipoDoNo(acesso, pisoDescarga)
-  return { AD: tipo === 'AD', ER: tipo === 'ER', PT: true }
+  return acesso.dims || dimsPadrao(tipoNo(acesso, pisoDescarga))
 }
 
 /** Dimensionamento de um nó de Acesso pra cada AD/ER/PT independentemente
@@ -233,18 +237,37 @@ export function dimsDoAcesso(acesso, pisoDescarga) {
  * precisa comportar o maior fluxo que passa por ali) — mesmo N mínimo de 1
  * mesmo que nenhum dos dois esteja ligado, pra nunca calcular porta com
  * 0 UP. Retorna null em cada campo cujo dimensionamento está desligado. */
-export function calcDimsAcesso(acessoId, ambientes, acessos, taxaPopulacional, larguras, dims) {
+export function calcDimsAcesso(acessoId, ambientes, acessos, taxaPopulacional, larguras, dims, erDaEstrutura = null) {
   const pop = calcPopAcesso(acessoId, ambientes, acessos, taxaPopulacional)
   const cap = capAmbientes(ambientesDoAcesso(acessoId, ambientes, acessos), taxaPopulacional)
   const ad  = dims.AD ? calcAD(pop, cap.AD, larguras) : null
-  const er  = dims.ER ? calcER(pop, cap.ER, larguras) : null
+  // `erDaEstrutura` (ver calcErEstrutura): um único cálculo de escada/rampa vale
+  // pra todas as escadas da estrutura — sem ele, cada nó calcula pela própria população.
+  const er  = dims.ER ? (erDaEstrutura?.er ?? calcER(pop, cap.ER, larguras)) : null
   const nPorta = Math.max(ad?.n || 0, er?.n || 0, 1)
   const pt  = dims.PT ? calcPortaNoAcesso(nPorta, larguras) : null
   return { pop, cap, ad, er, pt, nPorta }
 }
 
+/** Dimensionamento ÚNICO de escada/rampa de uma estrutura: população do
+ * pavimento mais populoso EXCETO o piso de descarga (o térreo), com a
+ * capacidade por UP das divisões desse pavimento. O mesmo resultado vale pra
+ * toda escada/rampa da estrutura. Sem nenhum pavimento acima do piso de
+ * descarga (ou todos sem ambientes) devolve null — quem chama cai no
+ * cálculo local do nó. `pavimentos` = pavimentos da estrutura. */
+export function calcErEstrutura(pavimentos, taxaPopulacional, larguras) {
+  const candidatos = (pavimentos || []).filter(p => !p.pisoDescarga)
+  if (!candidatos.length) return null
+  const [pav, pop] = candidatos
+    .map(p => [p, calcPopPav({ ambientes: p.ambientes || [] }, taxaPopulacional)])
+    .reduce((mx, par) => (par[1] > mx[1] ? par : mx))
+  if (pop <= 0) return null
+  const cap = capAmbientes(pav.ambientes || [], taxaPopulacional)
+  return { pavimento: pav, pop, cap, er: calcER(pop, cap.ER, larguras) }
+}
+
 /** Largura mínima da porta de um nó de Acesso/Saída/Escada-Rampa —
- * reaproveita o mesmo N de UP já calculado pro AD/ER daquele box (ver
+ * reaproveita o mesmo N de UP já calculado pro AD/ER daquele nó (ver
  * calcNoAcesso) em vez de recalcular população/capacidade: a mesma vazão
  * que passa pelo corredor/escada precisa caber na porta daquele ponto.
  * Só busca a largura mínima de porta pra esse N na tabela PT — mesma
@@ -279,7 +302,7 @@ export function getDistancia(divisao, pisoDescarga, nSaidas, temChuveiros, temDe
  * configurada nele na Etapa 4 (pav.divisao, ver Step4.jsx), não as
  * divisões dos ambientes cadastrados aqui em Saída de Emergência. Assim
  * aparece pra qualquer pavimento classificado, mesmo sem nenhum ambiente
- * ainda cadastrado na árvore de Acessos e Descargas. `pav.pisoDescarga` é
+ * ainda cadastrado no fluxograma de saídas. `pav.pisoDescarga` é
  * um booleano explícito por pavimento — ver ProjetoContext.jsx. */
 export function getDistanciaPavimento(pav, nSaidas, temChuveiros, temDeteccao, distanciasMaximas) {
   if (!pav.divisao) return null
@@ -307,39 +330,60 @@ export function popTipoPadrao(divisao, taxaPopulacional) {
   return taxaOpcoes(divisao, taxaPopulacional)[0]?.value || 'manual'
 }
 
-/** Índice da faixa de altura piso a piso em que a estrutura se encaixa,
- * dentro de `tiposEscada.faixas_altura` (cada faixa: { min, max, label }). */
+// ── Tipo de escada de emergência (Anexo C, Tabela 3) ────────────────────
+// Só identifica o tipo pela altura piso a piso da estrutura x divisão de
+// ocupação; as notas da tabela são apenas exibidas (por divisão + gerais).
+// Aplica-se a edificação com mais de 1 pavimento (contando subsolos).
+// Ocupação mista: vale o tipo mais restritivo (NE < EP < PF).
+
+/** Faixa da Tabela 3 (índice em faixas_altura) para a altura H em metros. */
 export function faixaAlturaEscada(altura, faixas) {
   const h = parseFloat(altura)
   if (!(h > 0) || !faixas?.length) return -1
   return faixas.findIndex(f => (f.min == null || h > f.min) && (f.max == null || h <= f.max))
 }
 
-/** Tipo de escada de emergência exigido pra estrutura (Anexo C, Tabela 3) —
- * cruza a faixa de altura piso a piso com a(s) divisão(ões) de ocupação dos
- * pavimentos; quando há mais de uma divisão, prevalece a mais restritiva
- * (maior rank). Só se aplica a estruturas com mais de 1 pavimento (térrea
- * não tem escada). Mesma função do site (data/se_calc.js). */
+/**
+ * @param {object} estrutura       — usa alturaPisoPiso, nPavimentos, nSubsolos
+ * @param {string[]} divisoes      — divisões de ocupação presentes na estrutura
+ * @param {object} tiposEscada     — TIPOS_ESCADA da norma (null/undefined = UF sem tabela)
+ * @returns {null | {status, faixa, porDivisao, exigido, notas}}
+ *   status: 'nao_aplica' (1 pavimento) | 'sem_altura' | 'sem_divisao' | 'ok'
+ */
 export function tipoEscadaEstrutura(estrutura, divisoes, tiposEscada) {
   if (!tiposEscada) return null
   const totalPav = (parseInt(estrutura.nPavimentos) || 1) + (parseInt(estrutura.nSubsolos) || 0)
   if (totalPav <= 1) return { status: 'nao_aplica' }
+
   const idx = faixaAlturaEscada(estrutura.alturaPisoPiso, tiposEscada.faixas_altura)
   if (idx < 0) return { status: 'sem_altura' }
+  // Chave da divisão na tabela: a própria divisão ("E-1") ou, quando a norma
+  // só traz a linha do grupo inteiro ("D"), o grupo.
   const chaveDe = d => (tiposEscada.tabela[d] ? d : d.split('-')[0])
   const divs = [...new Set((divisoes || []).filter(Boolean))].filter(d => tiposEscada.tabela[chaveDe(d)])
   if (divs.length === 0) return { status: 'sem_divisao', faixa: tiposEscada.faixas_altura[idx] }
-  const porDivisao = divs.map(d => ({ divisao: d, tipo: tiposEscada.tabela[chaveDe(d)][idx] }))
+
+  // "EP+"/"PF+": o tipo indicado e, além dele, consultar normas específicas.
+  const porDivisao = divs.map(d => {
+    const celula = tiposEscada.tabela[chaveDe(d)][idx]
+    const comConsulta = celula?.length > 1 && celula.endsWith('+')
+    return { divisao: d, tipo: comConsulta ? celula.slice(0, -1) : celula, consultar: comConsulta || celula === '+' }
+  })
   const ranks = porDivisao.map(p => tiposEscada.tipos[p.tipo]?.rank).filter(r => r != null)
   const maxRank = ranks.length ? Math.max(...ranks) : null
+  // Mais restritivo entre os que têm ranking; sem nenhum, mostra o símbolo
+  // (+ = consultar NT, - = não se aplica) da primeira divisão.
   const exigido = maxRank != null
     ? porDivisao.find(p => tiposEscada.tipos[p.tipo]?.rank === maxRank).tipo
     : porDivisao[0].tipo
-  const consultar = porDivisao.some(p => p.tipo === '+')
+  const consultar = porDivisao.some(p => p.consultar)
+
+  // Notas: as específicas das divisões presentes + as gerais.
   const chaves = [
     ...divs.flatMap(d => tiposEscada.notas_por_divisao?.[d] || tiposEscada.notas_por_divisao?.[chaveDe(d)] || []),
     ...(tiposEscada.notas_gerais || []),
   ]
   const notas = [...new Set(chaves)].map(k => ({ chave: k, texto: tiposEscada.notas[k] }))
+
   return { status: 'ok', faixa: tiposEscada.faixas_altura[idx], porDivisao, exigido, consultar, notas }
 }

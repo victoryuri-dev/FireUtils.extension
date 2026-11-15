@@ -12,6 +12,8 @@
  * tem mais de uma.
  */
 
+import { garantirFluxoMigrado } from "./seReducer";
+
 function paraNumero(valor) {
   if (valor === undefined || valor === null || valor === "") return null;
   const numero = Number(valor);
@@ -140,11 +142,13 @@ export function estruturasDoProjeto(linha) {
  * cadastrada no site (do mais baixo pro mais alto). Usado pela tela de
  * Saída de Emergência (lista de pavimentos + árvore de Acessos e
  * Descargas — components/dashboard/SaidaEmergenciaPage.jsx e
- * AcessosDescargasView.jsx), que precisa editar os campos direto, ao
+ * FluxogramaSaidas.jsx), que precisa editar os campos direto, ao
  * contrário de dashboardEstrutura (só deriva valores agregados
  * pro dashboard). */
 export function pavimentosCompletos(linha, estruturaId) {
-  const dados = linha.dados || {};
+  // Já no formato do fluxograma de saídas (grupos, tipo dos nós, saída/escada padrão,
+  // posições) — migração determinística, igual à do site; ver lib/seReducer.js.
+  const dados = garantirFluxoMigrado(linha.dados || {});
   return (dados.pavimentos || [])
     .filter((p) => p.estruturaId === estruturaId)
     .map((p) => ({ ...p, label: normalizarRotuloPavimento(p.label) }));

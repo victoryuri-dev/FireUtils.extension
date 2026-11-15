@@ -6,7 +6,7 @@ import xIconSvg from "../../assets/icons/x-icon.svg?raw";
 
 /**
  * seShared.jsx — UI compartilhada da árvore de Saída de Emergência
- * (SaidaEmergenciaPage.jsx / AcessosDescargasView.jsx), portada de
+ * (SaidaEmergenciaPage.jsx / FluxogramaSaidas.jsx), portada de
  * ETOS.FireUtils/src/pages/medidas/se_shared.jsx — mesmas regras de
  * negócio, reescrita em CSS simples (App.css) em vez das classes utility
  * do Tailwind que o site usa, pra ficar consistente com o resto desta
@@ -55,7 +55,7 @@ function DivisaoSelect({ value, onChange, ocupacoes }) {
 
 // ── Formulário de ambiente ────────────────────────────────────────────
 // Sem campo de nome — o nome do ambiente é editado pelo lápis no título
-// do modal que envolve este formulário (ver AcessosDescargasView.jsx).
+// do modal que envolve este formulário (ver FluxogramaSaidas.jsx).
 // `larguras`, se informado, habilita o cálculo de N° UP (porta) no
 // rodapé.
 export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, larguras }) {
@@ -245,6 +245,15 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function StatCol({ label, value, big }) {
+  return (
+    <div className="se-stat-col">
+      <div className="se-stat-col-label">{label}</div>
+      <div className={`se-stat-col-value ${big ? "se-stat-col-value-big" : ""}`}>{value}</div>
     </div>
   );
 }

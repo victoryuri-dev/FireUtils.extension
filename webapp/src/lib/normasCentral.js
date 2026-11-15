@@ -48,7 +48,7 @@ export async function getNormaCentral(uf, sistema) {
 // Python já usava, ver Fire Utils.tab/lib/normas/__init__.py.
 // _CHAVES_SAIDAS), mas o motor de cálculo e a UI portados do site
 // (data/se_calc.js, components/dashboard/seShared.jsx,
-// AcessosDescargasView.jsx) esperam os nomes em maiúsculo que o arquivo
+// FluxogramaSaidas.jsx) esperam os nomes em maiúsculo que o arquivo
 // estático do site usa (TAXA_POPULACIONAL, NOTAS_NORMATIVAS,
 // LARGURAS_MINIMAS, DISTANCIAS_MAXIMAS) — sem esse adaptador, a estrutura
 // batia campo a campo mas com nome de chave diferente, e a tela quebrava
