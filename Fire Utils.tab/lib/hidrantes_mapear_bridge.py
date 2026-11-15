@@ -132,18 +132,17 @@ def _selecionar(uidoc, postar_mensagem, instrucao, prompt, filtro):
 
 def _itens_pontas(doc, origem, pontas, caminhos):
     """Itens {trecho, elemento, eids} da lista de inconsistências, um por
-    ponta aberta encontrada em `origem` (Sucção ou Recalque). `eids` traz a
-    rota COMPLETA (ponto de partida da busca até a ponta aberta, ambos
-    inclusive — ver bfs_ate), não só o elemento isolado: "Localizar" na
-    dockpane seleciona/enquadra o trecho inteiro no Revit, não um ponto
-    solto sem contexto de onde ele está na rede."""
+    ponta aberta encontrada em `origem` (Sucção ou Recalque). `eids` traz
+    APENAS o elemento que tem o conector desconectado (o ponto de quebra),
+    não a rota inteira: "Localizar" na dockpane seleciona só esse ponto no
+    Revit. `caminhos` é mantido na assinatura por compatibilidade."""
     itens = []
     for eid in pontas:
         elem = doc.GetElement(to_element_id(eid))
         descricao = (descricao_curta_elemento(elem) if elem is not None
                      else u"ID {} (elemento não encontrado no modelo)".format(eid))
         itens.append({u"trecho": origem, u"elemento": descricao,
-                      u"eids": caminhos.get(eid, [eid])})
+                      u"eids": [eid]})
     return itens
 
 
