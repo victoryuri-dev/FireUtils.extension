@@ -231,8 +231,8 @@ function ConfirmacaoModal({ titulo, texto, rotuloConfirmar, onConfirmar, onCance
 }
 
 // ── Ambiente (cartão dentro de um grupo, solto na área ou na lista) ───────
-// Arrastável por HTML5 DnD (solta num grupo, na área de trabalho ou na lista
-// lateral); marcar vários pelo checkbox e arrastar um leva a seleção inteira.
+// Arrastável por HTML5 DnD (de dentro de um grupo: solta noutro grupo ou na área
+// de trabalho); na lista do popup "Ambientes" marca vários pelo checkbox.
 // Checkbox e botão do canto só aparecem no hover — ou em todos os cartões
 // enquanto houver algum marcado. Com pelo menos um marcado, o clique no cartão
 // marca/desmarca em vez de abrir o formulário. `noGrupo`: já está posicionado
@@ -244,15 +244,16 @@ function AmbienteLinha({ amb, noGrupo, naArea = false }) {
   const { pt } = calcNoAmbientePT(amb, c.taxa, c.larguras);
   const selecionado = c.selecionados.has(amb.id);
   const controles = `fx-amb-ctl ${c.selecionados.size > 0 ? "fx-amb-ctl-visivel" : ""}`;
-  const podeSelecionar = c.permiteSelecao;
+  // Seleção em massa só nas linhas do popup "Ambientes" (noGrupo = false).
+  const podeSelecionar = !noGrupo;
   return (
     <div
-      draggable={!naArea}
+      draggable={noGrupo && !naArea}
       onDragStart={
-        naArea
+        naArea || !noGrupo
           ? undefined
           : (e) => {
-              e.dataTransfer.setData(MIME_AMBIENTES, JSON.stringify(c.idsDoArrasto(amb.id)));
+              e.dataTransfer.setData(MIME_AMBIENTES, JSON.stringify([amb.id]));
               e.dataTransfer.effectAllowed = "move";
             }
       }
@@ -591,6 +592,89 @@ function EscolherAmbientesModal({ destino, candidatos, onAdicionar, onNovo, onFe
   );
 }
 
+// ── Popup "Ambientes" (botão do topo) ──
+// Ambientes que ainda não estão na área de trabalho (sem grupo e sem posição),
+// agrupados por pavimento — ficam com comunicação direta para uma área segura.
+// Clique abre o formulário; o checkbox seleciona vários pra mover em massa.
+function ListaAmbientesModal({ pavs, pavDe, soltos, alvosGrupo, selecionados, alvoSelecao, setAlvoSelecao, moverSelecionados, limparSelecao, bloqueado, onFechar }) {
+  const [busca, setBusca] = useState("");
+  const filtrados = soltos.filter((a) => normalizar(a.nome).includes(normalizar(busca)));
+  useEffect(() => {
+    if (bloqueado) return undefined;
+    const aoTeclar = (e) => {
+      if (e.key === "Escape") onFechar();
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [bloqueado, onFechar]);
+  return (
+    <div
+      className="se-modal-overlay"
+      onClick={(e) => {
+        e.stopPropagation();
+        onFechar();
+      }}
+    >
+      <div role="dialog" aria-modal="true" className="fx-escolher" onClick={(e) => e.stopPropagation()}>
+        <div className="fx-escolher-cab">
+          <div style={{ minWidth: 0 }}>
+            <div className="fx-escolher-titulo">Ambientes</div>
+            <div className="fx-escolher-sub">Ambientes nesta lista serão considerados com comunicação direta para uma área segura.</div>
+          </div>
+          <button type="button" onClick={onFechar} className="se-icon-botao" title="Fechar">
+            <Icon svg={xIconSvg} />
+          </button>
+        </div>
+        <div className="fx-escolher-busca">
+          <CampoBusca value={busca} onChange={setBusca} placeholder="Filtrar ambientes da lista…" />
+        </div>
+        <div className="fx-lista-corpo">
+          {pavs.map((p) => {
+            const lista = filtrados.filter((a) => pavDe.get(a.id) === p.id);
+            if (!lista.length) return null;
+            return (
+              <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="fx-lista-pav">{p.label}</div>
+                {lista.map((a) => (
+                  <AmbienteLinha key={a.id} amb={a} noGrupo={false} />
+                ))}
+              </div>
+            );
+          })}
+          {soltos.length === 0 && <div className="fx-lista-vazio">Todos os ambientes já estão na área de trabalho.</div>}
+          {soltos.length > 0 && filtrados.length === 0 && <div className="fx-lista-vazio">Nenhum ambiente da lista corresponde à busca.</div>}
+        </div>
+        {selecionados.size > 0 && (
+          <div className="fx-lista-selecao">
+            <strong>
+              {selecionados.size} ambiente{selecionados.size > 1 ? "s" : ""} selecionado{selecionados.size > 1 ? "s" : ""}
+            </strong>
+            <select value={alvoSelecao} onChange={(e) => setAlvoSelecao(e.target.value)} className="fx-select">
+              <option value="">Mover para...</option>
+              <option value={NOVO_GRUPO}>+ Novo grupo (no pavimento de cada um)</option>
+              <option value={NA_AREA}>— Soltos na área —</option>
+              <option value={SEM_GRUPO}>— Voltar pra lista —</option>
+              {alvosGrupo.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+            <div className="fx-lista-selecao-linha">
+              <button type="button" className="se-botao" disabled={!alvoSelecao} onClick={moverSelecionados}>
+                <Icon svg={checkIconSvg} /> Mover
+              </button>
+              <button type="button" className="fx-link" onClick={limparSelecao}>
+                Cancelar seleção
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const nodeTypes = { faixa: FaixaNode, grupo: GrupoNode, acesso: AcessoNode, ambiente: AmbienteNode };
 
 const NOVO_GRUPO = "__novo_grupo__";
@@ -630,16 +714,6 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   const [editAmb, setEditAmb] = useState(null);
   const [selecionados, setSelecionados] = useState(new Set());
   const [alvoSelecao, setAlvoSelecao] = useState("");
-  // A lista lateral de ambientes só cabe com o painel largo (>= 900 px); no painel
-  // estreito do Revit fica de fora (e a seleção em massa, que vive nela, também) —
-  // trazer ambientes pra um grupo é pelo "Adicionar ambiente" do próprio grupo.
-  const [larguraJanela, setLarguraJanela] = useState(() => (typeof window === "undefined" ? 1200 : window.innerWidth));
-  useEffect(() => {
-    const aoRedimensionar = () => setLarguraJanela(window.innerWidth);
-    window.addEventListener("resize", aoRedimensionar);
-    return () => window.removeEventListener("resize", aoRedimensionar);
-  }, []);
-  const listaVisivel = larguraJanela >= 900;
   const [salvando, setSalvando] = useState(false);
   // Maximizar: a área de trabalho passa a ocupar a janela inteira do painel (por
   // cima do menu e do cabeçalho da página); Esc ou o botão voltam ao normal.
@@ -695,10 +769,9 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     [noHover, origemLigacao, acessos, grupos, ambientes]
   );
 
-  const [filtroSoltos, setFiltroSoltos] = useState("");
-  // Lista lateral: ambientes sem grupo e sem posição na área de trabalho.
+  // Popup "Ambientes": ambientes sem grupo e sem posição na área de trabalho.
+  const [listaAberta, setListaAberta] = useState(false);
   const soltos = ambientes.filter((a) => !a.grupoId && !posDe(a.id));
-  const soltosFiltrados = soltos.filter((a) => normalizar(a.nome).includes(normalizar(filtroSoltos)));
 
   // ── Seleção em massa / arrasto de ambientes ──
   const toggleSelecao = (id) =>
@@ -709,7 +782,6 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
       return next;
     });
   const limparSelecao = () => setSelecionados(new Set());
-  const idsDoArrasto = (id) => (selecionados.size > 1 && selecionados.has(id) ? [...selecionados] : [id]);
 
   // ── Nós (a partir do estado do projeto) ──
   // Posição de um nó na área = origem da faixa do pavimento + `fluxoPos` (relativo).
@@ -1051,9 +1123,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     larguras: LARGURAS_MINIMAS,
     selecionados,
     toggleSelecao,
-    idsDoArrasto,
     editarAmbiente: setEditAmb,
-    permiteSelecao: listaVisivel,
     criarAmbiente,
     abrirEscolhaAmbientes: (grupoId) => setEscolha({ grupoId }),
     removerAmbiente,
@@ -1121,7 +1191,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   };
   // Fim do arrasto de nós: ambiente solto largado em cima de outro ambiente solto
   // (do mesmo pavimento) forma um grupo com ele; em cima de um grupo do mesmo
-  // pavimento entra nele; em cima da lista lateral, volta pra lista; do contrário
+  // pavimento entra nele; do contrário
   // só guarda a nova posição de tudo que foi arrastado.
   const soltarNo = (evento, _no, arrastadosRecebidos) => {
     let arrastados = arrastadosRecebidos;
@@ -1144,18 +1214,17 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     const mesmoPav = (id) => !!id && ambientesArrastados.every((a) => pavDe.get(a) === pavDe.get(id));
     const grupoAbaixo = abaixo.map((el) => el.closest(".react-flow__node-grupo")).find(Boolean)?.getAttribute("data-id");
     const grupoValido = mesmoPav(grupoAbaixo) ? grupoAbaixo : null;
-    const naLista = abaixo.some((el) => el.closest(".fx-lista"));
     // Outro ambiente solto por baixo do ponteiro: os dois viram um grupo.
     const ambienteAbaixo = abaixo
       .map((el) => el.closest(".react-flow__node-ambiente"))
       .find((n) => n && !ambientesArrastados.includes(n.getAttribute("data-id")))
       ?.getAttribute("data-id");
     const ambienteValido = mesmoPav(ambienteAbaixo) ? ambienteAbaixo : null;
-    if (ambientesArrastados.length && !grupoValido && !naLista && ambienteValido) {
+    if (ambientesArrastados.length && !grupoValido && ambienteValido) {
       agruparAmbientes(ambienteValido, ambientesArrastados);
       arrastados = arrastados.filter((n) => n.type !== "ambiente");
-    } else if (ambientesArrastados.length && (grupoValido || naLista)) {
-      moverParaGrupo(ambientesArrastados, grupoValido || null);
+    } else if (ambientesArrastados.length && grupoValido) {
+      moverParaGrupo(ambientesArrastados, grupoValido);
       arrastados = arrastados.filter((n) => n.type !== "ambiente");
     }
     // Posições (relativas à origem da faixa), um despacho por pavimento.
@@ -1201,13 +1270,13 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     requestAnimationFrame(() => requestAnimationFrame(() => enquadrarFaixa(rf, pavAtivoId, 250)));
   };
   useEffect(() => {
-    if (!maximizado || menu || confirmacao || editAmb) return undefined;
+    if (!maximizado || menu || confirmacao || editAmb || listaAberta || escolha) return undefined;
     const aoTeclar = (e) => {
       if (e.key === "Escape") setMaximizado(false);
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [maximizado, menu, confirmacao, editAmb]);
+  }, [maximizado, menu, confirmacao, editAmb, listaAberta, escolha]);
 
   // ── Popup "Adicionar ambiente": destino = um grupo (ambientes entram nele) ou a
   // área de um pavimento (ambientes ficam soltos no ponto clicado) ──
@@ -1230,7 +1299,6 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     criarAmbiente(grupoEscolha ? grupoEscolha.id : null, pavEscolha, ponto);
   };
 
-  const [sobreSoltos, setSobreSoltos] = useState(false);
   const alvosGrupo = pavs.flatMap((p) => (p.grupos || []).map((g) => ({ id: g.id, label: `${p.label} · ${g.nome}` })));
 
   return (
@@ -1263,6 +1331,9 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
           {salvando && <span className="fx-salvando">Salvando…</span>}
         </div>
         <div className="fx-topo-dir">
+          <button type="button" className="se-botao" onClick={() => setListaAberta(true)} title="Ambientes que ainda não estão na área de trabalho">
+            Ambientes ({soltos.length})
+          </button>
           {erEstrutura && (
             <span
               className="fx-topo-info"
@@ -1280,61 +1351,6 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
 
       <FluxoCtx.Provider value={ctx}>
         <div className="fx-corpo">
-          {/* Ambientes (lista lateral) */}
-          {listaVisivel && (
-            <aside {...dropProps(null, setSobreSoltos)} className={`fx-lista ${sobreSoltos ? "fx-lista-sobre" : ""}`}>
-              <div className="fx-lista-cab">
-                <div className="fx-lista-titulo">Ambientes</div>
-                <div className="fx-lista-texto">Ambientes nesta lista serão considerados com comunicação direta para uma área segura.</div>
-              </div>
-              <div className="fx-lista-busca">
-                <CampoBusca value={filtroSoltos} onChange={setFiltroSoltos} placeholder="Filtrar ambientes da lista…" />
-              </div>
-              <div className="fx-lista-corpo">
-                {pavs.map((p) => {
-                  const lista = soltosFiltrados.filter((a) => pavDe.get(a.id) === p.id);
-                  if (!lista.length) return null;
-                  return (
-                    <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div className="fx-lista-pav">{p.label}</div>
-                      {lista.map((a) => (
-                        <AmbienteLinha key={a.id} amb={a} noGrupo={false} />
-                      ))}
-                    </div>
-                  );
-                })}
-                {soltos.length === 0 && <div className="fx-lista-vazio">Todos os ambientes já estão na área de trabalho.</div>}
-                {soltos.length > 0 && soltosFiltrados.length === 0 && <div className="fx-lista-vazio">Nenhum ambiente da lista corresponde à busca.</div>}
-              </div>
-              {selecionados.size > 0 && (
-                <div className="fx-lista-selecao">
-                  <strong>
-                    {selecionados.size} ambiente{selecionados.size > 1 ? "s" : ""} selecionado{selecionados.size > 1 ? "s" : ""}
-                  </strong>
-                  <select value={alvoSelecao} onChange={(e) => setAlvoSelecao(e.target.value)} className="fx-select">
-                    <option value="">Mover para...</option>
-                    <option value={NOVO_GRUPO}>+ Novo grupo (no pavimento de cada um)</option>
-                    <option value={NA_AREA}>— Soltos na área —</option>
-                    <option value={SEM_GRUPO}>— Voltar pra lista —</option>
-                    {alvosGrupo.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="fx-lista-selecao-linha">
-                    <button type="button" className="se-botao" disabled={!alvoSelecao} onClick={moverSelecionados}>
-                      <Icon svg={checkIconSvg} /> Mover
-                    </button>
-                    <button type="button" className="fx-link" onClick={limparSelecao}>
-                      Cancelar seleção
-                    </button>
-                  </div>
-                </div>
-              )}
-            </aside>
-          )}
-
           {/* Área de trabalho */}
           <div
             ref={wrapRef}
@@ -1469,6 +1485,27 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
           }}
           onCancelar={() => setConfirmacao(null)}
         />
+      )}
+
+      {listaAberta && (
+        <FluxoCtx.Provider value={ctx}>
+          <ListaAmbientesModal
+            pavs={pavs}
+            pavDe={pavDe}
+            soltos={soltos}
+            alvosGrupo={alvosGrupo}
+            selecionados={selecionados}
+            alvoSelecao={alvoSelecao}
+            setAlvoSelecao={setAlvoSelecao}
+            moverSelecionados={moverSelecionados}
+            limparSelecao={limparSelecao}
+            bloqueado={!!editAmb}
+            onFechar={() => {
+              limparSelecao();
+              setListaAberta(false);
+            }}
+          />
+        </FluxoCtx.Provider>
       )}
 
       {editAmb && (

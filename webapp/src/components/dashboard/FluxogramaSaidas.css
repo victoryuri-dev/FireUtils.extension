@@ -79,45 +79,16 @@
   color: var(--text-3);
 }
 
-/* ── Corpo: lista lateral + área ── */
+/* ── Corpo: área de trabalho ── */
 .fx-corpo {
   flex: 1;
   display: flex;
   min-height: 0;
 }
 
-.fx-lista {
-  width: 280px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border);
-  transition: border-color 0.15s, background-color 0.15s;
-}
-.fx-lista-sobre {
-  border-right-color: var(--accent);
-  background: var(--red-dim);
-}
-.fx-lista-cab {
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-}
-.fx-lista-titulo {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.fx-lista-texto {
-  margin-top: 2px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--text-3);
-}
-.fx-lista-busca {
-  padding: 10px 12px 0;
-}
 .fx-lista-corpo {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px;
   display: flex;
