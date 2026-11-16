@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ReactFlow, ReactFlowProvider, Background, Controls, MiniMap, Handle, Panel, Position, MarkerType, applyNodeChanges, useReactFlow,
+  ReactFlow, ReactFlowProvider, Background, Controls, Handle, Panel, Position, MarkerType, applyNodeChanges, useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./FluxogramaSaidas.css";
@@ -558,6 +558,9 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   const [alvoSelecao, setAlvoSelecao] = useState("");
   const [listaAberta, setListaAberta] = useState(() => typeof window === "undefined" || window.innerWidth >= 900);
   const [salvando, setSalvando] = useState(false);
+  // Maximizar: a área de trabalho passa a ocupar a janela inteira do painel (por
+  // cima do menu e do cabeçalho da página); Esc ou o botão voltam ao normal.
+  const [maximizado, setMaximizado] = useState(false);
   const [reinicio, setReinicio] = useState(0);
   const wrapRef = useRef(null);
   const rf = useReactFlow();
@@ -1097,11 +1100,27 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
       else despachar({ type: "MOVER_ACESSO", pavimentoId, acessoId: e.source, novoAlimentaEm: null });
     });
 
+  // Maximizar/restaurar e reenquadrar o pavimento em edição quando o tamanho da
+  // área muda. Esc restaura — a menos que haja menu, confirmação ou formulário
+  // aberto por cima (eles fecham primeiro com o próprio Esc).
+  const alternarMaximizado = () => {
+    setMaximizado((v) => !v);
+    requestAnimationFrame(() => requestAnimationFrame(() => enquadrarFaixa(rf, pavAtivoId, 250)));
+  };
+  useEffect(() => {
+    if (!maximizado || menu || confirmacao || editAmb) return undefined;
+    const aoTeclar = (e) => {
+      if (e.key === "Escape") setMaximizado(false);
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [maximizado, menu, confirmacao, editAmb]);
+
   const [sobreSoltos, setSobreSoltos] = useState(false);
   const alvosGrupo = pavs.flatMap((p) => (p.grupos || []).map((g) => ({ id: g.id, label: `${p.label} · ${g.nome}` })));
 
   return (
-    <div className="fx-raiz">
+    <div className={`fx-raiz ${maximizado ? "fx-raiz-max" : ""}`}>
       {/* Topo */}
       <div className="fx-topo">
         <div className="fx-topo-esq">
@@ -1140,6 +1159,9 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
           )}
           <button type="button" className="se-botao" onClick={() => setListaAberta((v) => !v)}>
             {listaAberta ? "Ocultar lista" : `Ambientes (${soltos.length})`}
+          </button>
+          <button type="button" className="se-botao" onClick={alternarMaximizado} title={maximizado ? "Voltar ao tamanho normal (Esc)" : "Ocupar a janela inteira do painel"}>
+            {maximizado ? "Restaurar" : "Maximizar"}
           </button>
           <PisoDescargaSwitch
             checked={!!pavAtivo.pisoDescarga}
@@ -1263,13 +1285,6 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
             >
               <Background gap={20} />
               <Controls showInteractive={false} />
-              <MiniMap
-                pannable
-                zoomable
-                nodeColor={(n) =>
-                  n.type === "faixa" ? "transparent" : n.type === "grupo" ? "var(--text-3)" : n.data.tipo === "saida" ? "var(--green)" : n.data.tipo === "escada" ? "var(--amber)" : "var(--text-3)"
-                }
-              />
               <Panel position="top-left" className="fx-barra">
                 {OPCOES_CRIAR.map(([op, rotulo]) => (
                   <button key={op} type="button" className="se-botao" onClick={() => criarDaOpcao(op, pavAtivo.id)}>

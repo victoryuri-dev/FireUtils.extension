@@ -15,6 +15,17 @@
   position: relative;
 }
 
+/* Maximizado: cobre a janela inteira do painel (acima do menu e do cabeçalho da
+   página; abaixo dos formulários em popup, z-index 300, e dos avisos, 1000). */
+.fx-raiz-max {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
 /* ── Topo ── */
 .fx-topo {
   display: flex;
@@ -216,8 +227,6 @@
   --xy-edge-stroke-default: var(--text-3);
   --xy-edge-stroke-selected-default: var(--accent);
   --xy-node-boxshadow-selected-default: none;
-  --xy-minimap-background-color-default: var(--bg-2);
-  --xy-minimap-mask-background-color-default: rgba(0, 0, 0, 0.35);
   --xy-controls-button-background-color-default: var(--bg-2);
   --xy-controls-button-background-color-hover-default: var(--bg-3);
   --xy-controls-button-color-default: var(--text);
