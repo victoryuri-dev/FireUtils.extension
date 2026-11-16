@@ -267,18 +267,29 @@
   outline-offset: 2px;
 }
 
-.fx-barra {
+/* Botão de maximizar (canto superior direito da área de trabalho). */
+.fx-max {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
 }
-.fx-barra-em {
-  font-size: 11px;
-  color: var(--text-3);
-}
-.fx-barra-em strong {
+.fx-max:hover {
   color: var(--text);
+  background: var(--bg-3);
+  border-color: color-mix(in srgb, var(--text) 36%, transparent);
+}
+.fx-max .icon {
+  width: 15px;
+  height: 15px;
 }
 
 /* ── Faixa do pavimento ── */
@@ -395,6 +406,9 @@
   font-size: 11px;
   color: var(--text-3);
   white-space: nowrap;
+}
+.fx-amb-info-sem-sel {
+  padding-left: 0;
 }
 .fx-amb-info b {
   font-weight: 400;

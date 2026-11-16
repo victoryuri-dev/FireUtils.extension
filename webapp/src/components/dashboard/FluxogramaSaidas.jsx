@@ -23,6 +23,8 @@ import perfilIconSvg from "../../assets/icons/perfil-icon.svg?raw";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 import arrowLeftIconSvg from "../../assets/icons/arrow-left-icon.svg?raw";
 import lockIconSvg from "../../assets/icons/lock-icon.svg?raw";
+import maximizeIconSvg from "../../assets/icons/maximize-icon.svg?raw";
+import restoreIconSvg from "../../assets/icons/restore-icon.svg?raw";
 
 /**
  * FluxogramaSaidas.jsx — fluxograma de saídas de uma ESTRUTURA (Grupo de
@@ -242,6 +244,7 @@ function AmbienteLinha({ amb, noGrupo, naArea = false }) {
   const { pt } = calcNoAmbientePT(amb, c.taxa, c.larguras);
   const selecionado = c.selecionados.has(amb.id);
   const controles = `fx-amb-ctl ${c.selecionados.size > 0 ? "fx-amb-ctl-visivel" : ""}`;
+  const podeSelecionar = c.permiteSelecao;
   return (
     <div
       draggable={!naArea}
@@ -253,14 +256,16 @@ function AmbienteLinha({ amb, noGrupo, naArea = false }) {
               e.dataTransfer.effectAllowed = "move";
             }
       }
-      onClick={() => (c.selecionados.size > 0 ? c.toggleSelecao(amb.id) : c.editarAmbiente(amb))}
+      onClick={() => (podeSelecionar && c.selecionados.size > 0 ? c.toggleSelecao(amb.id) : c.editarAmbiente(amb))}
       className={`${naArea ? "" : "nodrag"} fx-amb ${selecionado ? "fx-amb-sel" : ""}`}
     >
       <div className="fx-amb-linha">
         <div className="fx-amb-esq">
-          <span className={`nodrag ${controles}`}>
-            <Checkbox checked={selecionado} onChange={() => c.toggleSelecao(amb.id)} title="Selecionar pra mover em massa" />
-          </span>
+          {podeSelecionar && (
+            <span className={`nodrag ${controles}`}>
+              <Checkbox checked={selecionado} onChange={() => c.toggleSelecao(amb.id)} title="Selecionar pra mover em massa" />
+            </span>
+          )}
           <span className="fx-amb-nome">{amb.nome}</span>
           {amb.origem === "manual" && (
             <span title="Ambiente criado manualmente (não veio do Revit)" className="fx-badge-manual">
@@ -294,7 +299,7 @@ function AmbienteLinha({ amb, noGrupo, naArea = false }) {
           </button>
         )}
       </div>
-      <div className="fx-amb-info">
+      <div className={`fx-amb-info ${podeSelecionar ? "" : "fx-amb-info-sem-sel"}`}>
         <span>{pop} pessoas</span>
         <b>|</b>
         <span className="fx-amb-porta">
@@ -626,7 +631,16 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   const [editAmb, setEditAmb] = useState(null);
   const [selecionados, setSelecionados] = useState(new Set());
   const [alvoSelecao, setAlvoSelecao] = useState("");
-  const [listaAberta, setListaAberta] = useState(() => typeof window === "undefined" || window.innerWidth >= 900);
+  // A lista lateral de ambientes só cabe com o painel largo (>= 900 px); no painel
+  // estreito do Revit fica de fora (e a seleção em massa, que vive nela, também) —
+  // trazer ambientes pra um grupo é pelo "Adicionar ambiente" do próprio grupo.
+  const [larguraJanela, setLarguraJanela] = useState(() => (typeof window === "undefined" ? 1200 : window.innerWidth));
+  useEffect(() => {
+    const aoRedimensionar = () => setLarguraJanela(window.innerWidth);
+    window.addEventListener("resize", aoRedimensionar);
+    return () => window.removeEventListener("resize", aoRedimensionar);
+  }, []);
+  const listaVisivel = larguraJanela >= 900;
   const [salvando, setSalvando] = useState(false);
   // Maximizar: a área de trabalho passa a ocupar a janela inteira do painel (por
   // cima do menu e do cabeçalho da página); Esc ou o botão voltam ao normal.
@@ -1034,6 +1048,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     toggleSelecao,
     idsDoArrasto,
     editarAmbiente: setEditAmb,
+    permiteSelecao: listaVisivel,
     criarAmbiente,
     abrirEscolhaAmbientes: setEscolhaGrupoId,
     removerAmbiente,
@@ -1230,12 +1245,6 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
               Escada/rampa (única): <strong>{erEstrutura.pop} pessoas</strong> · {erEstrutura.pavimento.label} · <strong className="fx-vermelho">{fmtM(erEstrutura.er.la)}</strong>
             </span>
           )}
-          <button type="button" className="se-botao" onClick={() => setListaAberta((v) => !v)}>
-            {listaAberta ? "Ocultar lista" : `Ambientes (${soltos.length})`}
-          </button>
-          <button type="button" className="se-botao" onClick={alternarMaximizado} title={maximizado ? "Voltar ao tamanho normal (Esc)" : "Ocupar a janela inteira do painel"}>
-            {maximizado ? "Restaurar" : "Maximizar"}
-          </button>
           <PisoDescargaSwitch
             checked={!!pavAtivo.pisoDescarga}
             onChange={(v) => despachar({ type: "SET_PISO_DESCARGA", pavimentoId: pavAtivo.id, valor: v })}
@@ -1246,7 +1255,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
       <FluxoCtx.Provider value={ctx}>
         <div className="fx-corpo">
           {/* Ambientes (lista lateral) */}
-          {listaAberta && (
+          {listaVisivel && (
             <aside {...dropProps(null, setSobreSoltos)} className={`fx-lista ${sobreSoltos ? "fx-lista-sobre" : ""}`}>
               <div className="fx-lista-cab">
                 <div className="fx-lista-titulo">Ambientes</div>
@@ -1358,15 +1367,16 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
             >
               <Background gap={20} />
               <Controls showInteractive={false} />
-              <Panel position="top-left" className="fx-barra">
-                {OPCOES_CRIAR.map(([op, rotulo]) => (
-                  <button key={op} type="button" className="se-botao" onClick={() => criarDaOpcao(op, pavAtivo.id)}>
-                    <Icon svg={plusIconSvg} /> {rotulo}
-                  </button>
-                ))}
-                <span className="fx-barra-em">
-                  em <strong>{pavAtivo.label}</strong>
-                </span>
+              <Panel position="top-right">
+                <button
+                  type="button"
+                  className="fx-max"
+                  onClick={alternarMaximizado}
+                  title={maximizado ? "Voltar ao tamanho normal (Esc)" : "Ocupar a janela inteira do painel"}
+                  aria-label={maximizado ? "Restaurar" : "Maximizar"}
+                >
+                  <Icon svg={maximizado ? restoreIconSvg : maximizeIconSvg} />
+                </button>
               </Panel>
               {setaSelecionada && (
                 <Panel position="top-center">
