@@ -185,24 +185,6 @@ export function aplicarAcaoSaida(dadosRecebidos, action) {
       }));
     }
 
-    // Troca o tipo do nó (acesso/saída/escada) e volta pro dimensionamento
-    // padrão do novo tipo. Saída/escada são raízes: deixam de alimentar outro
-    // nó. A saída/escada padrão (`fixo`) acompanha o piso de descarga — não
-    // troca à mão.
-    case "SET_ACESSO_TIPO":
-      return atualizarPavSE(dados, action.pavimentoId, (p) => ({
-        ...p,
-        acessos: (p.acessos || []).map((ac) => {
-          if (ac.id !== action.acessoId || ac.fixo) return ac;
-          return {
-            ...(action.tipo === "acesso" ? omitirChave(ac, "ligadoA") : ac),
-            tipo: action.tipo,
-            dims: dimsPadrao(action.tipo),
-            alimentaEm: action.tipo === "acesso" ? ac.alimentaEm : null,
-          };
-        }),
-      }));
-
     // Liga/desliga um dimensionamento (AD/ER/PT) de um nó específico — um nó
     // pode precisar de mais de um ao mesmo tempo (ex.: o ponto de descarga que
     // é ao mesmo tempo corredor de saída e chegada da escada que desce até ali).

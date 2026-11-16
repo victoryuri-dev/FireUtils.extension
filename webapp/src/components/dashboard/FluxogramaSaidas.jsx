@@ -410,12 +410,7 @@ function GrupoNode({ data }) {
 }
 
 // ── Acesso / Saída / Escada-Rampa ──────────────────────────────────────
-const TIPOS = [
-  { tipo: "acesso", label: "Acesso" },
-  { tipo: "saida", label: "Saída" },
-  { tipo: "escada", label: "Escada/Rampa" },
-];
-
+// O tipo é escolhido ao criar (barra do topo e clique direito) e não muda depois.
 function AcessoNode({ data }) {
   const c = useContext(FluxoCtx);
   const { acesso, tipo, dims, pop, entradas, raiz, erUnico } = data;
@@ -451,20 +446,6 @@ function AcessoNode({ data }) {
             </button>
           )}
         </div>
-      </div>
-      <div className="nodrag fx-tipos">
-        {TIPOS.map((t) => (
-          <button
-            key={t.tipo}
-            type="button"
-            disabled={!!acesso.fixo}
-            title={acesso.fixo ? "Acompanha o piso de descarga do pavimento (saída) ou os demais (escada/rampa)" : undefined}
-            onClick={() => tipo !== t.tipo && c.despachar({ type: "SET_ACESSO_TIPO", pavimentoId, acessoId: acesso.id, tipo: t.tipo })}
-            className={`fx-tipo-btn fx-tipo-${t.tipo} ${tipo === t.tipo ? "fx-tipo-ativo" : ""}`}
-          >
-            {t.label}
-          </button>
-        ))}
       </div>
       <div className="fx-dims">
         {["AD", "PT", "ER"].map((d) => (

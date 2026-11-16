@@ -560,48 +560,6 @@
   border-radius: 8px 8px 0 0;
   cursor: grab;
 }
-.fx-tipos {
-  display: flex;
-  gap: 4px;
-  padding: 10px 12px 0;
-}
-.fx-tipo-btn {
-  flex: 1;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 4px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-3);
-  cursor: pointer;
-  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
-}
-.fx-tipo-btn:hover:not(:disabled):not(.fx-tipo-ativo) {
-  color: var(--text);
-}
-.fx-tipo-btn:disabled {
-  cursor: default;
-}
-.fx-tipo-btn:disabled:not(.fx-tipo-ativo) {
-  opacity: 0.4;
-}
-.fx-tipo-ativo.fx-tipo-acesso {
-  background: var(--bg-3);
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 36%, transparent);
-}
-.fx-tipo-ativo.fx-tipo-saida {
-  background: var(--green-dim);
-  color: var(--green);
-  border-color: var(--green-border);
-}
-.fx-tipo-ativo.fx-tipo-escada {
-  background: var(--amber-dim);
-  color: var(--amber);
-  border-color: var(--amber-border);
-}
 .fx-dims {
   display: flex;
   align-items: center;

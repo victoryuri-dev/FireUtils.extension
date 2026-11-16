@@ -73,12 +73,10 @@ test("ações: criar nó e grupo, ligar, soltar ambiente na área e voltar pra l
   assert.deepEqual([pav(d, "e1-P3").ambientes[0].acessoId, pav(d, "e1-P3").fluxoPos.m9], [null, undefined]);
 });
 
-test("a saída/escada padrão não se exclui nem troca de tipo; mais de um piso de descarga; escada vira saída", () => {
+test("a saída/escada padrão não se exclui; mais de um piso de descarga; escada vira saída", () => {
   let d = garantirFluxoMigrado(legado());
   d = aplicarAcaoSaida(d, { type: "REMOVER_ACESSO", pavimentoId: "e1-P2", acessoId: "r1" }); // r1 é a padrão (1ª raiz que já existia)
   assert.ok(pav(d, "e1-P2").acessos.some((a) => a.id === "r1"));
-  d = aplicarAcaoSaida(d, { type: "SET_ACESSO_TIPO", pavimentoId: "e1-P2", acessoId: "r1", tipo: "acesso" });
-  assert.equal(raiz(d, "e1-P2").tipo, "escada");
   d = aplicarAcaoSaida(d, { type: "SET_PISO_DESCARGA", pavimentoId: "e1-P2", valor: true });
   assert.deepEqual(d.pavimentos.map((p) => [p.pisoDescarga, raiz(d, p.id).tipo]), [[true, "saida"], [true, "saida"], [false, "escada"]]);
   // A escada do 2º agora liga na saída do 1º (piso de descarga mais próximo).
