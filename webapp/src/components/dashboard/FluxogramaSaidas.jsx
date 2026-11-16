@@ -503,11 +503,12 @@ function FaixaNode({ data }) {
   );
 }
 
-// ── Popup "Adicionar ambiente" de um grupo ──────────────────────────────
-// Lista os ambientes do MESMO pavimento do grupo que ainda não estão nele (na
-// lista lateral, soltos na área ou em outro grupo) e deixa marcar vários pra
-// trazer pro grupo; "Novo ambiente" cria um ambiente manual já dentro dele.
-function EscolherAmbientesModal({ grupo, candidatos, onAdicionar, onNovo, onFechar }) {
+// ── Popup "Adicionar ambiente" (de um grupo, ou da área de um pavimento) ──
+// Lista os ambientes do MESMO pavimento do destino que ainda não estão nele (na
+// lista lateral, soltos na área ou em grupos — conforme o destino) e deixa marcar
+// vários pra trazer; "Novo ambiente" cria um ambiente manual já no destino.
+// `destino`: texto de onde vão cair (ex.: "em Grupo 3").
+function EscolherAmbientesModal({ destino, candidatos, onAdicionar, onNovo, onFechar }) {
   const [busca, setBusca] = useState("");
   const [marcados, setMarcados] = useState(new Set());
   const termo = normalizar(busca);
@@ -545,9 +546,7 @@ function EscolherAmbientesModal({ grupo, candidatos, onAdicionar, onNovo, onFech
         <div className="fx-escolher-cab">
           <div style={{ minWidth: 0 }}>
             <div className="fx-escolher-titulo">Adicionar ambientes</div>
-            <div className="fx-escolher-sub">
-              em <strong>{grupo.nome}</strong>
-            </div>
+            <div className="fx-escolher-sub">{destino}</div>
           </div>
           <button type="button" onClick={onFechar} className="se-icon-botao" title="Fechar">
             <Icon svg={xIconSvg} />
@@ -959,7 +958,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   // Confirmação de remover grupo/nó: caixa do próprio painel (ConfirmacaoModal).
   const [confirmacao, setConfirmacao] = useState(null);
   // Popup de "Adicionar ambiente" de um grupo (id do grupo, ou null).
-  const [escolhaGrupoId, setEscolhaGrupoId] = useState(null);
+  const [escolha, setEscolha] = useState(null); // { grupoId } ou { pavId, ponto } (área)
   const removerGrupo = (grupo) => {
     const n = ambientes.filter((a) => a.grupoId === grupo.id).length;
     const remover = () => despachar({ type: "REMOVER_GRUPO", pavimentoId: pavDe.get(grupo.id), grupoId: grupo.id });
@@ -1009,9 +1008,15 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   });
 
   // ── Barra flutuante do clique direito (mesmas opções da barra do topo) ──
+  // Confirma o popup de "Adicionar ambiente": no grupo, ou soltos na área do pavimento.
+  const adicionarEscolhidos = (ids, grupoId, pavId, ponto) => {
+    if (grupoId) moverParaGrupo(ids, grupoId);
+    else soltarNaArea(ids, pavId, posicaoNova(pavId, ponto));
+    setEscolha(null);
+  };
   const criarDaOpcao = (op, pavId, ponto) => {
     if (op === "grupo") criarGrupo(pavId, undefined, ponto);
-    else if (op === "ambiente") criarAmbiente(null, pavId, ponto);
+    else if (op === "ambiente") setEscolha({ pavId, ponto });
     else criarNo(pavId, op, ponto);
   };
   const [menu, setMenu] = useState(null); // { x, y (px no quadro), ponto (área), pavId }
@@ -1050,7 +1055,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     editarAmbiente: setEditAmb,
     permiteSelecao: listaVisivel,
     criarAmbiente,
-    abrirEscolhaAmbientes: setEscolhaGrupoId,
+    abrirEscolhaAmbientes: (grupoId) => setEscolha({ grupoId }),
     removerAmbiente,
     moverParaGrupo,
     agruparAmbientes,
@@ -1203,6 +1208,27 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [maximizado, menu, confirmacao, editAmb]);
+
+  // ── Popup "Adicionar ambiente": destino = um grupo (ambientes entram nele) ou a
+  // área de um pavimento (ambientes ficam soltos no ponto clicado) ──
+  const grupoEscolha = escolha?.grupoId ? grupos.find((g) => g.id === escolha.grupoId) : null;
+  const escolhaValida = !!escolha && (escolha.grupoId ? !!grupoEscolha : !!pavPorId.get(escolha.pavId));
+  const pavEscolha = grupoEscolha ? pavDe.get(grupoEscolha.id) : escolha?.pavId;
+  const candidatosEscolha = escolhaValida
+    ? ambientes
+        .filter((a) => pavDe.get(a.id) === pavEscolha && (grupoEscolha ? a.grupoId !== grupoEscolha.id : a.grupoId || !posDe(a.id)))
+        .map((a) => ({
+          amb: a,
+          pop: calcPopAmb(a, TAXA_POPULACIONAL),
+          onde: a.grupoId ? `em ${grupos.find((g) => g.id === a.grupoId)?.nome || "outro grupo"}` : posDe(a.id) ? "solto na área" : "na lista",
+        }))
+    : [];
+  const confirmarEscolha = (ids) => adicionarEscolhidos(ids, grupoEscolha?.id, pavEscolha, escolha?.ponto);
+  const novoDaEscolha = () => {
+    const { ponto } = escolha;
+    setEscolha(null);
+    criarAmbiente(grupoEscolha ? grupoEscolha.id : null, pavEscolha, ponto);
+  };
 
   const [sobreSoltos, setSobreSoltos] = useState(false);
   const alvosGrupo = pavs.flatMap((p) => (p.grupos || []).map((g) => ({ id: g.id, label: `${p.label} · ${g.nome}` })));
@@ -1412,33 +1438,25 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
         </div>
       </FluxoCtx.Provider>
 
-      {escolhaGrupoId && grupos.find((g) => g.id === escolhaGrupoId) && (() => {
-        const grupo = grupos.find((g) => g.id === escolhaGrupoId);
-        const pavId = pavDe.get(grupo.id);
-        const nomeGrupo = new Map(grupos.map((g) => [g.id, g.nome]));
-        const candidatos = ambientes
-          .filter((a) => pavDe.get(a.id) === pavId && a.grupoId !== grupo.id)
-          .map((a) => ({
-            amb: a,
-            pop: calcPopAmb(a, TAXA_POPULACIONAL),
-            onde: a.grupoId ? `em ${nomeGrupo.get(a.grupoId) || "outro grupo"}` : posDe(a.id) ? "solto na área" : "na lista",
-          }));
-        return (
-          <EscolherAmbientesModal
-            grupo={grupo}
-            candidatos={candidatos}
-            onFechar={() => setEscolhaGrupoId(null)}
-            onAdicionar={(ids) => {
-              moverParaGrupo(ids, grupo.id);
-              setEscolhaGrupoId(null);
-            }}
-            onNovo={() => {
-              setEscolhaGrupoId(null);
-              criarAmbiente(grupo.id);
-            }}
-          />
-        );
-      })()}
+      {escolhaValida && (
+        <EscolherAmbientesModal
+          destino={
+            grupoEscolha ? (
+              <>
+                em <strong>{grupoEscolha.nome}</strong>
+              </>
+            ) : (
+              <>
+                na área de <strong>{pavPorId.get(pavEscolha).label}</strong>
+              </>
+            )
+          }
+          candidatos={candidatosEscolha}
+          onFechar={() => setEscolha(null)}
+          onAdicionar={confirmarEscolha}
+          onNovo={novoDaEscolha}
+        />
+      )}
 
       {confirmacao && (
         <ConfirmacaoModal
