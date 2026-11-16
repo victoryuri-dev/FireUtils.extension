@@ -399,7 +399,7 @@ function GrupoNode({ data }) {
           <AmbienteLinha key={a.id} amb={a} noGrupo />
         ))}
         {ambientes.length === 0 && <div className="fx-grupo-vazio">Arraste ambientes para trazê-los pra cá.</div>}
-        <button type="button" className="nodrag se-botao" onClick={() => c.criarAmbiente(grupo.id)}>
+        <button type="button" className="nodrag se-botao" onClick={() => c.abrirEscolhaAmbientes(grupo.id)}>
           <Icon svg={plusIconSvg} /> ADICIONAR AMBIENTE
         </button>
       </div>
@@ -493,6 +493,95 @@ function FaixaNode({ data }) {
       <div style={{ pointerEvents: "auto" }} title="Arraste para mover o pavimento inteiro" className="faixa-cab fx-faixa-cab">
         <span className="fx-faixa-nome">{pav.label}</span>
         {pav.pisoDescarga && <span className="fx-faixa-tag">PISO DE DESCARGA</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── Popup "Adicionar ambiente" de um grupo ──────────────────────────────
+// Lista os ambientes do MESMO pavimento do grupo que ainda não estão nele (na
+// lista lateral, soltos na área ou em outro grupo) e deixa marcar vários pra
+// trazer pro grupo; "Novo ambiente" cria um ambiente manual já dentro dele.
+function EscolherAmbientesModal({ grupo, candidatos, onAdicionar, onNovo, onFechar }) {
+  const [busca, setBusca] = useState("");
+  const [marcados, setMarcados] = useState(new Set());
+  const termo = normalizar(busca);
+  const visiveis = candidatos.filter((c) => normalizar(c.amb.nome).includes(termo));
+  const alternar = (id) =>
+    setMarcados((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const todosVisiveisMarcados = visiveis.length > 0 && visiveis.every((c) => marcados.has(c.amb.id));
+  const alternarTodos = () =>
+    setMarcados((prev) => {
+      const n = new Set(prev);
+      visiveis.forEach((c) => (todosVisiveisMarcados ? n.delete(c.amb.id) : n.add(c.amb.id)));
+      return n;
+    });
+  useEffect(() => {
+    const aoTeclar = (e) => {
+      if (e.key === "Escape") onFechar();
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [onFechar]);
+  return (
+    <div
+      className="se-modal-overlay"
+      onClick={(e) => {
+        e.stopPropagation();
+        onFechar();
+      }}
+    >
+      <div role="dialog" aria-modal="true" className="fx-escolher" onClick={(e) => e.stopPropagation()}>
+        <div className="fx-escolher-cab">
+          <div style={{ minWidth: 0 }}>
+            <div className="fx-escolher-titulo">Adicionar ambientes</div>
+            <div className="fx-escolher-sub">
+              em <strong>{grupo.nome}</strong>
+            </div>
+          </div>
+          <button type="button" onClick={onFechar} className="se-icon-botao" title="Fechar">
+            <Icon svg={xIconSvg} />
+          </button>
+        </div>
+        <div className="fx-escolher-busca">
+          <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar ambiente…" />
+          {visiveis.length > 0 && (
+            <button type="button" className="fx-link" onClick={alternarTodos}>
+              {todosVisiveisMarcados ? "Desmarcar todos" : "Marcar todos"}
+            </button>
+          )}
+        </div>
+        <div className="fx-escolher-lista">
+          {candidatos.length === 0 && <div className="fx-lista-vazio">Não há outros ambientes deste pavimento. Use "Novo ambiente".</div>}
+          {candidatos.length > 0 && visiveis.length === 0 && <div className="fx-lista-vazio">Nenhum ambiente corresponde à busca.</div>}
+          {visiveis.map(({ amb, onde, pop }) => (
+            <div key={amb.id} onClick={() => alternar(amb.id)} className={`fx-escolher-item ${marcados.has(amb.id) ? "fx-escolher-item-marcado" : ""}`}>
+              <div className="fx-amb-esq">
+                <Checkbox checked={marcados.has(amb.id)} onChange={() => alternar(amb.id)} />
+                <span className="fx-amb-nome">{amb.nome}</span>
+              </div>
+              <div className="fx-escolher-info">
+                <span>{pop} pessoas</span>
+                <b>|</b>
+                <span>{onde}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="fx-escolher-rodape">
+          <button type="button" className="se-botao" onClick={onNovo}>
+            <Icon svg={plusIconSvg} /> Novo ambiente
+          </button>
+          <button type="button" className="se-botao se-botao-accent" disabled={marcados.size === 0} onClick={() => onAdicionar([...marcados])}>
+            Adicionar ambiente{marcados.size > 1 ? "s" : ""}
+            {marcados.size > 0 ? ` (${marcados.size})` : ""}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -855,6 +944,8 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
 
   // Confirmação de remover grupo/nó: caixa do próprio painel (ConfirmacaoModal).
   const [confirmacao, setConfirmacao] = useState(null);
+  // Popup de "Adicionar ambiente" de um grupo (id do grupo, ou null).
+  const [escolhaGrupoId, setEscolhaGrupoId] = useState(null);
   const removerGrupo = (grupo) => {
     const n = ambientes.filter((a) => a.grupoId === grupo.id).length;
     const remover = () => despachar({ type: "REMOVER_GRUPO", pavimentoId: pavDe.get(grupo.id), grupoId: grupo.id });
@@ -944,6 +1035,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     idsDoArrasto,
     editarAmbiente: setEditAmb,
     criarAmbiente,
+    abrirEscolhaAmbientes: setEscolhaGrupoId,
     removerAmbiente,
     moverParaGrupo,
     agruparAmbientes,
@@ -1309,6 +1401,34 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
           </div>
         </div>
       </FluxoCtx.Provider>
+
+      {escolhaGrupoId && grupos.find((g) => g.id === escolhaGrupoId) && (() => {
+        const grupo = grupos.find((g) => g.id === escolhaGrupoId);
+        const pavId = pavDe.get(grupo.id);
+        const nomeGrupo = new Map(grupos.map((g) => [g.id, g.nome]));
+        const candidatos = ambientes
+          .filter((a) => pavDe.get(a.id) === pavId && a.grupoId !== grupo.id)
+          .map((a) => ({
+            amb: a,
+            pop: calcPopAmb(a, TAXA_POPULACIONAL),
+            onde: a.grupoId ? `em ${nomeGrupo.get(a.grupoId) || "outro grupo"}` : posDe(a.id) ? "solto na área" : "na lista",
+          }));
+        return (
+          <EscolherAmbientesModal
+            grupo={grupo}
+            candidatos={candidatos}
+            onFechar={() => setEscolhaGrupoId(null)}
+            onAdicionar={(ids) => {
+              moverParaGrupo(ids, grupo.id);
+              setEscolhaGrupoId(null);
+            }}
+            onNovo={() => {
+              setEscolhaGrupoId(null);
+              criarAmbiente(grupo.id);
+            }}
+          />
+        );
+      })()}
 
       {confirmacao && (
         <ConfirmacaoModal
