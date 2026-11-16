@@ -58,35 +58,26 @@ export function caminhoAteSaida(id, { acessos, grupos, ambientes }) {
   return { nos, setas }
 }
 
-/** A ligação `origemId` -> `destinoId` é permitida? Devolve 'local' (mesmo
- * pavimento: grupo/ambiente solto/acesso -> acesso, saída ou escada, sem
- * ciclo), 'entre-pavimentos' (pavimentos diferentes: só saída/escada ->
- * saída/escada, sem ciclo) ou null. `pavDe`: Map id do nó -> id do pavimento;
- * `ambientesNaArea`: ids dos ambientes soltos na área (podem ser origem). */
+/** A ligação `origemId` -> `destinoId` é permitida? Devolve:
+ *  - 'local': grupo, ambiente solto ou acesso -> acesso/saída/escada, no MESMO
+ *    pavimento, sem ciclo (é a ligação que o cálculo segue: `alimentaEm`);
+ *  - 'livre': saída ou escada/rampa -> QUALQUER acesso, saída ou escada, de
+ *    qualquer pavimento (inclusive o mesmo), sem ciclo — é o que o usuário
+ *    desenha (ex.: a escada de cima chegando num acesso de baixo); fica em
+ *    `ligadoA` e não altera o cálculo;
+ *  - null: não pode (grupo/ambiente/acesso entre pavimentos, destino que não é
+ *    acesso/saída/escada, ou ciclo).
+ * `pavDe`: Map id do nó -> id do pavimento; `ambientesNaArea`: ids dos
+ * ambientes soltos na área (podem ser origem). */
 export function tipoDeLigacao(origemId, destinoId, { acessos, grupos, pavDe, ambientesNaArea }) {
   if (origemId === destinoId) return null
   const destino = acessos.find(a => a.id === destinoId)
   if (!destino) return null
   const origemAcesso = acessos.find(a => a.id === origemId)
-  if (pavDe.get(origemId) === pavDe.get(destinoId)) {
-    if (grupos.some(g => g.id === origemId) || ambientesNaArea?.has(origemId)) return 'local'
-    return origemAcesso?.tipo === 'acesso' && !criaCicloNoFluxo(acessos, origemId, destinoId) ? 'local' : null
-  }
-  const ehExtremo = a => !!a && a.tipo !== 'acesso'
-  if (ehExtremo(origemAcesso) && ehExtremo(destino) && !criaCicloEntrePavimentos(acessos, origemId, destinoId)) return 'entre-pavimentos'
-  return null
-}
-
-/** Ligar a saída/escada `origemId` a `destinoId` (outro pavimento) fecharia um
- * ciclo na cadeia de ligações entre pavimentos (`acesso.ligadoA`)? */
-export function criaCicloEntrePavimentos(acessos, origemId, destinoId) {
-  const porId = new Map(acessos.map(a => [a.id, a]))
-  const visitados = new Set()
-  for (let id = destinoId; id && !visitados.has(id); id = porId.get(id)?.ligadoA) {
-    if (id === origemId) return true
-    visitados.add(id)
-  }
-  return false
+  if (origemAcesso && origemAcesso.tipo !== 'acesso') return criaCicloNoFluxo(acessos, origemId, destinoId) ? null : 'livre'
+  if (pavDe.get(origemId) !== pavDe.get(destinoId)) return null
+  if (grupos.some(g => g.id === origemId) || ambientesNaArea?.has(origemId)) return 'local'
+  return origemAcesso?.tipo === 'acesso' && !criaCicloNoFluxo(acessos, origemId, destinoId) ? 'local' : null
 }
 
 /** Por quais lados uma seta deve sair da origem e chegar ao destino: o par
@@ -135,13 +126,14 @@ export function sincronizarAmbientes(ambientes, grupos, acessos) {
   })
 }
 
-/** Ligar `origemId` -> `destinoId` (origem passa a alimentar o destino)
- * fecharia um ciclo? Verdadeiro quando o destino já é a própria origem ou
- * (direta/indiretamente) é alimentado por ela. */
+/** Ligar `origemId` -> `destinoId` fecharia um ciclo? Verdadeiro quando o
+ * destino já é a própria origem ou (direta/indiretamente) leva até ela,
+ * seguindo tanto a alimentação (`alimentaEm`) quanto a ligação livre de
+ * saída/escada (`ligadoA`). */
 export function criaCicloNoFluxo(acessos, origemId, destinoId) {
   const porId = new Map(acessos.map(a => [a.id, a]))
   const visitados = new Set()
-  for (let id = destinoId; id && !visitados.has(id); id = porId.get(id)?.alimentaEm) {
+  for (let id = destinoId; id && !visitados.has(id); id = porId.get(id)?.alimentaEm ?? porId.get(id)?.ligadoA) {
     if (id === origemId) return true
     visitados.add(id)
   }

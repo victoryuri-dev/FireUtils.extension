@@ -34,8 +34,8 @@ import restoreIconSvg from "../../assets/icons/restore-icon.svg?raw";
  * descarga) ou escada/rampa padrão, que não pode ser excluída. O usuário
  * arrasta os nós, liga um ao outro com setas e escolhe por nó se ele é acesso,
  * saída ou escada/rampa. Nós só se ligam dentro do mesmo pavimento — exceto
- * saídas e escadas/rampas, que também se ligam a saídas/escadas de outros
- * pavimentos (ver tipoDeLigacao em data/se_fluxo.js). A escada/rampa é
+ * saídas e escadas/rampas, que se ligam livremente a qualquer acesso, saída ou
+ * escada, de qualquer pavimento (ver tipoDeLigacao em data/se_fluxo.js). A escada/rampa é
  * dimensionada uma única vez por estrutura (calcErEstrutura): vale pra todas.
  *
  * Diferença de arquitetura pro site: lá existe um reducer vivo (useReducer +
@@ -1103,7 +1103,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   }, [grupos, acessos, ambientes, pavimentos, nodes, setaSelecionada, caminhoQuente]);
 
   // Cada nó alimenta no máximo UM seguinte; que ligação vale entre dois nós
-  // (mesmo pavimento, ou saída/escada entre pavimentos) está em tipoDeLigacao.
+  // (no mesmo pavimento; ou saída/escada pra qualquer acesso/saída/escada) está em tipoDeLigacao.
   const tipoLigacao = (source, target) => tipoDeLigacao(source, target, { acessos, grupos, pavDe, ambientesNaArea });
   const conexaoValida = ({ source, target }) => !!tipoLigacao(source, target);
   // O destino é o nó sob o ponteiro quando o usuário solta a seta — corpo do nó
@@ -1171,7 +1171,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   const ligar = ({ source, target }) => {
     const tipo = tipoLigacao(source, target);
     const pavimentoId = pavDe.get(source);
-    if (tipo === "entre-pavimentos") despachar({ type: "LIGAR_ENTRE_PAVIMENTOS", pavimentoId, acessoId: source, destinoId: target });
+    if (tipo === "livre") despachar({ type: "LIGAR_ENTRE_PAVIMENTOS", pavimentoId, acessoId: source, destinoId: target });
     else if (tipo === "local") {
       if (grupos.some((g) => g.id === source)) despachar({ type: "LIGAR_GRUPO", pavimentoId, grupoId: source, acessoId: target });
       else if (ambientesNaArea.has(source)) despachar({ type: "LIGAR_AMBIENTE", pavimentoId, ambienteId: source, acessoId: target });

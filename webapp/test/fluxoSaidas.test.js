@@ -104,3 +104,15 @@ test("ação desconhecida (de outra medida, vinda do canal) devolve os dados sem
   const d = garantirFluxoMigrado(legado());
   assert.equal(aplicarAcaoSaida(d, { type: "SET_ALGUMA_OUTRA_COISA" }), d);
 });
+
+test("saída/escada liga livremente a acesso de outro pavimento; acesso continua só no próprio pavimento; sem ciclo", () => {
+  const d = garantirFluxoMigrado(legado());
+  const pavDe = new Map(d.pavimentos.flatMap((p) => [...p.acessos, ...(p.grupos || []), ...p.ambientes].map((n) => [n.id, p.id])));
+  const dados = { acessos: d.pavimentos.flatMap((p) => p.acessos), grupos: d.pavimentos.flatMap((p) => p.grupos || []), pavDe, ambientesNaArea: new Set() };
+  const t = (o, x) => fluxo.tipoDeLigacao(o, x, dados);
+  assert.equal(t("acs-fixo-e1-P3", "a1"), "livre"); // escada do 2º -> acesso do 1º
+  assert.equal(t("acs-fixo-e1-P3", "r0"), "livre"); // escada do 2º -> saída do térreo
+  assert.equal(t("a1", "r0"), null);                // acesso do 1º -> saída do térreo: não cruza pavimento
+  assert.equal(t("r1", "a1"), null);                // escada do 1º -> o acesso que a alimenta: ciclo
+  assert.equal(t("r0", "r0"), null);
+});
