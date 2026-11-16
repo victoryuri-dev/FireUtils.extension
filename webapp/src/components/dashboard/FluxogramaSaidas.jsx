@@ -505,8 +505,8 @@ function FaixaNode({ data }) {
 }
 
 // ── Popup "Adicionar ambiente" (de um grupo, ou da área de um pavimento) ──
-// Lista os ambientes do MESMO pavimento do destino que ainda não estão nele (na
-// lista lateral, soltos na área ou em grupos — conforme o destino) e deixa marcar
+// Lista só os ambientes do MESMO pavimento do destino que ainda estão fora da área
+// de trabalho (sem grupo e sem posição — os já posicionados não aparecem) e deixa marcar
 // vários pra trazer; "Novo ambiente" cria um ambiente manual já no destino.
 // `destino`: texto de onde vão cair (ex.: "em Grupo 3").
 function EscolherAmbientesModal({ destino, candidatos, onAdicionar, onNovo, onFechar }) {
@@ -562,9 +562,9 @@ function EscolherAmbientesModal({ destino, candidatos, onAdicionar, onNovo, onFe
           )}
         </div>
         <div className="fx-escolher-lista">
-          {candidatos.length === 0 && <div className="fx-lista-vazio">Não há outros ambientes deste pavimento. Use "Novo ambiente".</div>}
+          {candidatos.length === 0 && <div className="fx-lista-vazio">Não há ambientes disponíveis neste pavimento (os demais já estão na área de trabalho). Use "Novo ambiente".</div>}
           {candidatos.length > 0 && visiveis.length === 0 && <div className="fx-lista-vazio">Nenhum ambiente corresponde à busca.</div>}
-          {visiveis.map(({ amb, onde, pop }) => (
+          {visiveis.map(({ amb, pop }) => (
             <div key={amb.id} onClick={() => alternar(amb.id)} className={`fx-escolher-item ${marcados.has(amb.id) ? "fx-escolher-item-marcado" : ""}`}>
               <div className="fx-amb-esq">
                 <Checkbox checked={marcados.has(amb.id)} onChange={() => alternar(amb.id)} />
@@ -572,8 +572,6 @@ function EscolherAmbientesModal({ destino, candidatos, onAdicionar, onNovo, onFe
               </div>
               <div className="fx-escolher-info">
                 <span>{pop} pessoas</span>
-                <b>|</b>
-                <span>{onde}</span>
               </div>
             </div>
           ))}
@@ -1283,14 +1281,11 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   const grupoEscolha = escolha?.grupoId ? grupos.find((g) => g.id === escolha.grupoId) : null;
   const escolhaValida = !!escolha && (escolha.grupoId ? !!grupoEscolha : !!pavPorId.get(escolha.pavId));
   const pavEscolha = grupoEscolha ? pavDe.get(grupoEscolha.id) : escolha?.pavId;
+  // Só ambientes ainda fora da área de trabalho (sem grupo e sem posição).
   const candidatosEscolha = escolhaValida
     ? ambientes
-        .filter((a) => pavDe.get(a.id) === pavEscolha && (grupoEscolha ? a.grupoId !== grupoEscolha.id : a.grupoId || !posDe(a.id)))
-        .map((a) => ({
-          amb: a,
-          pop: calcPopAmb(a, TAXA_POPULACIONAL),
-          onde: a.grupoId ? `em ${grupos.find((g) => g.id === a.grupoId)?.nome || "outro grupo"}` : posDe(a.id) ? "solto na área" : "na lista",
-        }))
+        .filter((a) => pavDe.get(a.id) === pavEscolha && !a.grupoId && !posDe(a.id))
+        .map((a) => ({ amb: a, pop: calcPopAmb(a, TAXA_POPULACIONAL) }))
     : [];
   const confirmarEscolha = (ids) => adicionarEscolhidos(ids, grupoEscolha?.id, pavEscolha, escolha?.ponto);
   const novoDaEscolha = () => {
