@@ -7,7 +7,7 @@ import "./FluxogramaSaidas.css";
 import Icon from "../Icon";
 import { AmbienteForm, fmtM } from "./seShared";
 import {
-  calcPopAmb, calcNoAmbientePT, calcDimsAcesso, calcErEstrutura, dimsDoAcesso, contarSaidasPavimento, ehRaiz,
+  calcPopAmb, calcNoAmbientePT, calcDimsAcesso, calcErEstrutura, dimsDoAcesso, contarSaidasPavimento, ehRaiz, tipoEscadaEstrutura,
 } from "../../data/se_calc";
 import { FAIXA_CAB, FAIXA_PAD, ORIGEM_X, ORIGEM_Y, caminhoAteSaida, ladosMaisProximos, proximoNomeGrupo, tipoDeLigacao } from "../../data/se_fluxo";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE, idGrupo } from "../../lib/seReducer";
@@ -166,18 +166,6 @@ function CampoBusca({ value, onChange, placeholder }) {
         </button>
       )}
     </div>
-  );
-}
-
-// Quebra "ACESSO/DESCARGA" -> "ACESSO/" + quebra de linha + "DESCARGA".
-function LabelQuebrado({ texto }) {
-  const partes = texto.split("/");
-  if (partes.length !== 2) return texto;
-  return (
-    <>
-      {partes[0]}/<br />
-      {partes[1]}
-    </>
   );
 }
 
@@ -419,7 +407,7 @@ function GrupoNode({ data }) {
 // O tipo é escolhido ao criar (barra do topo e clique direito) e não muda depois.
 function AcessoNode({ data }) {
   const c = useContext(FluxoCtx);
-  const { acesso, tipo, dims, pop, entradas, raiz, erUnico } = data;
+  const { acesso, tipo, dims, pop, entradas, raiz, tipoEscada } = data;
   const alvoValido = c.podeReceberLigacao(acesso.id);
   const pavimentoId = c.pavDe(acesso.id);
   const toggleDim = (d) => c.despachar({ type: "SET_ACESSO_DIM", pavimentoId, acessoId: acesso.id, dim: d, valor: !dims[d] });
@@ -463,19 +451,14 @@ function AcessoNode({ data }) {
       <div className="fx-entradas">
         {entradas.map((e) => (
           <div key={e.label} className="fx-entrada">
-            <div className="fx-entrada-rotulo">
-              <LabelQuebrado texto={e.label} />
-            </div>
+            <div className="fx-entrada-rotulo">{e.label}</div>
             <div className="fx-entrada-valor">{e.value}</div>
           </div>
         ))}
       </div>
-      {erUnico && (
-        <div
-          className="fx-acesso-nota"
-          title="A escada/rampa é dimensionada uma única vez por estrutura, com a população do pavimento mais populoso (sem o piso de descarga) — vale pra todas."
-        >
-          Escada/rampa: {erUnico.pop} pessoas · {erUnico.label}
+      {tipoEscada && (
+        <div className="fx-acesso-nota" title="Tipo de escada exigido para a estrutura (Anexo C, Tabela 3).">
+          Tipo de escada: <strong>{tipoEscada}</strong>
         </div>
       )}
       {!raiz && tipo === "acesso" && !acesso.alimentaEm && <div className="fx-acesso-aviso">Sem ligação a uma saída ou escada/rampa</div>}
@@ -785,6 +768,15 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
   // Posição de um nó na área = origem da faixa do pavimento + `fluxoPos` (relativo).
   // Dimensionamento único das escadas/rampas da estrutura.
   const erEstrutura = useMemo(() => calcErEstrutura(pavimentos, TAXA_POPULACIONAL, LARGURAS_MINIMAS), [pavimentos, TAXA_POPULACIONAL, LARGURAS_MINIMAS]);
+  // Tipo de escada exigido da estrutura (texto do nó de escada/rampa); null = não se aplica.
+  const tipoEscada = useMemo(() => {
+    const r = tipoEscadaEstrutura(estrutura, pavimentos.map((p) => p.divisao), seNorma.TIPOS_ESCADA);
+    if (!r || r.status === "nao_aplica") return null;
+    if (r.status !== "ok") return "não definido";
+    const t = seNorma.TIPOS_ESCADA.tipos[r.exigido];
+    if (!t) return r.exigido;
+    return r.exigido === "+" || r.exigido === "-" ? t.nome : `${r.exigido} — ${t.nome}`;
+  }, [estrutura, pavimentos, seNorma.TIPOS_ESCADA]);
   const nosBase = useMemo(() => {
     const nos = [];
     pavs.forEach((p) => {
@@ -813,7 +805,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
             dims,
             pop,
             raiz: ehRaiz(ac),
-            erUnico: dims.ER && erEstrutura ? { pop: erEstrutura.pop, label: erEstrutura.pavimento.label } : null,
+            tipoEscada: dims.ER ? tipoEscada : null,
             entradas: [
               ad && { label: "ACESSO/DESCARGA", value: fmtM(ad.la) },
               pt && { label: "PORTAS", value: fmtM(pt.la) },
@@ -824,7 +816,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
       });
     });
     return nos;
-  }, [pavs, erEstrutura, TAXA_POPULACIONAL, LARGURAS_MINIMAS]);
+  }, [pavs, erEstrutura, tipoEscada, TAXA_POPULACIONAL, LARGURAS_MINIMAS]);
 
   // Estado local dos nós (React Flow precisa dele pra animar o arrasto);
   // reabastecido a cada mudança do projeto (ou depois de uma falha ao salvar),

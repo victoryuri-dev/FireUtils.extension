@@ -573,23 +573,21 @@
 }
 .fx-entradas {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 24px;
   min-height: 38px;
 }
 .fx-entrada {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
 }
 .fx-entrada-rotulo {
-  font-size: 9px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  text-align: center;
   line-height: 1.2;
   color: var(--text-3);
 }
@@ -601,9 +599,12 @@
   white-space: nowrap;
   color: var(--accent);
 }
+.fx-acesso-nota strong {
+  color: var(--text);
+}
 .fx-acesso-nota {
-  padding: 0 12px 8px;
-  font-size: 10px;
+  padding: 0 12px 10px;
+  font-size: 11px;
   color: var(--text-3);
   text-align: center;
 }
