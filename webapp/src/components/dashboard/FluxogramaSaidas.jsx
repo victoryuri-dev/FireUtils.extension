@@ -7,7 +7,7 @@ import "./FluxogramaSaidas.css";
 import Icon from "../Icon";
 import { AmbienteForm, fmtM } from "./seShared";
 import {
-  calcPopAmb, calcNoAmbientePT, calcDimsAcesso, calcErEstrutura, dimsDoAcesso, contarSaidasPavimento, ehRaiz, tipoEscadaEstrutura,
+  calcPopAmb, calcPopContada, calcNoAmbientePT, calcDimsAcesso, calcErEstrutura, dimsDoAcesso, contarSaidasPavimento, ehRaiz, tipoEscadaEstrutura,
 } from "../../data/se_calc";
 import { FAIXA_CAB, FAIXA_PAD, ORIGEM_X, ORIGEM_Y, caminhoAteSaida, ladosMaisProximos, proximoNomeGrupo, tipoDeLigacao } from "../../data/se_fluxo";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE, idGrupo } from "../../lib/seReducer";
@@ -290,6 +290,9 @@ function AmbienteLinha({ amb, noGrupo, naArea = false }) {
       </div>
       <div className={`fx-amb-info ${podeSelecionar ? "" : "fx-amb-info-sem-sel"}`}>
         <span>{pop} pessoas</span>
+        {amb.areaApoio && (
+          <span title="Área de apoio: a população não soma no total da edificação; só dimensiona a própria porta" style={{ fontSize: 9, textTransform: "uppercase", opacity: 0.7 }}>apoio</span>
+        )}
         <b>|</b>
         <span className="fx-amb-porta">
           <span>Porta</span>
@@ -792,7 +795,7 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
       });
       (p.grupos || []).forEach((g) => {
         const ambs = pambs.filter((a) => a.grupoId === g.id);
-        nos.push(filho(g.id, "grupo", { grupo: g, ambientes: ambs, ligado: !!g.acessoId, pop: ambs.reduce((s, a) => s + calcPopAmb(a, TAXA_POPULACIONAL), 0) }));
+        nos.push(filho(g.id, "grupo", { grupo: g, ambientes: ambs, ligado: !!g.acessoId, pop: ambs.reduce((s, a) => s + calcPopContada(a, TAXA_POPULACIONAL), 0) }));
       });
       pambs.filter((a) => !a.grupoId && p.fluxoPos?.[a.id]).forEach((a) => nos.push(filho(a.id, "ambiente", { amb: a })));
       pacs.forEach((ac) => {

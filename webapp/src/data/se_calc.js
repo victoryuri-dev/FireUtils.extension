@@ -53,9 +53,16 @@ export function calcPopAmb(amb, taxaPopulacional) {
   return calcPopBase(amb, taxaPopulacional) + calcPopArquibancada(amb)
 }
 
+/** População que o ambiente soma no total da edificação (pavimento, acessos,
+ * escadas, brigada). Área de apoio (`areaApoio`) usa a população de outros
+ * ambientes — não soma aqui; calcPopAmb continua valendo pra sua própria porta. */
+export function calcPopContada(amb, taxaPopulacional) {
+  return amb.areaApoio ? 0 : calcPopAmb(amb, taxaPopulacional)
+}
+
 /** Calcula a população total de um pavimento */
 export function calcPopPav(pav, taxaPopulacional) {
-  return pav.ambientes.reduce((s, a) => s + calcPopAmb(a, taxaPopulacional), 0)
+  return pav.ambientes.reduce((s, a) => s + calcPopContada(a, taxaPopulacional), 0)
 }
 
 /** Pavimento mais populoso excluindo piso de descarga */
@@ -186,7 +193,7 @@ export function ambientesDoAcesso(acessoId, ambientes, acessos) {
  * que também o alimente (cascata) — recursivo, sem limite de profundidade. */
 export function calcPopAcesso(acessoId, ambientes, acessos, taxaPopulacional) {
   const diretos = ambientesDiretosDoAcesso(acessoId, ambientes)
-    .reduce((s, a) => s + calcPopAmb(a, taxaPopulacional), 0)
+    .reduce((s, a) => s + calcPopContada(a, taxaPopulacional), 0)
   const dosFilhos = acessosFilhosDiretos(acessoId, acessos)
     .reduce((s, ac) => s + calcPopAcesso(ac.id, ambientes, acessos, taxaPopulacional), 0)
   return diretos + dosFilhos

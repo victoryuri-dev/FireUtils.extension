@@ -60,7 +60,7 @@ function DivisaoSelect({ value, onChange, ocupacoes }) {
 // rodapé.
 export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, larguras }) {
   const { TAXA_POPULACIONAL, NOTAS_NORMATIVAS } = seNorma;
-  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" };
+  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "", areaApoio: false };
   const [form, setForm] = useState(() =>
     initial
       ? {
@@ -70,6 +70,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           assentos: initial.assentos ? String(initial.assentos) : "",
           popManual: initial.popManual ? String(initial.popManual) : "",
           arquibancada: !!initial.arquibancada,
+          areaApoio: !!initial.areaApoio,
           arquibancadaComprimento: initial.arquibancadaComprimento ? String(initial.arquibancadaComprimento) : "",
         }
       : blank
@@ -112,6 +113,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
       area: parseFloat(form.area) || 0,
       assentos: parseInt(form.assentos) || 0,
       popManual: parseInt(form.popManual) || 0,
+      areaApoio: form.areaApoio,
       arquibancada: arquibancadaOn,
       arquibancadaComprimento: arquibancadaOn ? parseFloat(form.arquibancadaComprimento) || 0 : 0,
     });
@@ -214,6 +216,15 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
         </div>
       )}
 
+      <div>
+        <Toggle label="Área de apoio da edificação" checked={form.areaApoio} onChange={(v) => setForm((f) => ({ ...f, areaApoio: v }))} />
+        <div className="se-nota" style={{ marginTop: 6 }}>
+          {form.areaApoio
+            ? "Ativado: a população deste ambiente não soma na população total da edificação nem no dimensionamento de acessos e escadas — é a mesma de outros ambientes. Ela é usada só para dimensionar a porta deste ambiente."
+            : "Ative se este ambiente (ex.: depósito, vestiário, copa) só é usado por pessoas que já estão em outros ambientes da edificação."}
+        </div>
+      </div>
+
       {taxa?.notas?.length > 0 && (
         <div>
           <div className="se-label">Notas</div>
@@ -228,6 +239,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           <div>
             <div className="se-stat-label">População</div>
             <div className={`se-stat-value ${pop > 0 ? "se-stat-value-red" : "se-stat-value-faint"}`}>{pop} Pessoas</div>
+            {form.areaApoio && <div className="se-nota">não soma no total · só dimensiona a porta</div>}
           </div>
           {nUP !== null && (
             <div>
