@@ -3,6 +3,8 @@ import Icon from "../Icon";
 import { taxaOpcoes, popTipoPadrao, calcPT, calcPopArquibancada, divisaoComArquibancada, ARQUIBANCADA_TAXA } from "../../data/se_calc";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 import xIconSvg from "../../assets/icons/x-icon.svg?raw";
+import chevronDownIconSvg from "../../assets/icons/chevron-down-icon.svg?raw";
+import chevronRightIconSvg from "../../assets/icons/chevron-right-icon.svg?raw";
 
 /**
  * seShared.jsx — UI compartilhada da árvore de Saída de Emergência
@@ -76,6 +78,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
       : blank
   );
 
+  const [notasAbertas, setNotasAbertas] = useState(false); // notas normativas começam retraídas
   const taxa = TAXA_POPULACIONAL[form.divisao];
   const opcoes = taxaOpcoes(form.divisao, TAXA_POPULACIONAL);
   const isManual = form.popTipo === "manual";
@@ -226,11 +229,21 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
       </div>
 
       {taxa?.notas?.length > 0 && (
-        <div>
-          <div className="se-label">Notas</div>
-          <div className="se-notas">
-            {taxa.notas.map((k) => NOTAS_NORMATIVAS[k] && <div key={k} className="se-nota">{NOTAS_NORMATIVAS[k]}</div>)}
-          </div>
+        <div className="saidas-ocup-notas">
+          <button
+            type="button"
+            className="saidas-ocup-notas-toggle"
+            onClick={() => setNotasAbertas((a) => !a)}
+            aria-expanded={notasAbertas}
+          >
+            <Icon svg={notasAbertas ? chevronDownIconSvg : chevronRightIconSvg} />
+            Notas ({taxa.notas.filter((k) => NOTAS_NORMATIVAS[k]).length})
+          </button>
+          {notasAbertas && (
+            <div className="se-notas saidas-ocup-notas-corpo">
+              {taxa.notas.map((k) => NOTAS_NORMATIVAS[k] && <div key={k} className="se-nota">{NOTAS_NORMATIVAS[k]}</div>)}
+            </div>
+          )}
         </div>
       )}
 
