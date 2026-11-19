@@ -7,7 +7,7 @@ import "./FluxogramaSaidas.css";
 import Icon from "../Icon";
 import { AmbienteForm, fmtM } from "./seShared";
 import {
-  calcPopAmb, calcPopContada, calcNoAmbientePT, calcDimsAcesso, calcErEstrutura, dimsDoAcesso, contarSaidasPavimento, ehRaiz, tipoEscadaEstrutura,
+  calcPopAmb, calcPopContada, calcNoAmbientePT, calcDimsAcesso, calcErEstrutura, dimsDoAcesso, contarSaidasPavimento, ehRaiz, tipoEscadaEstrutura, calcPopPav,
 } from "../../data/se_calc";
 import { FAIXA_CAB, FAIXA_PAD, ORIGEM_X, ORIGEM_Y, caminhoAteSaida, ladosMaisProximos, proximoNomeGrupo, tipoDeLigacao } from "../../data/se_fluxo";
 import { aplicarAcaoSaida, idAcesso, idAmbienteSE, idGrupo } from "../../lib/seReducer";
@@ -485,6 +485,9 @@ function FaixaNode({ data }) {
       <div style={{ pointerEvents: "auto" }} title="Arraste para mover o pavimento inteiro" className="faixa-cab fx-faixa-cab">
         <span className="fx-faixa-nome">{pav.label}</span>
         {pav.pisoDescarga && <span className="fx-faixa-tag">PISO DE DESCARGA</span>}
+        <span className="fx-faixa-pop" title="População total do pavimento">
+          <strong>{calcPopPav(pav, c.taxa)}</strong> pessoas
+        </span>
       </div>
     </div>
   );
