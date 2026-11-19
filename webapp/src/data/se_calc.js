@@ -40,7 +40,16 @@ export function calcPopArquibancada(amb) {
   return Math.ceil((parseFloat(amb.arquibancadaComprimento) || 0) / ARQUIBANCADA_TAXA.M)
 }
 
+/** Divisões cuja taxa é por vaga de carro: { divisão: vagas por pessoa }.
+ * G-3 (posto de abastecimento): "1 pessoa por 40 vagas". */
+export const VAGAS_POR_PESSOA = { 'G-3': 40 }
+
+/** Divisão com taxa por vaga de carro (formulário próprio: nº de vagas). */
+export const divisaoPorVagas = divisao => divisao in VAGAS_POR_PESSOA
+
 function calcPopBase(amb, taxaPopulacional) {
+  if (amb.popTipo === 'vagas' && divisaoPorVagas(amb.divisao))
+    return Math.ceil(Math.max(0, parseInt(amb.vagas) || 0) / VAGAS_POR_PESSOA[amb.divisao])
   if (amb.popTipo === 'fixo')   return Math.max(0, parseInt(amb.assentos)  || 0)
   if (amb.popTipo === 'manual') return Math.max(0, parseInt(amb.popManual) || 0)
   const taxa = taxaPopulacional[amb.divisao]
@@ -326,9 +335,10 @@ export function taxaOpcoes(divisao, taxaPopulacional) {
   const opts = []
   if (taxa.A !== null) opts.push({ value:'area',   label: taxa.obs })
   if (taxa.notas?.includes('N')) opts.push({ value:'fixo', label:'Assentos fixos' })
-  if (taxa.A === null)  opts.push({ value:'manual', label: taxa.obs })
+  if (divisaoPorVagas(divisao)) opts.push({ value:'vagas', label: taxa.obs })
+  else if (taxa.A === null) opts.push({ value:'manual', label: taxa.obs })
   // Taxa global, vale pra qualquer ocupação: o usuário informa direto a população.
-  else opts.push({ value:'manual', label: POPULACAO_ESTIMADA_LABEL })
+  if (taxa.A !== null || divisaoPorVagas(divisao)) opts.push({ value:'manual', label: POPULACAO_ESTIMADA_LABEL })
   return opts
 }
 

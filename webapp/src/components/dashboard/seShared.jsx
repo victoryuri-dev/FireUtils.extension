@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Icon from "../Icon";
-import { taxaOpcoes, popTipoPadrao, calcPT, calcPopArquibancada, divisaoComArquibancada, ARQUIBANCADA_TAXA } from "../../data/se_calc";
+import { taxaOpcoes, popTipoPadrao, calcPopAmb, calcPT, calcPopArquibancada, divisaoComArquibancada, ARQUIBANCADA_TAXA } from "../../data/se_calc";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 import xIconSvg from "../../assets/icons/x-icon.svg?raw";
 import chevronDownIconSvg from "../../assets/icons/chevron-down-icon.svg?raw";
@@ -62,7 +62,7 @@ function DivisaoSelect({ value, onChange, ocupacoes }) {
 // rodapé.
 export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, larguras }) {
   const { TAXA_POPULACIONAL, NOTAS_NORMATIVAS } = seNorma;
-  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "", areaApoio: false };
+  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", vagas: "", popManual: "", arquibancada: false, arquibancadaComprimento: "", areaApoio: false };
   const [form, setForm] = useState(() =>
     initial
       ? {
@@ -70,6 +70,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           popTipo: initial.popTipo,
           area: initial.area ? String(initial.area) : "",
           assentos: initial.assentos ? String(initial.assentos) : "",
+          vagas: initial.vagas ? String(initial.vagas) : "",
           popManual: initial.popManual ? String(initial.popManual) : "",
           arquibancada: !!initial.arquibancada,
           areaApoio: !!initial.areaApoio,
@@ -83,6 +84,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
   const opcoes = taxaOpcoes(form.divisao, TAXA_POPULACIONAL);
   const isManual = form.popTipo === "manual";
   const isFixo = form.popTipo === "fixo";
+  const isVagas = form.popTipo === "vagas";
   const isArea = form.popTipo === "area";
 
   const temArquibancada = divisaoComArquibancada(form.divisao);
@@ -91,18 +93,20 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
   const popCalc = () => {
     const arq = calcPopArquibancada({ divisao: form.divisao, arquibancada: form.arquibancada, arquibancadaComprimento: form.arquibancadaComprimento });
     if (isFixo) return (parseInt(form.assentos) || 0) + arq;
+    if (isVagas) return calcPopAmb({ divisao: form.divisao, popTipo: "vagas", vagas: form.vagas }, TAXA_POPULACIONAL) + arq;
     if (isManual) return (parseInt(form.popManual) || 0) + arq;
     return (taxa?.A && form.area ? Math.ceil(parseFloat(form.area) / taxa.A) : 0) + arq;
   };
 
   const setDivisao = (div) =>
-    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" }));
-  const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, assentos: "", popManual: "" }));
+    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), assentos: "", vagas: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" }));
+  const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, assentos: "", vagas: "", popManual: "" }));
 
   const canSave = () => {
     if (!form.divisao) return false;
     if (isArea && !form.area) return false;
     if (isFixo && !form.assentos) return false;
+    if (isVagas && !(parseInt(form.vagas) > 0)) return false;
     if (isManual && !form.popManual) return false;
     if (arquibancadaOn && !(parseFloat(form.arquibancadaComprimento) > 0)) return false;
     return true;
@@ -115,6 +119,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
       popTipo: form.popTipo,
       area: parseFloat(form.area) || 0,
       assentos: parseInt(form.assentos) || 0,
+      vagas: parseInt(form.vagas) || 0,
       popManual: parseInt(form.popManual) || 0,
       areaApoio: form.areaApoio,
       arquibancada: arquibancadaOn,
@@ -122,7 +127,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
     });
   };
 
-  const inputLabel = isArea ? "Área (m²)" : isFixo ? "Assentos" : "População estimada (pessoas)";
+  const inputLabel = isArea ? "Área (m²)" : isFixo ? "Assentos" : isVagas ? "Vagas de carro" : "População estimada (pessoas)";
   const pop = popCalc();
   const nUP = larguras ? calcPT(pop, taxa?.PT ?? 100, larguras).n : null;
 
@@ -170,6 +175,17 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
                 placeholder="ex.: 120"
                 value={form.assentos}
                 onChange={(e) => setForm((f) => ({ ...f, assentos: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              />
+            )}
+            {isVagas && (
+              <input
+                className="se-input"
+                type="number"
+                min="0"
+                placeholder="ex.: 40"
+                value={form.vagas}
+                onChange={(e) => setForm((f) => ({ ...f, vagas: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && handleSave()}
               />
             )}
