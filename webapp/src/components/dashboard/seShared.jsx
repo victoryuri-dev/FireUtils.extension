@@ -96,8 +96,8 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
   };
 
   const setDivisao = (div) =>
-    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), area: "", assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" }));
-  const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, area: "", assentos: "", popManual: "" }));
+    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), assentos: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" }));
+  const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, assentos: "", popManual: "" }));
 
   const canSave = () => {
     if (!form.divisao) return false;
