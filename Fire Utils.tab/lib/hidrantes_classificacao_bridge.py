@@ -10,13 +10,13 @@ Information do documento ativo, no MESMO formato que o extinto pushbutton
 "Classificar Sistema de Hidrante" gravava — assim "Mapear Trechos" e
 "Dimensionar Hidrantes" continuam funcionando sem nenhuma mudança neles.
 
-O site manda Tipo + variante (a decisão da Tabela 3, que só ele faz —
-cruza área/ocupação/carga de incêndio do projeto). Os demais parâmetros da
-Tabela 2 (esguicho, mangueira, vazão/pressão mínima) continuam vindo do
-perfil normativo do próprio plugin (hidrantes/norm_profiles.py) — a mesma
-fonte que o extinto "Classificar Sistema" já usava —, nunca do site, pra
-nunca ter dois lugares dando valores potencialmente diferentes pra
-Tabela 2.
+O SITE interpreta o Tipo (decisão da Tabela 3 + parâmetros da Tabela 2 da
+norma do estado, ou um sistema "Personalizado" digitado pelo RT) e manda,
+além do Tipo/variante, os parâmetros já resolvidos (vazão e pressão
+mínimas, esguicho, mangueira, expedições). O plugin NÃO tem tabela de Tipos
+própria: só grava o que recebeu, no texto do parâmetro do projeto, que
+"Mapear Trechos"/"Dimensionar Hidrantes" e o motor de cálculo interpretam
+(ver hidrantes/sistema.py).
 
 Além do Tipo/variante, o site agora também manda (o botão "Classificar
 Sistema de Hidrante" foi removido — essa era a única outra forma de
@@ -36,17 +36,13 @@ salvarHidrantes()) — sem essa terceira cópia local que podia divergir das
 outras duas sem ninguém perceber.
 """
 
-import os
-
 from Autodesk.Revit.DB import Transaction
 
 from hidrantes.params import (
     create_hydrant_params, PROJECT_INFO_PARAM, PROJECT_INFO_METODO_PARAM,
 )
-from hidrantes.norm_profiles import get_profile, req, NormProfileError
 from hidrantes.calc import METODO_VALVULA, METODO_ESGUICHO
 from hidrantes import succao
-from projeto import carregar_dados_projeto
 from family_error_utils import texto_erro
 
 # Mapeia o token normalizado que o site manda (mesmo vocabulário de
@@ -62,6 +58,50 @@ def _metodo_calculo(token):
     return _METODOS_POR_TOKEN.get(token, METODO_ESGUICHO)
 
 
+def _txt(valor):
+    """Número como texto, sem casas inúteis (30.0 -> "30") e sem format spec
+    (um format spec num int quebra no IronPython 2.7)."""
+    v = float(valor)
+    return u"{}".format(int(v)) if v == int(v) else u"{}".format(v)
+
+
+def _ler_parametros(payload):
+    """Valida o que o site mandou. Retorna (rotulo, erro, parametros): o
+    rótulo é "Tipo N", "Tipo N – Var. X" ou "Personalizado"."""
+    tipo = payload.get(u"tipo")
+    if tipo == u"personalizado":
+        rotulo = u"Personalizado"
+    else:
+        try:
+            numero = int(tipo)
+        except (TypeError, ValueError):
+            return None, u"Tipo de sistema inválido.", None
+        try:
+            variante_idx = int(payload.get(u"tipoVariante") or 0)
+        except (TypeError, ValueError):
+            variante_idx = 0
+        rotulo = u"Tipo {}".format(numero)
+        if variante_idx > 0:
+            rotulo += u" – Var. {}".format(chr(65 + variante_idx))
+
+    bruto = payload.get(u"parametros") or {}
+    parametros = {}
+    for chave in (u"vazaoMin", u"pressaoMin", u"esguicho", u"mangueiraDn", u"mangueiraComprimento"):
+        try:
+            valor = float(bruto.get(chave))
+        except (TypeError, ValueError):
+            valor = 0.0
+        if valor <= 0:
+            return None, (u"Parâmetros do sistema incompletos ('{}'). Atualize a "
+                          u"classificação no site e tente novamente.".format(chave)), None
+        parametros[chave] = valor
+    expedicoes = (bruto.get(u"expedicoes") or u"").lower()
+    if expedicoes not in (u"simples", u"duplo"):
+        return None, u"Parâmetros do sistema incompletos ('expedicoes').", None
+    parametros[u"expedicoes"] = expedicoes
+    return rotulo, None, parametros
+
+
 def tratar_set_hidrantes_classificacao(uiapp, payload, postar_mensagem):
     uidoc = uiapp.ActiveUIDocument
     if uidoc is None or not uidoc.Document.PathName:
@@ -72,49 +112,19 @@ def tratar_set_hidrantes_classificacao(uiapp, payload, postar_mensagem):
         return
     doc = uidoc.Document
 
-    try:
-        tipo = int(payload.get(u"tipo"))
-    except (TypeError, ValueError):
-        postar_mensagem(u"HIDRANTES_CLASSIFICACAO_SAVED", {
-            u"ok": False, u"erro": u"Tipo de sistema inválido.",
-        })
-        return
-    try:
-        variante_idx = int(payload.get(u"tipoVariante") or 0)
-    except (TypeError, ValueError):
-        variante_idx = 0
-
-    projeto_dir = os.path.dirname(doc.PathName)
-    dados_projeto = carregar_dados_projeto(projeto_dir) or {}
-    sigla_estado = dados_projeto.get(u"uf") or u"MA"
-
-    try:
-        perfil = get_profile(sigla_estado, projeto_dir)
-    except NormProfileError as ex:
-        postar_mensagem(u"HIDRANTES_CLASSIFICACAO_SAVED", {u"ok": False, u"erro": texto_erro(ex)})
+    # O site interpreta o Tipo (Tabelas 2 e 3 da norma, ou um sistema
+    # personalizado) e manda os parâmetros já resolvidos — o plugin não tem
+    # tabela de Tipos: só grava o que recebeu.
+    rotulo, erro_param, parametros = _ler_parametros(payload)
+    if erro_param:
+        postar_mensagem(u"HIDRANTES_CLASSIFICACAO_SAVED", {u"ok": False, u"erro": erro_param})
         return
 
-    tipo_perfil = req(perfil, u"tipos").get(tipo)
-    if tipo_perfil is None:
-        postar_mensagem(u"HIDRANTES_CLASSIFICACAO_SAVED", {
-            u"ok": False,
-            u"erro": u"O perfil normativo '{}' não define o Tipo {} de sistema de hidrante.".format(
-                perfil.get(u"norma"), tipo),
-        })
-        return
-
-    variantes = tipo_perfil[u"variantes"]
-    if variante_idx < 0 or variante_idx >= len(variantes):
-        variante_idx = 0
-    dados = variantes[variante_idx]
-
-    # Mesmo formato de string gravado pelo pushbutton "Classificar Sistema
-    # de Hidrante" (Hidrantes.panel/Classificar Sistema.pushbutton/script.py)
-    # — sem format spec (":g"/".1f") nos números: a Tabela 2 guarda esses
-    # valores como int, e um format spec num int quebra no IronPython 2.7.
-    var_txt = u" – Var. {}".format(chr(65 + variante_idx)) if len(variantes) > 1 else u""
-    valor_param = u"Tipo {}{} – DN {} | {} L/min | {} mca".format(
-        tipo, var_txt, dados[u"mang_dn"], dados[u"q_min"], dados[u"p_min"])
+    valor_param = u"{} – DN {} | {} L/min | {} mca | Esg DN {} | {} m | {}".format(
+        rotulo,
+        _txt(parametros[u"mangueiraDn"]), _txt(parametros[u"vazaoMin"]),
+        _txt(parametros[u"pressaoMin"]), _txt(parametros[u"esguicho"]),
+        _txt(parametros[u"mangueiraComprimento"]), parametros[u"expedicoes"])
     metodo_calculo = _metodo_calculo(payload.get(u"metodoCalculo"))
     dados_succao = succao.normalizar_dados({
         u"altitude_m":    payload.get(u"succaoAltitude"),

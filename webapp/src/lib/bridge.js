@@ -110,25 +110,22 @@
  *     também quando nada foi selecionado no Revit, ou nenhum elemento
  *     selecionado tinha o parâmetro (`erro` explica qual caso).
  *
- *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number, tipoVariante?: number,
+ *   { type: "SET_HIDRANTES_CLASSIFICACAO", payload: { tipo: number | "personalizado", tipoVariante?: number,
+ *     parametros: { vazaoMin, pressaoMin, esguicho, mangueiraDn, mangueiraComprimento, expedicoes: "simples" | "duplo" },
  *     metodoCalculo?: "valvula" | "esguicho", succaoAltitude?: number, succaoTemperatura?: number } }
  *     JS -> Python: manda pro Project Information do documento Revit ativo
  *     só o que o motor de cálculo ("Dimensionar Hidrantes"/"Mapear
- *     Trechos") de fato lê pra dimensionar: Tipo + variante (resolve
- *     Q/Pmin/mangueira/esguicho contra o perfil normativo do próprio
- *     plugin — Tabela 2 nunca vem do site, pra nunca ter dois lugares
- *     dando valores potencialmente diferentes), método de cálculo (onde a
- *     norma exige verificar Q/Pmin) e os dados de sucção (altitude/
- *     temperatura, usados no NPSH disponível). RTI (Reserva Técnica de
- *     Incêndio, Tabela 3) NÃO entra aqui: o motor de cálculo nunca lê RTI
- *     do Project Information (dimensiona o reservatório, não a rede
- *     hidráulica) — fica só no Supabase (dados.hidrantes.rti), gravado
- *     direto por quem classifica (site ou a própria dockpane — ver
- *     SistemaHidrantesPage.jsx:salvarHidrantes()), sem essa terceira cópia
- *     local que podia divergir sem ninguém perceber. Mesmo método de
- *     classificação em ambos os lados (ver lib/hidrantesClassificacao.js
- *     aqui e src/data/hidrantes_calc.js no site) — gravado no Project
- *     Information via hidrantes_classificacao_bridge.py do lado Python.
+ *     Trechos") de fato lê. O SITE interpreta o Tipo (Tabelas 2 e 3 da
+ *     norma do estado, ou um sistema personalizado digitado pelo RT) e
+ *     manda os `parametros` já resolvidos (dados.hidrantes.parametros) —
+ *     o plugin NÃO tem tabela de Tipos: só grava o que recebeu. Também
+ *     o método de cálculo (onde a norma exige verificar Q/Pmin) e os
+ *     dados de sucção (altitude/temperatura, usados no NPSH disponível).
+ *     RTI (Reserva Técnica de Incêndio, Tabela 3) NÃO entra aqui: o motor
+ *     de cálculo nunca lê RTI do Project Information (dimensiona o
+ *     reservatório, não a rede hidráulica) — fica só no Supabase
+ *     (dados.hidrantes.rti). Gravado no Project Information via
+ *     hidrantes_classificacao_bridge.py do lado Python.
  *
  *   { type: "HIDRANTES_CLASSIFICACAO_SAVED", payload: { ok, erro?, valorSistema?, metodoCalculo? } }
  *     Python -> JS: resultado de um SET_HIDRANTES_CLASSIFICACAO.

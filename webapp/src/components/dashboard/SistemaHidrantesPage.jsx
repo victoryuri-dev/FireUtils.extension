@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import { salvarComRetry } from "../../lib/projectData";
 import { supabase } from "../../lib/supabaseClient";
-import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../../lib/projetoDados";
+import { dadosHidrantes } from "../../lib/projetoDados";
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
-import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
-import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
 import HidrantesMapeamento, { TITULO_FALHA_MAPEAMENTO } from "./HidrantesMapeamento";
@@ -61,13 +59,12 @@ function Pill({ active, onClick, disabled, children }) {
 }
 
 /**
- * Página "Sistema de Hidrantes" da dockpane — permite classificar o
- * sistema (Tabela 3, NT 22 CBMMA) direto aqui, com o MESMO método do site
- * (ver lib/hidrantesClassificacao.js — cópia fiel de
- * ETOS.FireUtils/src/data/hidrantes_calc.js), e mostra o que está de fato
- * aplicado/calculado no Revit (Project Information + cache local do
- * último "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO).
- * Clicar num Tipo já aplica no Revit — sem botão "Aplicar" separado. O
+ * Página "Sistema de Hidrantes" da dockpane — mostra a classificação que o
+ * SITE definiu (Tipo, RTI e os parâmetros do sistema: o site interpreta a
+ * Tabela 3 da norma ou o sistema personalizado; o plugin não tem tabela de
+ * Tipos própria), aplica essa classificação no Revit e mostra o que está de
+ * fato aplicado/calculado (Project Information + cache local do último
+ * "Dimensionar Hidrantes", via GET_HIDRANTES_DIMENSIONAMENTO). O
  * botão "Dimensionar Hidrantes"/"Dimensionar Novamente" roda o mesmo
  * motor de cálculo do pushbutton homônimo do Revit (ver
  * hidrantes_dimensionar_bridge.py), sem precisar voltar pro Revit — exige
@@ -136,11 +133,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // resultado do último "Mapear Trechos" (vivo) ou, depois de reabrir o
   // projeto, de HIDRANTES_DIMENSIONAMENTO (cache).
   const [pipeTypesPorEtapa, setPipeTypesPorEtapa] = useState(null);
-  // Seleção local de Tipo — null até o usuário clicar em algum; até lá, o
-  // Tipo "efetivo" (pra saber se mostra pills de variante e qual marcar
-  // como ativa) é o que está salvo no Supabase ou, na falta disso, o que
-  // já está aplicado no Revit (classificacao.tipo) — ver tipoEfetivo abaixo.
-  const [tipoSelecionado, setTipoSelecionado] = useState(null);
   // Etapa atual do menu horizontal (1 Classificação e Dimensionamento,
   // 2 Bomba de Incêndio) — ver ETAPAS_HIDRANTES acima.
   const [etapa, setEtapa] = useState(1);
@@ -304,25 +296,12 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     });
   }
 
-  // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site
-  // usa (área da estrutura vinculada + ocupação/carga de incêndio dos
-  // pavimentos + sprinklers) — sem depender do site pra essa decisão.
-  const divisoesComCarga = useMemo(
-    () => divisoesComCargaDaEstrutura(projeto, estrutura?.id),
-    [projeto, estrutura?.id]
-  );
-  const temSprinklers = sistemasAtivos(projeto, estrutura?.id).sprinklers;
-  const sugestao = useMemo(
-    () => sugerirClassificacao(estrutura?.areaConstruida, divisoesComCarga, temSprinklers, normaHidrantesMA),
-    [estrutura?.areaConstruida, divisoesComCarga, temSprinklers]
-  );
-
   // Método de cálculo e dados de sucção (NPSH) não são escolha desta
   // página — método é fixo pela norma (REFERENCIA_PRESSAO_VAZAO) e a
   // sucção continua vindo do que o site já tem salvo (ou o padrão, se o
   // site ainda não preencheu). tipo/tipoVariante já salvos no Supabase
   // (possivelmente escolhidos pelo site) alimentam o "tipo efetivo" abaixo.
-  const { tipo: tipoSalvo, tipoVariante: varianteSalva, rti: rtiSalvo, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
+  const { tipo: tipoSalvo, tipoVariante: varianteSalva, rti: rtiSalvo, parametros: parametrosSalvos, metodoCalculo: metodoSalvo, succaoAltitude, succaoTemperatura } = dadosHidrantes(projeto);
 
   const classificacao = resposta?.classificacao;
   const dimensionamento = resposta?.dimensionamento;
@@ -333,54 +312,39 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const ht = dimensionamento?.res?.P_RTI;
   const qt = dimensionamento?.res?.Qt;
 
-  async function aplicar(tipo, rti, tipoVariante) {
+  // O SITE interpreta o Tipo (Tabelas 2 e 3 da norma, ou o sistema
+  // personalizado) e grava em dados.hidrantes os parâmetros que o plugin
+  // precisa (vazão, pressão, esguicho, mangueira, expedições) — o plugin não
+  // tem tabela de Tipos: só aplica no Revit o que o site mandou.
+  const classificacaoDoSite = tipoSalvo != null && parametrosSalvos ? { tipo: tipoSalvo, tipoVariante: varianteSalva, rti: rtiSalvo, parametros: parametrosSalvos } : null;
+  const rotuloTipo = (tipo) => (tipo === "personalizado" ? "Personalizado" : `Tipo ${tipo}`);
+
+  // O que está aplicado no Revit confere com o que o site mandou?
+  const aplicadoConfere = (() => {
+    const c = resposta?.classificacao;
+    const p = classificacaoDoSite?.parametros;
+    if (!c || !p) return false;
+    return (
+      Number(c.q_min) === Number(p.vazaoMin) && Number(c.p_min) === Number(p.pressaoMin) &&
+      Number(c.esguicho_dn) === Number(p.esguicho) && Number(c.mang_dn) === Number(p.mangueiraDn) &&
+      Number(c.mang_comp) === Number(p.mangueiraComprimento) && c.expedicoes === p.expedicoes
+    );
+  })();
+
+  function aplicarDoSite() {
+    if (!classificacaoDoSite) return;
     setAplicando(true);
     // RTI não vai pro Project Information — o motor de cálculo nunca lê
-    // RTI de lá (dimensiona o reservatório, não a rede hidráulica). Só o
-    // que "Dimensionar Hidrantes"/"Mapear Trechos" de fato consomem.
+    // RTI de lá (dimensiona o reservatório, não a rede hidráulica).
     postToHost(BridgeMessageTypes.SET_HIDRANTES_CLASSIFICACAO, {
-      tipo,
-      tipoVariante,
-      metodoCalculo: normaHidrantesMA.REFERENCIA_PRESSAO_VAZAO,
+      tipo: classificacaoDoSite.tipo,
+      tipoVariante: classificacaoDoSite.tipoVariante,
+      parametros: classificacaoDoSite.parametros,
+      metodoCalculo: metodoSalvo,
       succaoAltitude,
       succaoTemperatura,
     });
-    try {
-      await salvarHidrantes({ tipo, tipoVariante, rti });
-    } catch (ex) {
-      adicionarToast?.({
-        tipo: "erro",
-        titulo: "Não foi possível sincronizar a classificação com o site",
-        mensagem: ex.message,
-        duracaoMs: 9000,
-      });
-    }
     setTimeout(() => setAplicando(false), 1500);
-  }
-
-  // Tipo efetivo pra decidir o que mostrar: a seleção local (clique ainda
-  // não confirmado), senão o que está salvo no Supabase (a mesma escolha
-  // que o site vê/edita), senão o que já está aplicado no Revit — mesmo
-  // sem nenhum clique ainda, um Tipo com mais de uma variante (Tipo 4) já
-  // mostra as pills de variante. `||`, não `??`: tipoSalvo vem '' (não
-  // null) quando o site ainda não tem uma escolha válida salva (ver
-  // useClassificacaoHidrantes.js) — com `??` a cadeia pararia nesse ''
-  // sem nunca chegar a conferir o que já está aplicado no Revit.
-  const tipoEfetivo = tipoSelecionado || tipoSalvo || classificacao?.tipo || null;
-  const variantesDoTipoEfetivo = tipoEfetivo ? normaHidrantesMA.TIPOS_SISTEMA[tipoEfetivo]?.variantes || [] : [];
-
-  function rtiParaTipo(tipo) {
-    return sugestao.opcoes.find((o) => o.tipo === tipo)?.rti ?? (tipoSalvo === tipo ? rtiSalvo : null);
-  }
-
-  function escolherTipo(opcao) {
-    setTipoSelecionado(opcao.tipo);
-    const variantes = normaHidrantesMA.TIPOS_SISTEMA[opcao.tipo]?.variantes || [];
-    if (variantes.length <= 1) aplicar(opcao.tipo, opcao.rti, 0);
-  }
-
-  function escolherVariante(i) {
-    aplicar(tipoEfetivo, rtiParaTipo(tipoEfetivo), i);
   }
 
   // Mescla `changes` em dados.hidrantes e grava direto no Supabase — mesmo
@@ -532,68 +496,39 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       {etapa === 1 && (
       <div className="hid-secao">
         <Cartao titulo="Classificação do Sistema">
-          {sugestao.opcoes.length === 0 ? (
+          {!classificacaoDoSite ? (
             <p className="vazio">
-              Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
-              site.
+              Sistema ainda não classificado no site. Abra o projeto no site, defina o Tipo do sistema e a RTI
+              (Classificação do sistema) e volte aqui.
             </p>
           ) : (
             <>
-              <div className="hiddim-stat-grid hiddim-stat-grid-2">
-                <div className="hiddim-stat-box hiddim-stat-box-left">
-                  <div className="hiddim-stat-label">Área Total Construída</div>
-                  <div className="hiddim-stat-val hiddim-stat-val-grande">
-                    {estrutura?.areaConstruida != null ? `${fmtNum(estrutura.areaConstruida, 2, "0")} m²` : "—"}
-                  </div>
+              <div className="hiddim-stat-grid hiddim-stat-grid-3" style={{ marginBottom: 14 }}>
+                <div className="hiddim-stat-box">
+                  <div className="hiddim-stat-label">Tipo (definido no site)</div>
+                  <div className="hiddim-stat-val">{rotuloTipo(classificacaoDoSite.tipo)}</div>
                 </div>
-                <div className="hiddim-stat-box hiddim-stat-box-left">
-                  <div className="hiddim-stat-label-linha">
-                    <span className="hiddim-stat-label">Divisão para classificação</span>
-                  </div>
-                  <div className="hiddim-stat-val hiddim-stat-val-grande">{sugestao.divisao || "—"}</div>
+                <div className="hiddim-stat-box">
+                  <div className="hiddim-stat-label">RTI</div>
+                  <div className="hiddim-stat-val">{classificacaoDoSite.rti != null ? `${fmtNum(classificacaoDoSite.rti, 2, "0")} m³` : "—"}</div>
+                </div>
+                <div className="hiddim-stat-box">
+                  <div className="hiddim-stat-label">No Revit</div>
+                  <div className="hiddim-stat-val">{aplicadoConfere ? "Aplicado" : "Não aplicado"}</div>
                 </div>
               </div>
 
-              {sugestao.opcoes.length > 1 && (
-                <div style={{ marginTop: 14, marginBottom: 14 }}>
-                  <p className="hiddim-campo-label">A norma permite dois sistemas para esta ocupação, escolha qual adotar</p>
-                  <div className="hid-pills-linha" style={{ marginTop: 6 }}>
-                    {sugestao.opcoes.map((op) => (
-                      <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
-                        Tipo {op.tipo} — RTI {op.rti} m³
-                      </Pill>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {sugestao.opcoes.length === 1 && (
-                <div className="hid-pills-linha" style={{ marginTop: 14, marginBottom: 14 }}>
-                  <Pill active onClick={() => escolherTipo(sugestao.opcoes[0])} disabled={aplicando}>
-                    Tipo {sugestao.opcoes[0].tipo} — RTI {sugestao.opcoes[0].rti} m³
-                  </Pill>
-                </div>
-              )}
-
-              {variantesDoTipoEfetivo.length > 1 && (
-                <div className="hid-pills-linha" style={{ marginBottom: 14 }}>
-                  {variantesDoTipoEfetivo.map((v, i) => (
-                    <Pill
-                      key={i}
-                      active={(tipoSalvo ?? classificacao?.tipo) === tipoEfetivo && (varianteSalva ?? classificacao?.variante_idx) === i}
-                      onClick={() => escolherVariante(i)}
-                      disabled={aplicando}
-                    >
-                      Esguicho DN{v.esguicho} — mangueira DN{v.mangueiraDn} — {v.pressaoMin} mca
-                    </Pill>
-                  ))}
-                </div>
-              )}
+              <div className="hid-pills-linha" style={{ marginBottom: 14 }}>
+                <Pill active={!aplicadoConfere} onClick={aplicarDoSite} disabled={aplicando}>
+                  {aplicando ? "Aplicando…" : aplicadoConfere ? "Reaplicar classificação no Revit" : "Aplicar classificação no Revit"}
+                </Pill>
+              </div>
 
               {classificacao && (
                 <div className="hiddim-stat-grid hiddim-stat-grid-3">
                   <div className="hiddim-stat-box">
                     <div className="hiddim-stat-label">Tipo</div>
-                    <div className="hiddim-stat-val">Tipo {classificacao.tipo}</div>
+                    <div className="hiddim-stat-val">{classificacao.personalizado ? "Personalizado" : `Tipo ${classificacao.tipo}`}</div>
                   </div>
                   <div className="hiddim-stat-box">
                     <div className="hiddim-stat-label">Esguicho</div>

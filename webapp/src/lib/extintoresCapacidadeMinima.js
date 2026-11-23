@@ -1,7 +1,6 @@
 // extintoresCapacidadeMinima.js — capacidade extintora mínima e distância
 // máxima a percorrer por classe de incêndio A/B, conforme o nível de risco
-// (extintores portáteis), portado pra dockpane do mesmo jeito que
-// hidrantesClassificacao.js porta a Tabela 3 de Hidrantes: fonte de
+// (extintores portáteis), portado pra dockpane: fonte de
 // verdade em ETOS.FireUtils/src/data/extintores_calc.js (função
 // capacidadeMinimaPorRisco). Tabela de referência comum a vários Corpos de
 // Bombeiros estaduais (mesmo texto-base citado pela NT 21 CBMMA e pela
