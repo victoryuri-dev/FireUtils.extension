@@ -583,7 +583,7 @@ function EscolherAmbientesModal({ destino, candidatos, onAdicionar, onNovo, onFe
 // Ambientes que ainda não estão na área de trabalho (sem grupo e sem posição),
 // agrupados por pavimento — ficam com comunicação direta para uma área segura.
 // Clique abre o formulário; o checkbox seleciona vários pra mover em massa.
-function ListaAmbientesModal({ pavs, pavDe, soltos, alvosGrupo, selecionados, alvoSelecao, setAlvoSelecao, moverSelecionados, limparSelecao, bloqueado, onFechar }) {
+function ListaAmbientesModal({ pavs, pavDe, soltos, alvosGrupo, selecionados, alvoSelecao, setAlvoSelecao, moverSelecionados, limparSelecao, pavAtivo, onNovo, bloqueado, onFechar }) {
   const [busca, setBusca] = useState("");
   const filtrados = soltos.filter((a) => normalizar(a.nome).includes(normalizar(busca)));
   useEffect(() => {
@@ -630,6 +630,11 @@ function ListaAmbientesModal({ pavs, pavDe, soltos, alvosGrupo, selecionados, al
           })}
           {soltos.length === 0 && <div className="fx-lista-vazio">Todos os ambientes já estão na área de trabalho.</div>}
           {soltos.length > 0 && filtrados.length === 0 && <div className="fx-lista-vazio">Nenhum ambiente da lista corresponde à busca.</div>}
+        </div>
+        <div className="fx-escolher-rodape">
+          <button type="button" className="se-botao" onClick={onNovo} title="Cria um ambiente manual na lista do pavimento em edição">
+            <Icon svg={plusIconSvg} /> Novo ambiente em {pavAtivo.label}
+          </button>
         </div>
         {selecionados.size > 0 && (
           <div className="fx-lista-selecao">
@@ -938,6 +943,15 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
     const nome = `Ambiente ${ambientes.length + 1}`;
     const ambiente = { nome, divisao: "", popTipo: "area", area: 0, assentos: 0, popManual: 0, grupoId: grupoId || null, origem: "manual" };
     despachar({ type: "ADD_AMBIENTE_SE", pavimentoId, id, pos: grupoId ? null : posicaoNova(pavimentoId, ponto), ambiente });
+    setEditAmb({ id, ...ambiente });
+  };
+  // Ambiente novo direto na lista do popup "Ambientes" (do pavimento em edição):
+  // sem grupo e sem posição na área — abre o formulário pra preencher.
+  const criarAmbienteNaLista = (pavimentoId) => {
+    const id = idAmbienteSE();
+    const nome = `Ambiente ${ambientes.length + 1}`;
+    const ambiente = { nome, divisao: "", popTipo: "area", area: 0, assentos: 0, popManual: 0, grupoId: null, origem: "manual" };
+    despachar({ type: "ADD_AMBIENTE_SE", pavimentoId, id, pos: null, ambiente });
     setEditAmb({ id, ...ambiente });
   };
   const removerAmbiente = (id) => {
@@ -1492,6 +1506,8 @@ function Fluxograma({ projeto, estrutura, pavimentos, focoPavId, seNorma, ocupac
             setAlvoSelecao={setAlvoSelecao}
             moverSelecionados={moverSelecionados}
             limparSelecao={limparSelecao}
+            pavAtivo={pavAtivo}
+            onNovo={() => criarAmbienteNaLista(pavAtivo.id)}
             bloqueado={!!editAmb}
             onFechar={() => {
               limparSelecao();
