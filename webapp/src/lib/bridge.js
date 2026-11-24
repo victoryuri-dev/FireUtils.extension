@@ -282,6 +282,11 @@
  *     Python) vai para a página do grupo e abre a mesma ferramenta que o cartão
  *     correspondente.
  *
+ *   { type: "SAIDAS_AMBIENTES_ATUALIZADOS", payload: { acao: "identificar" | "sincronizar" } }
+ *     Python -> JS: a barra flutuante de Saídas (sem passar pela dockpane) acabou de
+ *     identificar/sincronizar ambientes com sucesso. A página de Saídas recarrega os
+ *     ambientes do Revit, como se a ação tivesse sido feita por ela.
+ *
  *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash, abrirPasta? } }
  *     JS -> Python: baixa, confere e instala uma versão nova do plugin
  *     (plugin_atualizacao.py). Os links são URLs assinadas do bucket privado
@@ -413,6 +418,7 @@ export const BridgeMessageTypes = {
   SINCRONIZAR_AMBIENTES: "SINCRONIZAR_AMBIENTES",
   SAIDAS_AMBIENTES_PROGRESSO: "SAIDAS_AMBIENTES_PROGRESSO",
   SAIDAS_AMBIENTES_RESULTADO: "SAIDAS_AMBIENTES_RESULTADO",
+  SAIDAS_AMBIENTES_ATUALIZADOS: "SAIDAS_AMBIENTES_ATUALIZADOS",
   ABRIR_JANELA_FERRAMENTAS: "ABRIR_JANELA_FERRAMENTAS",
   JANELA_FERRAMENTAS_ESTADO: "JANELA_FERRAMENTAS_ESTADO",
   FERRAMENTA_FLUTUANTE: "FERRAMENTA_FLUTUANTE",

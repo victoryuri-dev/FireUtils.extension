@@ -9,7 +9,8 @@ import { supabase } from "../../lib/supabaseClient";
 import { aplicarAcaoSaida, idAmbienteSE } from "../../lib/seReducer";
 import { salvarComRetry } from "../../lib/projectData";
 import { useProjetoChannel } from "../../lib/useProjetoChannel";
-import AcessosDescargasView, { StatCol } from "./AcessosDescargasView";
+import FluxogramaSaidas from "./FluxogramaSaidas";
+import { StatCol } from "./seShared";
 import SaidasFerramentas from "./SaidasFerramentas";
 import exitIconSvg from "../../assets/icons/exit-icon.svg?raw";
 
@@ -47,15 +48,16 @@ function resolverPavimentoSite(nomeImportado, pavimentos, pavimentoId) {
 // como aplicar (mesclar via IMPORT_AMBIENTES_SE, não substituir a lista
 // inteira de pavimentos).
 //
-// Ambiente já existente no pavimento é ATUALIZADO no lugar — mantém `id` e
-// `acessoId`, só troca os dados que são autoridade do Revit (nome/divisão/
-// área) — em vez de recriado do zero, o que soltava (órfão) qualquer
-// ambiente que já estivesse dentro de um Acesso/Saída a cada nova
+// Ambiente já existente no pavimento é ATUALIZADO no lugar — mantém `id`,
+// `grupoId` (o grupo em que está no fluxograma; `acessoId` é derivado dele no
+// reducer, ou é a ligação direta de um ambiente solto na área), só troca os
+// dados que são autoridade do Revit (nome/divisão/área) — em vez de recriado
+// do zero, o que tirava do grupo qualquer ambiente já posicionado a cada nova
 // importação. Casamento é primeiro por `revitId` (Room.UniqueId, ver
 // rooms.get_rooms_classificados no plugin) — estável mesmo se o ambiente
 // for renomeado numa reclassificação ou tiver só a área editada — com
 // fallback pro NOME normalizado só pra ambiente sincronizado antes dessa
-// mudança (ainda sem revitId salvo). `popTipo`/`assentos`/`popManual`/`arquibancada` NÃO
+// mudança (ainda sem revitId salvo). `popTipo`/`assentos`/`popManual`/`arquibancada`/`areaApoio`/`vagas` NÃO
 // vêm mais do Revit (ver montar_payload_ambientes em
 // Fire Utils.tab/lib/saidas/calc.py) — população é autoridade do site (é
 // lá que se escolhe "assento fixo"/manual e mora a taxa normativa vigente;
@@ -64,7 +66,7 @@ function resolverPavimentoSite(nomeImportado, pavimentos, pavimentoId) {
 // preservam o valor já cadastrado, nunca são sobrescritos por uma
 // importação do Revit. `origem: "revit"` marca todo ambiente que passa
 // por aqui — distingue do `origem: "manual"` de quem nasce pelo botão
-// "Adicionar Ambiente" (ver AcessosDescargasView.jsx).
+// "Adicionar Ambiente" (ver FluxogramaSaidas.jsx).
 function resolverImportacaoSaidas(payloadSE, pavimentos) {
   if (!payloadSE?.pavimentos) throw new Error('Chave "pavimentos" não encontrada nos dados.');
 
@@ -94,6 +96,7 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
         if (existente) idsUsados.add(existente.id);
         return {
           id: existente?.id ?? idAmbienteSE(),
+          grupoId: existente?.grupoId ?? null,
           acessoId: existente?.acessoId ?? null,
           nome,
           divisao: a.divisao || "",
@@ -101,6 +104,8 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
           popTipo: existente?.popTipo || "area",
           assentos: existente?.assentos ?? 0,
           popManual: existente?.popManual ?? 0,
+          vagas: existente?.vagas ?? 0,
+          areaApoio: existente?.areaApoio ?? false,
           arquibancada: existente?.arquibancada ?? false,
           arquibancadaComprimento: existente?.arquibancadaComprimento ?? 0,
           revitId: a.revitId ?? existente?.revitId ?? null,
@@ -118,13 +123,14 @@ function resolverImportacaoSaidas(payloadSE, pavimentos) {
  * dockpane (mesmo destino do atalho da sidebar e do cartão "Saída de
  * Emergência" no Dashboard — ver Sidebar.jsx/App.jsx/DashboardEstrutura.jsx).
  *
- * Ao contrário do site (onde AcessosDescargasView é um popup — ver
- * ETOS.FireUtils/src/pages/medidas/SaidaEmergenciaPage.jsx), aqui a árvore
- * de um pavimento troca o CONTEÚDO desta página (clicar num pavimento não
- * abre popup, navega pra tela de dimensionamento; um botão "voltar" com
- * seta volta pra lista) — só o formulário de Ambiente continua sendo um
- * popup de verdade (ver editAmb dentro de AcessosDescargasView.jsx). O
- * título "Saídas de Emergência" no topo fica fixo nos dois passos.
+ * Ao contrário do site (onde o FluxogramaSaidas é um popup — ver
+ * ETOS.FireUtils/src/pages/medidas/SaidaEmergenciaPage.jsx), aqui o
+ * fluxograma da estrutura troca o CONTEÚDO desta página (clicar num
+ * pavimento não abre popup, abre a área de trabalho da estrutura focada
+ * nele; um botão "voltar" com seta volta pra lista) — só o formulário de
+ * Ambiente continua sendo um popup de verdade (ver editAmb dentro de
+ * FluxogramaSaidas.jsx). O título "Saídas de Emergência" no topo fica fixo
+ * nos dois passos.
  */
 export default function SaidaEmergenciaPage({
   projeto,
@@ -178,7 +184,7 @@ export default function SaidaEmergenciaPage({
   // Emergência de outras sessões (o site, ou outra instância da dockpane)
   // e as aplica localmente (nunca salva de novo: quem mandou já
   // persistiu). `enviarAcao` é repassado pro despachar() de
-  // AcessosDescargasView.jsx e usado aqui mesmo no handleBuscarRevit, pra
+  // FluxogramaSaidas.jsx e usado aqui mesmo no handleBuscarRevit, pra
   // avisar as outras sessões depois de CADA ação salva com sucesso.
   const enviarAcao = useProjetoChannel(projeto.id, (action) => {
     const novosDados = aplicarAcaoSaida(projeto.dados, action);
@@ -283,10 +289,13 @@ export default function SaidaEmergenciaPage({
       </div>
 
       {viewPav && seNorma ? (
-        <AcessosDescargasView
+        <FluxogramaSaidas
+          key={estruturaId}
           projeto={projeto}
           enviarAcao={enviarAcao}
-          pav={viewPav}
+          estrutura={estruturaAtual}
+          pavimentos={pavimentos}
+          focoPavId={viewPav.id}
           seNorma={seNorma}
           // OCUPACOES (grupo/divisão) é só do estado MA por enquanto — ver data/ocupacoesMA.js.
           ocupacoes={OCUPACOES}

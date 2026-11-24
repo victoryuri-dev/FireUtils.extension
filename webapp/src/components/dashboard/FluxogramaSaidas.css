@@ -1,0 +1,809 @@
+/* FluxogramaSaidas — área de trabalho do fluxograma de saídas (React Flow).
+   Porte do site (ETOS.FireUtils/src/pages/medidas/FluxogramaSaidas.jsx, que usa
+   Tailwind) pro CSS da dockpane: mesmas medidas, com os tokens do tema daqui
+   (--bg-2 = superfície, --bg-3 = superfície elevada, --text-3 = texto fraco). */
+
+.fx-raiz {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Maximizado: cobre a janela inteira do painel (acima do menu e do cabeçalho da
+   página; abaixo dos formulários em popup, z-index 300, e dos avisos, 1000). */
+.fx-raiz-max {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
+/* ── Topo ── */
+.fx-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.fx-topo-esq,
+.fx-topo-dir {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.fx-topo-nome {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fx-topo-select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 8px;
+}
+.fx-topo-info {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.fx-topo-info strong {
+  color: var(--text);
+}
+.fx-topo-info .fx-vermelho {
+  color: var(--accent);
+}
+.fx-salvando {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ── Corpo: área de trabalho ── */
+.fx-corpo {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.fx-lista-corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fx-lista-pav {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: var(--text-3);
+  padding-top: 4px;
+}
+.fx-lista-vazio {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-3);
+}
+.fx-lista-selecao {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fx-lista-selecao-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fx-lista-selecao strong {
+  font-size: 12px;
+  color: var(--text);
+}
+.fx-select {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.fx-link {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.fx-link:hover {
+  color: var(--text);
+}
+
+/* Campo de busca */
+.fx-busca {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 10px;
+}
+.fx-busca .icon {
+  width: 12px;
+  height: 12px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.fx-busca input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 0;
+}
+.fx-busca button {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+}
+.fx-busca button .icon {
+  width: 11px;
+  height: 11px;
+}
+
+/* ── Área de trabalho (React Flow) ── */
+.fx-area {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.fx-area .react-flow {
+  --xy-background-color: var(--bg);
+  --xy-background-pattern-dots-color-default: var(--border-2);
+  --xy-edge-stroke-default: var(--text-3);
+  --xy-edge-stroke-selected-default: var(--accent);
+  --xy-node-boxshadow-selected-default: none;
+  --xy-controls-button-background-color-default: var(--bg-2);
+  --xy-controls-button-background-color-hover-default: var(--bg-3);
+  --xy-controls-button-color-default: var(--text);
+  --xy-controls-button-border-color-default: var(--border);
+  --xy-attribution-background-color-default: transparent;
+}
+.fx-area .react-flow__edge-path {
+  stroke-width: 2;
+}
+
+/* Alça de saída (vermelha) só aparece com o mouse sobre o nó ou o nó
+   selecionado; as de destino ficam sempre invisíveis (a seta é solta no corpo
+   do nó). */
+.fx-area .react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--bg-2);
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.fx-area .react-flow__handle.target {
+  background: var(--text-3);
+  pointer-events: none;
+}
+.fx-area .react-flow__node:hover .react-flow__handle.source,
+.fx-area .react-flow__node.selected .react-flow__handle.source {
+  opacity: 1;
+}
+/* Durante o arrasto de uma seta, nenhuma alça aparece nos nós de destino — só
+   a que está sendo puxada. */
+.fx-area.fx-conectando .react-flow__node .react-flow__handle.source:not(.connectingfrom) {
+  opacity: 0;
+}
+/* Nó que pode receber a seta que está sendo arrastada. */
+.fx-area.fx-conectando .fx-alvo-valido:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Botão de maximizar (canto superior direito da área de trabalho). */
+.fx-max {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s;
+}
+.fx-max:hover {
+  color: var(--text);
+  background: var(--bg-3);
+  border-color: color-mix(in srgb, var(--text) 36%, transparent);
+}
+.fx-max .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* ── Faixa do pavimento ── */
+.fx-faixa {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border-radius: 8px;
+  border: 1px dashed color-mix(in srgb, var(--text) 36%, transparent);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.fx-faixa-ativa {
+  border-color: color-mix(in srgb, var(--text) 70%, transparent);
+  background: color-mix(in srgb, var(--text) 1.2%, transparent);
+}
+.fx-faixa-cab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 12px 24px;
+  cursor: grab;
+}
+.fx-faixa-nome {
+  font-family: var(--font-titulo);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.fx-faixa-ativa .fx-faixa-nome {
+  color: var(--text);
+}
+.fx-faixa-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--amber-dim);
+  border: 1px solid var(--amber-border);
+  color: var(--amber);
+}
+.fx-faixa-pop {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.fx-faixa-pop strong {
+  color: var(--text);
+}
+
+/* ── Ambiente (cartão) ── */
+.fx-amb {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-2);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.fx-amb:hover {
+  border-color: color-mix(in srgb, var(--text) 36%, transparent);
+}
+.fx-amb-sel,
+.fx-amb-sel:hover {
+  border-color: var(--accent);
+}
+.fx-amb-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.fx-amb-esq {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.fx-amb-nome {
+  font-family: var(--font-titulo);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.fx-amb-ctl {
+  display: flex;
+  transition: opacity 0.15s;
+  opacity: 0;
+}
+.fx-amb:hover .fx-amb-ctl,
+.fx-amb:focus-within .fx-amb-ctl,
+.fx-amb-ctl-visivel {
+  opacity: 1;
+}
+.fx-amb-botao {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+  display: flex;
+}
+.fx-amb-botao:hover {
+  color: var(--accent);
+}
+.fx-amb-botao .icon {
+  width: 12px;
+  height: 12px;
+}
+.fx-amb-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 24px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.fx-amb-info-sem-sel {
+  padding-left: 0;
+}
+.fx-amb-info b {
+  font-weight: 400;
+  opacity: 0.35;
+}
+.fx-amb-porta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fx-amb-porta span {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.fx-amb-porta strong {
+  font-family: var(--font-titulo);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--accent);
+}
+.fx-badge-manual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.fx-badge-manual .icon {
+  width: 10px;
+  height: 10px;
+}
+.fx-no-amb {
+  width: 300px;
+  border-radius: 6px;
+  cursor: grab;
+}
+.fx-no-amb.fx-realce {
+  outline: 2px solid var(--accent);
+}
+
+/* ── Grupo de ambientes ── */
+.fx-grupo {
+  width: 340px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.fx-grupo.fx-grupo-sobre {
+  border-color: var(--accent);
+  background: var(--red-dim);
+}
+.fx-realce {
+  outline: 2px solid var(--accent);
+}
+.fx-grupo-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-2);
+  border-radius: 8px 8px 0 0;
+  cursor: grab;
+}
+.fx-nome-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.fx-nome-linha .icon {
+  width: 13px;
+  height: 13px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.fx-nome {
+  font-family: var(--font-titulo);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.fx-cab-dir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.fx-pop {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.fx-lixeira {
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+}
+.fx-lixeira:hover {
+  color: var(--accent);
+}
+.fx-lixeira .icon,
+.fx-cadeado .icon {
+  width: 12px;
+  height: 12px;
+}
+.fx-cadeado {
+  color: var(--text-3);
+  display: flex;
+  padding: 2px;
+}
+.fx-grupo-corpo {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fx-grupo-vazio {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-3);
+  text-align: center;
+  padding: 4px 0;
+}
+.fx-grupo-aviso {
+  padding: 0 12px 10px;
+  font-size: 10px;
+  color: var(--text-3);
+  text-align: center;
+}
+.fx-grupo-corpo .se-botao {
+  justify-content: center;
+}
+
+/* ── Acesso / Saída / Escada-Rampa ── */
+.fx-acesso {
+  width: 300px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+}
+.fx-acesso-saida {
+  border-color: var(--green-border);
+}
+.fx-acesso-escada {
+  border-color: var(--amber-border);
+}
+.fx-acesso-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-3);
+  border-radius: 8px 8px 0 0;
+  cursor: grab;
+}
+.fx-dims {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+.fx-dim-btn {
+  font-family: var(--font-titulo);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+.fx-dim-btn-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--white);
+}
+.fx-entradas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 24px;
+  min-height: 38px;
+}
+.fx-entrada {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.fx-entrada-rotulo {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  color: var(--text-3);
+}
+.fx-entrada-valor {
+  font-family: var(--font-titulo);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--accent);
+}
+.fx-acesso-nota strong {
+  color: var(--text);
+}
+.fx-acesso-nota {
+  padding: 0 12px 10px;
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+}
+.fx-acesso-aviso {
+  padding: 0 12px 10px;
+  font-size: 10px;
+  color: var(--amber);
+  text-align: center;
+}
+
+/* ── Menu flutuante do clique direito ── */
+.fx-menu {
+  position: absolute;
+  z-index: 50;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.fx-menu > span {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.fx-menu > span strong {
+  color: var(--text);
+}
+.fx-menu-itens {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fx-menu-itens .se-botao {
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+/* ── Confirmação (no lugar do window.confirm do navegador) ── */
+.fx-confirma-fundo {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.65);
+}
+.fx-confirma {
+  width: 440px;
+  max-width: 100%;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.fx-confirma-titulo {
+  margin-bottom: 8px;
+  font-family: var(--font-titulo);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.fx-confirma-texto {
+  margin-bottom: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.fx-confirma-botoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.fx-confirma-perigo {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--white);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.fx-confirma-perigo:hover {
+  opacity: 0.9;
+}
+
+/* ── Popup "Adicionar ambiente" de um grupo ── */
+.fx-escolher {
+  width: 520px;
+  max-width: 100%;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+.fx-escolher-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.fx-escolher-titulo {
+  font-family: var(--font-titulo);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.fx-escolher-sub {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.fx-escolher-sub strong {
+  color: var(--text);
+}
+.fx-escolher-busca {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px 0;
+}
+.fx-escolher-busca .fx-busca {
+  flex: 1;
+}
+.fx-escolher-busca .fx-link {
+  margin-left: 0;
+  white-space: nowrap;
+}
+.fx-escolher-lista {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fx-escolher-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-2);
+  background: var(--bg-2);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.fx-escolher-item:hover {
+  border-color: color-mix(in srgb, var(--text) 36%, transparent);
+}
+.fx-escolher-item-marcado,
+.fx-escolher-item-marcado:hover {
+  border-color: var(--accent);
+}
+.fx-escolher-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.fx-escolher-info b {
+  font-weight: 400;
+  opacity: 0.35;
+}
+.fx-escolher-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+}

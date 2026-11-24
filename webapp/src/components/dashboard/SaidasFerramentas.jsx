@@ -266,6 +266,10 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
         setOpcoes(mensagem.payload || { ok: false, erro: "Sem resposta do Revit." });
       } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_PROGRESSO) {
         setExecutando((atual) => (atual ? { ...atual, instrucao: mensagem.payload?.instrucao || "" } : atual));
+      } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_ATUALIZADOS) {
+        // Ação feita pela barra flutuante (janela própria, sem a dockpane):
+        // só falta trazer os ambientes novos para a página.
+        concluidoRef.current?.();
       } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_RESULTADO) {
         const r = mensagem.payload || {};
         setExecutando(null);

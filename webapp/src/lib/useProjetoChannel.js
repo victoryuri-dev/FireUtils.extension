@@ -12,7 +12,7 @@ import { supabase } from "./supabaseClient";
  *
  * Ao contrário do site, a dockpane não tem um reducer vivo nem um
  * autosave debounced: cada ação já é salva na hora, síncrona, via
- * lib/projectData.salvarComRetry (ver AcessosDescargasView.jsx /
+ * lib/projectData.salvarComRetry (ver FluxogramaSaidas.jsx /
  * SaidaEmergenciaPage.jsx). Por isso este hook não persiste nada
  * sozinho — só entrega `enviarAcao(action)` pra quem já salvou avisar as
  * outras sessões, e chama `aoReceberAcao(action)` quando uma ação chega
