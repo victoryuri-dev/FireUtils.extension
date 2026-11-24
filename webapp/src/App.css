@@ -1604,9 +1604,10 @@
 
 .cartao-atribuir-estrutura-controles {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 1 1 100%;
 }
 
 .cartao-atribuir-estrutura-controles select {
@@ -1618,7 +1619,8 @@
   color: var(--text);
   font-size: 11px;
   font-family: inherit;
-  max-width: 140px;
+  flex: 1 1 100%;
+  min-width: 0;
 }
 
 .cartao-atribuir-estrutura-controles .botao {
