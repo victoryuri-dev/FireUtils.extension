@@ -1624,6 +1624,7 @@
 }
 
 .cartao-atribuir-estrutura-controles .botao {
+  flex: 1 1 0;
   height: 28px;
   padding: 0 12px;
   font-size: 11px;
