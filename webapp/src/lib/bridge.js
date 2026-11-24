@@ -100,10 +100,8 @@
  *     Segurança, Luminárias, Ambientes e Dispositivos de Alarme de
  *     Incêndio) são ignoradas, não dá erro. Selecionar a TAG de um
  *     ambiente vale o mesmo que selecionar o ambiente (resolvido pro
- *     Room por trás). Botão "Atribuir e Gravar" do Dashboard — um clique só
- *     que atribui a seleção e, com ESTRUTURA_ATRIBUIDA confirmando sucesso,
- *     a própria dockpane encadeia um GRAVAR_QUANTITATIVOS em seguida (ver
- *     App.jsx), sem esperar um segundo clique.
+ *     Room por trás). Botão "Atribuir" do box de quantitativos do Dashboard
+ *     (o "Gravar" é um botão separado no mesmo box — ver GRAVAR_QUANTITATIVOS).
  *
  *   { type: "ESTRUTURA_ATRIBUIDA", payload: { ok, erro?, estruturaNome?, marcados?, ignorados? } }
  *     Python -> JS: resultado de um ASSIGN_ESTRUTURA_SELECAO. `ok: false`
@@ -329,10 +327,9 @@
  *     parâmetro "Estrutura" (ver estrutura_param.py), grava o firedata.json
  *     e envia pro site um lote por (medida, estrutura) — sem seleção
  *     nenhuma (sempre todas as medidas) e sem abrir nenhum outro painel
- *     (nem janela WPF, nem o output window do pyRevit). Não tem botão
- *     próprio na dockpane: App.jsx dispara isso sozinho assim que
- *     ESTRUTURA_ATRIBUIDA confirma sucesso (ver ASSIGN_ESTRUTURA_SELECAO
- *     acima) — "atribuir seleção" e "gravar/enviar" são um clique só.
+ *     (nem janela WPF, nem o output window do pyRevit). Botão "Gravar" do
+ *     box de quantitativos do Dashboard, ao lado do "Atribuir" (ver
+ *     ASSIGN_ESTRUTURA_SELECAO acima) — um não dispara o outro.
  *
  *   { type: "QUANTITATIVOS_GRAVADOS", payload: { ok, erro?,
  *     medidas?: [{ chave, rotulo, estruturaNome, quantidade, enviado, motivo?,

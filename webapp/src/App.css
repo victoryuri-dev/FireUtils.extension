@@ -1596,8 +1596,8 @@
 }
 
 /* "Atribuir seleção à estrutura" (DashboardEstrutura.jsx) — precisa de um
-   valor escolhido antes de agir, então ganha um <select> + botão em vez do
-   clique único dos outros cartões da grade. */
+   valor escolhido antes de agir, então ganha um <select> + botões (Atribuir e
+   Gravar) em vez do clique único dos outros cartões da grade. */
 .cartao-atribuir-estrutura {
   flex-wrap: wrap;
 }
