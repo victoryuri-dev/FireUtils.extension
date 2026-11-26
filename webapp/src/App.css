@@ -3189,6 +3189,13 @@
   border: 1px solid var(--border);
   border-radius: 6px;
   margin-bottom: 4px;
+  /* Responde à largura da própria tabela (e não da janela): dentro de cartões
+     aninhados numa dockpane estreita sobra pouco espaço. */
+  container-type: inline-size;
+}
+
+.hiddim-situacao-curto {
+  display: none;
 }
 
 .hiddim-tabela {
@@ -4957,4 +4964,33 @@ h1, h2, h3, h4, h5, h6,
 .hid-pills-linha-cheia .hid-pill {
   flex: 1 1 auto;
   text-align: center;
+}
+
+/* Tabela estreita: some o que é secundário (ex.: Leq unitário) e o essencial
+   continua visível; o texto da situação do hidrante encurta. */
+@container (max-width: 500px) {
+  .hiddim-col-sec {
+    display: none;
+  }
+
+  .hiddim-th,
+  .hiddim-td {
+    padding: 8px 6px;
+  }
+
+  .hiddim-th {
+    white-space: normal;
+  }
+
+  .hiddim-situacao-longo {
+    display: none;
+  }
+
+  .hiddim-situacao-curto {
+    display: inline;
+  }
+
+  .hiddim-situacao {
+    padding: 3px 6px;
+  }
 }

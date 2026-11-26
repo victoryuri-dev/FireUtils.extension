@@ -45,22 +45,24 @@ function Tabela({ children }) {
     </div>
   );
 }
-function TH({ children, right, center, w }) {
+// `secundaria`: coluna que some quando a tabela fica estreita (dockpane
+// pequena) — fica só o essencial. Ver ".hiddim-col-sec" no App.css.
+function TH({ children, right, center, w, secundaria }) {
   const alinhamento = right ? "right" : center ? "center" : "left";
   return (
-    <th style={w ? { width: w } : undefined} className={`hiddim-th hiddim-align-${alinhamento}`}>
+    <th style={w ? { width: w } : undefined} className={`hiddim-th hiddim-align-${alinhamento} ${secundaria ? "hiddim-col-sec" : ""}`}>
       {children}
     </th>
   );
 }
-function TD({ children, red, green, bold, muted, right, center, mono }) {
+function TD({ children, red, green, bold, muted, right, center, mono, secundaria }) {
   const alinhamento = right ? "right" : center ? "center" : "left";
   const cor = red ? "red" : green ? "green" : muted ? "muted" : "normal";
   return (
     <td
       className={`hiddim-td hiddim-align-${alinhamento} hiddim-cor-${cor} ${bold ? "hiddim-bold" : ""} ${
         mono ? "hiddim-mono" : ""
-      }`}
+      } ${secundaria ? "hiddim-col-sec" : ""}`}
     >
       {children}
     </td>
@@ -101,9 +103,10 @@ function THSigla({ sigla, tip, align = "center" }) {
 
 // ── Verificação do Hidrante Mais Desfavorável ────────────────────────────
 function situacaoHidrante(indice, total) {
-  if (indice === 0) return { texto: "1º Hidrante Mais Desfavorável", classe: "hiddim-situacao-red" };
-  if (indice === 1) return { texto: "2º Hidrante Mais Desfavorável", classe: "hiddim-situacao-amber" };
-  if (indice === total - 1) return { texto: "Hidrante Mais Favorável", classe: "hiddim-situacao-neutro" };
+  // `curto`: versão para tabela estreita (ver .hiddim-situacao-curto).
+  if (indice === 0) return { texto: "1º Hidrante Mais Desfavorável", curto: "1º Desfav.", classe: "hiddim-situacao-red" };
+  if (indice === 1) return { texto: "2º Hidrante Mais Desfavorável", curto: "2º Desfav.", classe: "hiddim-situacao-amber" };
+  if (indice === total - 1) return { texto: "Hidrante Mais Favorável", curto: "Favorável", classe: "hiddim-situacao-neutro" };
   return null;
 }
 
@@ -160,7 +163,12 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
                 <TD bold>{h.id}</TD>
                 <TD right bold mono>{fmca(h.score)}</TD>
                 <td className="hiddim-td hiddim-align-center">
-                  {situacao ? <span className={`hiddim-situacao ${situacao.classe}`}>{situacao.texto}</span> : <span className="hiddim-td-vazio">—</span>}
+                  {situacao ? (
+                    <span className={`hiddim-situacao ${situacao.classe}`}>
+                      <span className="hiddim-situacao-longo">{situacao.texto}</span>
+                      <span className="hiddim-situacao-curto">{situacao.curto}</span>
+                    </span>
+                  ) : <span className="hiddim-td-vazio">—</span>}
                 </td>
               </tr>
             );
@@ -346,7 +354,7 @@ function SegmentoTrecho({ seg }) {
               <tr>
                 <TH>Componente</TH>
                 <TH center w={52}>Qtd</TH>
-                <TH right>Leq unit.</TH>
+                <TH right secundaria>Leq unit.</TH>
                 <TH right>Leq total</TH>
               </tr>
             </thead>
@@ -355,7 +363,7 @@ function SegmentoTrecho({ seg }) {
                 <tr key={i}>
                   <TD>{a.nome}</TD>
                   <TD center bold>{a.qtd}</TD>
-                  <TD right mono muted>{f2(a.leq_unit)} m</TD>
+                  <TD right mono muted secundaria>{f2(a.leq_unit)} m</TD>
                   <TD right mono bold>{f2(a.leq_tot)} m</TD>
                 </tr>
               ))}
