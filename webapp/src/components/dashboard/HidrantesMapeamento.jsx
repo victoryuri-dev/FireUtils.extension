@@ -183,6 +183,7 @@ export default function HidrantesMapeamento({
     <div className="cartao-info">
       <div className="se-pagina-header" style={{ marginBottom: 0 }}>
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="hid-passo">1</span>
           Referências
           <InfoTip
             align="start"

@@ -448,9 +448,12 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
   async function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
-    // Com RTI, bomba e família da válvula já identificadas, a troca do
-    // sistema já dimensiona (ver HIDRANTES_CLASSIFICACAO_SAVED).
+    // Trocar o Tipo só redimensiona sozinho se o sistema JÁ foi dimensionado
+    // alguma vez (há resultado salvo) e as referências continuam
+    // identificadas (ver HIDRANTES_CLASSIFICACAO_SAVED). Na primeira vez, o
+    // usuário segue o roteiro até o botão Dimensionar.
     dimensionarAposAplicarRef.current =
+      !!dimensionamento &&
       !!referencias?.rti?.existe && !!referencias?.bomba?.existe &&
       (referencias?.familiasValvula?.length ?? 0) > 0 && !dimensionando && !mapeando;
     // RTI não vai pro Project Information — o motor de cálculo nunca lê
@@ -647,9 +650,35 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         })}
       </div>
 
+      {carregando && !resposta && (
+        <div className="tela-carregando">
+          <Loader size={40} />
+        </div>
+      )}
+
+      {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
+
+      {/* Ordem sequencial: 1 Referências → 2 Classificação → 3 Material → 4 Dimensionar. */}
+      {etapa === 1 && resposta?.ok && (
+        <>
+        <HidrantesInstrucaoModal progresso={progresso} aberto={popupAberto} onFechar={cancelarSelecao} />
+        <HidrantesMapeamento
+          mapeando={mapeando}
+          pendente={mapeamentoPendente}
+          inconsistencia={inconsistenciaMapeamento}
+          referencias={referencias}
+          atualizandoReferencia={atualizandoReferencia}
+          onAtualizarReferencia={atualizarReferencia}
+          onIdentificarReferencias={identificarReferencias}
+          onDimensionar={dimensionar}
+          onContinuar={continuarMapeamento}
+        />
+        </>
+      )}
+
       {etapa === 1 && (
       <div className="hid-secao">
-        <Cartao titulo="Classificação do Sistema">
+        <Cartao titulo={<><span className="hid-passo">2</span>Classificação do Sistema</>}>
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
               Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
@@ -745,44 +774,15 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       </div>
       )}
 
-      {carregando && !resposta && (
-        <div className="tela-carregando">
-          <Loader size={40} />
-        </div>
-      )}
-
-      {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
-
       {etapa === 1 && resposta?.ok && (
         <>
-          {/* "Mapear Trechos" depende do Tipo já aplicado no Revit
-              (classificacao.tipo — o parâmetro de Project Information que o
-              bridge lê pra saber Qs/Pmin): sem isso, o próprio mapeamento
-              falharia no Revit pedindo pra classificar primeiro. Em vez de
-              deixar o RT descobrir isso só ao clicar, a seção nem aparece
-              até o Tipo estar identificado. */}
-          {classificacao?.tipo ? (
-            <>
-              <HidrantesInstrucaoModal progresso={progresso} aberto={popupAberto} onFechar={cancelarSelecao} />
-              <HidrantesMapeamento
-                mapeando={mapeando}
-                pendente={mapeamentoPendente}
-                inconsistencia={inconsistenciaMapeamento}
-                referencias={referencias}
-                atualizandoReferencia={atualizandoReferencia}
-                onAtualizarReferencia={atualizarReferencia}
-                onIdentificarReferencias={identificarReferencias}
-                onDimensionar={dimensionar}
-                onContinuar={continuarMapeamento}
-              />
               {/* Só existe tipo de tubo pra escolher material/conexão depois
                   de a rede ser mapeada pelo menos uma vez (o 1º dimensionamento
                   usa o padrão) — antes disso fica oculto. */}
-              {pipeTypesPorEtapa && (
-                <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
-              )}
-            </>
-          ) : (
+          {pipeTypesPorEtapa && (
+            <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
+          )}
+          {!classificacao?.tipo && (
             <div className="hid-aviso" style={{ marginBottom: 14 }}>
               Escolha e aplique o Tipo do sistema acima antes de dimensionar.
             </div>
@@ -792,7 +792,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               operação do sistema. As verificações detalhadas vêm abaixo. */}
           <div className="cartao-info hid-resultados">
             <div className="se-pagina-header" style={{ marginBottom: dimensionamento ? 20 : 12 }}>
-              <h3 style={{ margin: 0 }}>Resultados do dimensionamento</h3>
+              <h3 style={{ margin: 0 }}><span className="hid-passo">4</span>Resultados do dimensionamento</h3>
               <button
                 type="button"
                 className="se-botao se-botao-accent se-pagina-header-botao"
