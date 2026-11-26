@@ -5399,3 +5399,164 @@ h1, h2, h3, h4, h5, h6,
 .hid-pagina .hid-grupo:last-child {
   margin-bottom: 0;
 }
+
+/* ── Perdas de carga por trecho: composição do comprimento ───────────────────
+   tubo reto + conexões e acessórios = comprimento total → perda de carga.
+   Linhas de rótulo e valor (no lugar da tabela e das três caixas); os itens das
+   conexões abrem sob demanda; a perda de carga é o destaque do bloco. */
+.hid-pagina .hiddim-segmento {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.hid-pagina .hiddim-segmento > .hiddim-dn-badge {
+  align-self: flex-start;
+}
+
+.hiddim-comp {
+  display: flex;
+  flex-direction: column;
+}
+
+.hiddim-comp-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.hiddim-comp-rotulo {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.hiddim-comp-sigla {
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.hiddim-comp-valor {
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.hiddim-comp-total {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.hiddim-comp-total .hiddim-comp-rotulo {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.hiddim-comp-total .hiddim-comp-valor {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.hiddim-comp-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.hiddim-comp-toggle:hover,
+.hiddim-comp-toggle:focus-visible {
+  color: var(--text);
+  outline: none;
+}
+
+.hiddim-comp-itens {
+  list-style: none;
+  margin: 4px 0 8px;
+  padding: 0 0 0 14px;
+  border-left: 1px solid var(--border);
+}
+
+.hiddim-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-2);
+}
+
+.hiddim-item:last-child {
+  border-bottom: 0;
+}
+
+.hiddim-item-nome {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.hiddim-item-sub {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.hiddim-item-val {
+  font-family: var(--font-corpo);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* A perda de carga é o resultado do bloco: faixa tingida com barra à esquerda.
+   O valor fica em branco (o vermelho puro tem pouco contraste sobre o fundo). */
+.hiddim-perda {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--red-dim);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+}
+
+.hiddim-perda-rotulo {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.hiddim-perda-valor {
+  font-family: var(--font-titulo);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}

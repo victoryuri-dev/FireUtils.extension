@@ -331,55 +331,65 @@ export function VerificacaoVelocidade({ d, limites }) {
 }
 
 // ── Perdas de Carga por Trecho ───────────────────────────────────────────
-function MiniStat({ label, destaque, val }) {
-  return (
-    <div className="hiddim-ministat">
-      <div className="hiddim-ministat-label">{label}</div>
-      <div className={`hiddim-ministat-val ${destaque ? "hiddim-ministat-destaque" : ""}`}>{val}</div>
-    </div>
-  );
-}
-
+// Um diâmetro do trecho, apresentado como a "composição do comprimento":
+// tubo reto + conexões/acessórios (Leq) = comprimento total, e então a perda
+// de carga. Os itens de conexões/acessórios abrem sob demanda — o total de
+// cada um já aparece na linha de cima.
 function SegmentoTrecho({ seg }) {
+  const [aberto, setAberto] = useState(false);
+  const itens = seg.acessorios || [];
   return (
     <div className="hiddim-segmento">
-      <div className="hiddim-segmento-topo">
-        <span className="hiddim-dn-badge">DN{Number(seg.d_mm).toFixed(0)}</span>
-        <span className="hiddim-segmento-tubo">
-          Tubo reto: <strong>{f4(seg.L)} m</strong>
-        </span>
+      <span className="hiddim-dn-badge">DN{Number(seg.d_mm).toFixed(0)}</span>
+
+      <div className="hiddim-comp">
+        <div className="hiddim-comp-linha">
+          <span className="hiddim-comp-rotulo">Tubo reto</span>
+          <span className="hiddim-comp-valor">{f4(seg.L)} m</span>
+        </div>
+        <div className="hiddim-comp-linha">
+          <span className="hiddim-comp-rotulo">
+            Conexões e acessórios <span className="hiddim-comp-sigla">Leq</span>
+          </span>
+          <span className="hiddim-comp-valor">{f4(seg.Leq)} m</span>
+        </div>
+
+        {itens.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="hiddim-comp-toggle"
+              onClick={() => setAberto((v) => !v)}
+              aria-expanded={aberto}
+            >
+              {aberto ? "Ocultar itens" : `Ver ${itens.length} ${itens.length === 1 ? "item" : "itens"}`}
+              <Icon svg={chevronDownSvg} className={`hiddim-expand-icon ${aberto ? "hiddim-expand-icon-aberto" : ""}`} />
+            </button>
+            {aberto && (
+              <ul className="hiddim-comp-itens">
+                {itens.map((a, i) => (
+                  <li key={i} className="hiddim-item">
+                    <span className="hiddim-item-nome">
+                      {a.nome}
+                      <span className="hiddim-item-sub">{a.qtd} × {f2(a.leq_unit)} m</span>
+                    </span>
+                    <span className="hiddim-item-val">{f2(a.leq_tot)} m</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+
+        <div className="hiddim-comp-linha hiddim-comp-total">
+          <span className="hiddim-comp-rotulo">Comprimento total</span>
+          <span className="hiddim-comp-valor">{f4(seg.Ltotal)} m</span>
+        </div>
       </div>
 
-      {seg.acessorios.length > 0 && (
-        <div className="hiddim-segmento-acessorios">
-          <div className="hiddim-segmento-acessorios-titulo">Conexões e Acessórios (perda localizada)</div>
-          <Tabela>
-            <thead>
-              <tr>
-                <TH>Componente</TH>
-                <TH center w={52} secundaria>Qtd</TH>
-                <TH right secundaria>Leq unit.</TH>
-                <TH right>Leq total</TH>
-              </tr>
-            </thead>
-            <tbody>
-              {seg.acessorios.map((a, i) => (
-                <tr key={i}>
-                  <TD>{a.nome}</TD>
-                  <TD center bold secundaria>{a.qtd}</TD>
-                  <TD right mono muted secundaria>{f2(a.leq_unit)} m</TD>
-                  <TD right mono bold>{f2(a.leq_tot)} m</TD>
-                </tr>
-              ))}
-            </tbody>
-          </Tabela>
-        </div>
-      )}
-
-      <div className="hiddim-ministat-grid">
-        <MiniStat label="Comp. Equivalente (Leq)" val={`${f4(seg.Leq)} m`} />
-        <MiniStat label="Comp. Total (Ltotal)" val={`${f4(seg.Ltotal)} m`} />
-        <MiniStat label="Perda de Carga do Trecho (J)" destaque val={fmca(seg.J)} />
+      <div className="hiddim-perda">
+        <span className="hiddim-perda-rotulo">Perda de carga do trecho</span>
+        <strong className="hiddim-perda-valor">{fmca(seg.J)}</strong>
       </div>
     </div>
   );
