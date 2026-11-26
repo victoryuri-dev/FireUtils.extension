@@ -4850,3 +4850,83 @@ h1, h2, h3, h4, h5, h6,
   background: var(--accent);
   border-color: var(--accent);
 }
+
+/* Referências (RTI, bomba, família da válvula) em boxes --------------------- */
+.hid-ref-grade {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.hid-ref-largo {
+  grid-column: 1 / -1;
+}
+
+.hid-ref-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.hid-ref-box:hover:not(.hid-ref-box-desabilitado):not(.hid-ref-box-fixa),
+.hid-ref-box:focus-visible {
+  border-color: var(--accent);
+}
+
+.hid-ref-box-ativa {
+  border-color: var(--accent);
+}
+
+.hid-ref-box-desabilitado {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.hid-ref-box-fixa {
+  cursor: default;
+}
+
+.hid-ref-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.hid-ref-rotulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.hid-ref-nome {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.hid-ref-nome-alerta {
+  color: var(--amber, #e0a030);
+}
+
+.hid-ref-acao {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.hid-ref-box:hover:not(.hid-ref-box-desabilitado) .hid-ref-acao {
+  color: var(--accent);
+}

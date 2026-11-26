@@ -1,4 +1,5 @@
 import Icon from "../Icon";
+import InfoTip from "../InfoTip";
 import { postToHost, BridgeMessageTypes } from "../../lib/bridge";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 
@@ -57,65 +58,79 @@ function ListaInconsistencias({ itens }) {
 
 const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio" };
 
+// O ID do elemento ("Tubulação (ID 9251694)") não ajuda o usuário a conferir
+// a referência — mostra só o nome. O "Localizar" continua achando o elemento.
+const semId = (texto) => (texto || "").replace(/\s*\(ID\s*\d+\)/gi, "").trim();
+
 /**
- * RTI e bomba salvas no projeto: "Mapear Trechos" reaproveita as duas, sem
- * pedir o clique de novo. O usuário confere se continuam as mesmas (e
- * localiza no Revit) e troca só a que mudou.
+ * Box de uma referência (RTI ou bomba) salva no projeto: "Dimensionar"
+ * reaproveita a referência, sem pedir o clique de novo. O box inteiro é
+ * clicável e troca a referência no Revit; o ícone de lupa localiza o
+ * elemento salvo sem acionar a troca.
  */
+function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
+  const ativa = atualizando === qual;
+  const falta = ref && !ref.existe;
+  const acao = ativa ? "Selecionando…" : ref ? "Alterar referência" : "Definir referência";
+
+  function acionar() {
+    if (!desabilitado) onAtualizar(qual);
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={desabilitado ? -1 : 0}
+      aria-disabled={desabilitado}
+      className={`hid-ref-box ${desabilitado ? "hid-ref-box-desabilitado" : ""} ${ativa ? "hid-ref-box-ativa" : ""}`}
+      onClick={acionar}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          acionar();
+        }
+      }}
+    >
+      <div className="hid-ref-topo">
+        <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
+        {ref?.existe && ref.eids?.length > 0 && (
+          // Não aciona a troca da referência ao localizar.
+          <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <BotaoLocalizar eids={ref.eids} />
+          </span>
+        )}
+      </div>
+      <span className={`hid-ref-nome ${falta || !ref ? "hid-ref-nome-alerta" : ""}`}>
+        {!ref ? "Não definida" : falta ? "Não encontrado no modelo" : semId(ref.descricao) || "Elemento salvo"}
+      </span>
+      <span className="hid-ref-acao">{acao}</span>
+    </div>
+  );
+}
+
 function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar }) {
-  const linhas = ["rti", "bomba"].map((qual) => ({ qual, ref: referencias?.[qual] }));
   const familias = referencias?.familiasValvula || [];
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <div className="hiddim-tabela-wrap">
-        <table className="hiddim-tabela">
-          <thead>
-            <tr>
-              <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
-              <th className="hiddim-th hiddim-align-left">Referência</th>
-              <th className="hiddim-th hiddim-align-left">Elemento salvo</th>
-              <th className="hiddim-th hiddim-align-center" />
-            </tr>
-          </thead>
-          <tbody>
-            {linhas.map(({ qual, ref }) => (
-              <tr key={qual}>
-                <td className="hiddim-td hiddim-align-center">
-                  <BotaoLocalizar eids={ref?.existe ? ref.eids : null} />
-                </td>
-                <td className="hiddim-td hiddim-align-left">{NOME_REFERENCIA[qual]}</td>
-                <td className="hiddim-td hiddim-align-left hiddim-cor-muted">
-                  {!ref
-                    ? "Não definida — será pedida no próximo mapeamento"
-                    : ref.existe
-                      ? ref.descricao
-                      : `${ref.descricao || "Elemento"} (não existe mais no modelo)`}
-                </td>
-                <td className="hiddim-td hiddim-align-center">
-                  <button
-                    type="button"
-                    className="se-botao"
-                    onClick={() => onAtualizar(qual)}
-                    disabled={desabilitado}
-                  >
-                    {atualizando === qual ? "Selecionando…" : ref ? "Atualizar" : "Definir"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {familias.length > 0 && (
-              <tr>
-                <td className="hiddim-td hiddim-align-center"><span className="hiddim-td-vazio">—</span></td>
-                <td className="hiddim-td hiddim-align-left">Famílias da válvula de hidrante</td>
-                <td className="hiddim-td hiddim-align-left hiddim-cor-muted" colSpan={2}>
-                  {familias.join(", ")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+    <div className="hid-ref-grade">
+      {["rti", "bomba"].map((qual) => (
+        <BoxReferencia
+          key={qual}
+          qual={qual}
+          ref={referencias?.[qual]}
+          atualizando={atualizando}
+          desabilitado={desabilitado}
+          onAtualizar={onAtualizar}
+        />
+      ))}
+      {familias.length > 0 && (
+        <div className="hid-ref-box hid-ref-box-fixa hid-ref-largo">
+          <div className="hid-ref-topo">
+            <span className="hid-ref-rotulo">Família da válvula de hidrante</span>
+          </div>
+          <span className="hid-ref-nome">{familias.join(", ")}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -136,7 +151,13 @@ export default function HidrantesMapeamento({
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
       <div className="se-pagina-header" style={{ marginBottom: 0 }}>
-        <h3 style={{ margin: 0 }}>Referências</h3>
+        <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          Referências
+          <InfoTip
+            align="start"
+            text="Identifique os elementos essenciais para mapeamento e dimensionamento da rede de hidrantes."
+          />
+        </h3>
       </div>
 
       <ReferenciasSalvas
@@ -182,13 +203,6 @@ export default function HidrantesMapeamento({
           segunda exibição sempre aparece. Mostrar as duas era repetir a
           mesma informação. */}
 
-      {/* Mesma formatação da nota "Sempre que trocar o sistema…" do cartão de
-          classificação (.hid-nota-aviso), no pé do cartão. */}
-      <p className="hid-nota-aviso">
-        A RTI e a bomba são pedidas no Revit na primeira vez e depois ficam salvas. Ao dimensionar,
-        a rede é mapeada de novo (válvulas, rotas e numeração dos hidrantes), então basta clicar em
-        Dimensionar depois de qualquer mudança no modelo.
-      </p>
     </div>
   );
 }
