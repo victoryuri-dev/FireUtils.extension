@@ -58,19 +58,18 @@ function ListaInconsistencias({ itens }) {
 
 const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio" };
 
-// O ID do elemento ("Tubulação (ID 9251694)") não ajuda o usuário a conferir
-// a referência — mostra só o nome. O "Localizar" continua achando o elemento.
-const semId = (texto) => (texto || "").replace(/\s*\(ID\s*\d+\)/gi, "").trim();
-
 /**
- * Box de uma referência (RTI ou bomba) salva no projeto: "Dimensionar"
- * reaproveita a referência, sem pedir o clique de novo. O box inteiro é
- * clicável e troca a referência no Revit; o ícone de lupa localiza o
- * elemento salvo sem acionar a troca.
+ * Linha de uma referência (RTI ou bomba) salva no projeto: "Dimensionar"
+ * reaproveita a referência, sem pedir o clique de novo. A linha inteira é
+ * clicável e troca a referência no Revit; a lupa localiza o elemento
+ * salvo sem acionar a troca. À direita, o estado (Identificado / Não
+ * definido); no hover vira a ação ("Alterar referência" / "Definir
+ * referência").
  */
 function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
   const ativa = atualizando === qual;
-  const falta = ref && !ref.existe;
+  const encontrada = !!ref?.existe;
+  const estado = !ref ? "Não definido" : !encontrada ? "Não encontrado" : "Identificado";
   const acao = ativa ? "Selecionando…" : ref ? "Alterar referência" : "Definir referência";
 
   function acionar() {
@@ -91,19 +90,17 @@ function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
         }
       }}
     >
-      <div className="hid-ref-topo">
+      <span className="hid-ref-esq">
+        {/* Não aciona a troca da referência ao localizar. */}
+        <span className="hid-ref-lupa" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+          {encontrada && ref.eids?.length > 0 && <BotaoLocalizar eids={ref.eids} />}
+        </span>
         <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
-        {ref?.existe && ref.eids?.length > 0 && (
-          // Não aciona a troca da referência ao localizar.
-          <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            <BotaoLocalizar eids={ref.eids} />
-          </span>
-        )}
-      </div>
-      <span className={`hid-ref-nome ${falta || !ref ? "hid-ref-nome-alerta" : ""}`}>
-        {!ref ? "Não definida" : falta ? "Não encontrado no modelo" : semId(ref.descricao) || "Elemento salvo"}
       </span>
-      <span className="hid-ref-acao">{acao}</span>
+      <span className={`hid-ref-estado ${!ref || !encontrada ? "hid-ref-estado-alerta" : "hid-ref-estado-ok"} ${ativa ? "hid-ref-estado-ativa" : ""}`}>
+        <span className="hid-ref-estado-texto">{ativa ? acao : estado}</span>
+        {!ativa && <span className="hid-ref-estado-acao">{acao}</span>}
+      </span>
     </div>
   );
 }
@@ -124,11 +121,12 @@ function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar
         />
       ))}
       {familias.length > 0 && (
-        <div className="hid-ref-box hid-ref-box-fixa hid-ref-largo">
-          <div className="hid-ref-topo">
+        <div className="hid-ref-box hid-ref-box-fixa">
+          <span className="hid-ref-esq">
+            <span className="hid-ref-lupa" />
             <span className="hid-ref-rotulo">Família da válvula de hidrante</span>
-          </div>
-          <span className="hid-ref-nome">{familias.join(", ")}</span>
+          </span>
+          <span className="hid-ref-familia">{familias.join(", ")}</span>
         </div>
       )}
     </div>
