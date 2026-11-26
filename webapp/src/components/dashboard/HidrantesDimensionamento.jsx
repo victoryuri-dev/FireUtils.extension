@@ -146,7 +146,7 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
           <tr>
             <TH w={32}></TH>
             <TH>Hidrante</TH>
-            <TH right>
+            <TH right secundaria>
               <THSigla sigla="Perda de carga" align="end" tip="Perda de Carga Total = perda de carga (J) + desnível (∆Z) — usada só para ranquear os hidrantes. O 1º e o 2º mais desfavoráveis recebem a marcha de cálculo completa, com equilíbrio hidráulico, no restante desta etapa." />
             </TH>
             <TH center>Situação</TH>
@@ -161,7 +161,7 @@ export function VerificacaoHidranteDesfavoravel({ ranking }) {
                   <BotaoLocalizar eids={h.rota} />
                 </td>
                 <TD bold>{h.id}</TD>
-                <TD right bold mono>{fmca(h.score)}</TD>
+                <TD right bold mono secundaria>{fmca(h.score)}</TD>
                 <td className="hiddim-td hiddim-align-center">
                   {situacao ? (
                     <span className={`hiddim-situacao ${situacao.classe}`}>
@@ -201,7 +201,7 @@ export function ResumoExecutivo({ d }) {
       cor: "red",
       rows: [
         { label: labelPressao, val: fmca(p01) },
-        { label: "Vazão real", val: lmin(res.Q_hd01) },
+        { label: "Vazão real", val: lmin(res.Q_hd01), opc: true },
       ],
       atende: p01 >= pmin && p01 <= pmax,
     },
@@ -211,7 +211,7 @@ export function ResumoExecutivo({ d }) {
       cor: "amber",
       rows: [
         { label: labelPressao, val: fmca(p02) },
-        { label: "Vazão real", val: lmin(res.Q_hd02) },
+        { label: "Vazão real", val: lmin(res.Q_hd02), opc: true },
       ],
       atende: p02 >= pmin && p02 <= pmax,
     },
@@ -222,12 +222,12 @@ export function ResumoExecutivo({ d }) {
       {cards.map((c) => (
         <Cartao key={c.id}>
           <CartaoHeader>
-            <span className={`hiddim-situacao hiddim-situacao-${c.cor}`}>{c.label}</span>
+            <span className={`hiddim-situacao hiddim-situacao-${c.cor} hiddim-opc`}>{c.label}</span>
             <span className="hiddim-id-badge hiddim-id-badge-neutro">{c.id}</span>
           </CartaoHeader>
           <div className="hiddim-resumo-corpo">
             {c.rows.map((r, i) => (
-              <div key={i} className="hiddim-resumo-linha">
+              <div key={i} className={`hiddim-resumo-linha ${r.opc ? "hiddim-opc" : ""}`}>
                 <span className="hiddim-resumo-linha-label">{r.label}</span>
                 <span className="hiddim-resumo-linha-val">{r.val}</span>
               </div>
@@ -292,7 +292,7 @@ export function VerificacaoVelocidade({ d, limites }) {
           <tr>
             <TH w={32}></TH>
             <TH>Trecho</TH>
-            <TH>DN</TH>
+            <TH secundaria>DN</TH>
             <TH>Velocidade</TH>
           </tr>
         </thead>
@@ -303,7 +303,7 @@ export function VerificacaoVelocidade({ d, limites }) {
                 <BotaoLocalizar eids={l.eids} />
               </td>
               <TD bold>{l.label}</TD>
-              <TD mono muted>DN{Number(l.dn).toFixed(0)}</TD>
+              <TD mono muted secundaria>DN{Number(l.dn).toFixed(0)}</TD>
               <td className="hiddim-td">
                 <VelChip v={l.v} limite={l.vLimite} />
               </td>
@@ -353,7 +353,7 @@ function SegmentoTrecho({ seg }) {
             <thead>
               <tr>
                 <TH>Componente</TH>
-                <TH center w={52}>Qtd</TH>
+                <TH center w={52} secundaria>Qtd</TH>
                 <TH right secundaria>Leq unit.</TH>
                 <TH right>Leq total</TH>
               </tr>
@@ -362,7 +362,7 @@ function SegmentoTrecho({ seg }) {
               {seg.acessorios.map((a, i) => (
                 <tr key={i}>
                   <TD>{a.nome}</TD>
-                  <TD center bold>{a.qtd}</TD>
+                  <TD center bold secundaria>{a.qtd}</TD>
                   <TD right mono muted secundaria>{f2(a.leq_unit)} m</TD>
                   <TD right mono bold>{f2(a.leq_tot)} m</TD>
                 </tr>

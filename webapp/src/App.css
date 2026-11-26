@@ -4966,6 +4966,12 @@ h1, h2, h3, h4, h5, h6,
   text-align: center;
 }
 
+/* Containers dos cards/cabeçalhos que também encurtam em tela estreita. */
+.hiddim-resumo-grid,
+.hiddim-trecho-cartao {
+  container-type: inline-size;
+}
+
 /* Tabela estreita: some o que é secundário (ex.: Leq unitário) e o essencial
    continua visível; o texto da situação do hidrante encurta. */
 @container (max-width: 500px) {
@@ -4992,5 +4998,12 @@ h1, h2, h3, h4, h5, h6,
 
   .hiddim-situacao {
     padding: 3px 6px;
+  }
+
+  /* Itens opcionais: rótulo de ranking e vazão dos cards HID, resumo Q/J do
+     cabeçalho do trecho. */
+  .hiddim-opc,
+  .hiddim-trecho-info {
+    display: none;
   }
 }
