@@ -429,8 +429,11 @@ export default function HidrantesDimensionamento({ d, limites }) {
   // ResultadoPrincipal e SistemaHidrantesPage.jsx.
   return (
     <>
-      <VerificacaoHidranteDesfavoravel ranking={d.ranking_hidrantes} />
-      <VerificacaoVelocidade d={d} limites={limites} />
+      {/* Bloco das verificações: ranking dos hidrantes e velocidade por trecho. */}
+      <div className="hid-bloco">
+        <VerificacaoHidranteDesfavoravel ranking={d.ranking_hidrantes} />
+        <VerificacaoVelocidade d={d} limites={limites} />
+      </div>
       <PerdasPorTrecho d={d} />
     </>
   );

@@ -677,7 +677,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       )}
 
       {etapa === 1 && (
-      <div className="hid-secao">
+      <div className="hid-secao hid-bloco">
         <Cartao titulo="Classificação do Sistema">
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
@@ -771,17 +771,17 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
             </>
           )}
         </Cartao>
+        {/* Só existe tipo de tubo pra escolher o material depois de a rede ser
+            mapeada pelo menos uma vez (o 1º dimensionamento usa o padrão) —
+            antes disso fica oculto. */}
+        {resposta?.ok && pipeTypesPorEtapa && (
+          <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
+        )}
       </div>
       )}
 
       {etapa === 1 && resposta?.ok && (
         <>
-              {/* Só existe tipo de tubo pra escolher material/conexão depois
-                  de a rede ser mapeada pelo menos uma vez (o 1º dimensionamento
-                  usa o padrão) — antes disso fica oculto. */}
-          {pipeTypesPorEtapa && (
-            <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
-          )}
           {!classificacao?.tipo && (
             <div className="hid-aviso" style={{ marginBottom: 14 }}>
               Escolha e aplique o Tipo do sistema acima antes de dimensionar.

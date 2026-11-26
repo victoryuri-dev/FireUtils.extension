@@ -5382,3 +5382,30 @@ h1, h2, h3, h4, h5, h6,
 .hid-pagina .cartao-info > .se-pagina-header > .se-pagina-header-botao {
   flex-shrink: 0;
 }
+
+/* Blocos de informação que reúnem mais de uma seção num só cartão:
+   (Classificação + Material) e (Verificação do hidrante + Velocidade). As
+   seções internas perdem a moldura própria e ficam separadas por uma linha. */
+.hid-pagina .hid-bloco {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 18px;
+  margin-bottom: 16px;
+}
+
+.hid-pagina .hid-bloco > .cartao-info,
+.hid-pagina .hid-bloco > .hiddim-secao {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hid-pagina .hid-bloco > :is(.cartao-info, .hiddim-secao) + :is(.cartao-info, .hiddim-secao) {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
