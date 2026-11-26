@@ -4783,3 +4783,60 @@ h1, h2, h3, h4, h5, h6,
   color: var(--accent);
   margin-bottom: 12px;
 }
+
+/* Popup de identificação das referências (RTI, bomba, válvulas) ------------ */
+.hid-instrucao {
+  width: min(560px, 100%);
+  background: var(--bg-2);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 28px 28px 22px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hid-instrucao-etiqueta {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.hid-instrucao-titulo {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hid-instrucao-texto {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.hid-instrucao-dica {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  background: var(--bg-3);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.hid-instrucao-rodape {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}

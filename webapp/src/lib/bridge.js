@@ -176,10 +176,13 @@
  *     visível e recebe os passos em HIDRANTES_MAPEAR_PROGRESSO. Exige a
  *     classificação já aplicada. Não usa internet.
  *
- *   { type: "HIDRANTES_MAPEAR_PROGRESSO", payload: { instrucao } }
+ *   { type: "HIDRANTES_MAPEAR_PROGRESSO", payload: { instrucao, titulo, acao, dica } }
  *     Python -> JS: o que o usuário deve fazer no Revit agora ("Clique na
  *     bomba de incêndio…") ou o que o plugin está fazendo ("Percorrendo a
- *     rede…"). Várias por mapeamento.
+ *     rede…"). Várias por mapeamento. `acao`: "clique" (um elemento no
+ *     Revit), "selecao" (vários, depois Concluir) ou "processando"; nos dois
+ *     primeiros a dockpane abre o popup grande (HidrantesInstrucaoModal),
+ *     com `titulo`, `instrucao` e `dica` (texto de apoio, pode vir vazio).
  *
  *   { type: "HIDRANTES_MAPEAR_RESULTADO", payload: { ok, ... } }
  *     Python -> JS: fim (ou pausa) de um MAPEAR_TRECHOS/CONTINUAR_MAPEAMENTO.

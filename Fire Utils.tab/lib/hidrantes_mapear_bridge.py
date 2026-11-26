@@ -193,11 +193,13 @@ def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
     selecionadas, marca todas as instâncias de cada família e guarda os
     nomes das famílias para os próximos mapeamentos. Esc cancela."""
     doc = uidoc.Document
-    postar_mensagem(_TIPO_PROGRESSO, {
-        u"instrucao": u"Nenhuma válvula de hidrante identificada no projeto. "
-                      u"Clique em uma válvula de cada família de hidrante "
-                      u"(Acessórios de tubulação) no Revit e clique em Concluir.",
-    })
+    _progresso(
+        postar_mensagem,
+        u"Nenhuma válvula de hidrante foi identificada no projeto. No Revit, clique em UMA "
+        u"válvula de cada família de hidrante (normalmente é uma só) e depois em Concluir.",
+        u"Identifique as válvulas de hidrante", u"selecao",
+        u"Só Acessórios de tubulação podem ser selecionados. Se houver famílias de válvula "
+        u"diferentes, clique em uma de cada. Ao terminar, clique em Concluir na barra do Revit.")
     try:
         refs = uidoc.Selection.PickObjects(
             ObjectType.Element, _FiltroAcessorio(),
@@ -205,6 +207,8 @@ def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
     except OperationCanceledException:
         raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
 
+    _progresso(postar_mensagem, u"Válvulas selecionadas. Marcando as famílias no projeto…",
+               u"Identificando as válvulas", u"processando")
     nomes = sorted(set(
         n for n in (_nome_familia(doc.GetElement(r.ElementId)) for r in refs) if n))
     if not nomes:
@@ -221,17 +225,28 @@ def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
                 P_ID_HIDRANTE, len(sem_param), sem_param[0].Id))
 
 
-def _selecionar(uidoc, postar_mensagem, instrucao, prompt, filtro):
+def _progresso(postar_mensagem, instrucao, titulo=None, acao=u"processando", dica=None):
+    """Passo do mapeamento para o popup da dockpane. `acao`: "clique" (o
+    usuário deve clicar UM elemento no Revit), "selecao" (vários elementos,
+    depois Concluir) ou "processando" (o plugin está trabalhando)."""
+    postar_mensagem(_TIPO_PROGRESSO, {
+        u"instrucao": instrucao, u"titulo": titulo or u"", u"acao": acao,
+        u"dica": dica or u""})
+
+
+def _selecionar(uidoc, postar_mensagem, instrucao, prompt, filtro, titulo=None, dica=None):
     """
     Pede um elemento no modelo. A instrução vai para a dockpane (o usuário
     está olhando para ela) e o prompt para a barra de status do Revit. Esc
     cancela o mapeamento inteiro.
     """
-    postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": instrucao})
+    _progresso(postar_mensagem, instrucao, titulo, u"clique", dica)
     try:
         ref = uidoc.Selection.PickObject(ObjectType.Element, filtro, prompt)
     except OperationCanceledException:
         raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
+    # Fecha o popup da dockpane até o próximo passo chegar.
+    _progresso(postar_mensagem, u"Elemento selecionado. Continuando…", titulo, u"processando")
     return uidoc.Document.GetElement(ref.ElementId)
 
 
@@ -298,13 +313,17 @@ def _montar_rti(uidoc, postar_mensagem, ref):
     rti = _elem(doc, ref.get(u"eid"))
     if rti is None:
         if ref:
-            postar_mensagem(_TIPO_PROGRESSO, {
-                u"instrucao": u"A RTI salva não existe mais no modelo. Selecione de novo."})
+            _progresso(postar_mensagem,
+                       u"A RTI salva não existe mais no modelo. Selecione de novo.",
+                       u"Reservatório (RTI)")
         ref = {}
         rti = _selecionar(
             uidoc, postar_mensagem,
-            u"Clique no reservatório (RTI) ou no tubo de saída dele no Revit.",
-            u"Selecione a RTI ou o tubo de saída da RTI", _FiltroEquipamentoOuTubo())
+            u"No Revit, clique no reservatório (RTI) ou no tubo de saída dele.",
+            u"Selecione a RTI ou o tubo de saída da RTI", _FiltroEquipamentoOuTubo(),
+            u"Selecione o reservatório (RTI)",
+            u"Pode clicar direto no tubo que sai do reservatório. Se o reservatório não estiver "
+            u"conectado a nenhum tubo, o próximo passo pede o tubo.")
 
     if isinstance(rti, Pipe):
         return rti, rti, [], False, {
@@ -320,8 +339,9 @@ def _montar_rti(uidoc, postar_mensagem, ref):
         if not isinstance(tubo, Pipe):
             tubo = _selecionar(
                 uidoc, postar_mensagem,
-                u"A RTI não está conectada a nenhum tubo. Clique no tubo de saída da RTI no Revit.",
-                u"Tubo de saída da RTI", _FiltroTubo())
+                u"A RTI não está conectada a nenhum tubo. No Revit, clique no tubo de saída da RTI.",
+                u"Tubo de saída da RTI", _FiltroTubo(),
+                u"Selecione o tubo de saída da RTI")
         eid_tubo = get_id(tubo)
     return rti, tubo, interm, rti_auto, {
         u"eid": get_id(rti), u"eid_tubo": eid_tubo,
@@ -337,13 +357,15 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
     bomba = _elem(doc, ref.get(u"eid"))
     if bomba is None:
         if ref:
-            postar_mensagem(_TIPO_PROGRESSO, {
-                u"instrucao": u"A bomba salva não existe mais no modelo. Selecione de novo."})
+            _progresso(postar_mensagem,
+                       u"A bomba salva não existe mais no modelo. Selecione de novo.",
+                       u"Bomba de incêndio")
         ref = {}
         bomba = _selecionar(
             uidoc, postar_mensagem,
-            u"Clique na bomba de incêndio no Revit.",
-            u"Selecione a bomba de incêndio", _FiltroEquipamento())
+            u"No Revit, clique na bomba de incêndio.",
+            u"Selecione a bomba de incêndio", _FiltroEquipamento(),
+            u"Selecione a bomba de incêndio")
 
     tubo_s, interm_s = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
     eid_s = None
@@ -354,8 +376,9 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
             tubo_s = _selecionar(
                 uidoc, postar_mensagem,
                 u"Não deu para identificar o tubo de entrada (sucção) da bomba. "
-                u"Clique no tubo que conecta na entrada da bomba.",
-                u"Tubo de sucção da bomba", _FiltroTubo())
+                u"No Revit, clique no tubo que conecta na entrada da bomba.",
+                u"Tubo de sucção da bomba", _FiltroTubo(),
+                u"Selecione o tubo de sucção da bomba")
         eid_s = get_id(tubo_s)
 
     tubo_r, interm_r = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
@@ -367,8 +390,9 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
             tubo_r = _selecionar(
                 uidoc, postar_mensagem,
                 u"Não deu para identificar o tubo de saída (recalque) da bomba. "
-                u"Clique no tubo que conecta na saída da bomba.",
-                u"Tubo de recalque da bomba", _FiltroTubo())
+                u"No Revit, clique no tubo que conecta na saída da bomba.",
+                u"Tubo de recalque da bomba", _FiltroTubo(),
+                u"Selecione o tubo de recalque da bomba")
         eid_r = get_id(tubo_r)
 
     return bomba, tubo_s, interm_s, tubo_r, interm_r, {
@@ -538,7 +562,8 @@ def _mapear(uiapp, postar_mensagem):
     # a RTI ou só a bomba (ATUALIZAR_REFERENCIA_HIDRANTE).
     refs = _ler_referencias(projeto_dir)
     if refs.get(u"rti") and refs.get(u"bomba"):
-        postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": u"Usando a RTI e a bomba salvas…"})
+        _progresso(postar_mensagem, u"Usando a RTI e a bomba salvas no projeto.",
+                   u"Preparando o mapeamento")
 
     rti, tubo_rti, interm_rti, rti_auto, ref_rti = _montar_rti(
         uidoc, postar_mensagem, refs.get(u"rti"))
@@ -558,7 +583,10 @@ def _mapear(uiapp, postar_mensagem):
     if not todas_valvulas_hidrante(doc):
         _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir)
 
-    postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": u"Percorrendo a rede…"})
+    _progresso(postar_mensagem,
+               u"Percorrendo a tubulação da bomba até cada válvula de hidrante, "
+               u"calculando as perdas de carga e numerando os hidrantes. Aguarde.",
+               u"Mapeando a rede")
 
     eid_rti = get_id(tubo_rti)
     eid_bomba = get_id(tubo_bomba)

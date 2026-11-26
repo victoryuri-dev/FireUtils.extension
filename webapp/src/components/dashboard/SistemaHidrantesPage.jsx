@@ -11,6 +11,7 @@ import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
 import HidrantesDimensionamento from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
 import HidrantesMapeamento, { TITULO_FALHA_MAPEAMENTO } from "./HidrantesMapeamento";
+import HidrantesInstrucaoModal from "./HidrantesInstrucaoModal";
 import MaterialConexaoSelector from "./MaterialConexaoSelector";
 import { fmtNum } from "../../lib/numero";
 import hydrantIconSvg from "../../assets/icons/hydrant-icon.svg?raw";
@@ -127,7 +128,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // Mapeamento da rede (ex-botão "Mapear trechos"): o usuário clica nos
   // elementos no Revit; `instrucao` é o passo atual vindo do Python.
   const [mapeando, setMapeando] = useState(false);
-  const [instrucaoMapeamento, setInstrucaoMapeamento] = useState("");
+  // Passo atual vindo do Python: { instrucao, titulo, acao, dica } — alimenta
+  // o popup (HidrantesInstrucaoModal) e o aviso do cartão Referências.
+  const [progresso, setProgresso] = useState(null);
   const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
   const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
   // RTI/bomba/famílias de válvula salvas no projeto (reaproveitadas por
@@ -229,7 +232,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       }
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_MAPEAR_PROGRESSO) {
-        setInstrucaoMapeamento(mensagem.payload?.instrucao || "");
+        setProgresso(mensagem.payload || null);
         return;
       }
 
@@ -324,7 +327,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
   function atualizarReferencia(qual) {
     setAtualizandoReferencia(qual);
-    setInstrucaoMapeamento("");
+    setProgresso(null);
     postToHost(BridgeMessageTypes.ATUALIZAR_REFERENCIA_HIDRANTE, { qual });
   }
 
@@ -336,7 +339,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     fluxoDimensionarRef.current = { token };
     setDimensionando(true);
     setMapeando(true);
-    setInstrucaoMapeamento("Gravando o mapeamento…");
+    setProgresso({ instrucao: "Gravando o mapeamento…", acao: "processando" });
     setMapeamentoPendente(null);
     postToHost(BridgeMessageTypes.CONTINUAR_MAPEAMENTO, {});
   }
@@ -351,7 +354,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     fluxoDimensionarRef.current = { token };
     setDimensionando(true);
     setMapeando(true);
-    setInstrucaoMapeamento("");
+    setProgresso(null);
     setMapeamentoPendente(null);
     setInconsistenciaMapeamento(null);
     postToHost(BridgeMessageTypes.MAPEAR_TRECHOS, {});
@@ -700,9 +703,10 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               até o Tipo estar identificado. */}
           {classificacao?.tipo ? (
             <>
+              {(mapeando || atualizandoReferencia) && <HidrantesInstrucaoModal progresso={progresso} />}
               <HidrantesMapeamento
                 mapeando={mapeando}
-                instrucao={instrucaoMapeamento}
+                instrucao={progresso?.instrucao}
                 pendente={mapeamentoPendente}
                 inconsistencia={inconsistenciaMapeamento}
                 referencias={referencias}
