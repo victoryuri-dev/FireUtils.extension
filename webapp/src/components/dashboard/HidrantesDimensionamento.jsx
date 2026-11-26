@@ -420,13 +420,26 @@ export function PerdasPorTrecho({ d }) {
 // (payload.dimensionamento, ver bridge.js) e `limites` os limites
 // normativos de velocidade (payload.limites).
 export default function HidrantesDimensionamento({ d, limites }) {
+  // O resultado principal (hidrantes mais desfavoráveis e ponto de operação)
+  // fica no box "Resultados do dimensionamento" da página — ver
+  // ResultadoPrincipal e SistemaHidrantesPage.jsx.
   return (
     <>
       <VerificacaoHidranteDesfavoravel ranking={d.ranking_hidrantes} />
       <VerificacaoVelocidade d={d} limites={limites} />
-      <ResumoExecutivo d={d} />
-      <ResultadoHidraulico d={d} />
       <PerdasPorTrecho d={d} />
+    </>
+  );
+}
+
+// ── Resultado principal: os dois hidrantes mais desfavoráveis e o ponto de
+// operação do sistema (Ht/Qt), para ir dentro do box de resultados.
+export function ResultadoPrincipal({ d }) {
+  return (
+    <>
+      <ResumoExecutivo d={d} />
+      <h4 className="hiddim-secao-titulo">Ponto de operação do sistema</h4>
+      <ResultadoHidraulico d={d} />
     </>
   );
 }

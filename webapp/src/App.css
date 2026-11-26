@@ -4966,6 +4966,15 @@ h1, h2, h3, h4, h5, h6,
   text-align: center;
 }
 
+/* Dentro do box de resultados: sem margem sobrando no fim e menos espaço entre as duas fileiras. */
+.cartao-info > .hiddim-resultado-grid:last-child {
+  margin-bottom: 0;
+}
+
+.cartao-info > .hiddim-resumo-grid {
+  margin-bottom: 18px;
+}
+
 /* Containers dos cards/cabeçalhos que também encurtam em tela estreita. */
 .hiddim-resumo-grid,
 .hiddim-trecho-cartao {

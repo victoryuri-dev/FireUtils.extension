@@ -8,7 +8,7 @@ import { dadosHidrantes, divisoesComCargaDaEstrutura, sistemasAtivos } from "../
 import { calcPotenciaBomba } from "../../lib/hidrantesCalc";
 import { sugerirClassificacao } from "../../lib/hidrantesClassificacao";
 import * as normaHidrantesMA from "../../lib/normaHidrantesMA";
-import HidrantesDimensionamento from "./HidrantesDimensionamento";
+import HidrantesDimensionamento, { ResultadoPrincipal } from "./HidrantesDimensionamento";
 import HidrantesBomba from "./HidrantesBomba";
 import HidrantesMapeamento, { TITULO_FALHA_MAPEAMENTO } from "./HidrantesMapeamento";
 import HidrantesInstrucaoModal from "./HidrantesInstrucaoModal";
@@ -787,33 +787,31 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               Escolha e aplique o Tipo do sistema acima antes de dimensionar.
             </div>
           )}
-          <div className="se-pagina-header" style={{ marginBottom: 14 }}>
-            <p className="dashboard-subtitulo" style={{ margin: 0 }}>
-              Resultados do dimensionamento.
-            </p>
-            <button
-              type="button"
-              className="se-botao se-botao-accent se-pagina-header-botao"
-              onClick={dimensionar}
-              disabled={dimensionando || mapeando || !!atualizandoReferencia || !classificacao?.tipo}
-              title={classificacao?.tipo ? undefined : "Aplique o Tipo do sistema antes de dimensionar"}
-            >
-              {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
-            </button>
+          {/* Box dos resultados: título + botão de dimensionar no cabeçalho;
+              dentro, os dois hidrantes mais desfavoráveis e o ponto de
+              operação do sistema. As verificações detalhadas vêm abaixo. */}
+          <div className="cartao-info" style={{ marginBottom: 14 }}>
+            <div className="se-pagina-header" style={{ marginBottom: dimensionamento ? 16 : 10 }}>
+              <h3 style={{ margin: 0 }}>Resultados do dimensionamento</h3>
+              <button
+                type="button"
+                className="se-botao se-botao-accent se-pagina-header-botao"
+                onClick={dimensionar}
+                disabled={dimensionando || mapeando || !!atualizandoReferencia || !classificacao?.tipo}
+                title={classificacao?.tipo ? undefined : "Aplique o Tipo do sistema antes de dimensionar"}
+              >
+                {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
+              </button>
+            </div>
+            {dimensionamento ? (
+              <ResultadoPrincipal d={dimensionamento} />
+            ) : (
+              <p className="vazio" style={{ margin: 0 }}>
+                {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
+              </p>
+            )}
           </div>
-          {/* Resultados (ou o placeholder de "nenhum dimensionamento ainda")
-              só fazem sentido com uma rede mapeada de verdade — sem isso o
-              cache 'rotas' que o dimensionamento lê nem existe, e mostrar
-              um resultado desatualizado (de um mapeamento anterior) ou o
-              placeholder confundiria o RT. A seção some até lá; a própria
-              HidrantesMapeamento acima já diz o que fazer. */}
-          {(!dimensionamento ? (
-            <p className="vazio">
-              {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
-            </p>
-          ) : (
-            <HidrantesDimensionamento d={dimensionamento} limites={limites} />
-          ))}
+          {dimensionamento && <HidrantesDimensionamento d={dimensionamento} limites={limites} />}
         </>
       )}
 
