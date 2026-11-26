@@ -146,7 +146,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
           "segmentos": [ { "d_mm", "L", "Leq", "Ltotal", "n_tubos", "ids",
                            "pipe_type_id", "pipe_type_nome",
                            "acessorios": [ {nome, qtd, leq_unit, leq_tot} ],
-                           "conexoes": [ {tipo, qtd, angulo_graus, d2_mm, sistema} ] } ],
+                           "conexoes": [ {tipo, qtd, angulo_graus, d2_mm} ] } ],
           "L":   soma dos comprimentos reais,
           "Leq": soma dos acessórios ainda dependentes do parâmetro de
                  família (ver get_leq) — o Leq das conexões em "conexoes"
@@ -172,7 +172,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
     antes desta funcionalidade existir.
 
     Acessórios e conexões são agrupados por (nome do tipo) e (tipo,
-    ângulo, d2, sistema) respectivamente, dentro de cada (diâmetro,
+    ângulo, d2) respectivamente, dentro de cada (diâmetro,
     pipe_type). leq_unit é a média exata dos valores acumulados
     (leq_tot / qtd), garantindo por construção que qtd × leq_unit ==
     leq_tot em toda linha do memorial.
@@ -281,7 +281,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             })
         acessorios.sort(key=lambda a: a["nome"])
         conexoes = sorted(s["conexoes"].values(),
-                          key=lambda c: (c["tipo"], c["angulo_graus"] or 0, c["d2_mm"] or 0, c["sistema"]))
+                          key=lambda c: (c["tipo"], c["angulo_graus"] or 0, c["d2_mm"] or 0))
         segmentos.append({
             "d_mm":           s["d_mm"],
             "pipe_type_id":   s["pipe_type_id"],
