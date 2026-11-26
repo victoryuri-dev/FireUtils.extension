@@ -186,7 +186,28 @@ def _marcar_instancias_das_familias(doc, nomes):
     return sem_param
 
 
-def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
+def _limpar_ids_hidrante(doc):
+    """Zera 'ID Hidrante' de todos os Acessórios de tubulação (usado ao
+    redefinir as válvulas, para o conjunto novo substituir o antigo)."""
+    alvos = [
+        e for e in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements()
+        if eh_acessorio_tubulacao(e) and tem_id_hidrante(e)
+    ]
+    if not alvos:
+        return
+    with Transaction(doc, u"FireUtils - Redefinir Válvulas de Hidrante") as t:
+        t.Start()
+        try:
+            for v in alvos:
+                _set_param(v, P_ID_HIDRANTE, u"")
+            t.Commit()
+        except Exception as ex:
+            t.RollBack()
+            raise _Interrompido(
+                u"Erro ao redefinir as válvulas: {}".format(texto_erro(ex)), u"servidor")
+
+
+def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir, substituir=False):
     """O projeto não tem nenhuma válvula identificada: pede para o usuário
     clicar em UMA válvula de cada família de hidrante presente (normalmente
     uma só; várias se o projeto tem famílias distintas). A partir das
@@ -215,8 +236,12 @@ def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
     if not nomes:
         raise _Interrompido(u"Nenhuma válvula foi selecionada.")
 
+    if substituir:
+        # Só depois da seleção: cancelar antes não apaga nada.
+        _limpar_ids_hidrante(doc)
     sem_param = _marcar_instancias_das_familias(doc, nomes)
-    salvar_cache({u"nomes": sorted(set(_familias_salvas(projeto_dir)) | set(nomes))},
+    salvas = [] if substituir else _familias_salvas(projeto_dir)
+    salvar_cache({u"nomes": sorted(set(salvas) | set(nomes))},
                  projeto_dir, chave=_CHAVE_FAMILIAS)
     if sem_param:
         raise _Interrompido(
@@ -440,8 +465,9 @@ def _garantir_valvulas(uidoc, postar_mensagem, projeto_dir):
 
 
 def _payload_referencias(doc, projeto_dir):
-    """O que a dockpane mostra: RTI, bomba e famílias de válvula salvas."""
+    """O que a dockpane mostra: RTI, bomba e válvulas de hidrante."""
     refs = _ler_referencias(projeto_dir)
+    valvulas = todas_valvulas_hidrante(doc)
 
     def item(ref):
         if not ref:
@@ -462,7 +488,8 @@ def _payload_referencias(doc, projeto_dir):
         u"bomba": item(refs.get(u"bomba")),
         u"familiasValvula": _familias_salvas(projeto_dir),
         # Válvulas identificadas no projeto (por parâmetro ou família salva).
-        u"qtdValvulas": len(todas_valvulas_hidrante(doc)),
+        u"qtdValvulas": len(valvulas),
+        u"eidsValvulas": [get_id(v) for v in valvulas],
     }
 
 
@@ -518,22 +545,31 @@ def tratar_identificar_referencias(uiapp, payload, fila_acoes, postar_mensagem):
 
 
 def tratar_atualizar_referencia(uiapp, payload, fila_acoes, postar_mensagem):
-    """Troca só a RTI ou só a bomba (payload {qual: 'rti'|'bomba'}) pedindo
-    a nova seleção no Revit; a outra referência é mantida."""
+    """Troca só a RTI, só a bomba ou só as válvulas (payload {qual: 'rti' |
+    'bomba' | 'valvula'}) pedindo a nova seleção no Revit; as outras
+    referências são mantidas."""
     try:
         if not licenca.tem_acesso(u"hidrantes"):
             raise _Interrompido(
                 u"Esta conta não tem o módulo Hidrantes liberado neste computador.", u"licenca")
         qual = (payload or {}).get(u"qual")
-        if qual not in (u"rti", u"bomba"):
+        if qual not in (u"rti", u"bomba", u"valvula"):
             raise _Interrompido(u"Referência desconhecida: {}".format(qual))
         uidoc, projeto_dir = _doc_e_pasta(uiapp)
         refs = _ler_referencias(projeto_dir)
-        if qual == u"rti":
+        if qual == u"valvula":
+            try:
+                create_hydrant_params(uidoc.Document)
+            except Exception as ex:
+                raise _Interrompido(
+                    u"Erro ao criar parâmetros: {}".format(texto_erro(ex)), u"servidor")
+            _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir, substituir=True)
+        elif qual == u"rti":
             refs[u"rti"] = _montar_rti(uidoc, postar_mensagem, None)[4]
+            _gravar_referencias(projeto_dir, refs)
         else:
             refs[u"bomba"] = _montar_bomba(uidoc, postar_mensagem, None)[5]
-        _gravar_referencias(projeto_dir, refs)
+            _gravar_referencias(projeto_dir, refs)
         resposta = _payload_referencias(uidoc.Document, projeto_dir)
         resposta[u"atualizado"] = qual
         postar_mensagem(_TIPO_REFERENCIAS, resposta)

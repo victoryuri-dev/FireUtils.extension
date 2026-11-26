@@ -56,7 +56,7 @@ function ListaInconsistencias({ itens }) {
   );
 }
 
-const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio" };
+const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio", valvula: "Válvula de hidrante" };
 
 /**
  * Linha de uma referência (RTI ou bomba) salva no projeto: "Dimensionar"
@@ -83,11 +83,16 @@ function LupaReferencia({ eids }) {
   );
 }
 
-function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
+// Atenção: a propriedade NÃO pode se chamar `ref` — o React reserva esse nome
+// e não o repassa ao componente (a referência chegava sempre vazia).
+function BoxReferencia({ qual, referencia, atualizando, desabilitado, onAtualizar }) {
   const ativa = atualizando === qual;
-  const encontrada = !!ref?.existe;
-  const estado = !ref ? "Não definido" : !encontrada ? "Não encontrado" : "Identificado";
-  const acao = ativa ? "Selecionando…" : ref ? "Alterar referência" : "Definir referência";
+  const encontrada = !!referencia?.existe;
+  const fem = qual === "valvula";
+  const estado = !referencia
+    ? (fem ? "Não definida" : "Não definido")
+    : !encontrada ? "Não encontrado" : (fem ? "Identificada" : "Identificado");
+  const acao = ativa ? "Selecionando…" : referencia ? "Alterar referência" : "Definir referência";
 
   function acionar() {
     if (!desabilitado) onAtualizar(qual);
@@ -110,11 +115,14 @@ function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
       <span className="hid-ref-esq">
         {/* Não aciona a troca da referência ao localizar. */}
         <span className="hid-ref-lupa" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          <LupaReferencia eids={encontrada ? ref.eids : null} />
+          <LupaReferencia eids={encontrada ? referencia.eids : null} />
         </span>
-        <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
+        <span className="hid-ref-textos">
+          <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
+          {referencia?.sub && <span className="hid-ref-sub">{referencia.sub}</span>}
+        </span>
       </span>
-      <span className={`hid-ref-estado ${!ref || !encontrada ? "hid-ref-estado-alerta" : "hid-ref-estado-ok"} ${ativa ? "hid-ref-estado-ativa" : ""}`}>
+      <span className={`hid-ref-estado ${!referencia || !encontrada ? "hid-ref-estado-alerta" : "hid-ref-estado-ok"} ${ativa ? "hid-ref-estado-ativa" : ""}`}>
         <span className="hid-ref-estado-texto">{ativa ? acao : estado}</span>
         {!ativa && <span className="hid-ref-estado-acao">{acao}</span>}
       </span>
@@ -130,36 +138,34 @@ function semReferencias(referencias) {
 }
 
 function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar }) {
+  if (semReferencias(referencias)) return null;
+
   const familias = referencias?.familiasValvula || [];
   const qtdValvulas = referencias?.qtdValvulas || 0;
-
-  if (semReferencias(referencias)) return null;
+  const valvula = familias.length > 0 || qtdValvulas > 0
+    ? {
+        existe: true,
+        eids: referencias?.eidsValvulas || [],
+        sub: familias.length > 0 ? familias.join(", ") : `${qtdValvulas} identificada(s)`,
+      }
+    : null;
 
   return (
     <div className="hid-ref-grade">
-      {["rti", "bomba"].map((qual) => (
+      {[
+        ["rti", referencias?.rti],
+        ["bomba", referencias?.bomba],
+        ["valvula", valvula],
+      ].map(([qual, referencia]) => (
         <BoxReferencia
           key={qual}
           qual={qual}
-          ref={referencias?.[qual]}
+          referencia={referencia}
           atualizando={atualizando}
           desabilitado={desabilitado}
           onAtualizar={onAtualizar}
         />
       ))}
-      <div className="hid-ref-box hid-ref-box-fixa">
-        <span className="hid-ref-esq">
-          <span className="hid-ref-lupa" />
-          <span className="hid-ref-rotulo">Válvula de hidrante</span>
-        </span>
-        {familias.length > 0 || qtdValvulas > 0 ? (
-          <span className="hid-ref-familia">
-            {familias.length > 0 ? familias.join(", ") : `${qtdValvulas} identificada(s)`}
-          </span>
-        ) : (
-          <span className="hid-ref-estado hid-ref-estado-alerta">Não definida</span>
-        )}
-      </div>
     </div>
   );
 }

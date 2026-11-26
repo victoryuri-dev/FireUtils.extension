@@ -209,7 +209,7 @@
  *     sequência, a RTI, a bomba e (se o projeto ainda não tem) as válvulas de
  *     hidrante; o que já está salvo é reaproveitado. Passos em
  *     HIDRANTES_MAPEAR_PROGRESSO; responde HIDRANTES_REFERENCIAS (com
- *     `qtdValvulas`, o nº de válvulas identificadas). É a mesma verificação
+ *     `qtdValvulas`/`eidsValvulas`, as válvulas identificadas). É a mesma verificação
  *     que o Dimensionar faz quando falta alguma referência.
  *
  *   { type: "CANCELAR_SELECAO_REVIT" }
@@ -223,7 +223,7 @@
  *     famílias de válvula). "Mapear Trechos" reaproveita a RTI e a bomba
  *     salvas em vez de pedir o clique de novo. Responde HIDRANTES_REFERENCIAS.
  *
- *   { type: "ATUALIZAR_REFERENCIA_HIDRANTE", payload: { qual: "rti" | "bomba" } }
+ *   { type: "ATUALIZAR_REFERENCIA_HIDRANTE", payload: { qual: "rti" | "bomba" | "valvula" } }
  *     JS -> Python: o usuário troca só a RTI ou só a bomba, clicando no Revit
  *     (progresso em HIDRANTES_MAPEAR_PROGRESSO). Responde HIDRANTES_REFERENCIAS.
  *
