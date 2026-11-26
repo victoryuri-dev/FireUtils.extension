@@ -333,6 +333,18 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
   // O usuário decidiu ignorar as inconsistências leves: grava o mapeamento
   // e, ao responder, o processo segue para o cálculo.
+  // O popup só abre quando o usuário precisa agir no Revit; nesse caso o
+  // cartão Referências não repete a instrução.
+  // Python anterior ao popup não manda `acao`: aí vale como clique tudo que
+  // não for aviso de "trabalhando" (Percorrendo/Usando/Gravando…).
+  const acaoDoPasso =
+    progresso?.acao ??
+    (progresso?.instrucao && !/^(Percorrendo|Usando|Gravando|Elemento selecionado)/.test(progresso.instrucao)
+      ? "clique"
+      : "processando");
+  const popupAberto =
+    (mapeando || !!atualizandoReferencia) && (acaoDoPasso === "clique" || acaoDoPasso === "selecao");
+
   async function continuarMapeamento() {
     const token = await tokenDaSessao();
     if (!token) return;
@@ -703,10 +715,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               até o Tipo estar identificado. */}
           {classificacao?.tipo ? (
             <>
-              {(mapeando || atualizandoReferencia) && <HidrantesInstrucaoModal progresso={progresso} />}
+              <HidrantesInstrucaoModal progresso={progresso} acao={acaoDoPasso} aberto={popupAberto} />
               <HidrantesMapeamento
                 mapeando={mapeando}
                 instrucao={progresso?.instrucao}
+                popupAberto={popupAberto}
                 pendente={mapeamentoPendente}
                 inconsistencia={inconsistenciaMapeamento}
                 referencias={referencias}

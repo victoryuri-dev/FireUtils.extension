@@ -63,7 +63,7 @@ const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio
  * pedir o clique de novo. O usuário confere se continuam as mesmas (e
  * localiza no Revit) e troca só a que mudou.
  */
-function ReferenciasSalvas({ referencias, atualizando, instrucao, desabilitado, onAtualizar }) {
+function ReferenciasSalvas({ referencias, atualizando, instrucao, popupAberto, desabilitado, onAtualizar }) {
   const linhas = ["rti", "bomba"].map((qual) => ({ qual, ref: referencias?.[qual] }));
   const familias = referencias?.familiasValvula || [];
 
@@ -117,7 +117,7 @@ function ReferenciasSalvas({ referencias, atualizando, instrucao, desabilitado, 
           </tbody>
         </table>
       </div>
-      {atualizando && (
+      {atualizando && !popupAberto && (
         <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
           <Loader size={16} />
           <span>{instrucao || "Preparando…"} (Esc no Revit cancela)</span>
@@ -138,7 +138,7 @@ function ReferenciasSalvas({ referencias, atualizando, instrucao, desabilitado, 
  */
 export default function HidrantesMapeamento({
   mapeando, instrucao, pendente, inconsistencia, onDimensionar, onContinuar,
-  referencias, atualizandoReferencia, onAtualizarReferencia,
+  referencias, atualizandoReferencia, onAtualizarReferencia, popupAberto,
 }) {
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
@@ -150,11 +150,12 @@ export default function HidrantesMapeamento({
         referencias={referencias}
         atualizando={atualizandoReferencia}
         instrucao={instrucao}
+        popupAberto={popupAberto}
         desabilitado={mapeando || !!atualizandoReferencia}
         onAtualizar={onAtualizarReferencia}
       />
 
-      {mapeando && (
+      {mapeando && !popupAberto && (
         <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Loader size={16} />
           <span>{instrucao || "Preparando…"} (Esc no Revit cancela)</span>

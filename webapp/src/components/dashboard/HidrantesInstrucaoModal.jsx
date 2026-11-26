@@ -5,9 +5,8 @@
  * hidrantes_mapear_bridge.py); enquanto o plugin trabalha sozinho, o
  * cartão "Referências" mostra só um aviso discreto.
  */
-export default function HidrantesInstrucaoModal({ progresso }) {
-  const acao = progresso?.acao;
-  if (acao !== "clique" && acao !== "selecao") return null;
+export default function HidrantesInstrucaoModal({ progresso, acao, aberto }) {
+  if (!aberto) return null;
 
   return (
     <div className="se-modal-overlay" role="dialog" aria-modal="true" aria-live="polite">
