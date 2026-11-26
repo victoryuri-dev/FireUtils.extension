@@ -198,18 +198,10 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
         ids_no_trecho = set(get_id(e) for e in trechos_elems[nome_trecho])
         return lambda e, _ids=ids_no_trecho: get_pipe_type_no_trecho(e, _ids)
 
-    # Material/sistema de conexão são escolhidos na dockpane por (etapa,
-    # pipe_type) — ver material_conexao.py. Pipe sem PipeType resolvível
-    # (ou trecho nunca configurado) usa material None/sistema "bsp", o
-    # mesmo comportamento de antes desta funcionalidade existir.
+    # O material é escolhido na dockpane por (etapa, pipe_type) — ver
+    # material_conexao.py. Pipe sem PipeType resolvível (ou trecho nunca
+    # configurado) usa material None (C padrão do perfil).
     dados_material = material_conexao_calc.load_dados(doc)
-
-    def _tipo_conexao_fn(chave_t, pipe_type_fn):
-        def fn(elem, d_mm):
-            pipe_type_id, _nome = pipe_type_fn(elem) or (None, None)
-            _material, sistema = material_conexao_calc.get_escolha(dados_material, chave_t, pipe_type_id)
-            return get_tipo_conexao(elem, d_mm, sistema)
-        return fn
 
     _TRECHOS_ORDEM = (
         (u"t1", u"RTI - Bomba"),
@@ -224,12 +216,11 @@ def _processar(uiapp, payload, fila_acoes, postar_mensagem):
             pipe_type_fn = _pipe_type_fn(nome_trecho)
             resultado = extrair_trecho(
                 trechos_elems[nome_trecho], get_comprimento, _diametro_fn(nome_trecho),
-                get_leq, get_nome, get_id, _tipo_conexao_fn(chave_t, pipe_type_fn), pipe_type_fn,
+                get_leq, get_nome, get_id, get_tipo_conexao, pipe_type_fn,
             )
-            # O material é do TUBO (segmento), não da conexão — a conexão só
-            # herda o sistema de conexão (já resolvido acima, por conexão).
+            # O material é do TUBO (segmento).
             for seg in resultado[u"segmentos"]:
-                material, _sistema = material_conexao_calc.get_escolha(
+                material = material_conexao_calc.get_material(
                     dados_material, chave_t, seg.get(u"pipe_type_id"))
                 seg[u"material"] = material
             trechos_data[chave_t] = resultado

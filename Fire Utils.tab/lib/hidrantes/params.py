@@ -146,14 +146,13 @@ PROJECT_INFO_METODO_PARAM = u"FireUtils - Metodo de Calculo de Hidrante"
 # (ver hidrantes_classificacao_bridge.py).
 PROJECT_INFO_SUCCAO_PARAM = u"FireUtils - Dados de Succao"
 
-# Guarda, em JSON, o material da tubulação E o sistema de conexão (BSP
-# roscado x Grooved ranhurado) escolhidos na dockpane POR TRECHO — mais
-# especificamente por (etapa, tipo de tubo detectado no Revit via
-# PipeType). Usado pelo motor de cálculo pra decidir o C de
-# Hazen-Williams da etapa e a tabela de Leq de cotovelo/tê (ver
-# get_tipo_conexao em rede.py, dimensionar.ts e leqConexoes.ts do lado do
-# motor) — nenhum dos dois dá pra inferir da família/tipo do Revit
-# sozinho, só a troca em si (ver hidrantes/material_conexao.py).
+# Guarda, em JSON, o material da tubulação escolhido na dockpane POR
+# TRECHO — mais especificamente por (etapa, tipo de tubo detectado no
+# Revit via PipeType). Usado pelo motor de cálculo pra decidir o C de
+# Hazen-Williams da etapa (ver dimensionar.ts do lado do motor) — não dá
+# pra inferir da família/tipo do Revit sozinho (ver
+# hidrantes/material_conexao.py). O nome do parâmetro ("Material e
+# Conexao") é mantido por compatibilidade com projetos já gravados.
 PROJECT_INFO_MATERIAL_CONEXAO_PARAM = u"FireUtils - Material e Conexao"
 
 PROJECT_INFO_PARAMS = [

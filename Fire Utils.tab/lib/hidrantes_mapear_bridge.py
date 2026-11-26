@@ -836,7 +836,7 @@ def _gravar(doc, ctx):
         trechos.append({u"nome": nome, u"eids": list(c[u"rota"]), u"perda": c[u"J"]})
 
     # Combinações (tipo de tubo, diâmetros) por etapa — pra dockpane desenhar
-    # o seletor de material/sistema de conexão (ver material_conexao.py).
+    # o seletor de material (ver material_conexao.py).
     # Mesmos 4 conjuntos de elementos que "Dimensionar" vai usar depois
     # (payload_rotas.t1-t4 na próxima chamada são exatamente estes ids).
     def _combinacoes(ids):

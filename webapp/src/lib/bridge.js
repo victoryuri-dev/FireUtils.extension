@@ -424,12 +424,11 @@ export const BridgeMessageTypes = {
   REVIT_LEVELS: "REVIT_LEVELS",
   SET_NIVEIS_CORRELACAO: "SET_NIVEIS_CORRELACAO",
   NIVEIS_CORRELACAO_SAVED: "NIVEIS_CORRELACAO_SAVED",
-  // Material da tubulação + sistema de conexão (BSP roscado x Grooved
-  // ranhurado), por (etapa, tipo de tubo detectado no Revit) — decide o C
-  // de Hazen-Williams e a tabela de Leq de cotovelo/tê no motor (ver
-  // hidrantes/material_conexao.py e dimensionar.ts/leqConexoes.ts). GET
-  // devolve o que já está salvo no projeto (porEtapa: {"t1": {"<pipe_type_id>":
-  // {material, sistema}}, ...}); SET grava a escolha feita na dockpane.
+  // Material da tubulação, por (etapa, tipo de tubo detectado no Revit) —
+  // decide o C de Hazen-Williams no motor (ver hidrantes/material_conexao.py
+  // e dimensionar.ts). GET devolve o que já está salvo no projeto
+  // (porEtapa: {"t1": {"<pipe_type_id>": {material}}, ...}); SET grava a
+  // escolha feita na dockpane.
   GET_MATERIAL_CONEXAO: "GET_MATERIAL_CONEXAO",
   MATERIAL_CONEXAO: "MATERIAL_CONEXAO",
   SET_MATERIAL_CONEXAO: "SET_MATERIAL_CONEXAO",

@@ -20,8 +20,6 @@ const MATERIAIS = [
   { key: "cobre", label: "Cobre" },
 ];
 
-const ROTULO_SISTEMA = { bsp: "BSP (roscado)", grooved: "Grooved (ranhurado)" };
-
 const NOME_ETAPA = {
   t1: "Sucção (RTI → Bomba)",
   t2: "Recalque (Bomba → Ponto A)",
@@ -79,28 +77,9 @@ function SeletorMaterial({ value, onChange }) {
   );
 }
 
-function SeletorSistema({ value, onChange }) {
-  return (
-    <div style={{ display: "flex", gap: 6 }}>
-      {Object.keys(ROTULO_SISTEMA).map((sistema) => (
-        <button
-          key={sistema}
-          type="button"
-          className={`hid-acionamento-pill ${(value || "bsp") === sistema ? "hid-acionamento-pill-ativa" : ""}`}
-          style={{ flex: 1, textAlign: "center" }}
-          onClick={() => onChange(sistema)}
-        >
-          {ROTULO_SISTEMA[sistema]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** Um grupo (tipo de tubo detectado) dentro de uma etapa — card próprio,
  * campos empilhados (nunca lado a lado): é o que se comporta bem numa
- * dockpane estreita, sem truncar o nome do material nem espremer os
- * botões de sistema. */
+ * dockpane estreita, sem truncar o nome do material. */
 function CartaoGrupo({ grupo, escolha, onEscolher }) {
   const diametros = grupo.diametros || [];
   const nome = grupo.nome || "Tipo de tubo não identificado";
@@ -117,17 +96,13 @@ function CartaoGrupo({ grupo, escolha, onEscolher }) {
         <Campo rotulo="Material">
           <SeletorMaterial value={escolha.material} onChange={(v) => onEscolher("material", v)} />
         </Campo>
-        <Campo rotulo="Sistema de conexão">
-          <SeletorSistema value={escolha.sistema} onChange={(v) => onEscolher("sistema", v)} />
-        </Campo>
       </div>
     </div>
   );
 }
 
 /**
- * Material da tubulação + sistema de conexão (BSP x Grooved), escolhidos
- * JUNTOS, por (etapa, tipo de tubo detectado no Revit) — um mesmo trecho
+ * Material da tubulação, escolhido por (etapa, tipo de tubo detectado no Revit) — um mesmo trecho
  * (RTI-Bomba, Bomba-Ponto A, ...) pode ter mais de um PipeType ao longo do
  * seu comprimento (troca de material no meio do trecho), e cada um precisa
  * da própria escolha. As combinações (quais tipos de tubo existem em cada
@@ -146,7 +121,7 @@ function CartaoGrupo({ grupo, escolha, onEscolher }) {
  * Acionamento da Bomba (.hid-acionamento-lista), pra ficar familiar pra
  * quem já usa o resto da dockpane todo dia.
  *
- * "Mesmo material/conexão para todos os trechos": simplifica pra um
+ * "Mesmo material para todos os trechos": simplifica pra um
  * controle só, que grava A MESMA escolha em TODO (etapa, tipo de tubo)
  * conhecido — sem formato novo nenhum do lado do Python: é só o mesmo
  * SET_MATERIAL_CONEXAO de sempre, com a mesma escolha repetida em cada
@@ -163,7 +138,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
   const [porEtapa, setPorEtapa] = useState({});
   const [carregado, setCarregado] = useState(false);
   const [mesmoParaTodos, setMesmoParaTodos] = useState(false);
-  const [escolhaUnica, setEscolhaUnica] = useState({ material: null, sistema: "bsp" });
+  const [escolhaUnica, setEscolhaUnica] = useState({ material: null });
   const inferenciaFeitaRef = useRef(false);
 
   useEffect(() => {
@@ -175,7 +150,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
         const { ok, porEtapa: salvo, erro } = mensagem.payload || {};
         setCarregado(true);
         if (!ok) {
-          adicionarToast?.({ tipo: "erro", titulo: "Não foi possível ler material/conexão", mensagem: erro, duracaoMs: 9000 });
+          adicionarToast?.({ tipo: "erro", titulo: "Não foi possível ler o material", mensagem: erro, duracaoMs: 9000 });
           return;
         }
         setPorEtapa(salvo || {});
@@ -185,7 +160,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
       if (mensagem.type === BridgeMessageTypes.MATERIAL_CONEXAO_SAVED) {
         const { ok, porEtapa: salvo, erro } = mensagem.payload || {};
         if (!ok) {
-          adicionarToast?.({ tipo: "erro", titulo: "Não foi possível salvar material/conexão", mensagem: erro, duracaoMs: 9000 });
+          adicionarToast?.({ tipo: "erro", titulo: "Não foi possível salvar o material", mensagem: erro, duracaoMs: 9000 });
           return;
         }
         setPorEtapa(salvo || {});
@@ -204,11 +179,11 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
     if (chaves.length === 0) return; // ainda sem combinações — espera o mapeamento
     inferenciaFeitaRef.current = true;
 
-    const valores = chaves.map(({ etapa, chave }) => porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" });
+    const valores = chaves.map(({ etapa, chave }) => porEtapa[etapa]?.[chave] || { material: null });
     const primeiro = valores[0];
-    const todasIguais = valores.every((v) => (v.material || null) === (primeiro.material || null) && (v.sistema || "bsp") === (primeiro.sistema || "bsp"));
+    const todasIguais = valores.every((v) => (v.material || null) === (primeiro.material || null));
     if (todasIguais) {
-      setEscolhaUnica({ material: primeiro.material || null, sistema: primeiro.sistema || "bsp" });
+      setEscolhaUnica({ material: primeiro.material || null });
       setMesmoParaTodos(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,7 +191,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
 
   function escolher(etapa, pipeTypeId, campo, valor) {
     const chave = chavePipeType(pipeTypeId);
-    const atual = porEtapa[etapa]?.[chave] || { material: null, sistema: "bsp" };
+    const atual = porEtapa[etapa]?.[chave] || { material: null };
     if (atual[campo] === valor) return;
     const novo = {
       ...porEtapa,
@@ -252,23 +227,22 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
 
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
-      <h3 style={{ margin: 0 }}>Material e Sistema de Conexão</h3>
+      <h3 style={{ margin: 0 }}>Material da Tubulação</h3>
       {/* .hid-secao-desc tem margin-top negativo (compensa o line-height de
           outro card, "Bomba de Incêndio") — sobrescrito aqui pra não colar
           no título. */}
       <p className="hid-secao-desc" style={{ marginTop: 6 }}>
-        Material (coeficiente C) e sistema de conexão de cotovelo/tê, por trecho e tipo de tubo. Sem escolha,
-        usa galvanizado (C=120) e BSP.
+        Material (coeficiente C) por trecho e tipo de tubo. Sem escolha, usa galvanizado (C=120).
       </p>
       {!carregado ? (
         <p className="vazio">Carregando…</p>
       ) : etapasComTubo.length === 0 ? (
-        <p className="vazio">Mapeie a rede (acima) para configurar material e conexão por trecho.</p>
+        <p className="vazio">Dimensione a rede (acima) uma vez para configurar o material por trecho.</p>
       ) : (
         <>
           <button type="button" className={`hid-bomba-cartao ${mesmoParaTodos ? "hid-bomba-cartao-ativa" : ""}`} onClick={alternarMesmoParaTodos} style={{ marginTop: 16 }}>
             <span className="hid-bomba-cartao-textos">
-              <span className="hid-bomba-cartao-titulo">Mesmo material e conexão para todos os trechos</span>
+              <span className="hid-bomba-cartao-titulo">Mesmo material para todos os trechos</span>
             </span>
             <span className={`hid-bomba-check ${mesmoParaTodos ? "hid-bomba-check-ativo" : ""}`}>
               {mesmoParaTodos && <Icon svg={checkStrokeIconSvg} />}
@@ -280,9 +254,6 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <Campo rotulo="Material">
                   <SeletorMaterial value={escolhaUnica.material} onChange={(v) => escolherUnica("material", v)} />
-                </Campo>
-                <Campo rotulo="Sistema de conexão">
-                  <SeletorSistema value={escolhaUnica.sistema} onChange={(v) => escolherUnica("sistema", v)} />
                 </Campo>
               </div>
               <p className="hid-nota-aviso" style={{ marginBottom: 0 }}>Aplicado a todos os trechos e tipos de tubo encontrados no mapeamento.</p>
@@ -296,7 +267,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
                     <CartaoGrupo
                       key={chavePipeType(grupo.id)}
                       grupo={grupo}
-                      escolha={porEtapa[etapa]?.[chavePipeType(grupo.id)] || { material: null, sistema: "bsp" }}
+                      escolha={porEtapa[etapa]?.[chavePipeType(grupo.id)] || { material: null }}
                       onEscolher={(campo, valor) => escolher(etapa, grupo.id, campo, valor)}
                     />
                   ))}

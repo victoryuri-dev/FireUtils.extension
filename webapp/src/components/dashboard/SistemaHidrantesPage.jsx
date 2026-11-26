@@ -139,7 +139,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const fluxoDimensionarRef = useRef(null);
   const [atualizandoReferencia, setAtualizandoReferencia] = useState(null);
   // Combinações (tipo de tubo, diâmetros) por etapa, pro seletor de
-  // material/sistema de conexão (MaterialConexaoSelector) — vem do
+  // material (MaterialConexaoSelector) — vem do
   // resultado do último "Mapear Trechos" (vivo) ou, depois de reabrir o
   // projeto, de HIDRANTES_DIMENSIONAMENTO (cache).
   const [pipeTypesPorEtapa, setPipeTypesPorEtapa] = useState(null);

@@ -2,38 +2,31 @@
 """
 material_conexao.py — Fire Utils · lib/hidrantes/
 
-Material da tubulação e sistema de conexão (BSP roscado x Grooved
-ranhurado), escolhidos na dockpane POR TRECHO — mais especificamente por
-(etapa, tipo de tubo detectado no Revit): uma mesma etapa (RTI-Bomba,
-Bomba-Ponto A, ...) pode ter mais de um PipeType diferente ao longo do
-seu comprimento (troca de material no meio do trecho), e cada um precisa
-da própria escolha. Guardado no Project Information do projeto (JSON no
-parâmetro "FireUtils - Material e Conexao"), no mesmo molde de
-succao.py. Substitui sistema_conexao.py: o sistema de conexão passou a
-ser escolhido JUNTO do material, por (etapa, tipo de tubo), não mais só
-por diâmetro isolado.
+Material da tubulação, escolhido na dockpane POR TRECHO — mais
+especificamente por (etapa, tipo de tubo detectado no Revit): uma mesma
+etapa (RTI-Bomba, Bomba-Ponto A, ...) pode ter mais de um PipeType
+diferente ao longo do seu comprimento (troca de material no meio do
+trecho), e cada um precisa da própria escolha. Guardado no Project
+Information do projeto (JSON no parâmetro "FireUtils - Material e
+Conexao" — nome mantido por compatibilidade com projetos já gravados),
+no mesmo molde de succao.py.
 
-Por que isso existe:
-- O material decide o coeficiente C de Hazen-Williams do trecho. Antes
-  desta funcionalidade, o motor de cálculo sempre assumia "galvanizado"
-  pra rede inteira, não importava o material real (ver dimensionar.ts,
-  repositório ETOS.FireUtils) — o seletor de material que já existia no
-  site nunca chegava no cálculo.
-- Cotovelo/tê roscado e ranhurado têm Leq bem diferente pro mesmo
-  diâmetro, e nenhum dos dois (material, sistema de conexão) dá pra
-  inferir sozinho da família do Revit: só a FORMA da conexão (PartType)
-  e a TROCA de tipo de tubo (PipeType) são nativas; a correspondência de
-  cada uma com a lista de materiais/sistemas da norma é escolha do
-  usuário.
+O material decide o coeficiente C de Hazen-Williams do trecho. Não dá
+para inferi-lo da família do Revit: a correspondência de cada PipeType
+com a lista de materiais da norma é escolha do usuário.
+
+O antigo "sistema de conexão" (BSP roscado x Grooved ranhurado) foi
+removido: o motor usa uma única tabela de Leq para cotovelo/tê. Projetos
+com escolha antiga gravada continuam válidos — a chave "sistema" é
+ignorada ao ler.
 
 Formato salvo:
-    {"t1": {"<pipe_type_id>": {"material": "galvanizado"|None, "sistema": "bsp"|"grooved"}, ...},
+    {"t1": {"<pipe_type_id>": {"material": "galvanizado"|None}, ...},
      "t2": {...}, "t3": {...}, "t4": {...}}
 "<pipe_type_id>" é o ElementId (int, como string) do PipeType do Revit —
 "none" pro grupo sem PipeType resolvível (fitting na ponta do trecho sem
-nenhum Pipe vizinho no mesmo trecho; raro, e cai no padrão sem precisar
-de configuração: material None usa o C padrão do perfil, sistema "bsp"
-é o mesmo default de antes desta funcionalidade).
+nenhum Pipe vizinho no mesmo trecho; raro, e cai no padrão: material
+None usa o C padrão do perfil).
 """
 
 from __future__ import absolute_import
@@ -52,8 +45,6 @@ MATERIAIS_VALIDOS = (
     u"plastico", u"ff_revest_cimento", u"cobre",
 )
 
-SISTEMAS_VALIDOS = (u"bsp", u"grooved")
-SISTEMA_PADRAO = u"bsp"
 CHAVE_SEM_PIPE_TYPE = u"none"
 
 
@@ -63,7 +54,7 @@ def default_dados():
 
 def chave_pipe_type(pipe_type_id):
     """Chave de string estável pro dict salvo — mesma função usada ao
-    salvar (dockpane) e ao ler (get_escolha), pra nunca divergir."""
+    salvar (dockpane) e ao ler (get_material), pra nunca divergir."""
     if pipe_type_id is None:
         return CHAVE_SEM_PIPE_TYPE
     try:
@@ -74,8 +65,8 @@ def chave_pipe_type(pipe_type_id):
 
 def normalizar_dados(dados):
     """Converte um dict cru (JSON salvo, ou vindo da dockpane) pro formato
-    canônico. Entradas inválidas (etapa desconhecida, material/sistema
-    fora da lista) são descartadas silenciosamente — nunca gravam um
+    canônico. Entradas inválidas (etapa desconhecida, material fora da
+    lista) são descartadas silenciosamente — nunca gravam um
     valor que o motor não reconheceria."""
     out = default_dados()
     if not isinstance(dados, dict):
@@ -89,26 +80,19 @@ def normalizar_dados(dados):
             material = escolha.get(u"material")
             if material is not None and material not in MATERIAIS_VALIDOS:
                 continue
-            sistema = escolha.get(u"sistema") or SISTEMA_PADRAO
-            if sistema not in SISTEMAS_VALIDOS:
-                continue
-            out[etapa][u"{}".format(chave)] = {u"material": material, u"sistema": sistema}
+            out[etapa][u"{}".format(chave)] = {u"material": material}
     return out
 
 
-def get_escolha(dados, etapa, pipe_type_id):
-    """(material, sistema) configurados pra esse (etapa, pipe_type).
-
-    material é None (usa o C padrão do perfil normativo) e sistema é
-    SISTEMA_PADRAO ("bsp") quando não há escolha salva pra essa
-    combinação — mesmo comportamento de antes desta funcionalidade
-    existir, então um trecho nunca configurado não muda resultado
-    nenhum."""
+def get_material(dados, etapa, pipe_type_id):
+    """Material configurado pra esse (etapa, pipe_type), ou None (usa o C
+    padrão do perfil normativo) quando não há escolha salva pra essa
+    combinação — um trecho nunca configurado não muda resultado nenhum."""
     por_pipe_type = (dados or {}).get(etapa) or {}
     escolha = por_pipe_type.get(chave_pipe_type(pipe_type_id))
     if not escolha:
-        return None, SISTEMA_PADRAO
-    return escolha.get(u"material"), (escolha.get(u"sistema") or SISTEMA_PADRAO)
+        return None
+    return escolha.get(u"material")
 
 
 def load_dados(doc):
@@ -130,7 +114,7 @@ def load_dados(doc):
 
 def save_dados(doc, dados):
     """
-    Grava material/sistema por (etapa, pipe_type) no projeto (JSON no
+    Grava o material por (etapa, pipe_type) no projeto (JSON no
     Project Information). Abre e fecha a própria Transaction.
     """
     from Autodesk.Revit.DB import Transaction
@@ -140,8 +124,8 @@ def save_dados(doc, dados):
         return False, u"Parâmetro '{}' não encontrado no projeto.".format(PARAM)
 
     normalizados = normalizar_dados(dados)
-    with Transaction(doc, u"FireUtils - Material e sistema de conexão por trecho") as t:
+    with Transaction(doc, u"FireUtils - Material da tubulação por trecho") as t:
         t.Start()
         param.Set(json.dumps(normalizados, ensure_ascii=True, sort_keys=True))
         t.Commit()
-    return True, u"Material e sistema de conexão salvos no projeto."
+    return True, u"Material salvo no projeto."

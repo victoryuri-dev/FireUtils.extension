@@ -2,9 +2,8 @@
 """
 hidrantes_material_conexao_bridge.py — Fire Utils · lib/
 Processa as mensagens da bridge web GET_MATERIAL_CONEXAO/SET_MATERIAL_CONEXAO:
-material da tubulação + sistema de conexão (BSP roscado x Grooved
-ranhurado) escolhidos na dockpane, por (etapa, tipo de tubo) — ver
-hidrantes/material_conexao.py e leqConexoes.ts/dimensionar.ts (motor).
+material da tubulação escolhido na dockpane, por (etapa, tipo de tubo) —
+ver hidrantes/material_conexao.py e dimensionar.ts (motor).
 """
 
 from hidrantes import material_conexao
@@ -30,7 +29,7 @@ def tratar_set_material_conexao(uiapp, payload, postar_mensagem):
     if uidoc is None or not uidoc.Document.PathName:
         postar_mensagem(u"MATERIAL_CONEXAO_SAVED", {
             u"ok": False,
-            u"erro": u"Salve o projeto Revit (.rvt) antes de escolher material/sistema de conexão.",
+            u"erro": u"Salve o projeto Revit (.rvt) antes de escolher o material.",
         })
         return
     doc = uidoc.Document

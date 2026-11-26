@@ -209,8 +209,7 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
             tipo_conexao = get_tipo_conexao_fn(elem, d_mm) if get_tipo_conexao_fn else None
             if tipo_conexao is not None:
                 s = _seg(d_mm, pipe_type_id, pipe_type_nome)
-                chave = (tipo_conexao["tipo"], tipo_conexao["angulo_graus"], tipo_conexao["d2_mm"],
-                         tipo_conexao.get("sistema"))
+                chave = (tipo_conexao["tipo"], tipo_conexao["angulo_graus"], tipo_conexao["d2_mm"])
                 if chave in s["conexoes"]:
                     s["conexoes"][chave]["qtd"] += 1
                 else:
@@ -218,7 +217,6 @@ def extrair_trecho(elems, get_comprimento_fn, get_diametro_fn, get_leq_fn, get_n
                         "tipo": tipo_conexao["tipo"],
                         "angulo_graus": tipo_conexao["angulo_graus"],
                         "d2_mm": tipo_conexao["d2_mm"],
-                        "sistema": tipo_conexao.get("sistema") or "bsp",
                         "qtd": 1,
                     }
                 continue
@@ -310,7 +308,7 @@ def combinacoes_pipe_type(elems, get_diametro_fn, get_pipe_type_fn, get_id_fn=No
     (pipe_type_id, pipe_type_nome) encontradas nos TUBOS (Pipe) de `elems`
     e os diâmetros (DN, mm) de cada uma. Usado por "Mapear Trechos" pra
     informar a dockpane quais (etapa, tipo de tubo) existem de fato no
-    modelo, pra ela desenhar o seletor de material/sistema de conexão
+    modelo, pra ela desenhar o seletor de material
     (ver hidrantes_mapear_bridge.py, material_conexao.py).
 
     SÓ considera elementos Pipe — conexões/acessórios (FamilyInstance)

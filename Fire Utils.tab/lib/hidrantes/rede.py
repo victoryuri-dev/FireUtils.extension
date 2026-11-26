@@ -693,7 +693,7 @@ def _angulo_cotovelo(elem):
         return None
 
 
-def get_tipo_conexao(elem, d_mm=None, sistema=None):
+def get_tipo_conexao(elem, d_mm=None):
     """
     Classifica uma conexão/fitting de tubulação (cotovelo, tê, redução,
     tampão, união, luva Y) pelo tipo NATIVO do Revit — o PartType da
@@ -707,13 +707,6 @@ def get_tipo_conexao(elem, d_mm=None, sistema=None):
     d_mm, se informado, é o diâmetro nominal (mm) já resolvido pelo
     chamador pra este elemento (get_diametro_no_trecho) — usado só pra
     decidir qual dos dois lados de uma redução é o "outro" (d2_mm).
-
-    sistema ("bsp"|"grooved", default "bsp" se None) já vem RESOLVIDO pelo
-    chamador — material_conexao.get_escolha(dados, etapa, pipe_type_id),
-    porque sistema de conexão agora é escolhido junto do material, por
-    (etapa, tipo de tubo), não mais por diâmetro isolado (ver
-    hidrantes/material_conexao.py). Esta função só carimba o valor no
-    resultado; não faz lookup nenhum sozinha.
 
     Retorna None se o elemento não for uma conexão classificável assim
     (categoria diferente de "Conexões de Tubulação", ou PartType sem
@@ -733,8 +726,7 @@ def get_tipo_conexao(elem, d_mm=None, sistema=None):
     Retorna, caso contrário:
         {"tipo": "cotovelo"|"tee"|"transicao"|"tampao"|"uniao"|"luva_y",
          "angulo_graus": float|None,   # só cotovelo
-         "d2_mm": float|None,          # só transição
-         "sistema": "bsp"|"grooved"}   # vem de sistema_por_diametro, por d_mm
+         "d2_mm": float|None}          # só transição
     """
     global _CATS_CONEXAO, _MAPA_PART_TYPE_CONEXAO
 
@@ -799,10 +791,7 @@ def get_tipo_conexao(elem, d_mm=None, sistema=None):
     except Exception:
         return None
 
-    resultado = {
-        u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None,
-        u"sistema": sistema if sistema in (u"bsp", u"grooved") else u"bsp",
-    }
+    resultado = {u"tipo": tipo, u"angulo_graus": None, u"d2_mm": None}
 
     if tipo == u"cotovelo":
         resultado[u"angulo_graus"] = _angulo_cotovelo(elem)
