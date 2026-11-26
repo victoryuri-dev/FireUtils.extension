@@ -131,6 +131,10 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
   const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
   const [trechosMapeados, setTrechosMapeados] = useState(null);
+  // RTI/bomba/famílias de válvula salvas no projeto (reaproveitadas por
+  // "Mapear Trechos") e qual delas está sendo trocada no Revit agora.
+  const [referencias, setReferencias] = useState(null);
+  const [atualizandoReferencia, setAtualizandoReferencia] = useState(null);
   // Combinações (tipo de tubo, diâmetros) por etapa, pro seletor de
   // material/sistema de conexão (MaterialConexaoSelector) — vem do
   // resultado do último "Mapear Trechos" (vivo) ou, depois de reabrir o
@@ -176,8 +180,25 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
   useEffect(() => {
     recarregar();
+    postToHost(BridgeMessageTypes.GET_HIDRANTES_REFERENCIAS, {});
     return escutarMensagensDoHost((mensagem) => {
       if (!mensagem) return;
+
+      if (mensagem.type === BridgeMessageTypes.HIDRANTES_REFERENCIAS) {
+        setAtualizandoReferencia(null);
+        const p = mensagem.payload || {};
+        if (p.ok) {
+          setReferencias(p);
+        } else if (p.categoria !== "cancelado") {
+          adicionarToast?.({
+            tipo: "erro",
+            titulo: "Não foi possível atualizar a referência",
+            mensagem: p.erro,
+            duracaoMs: 9000,
+          });
+        }
+        return;
+      }
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAMENTO) {
         setCarregando(false);
@@ -212,6 +233,8 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_MAPEAR_RESULTADO) {
         setMapeando(false);
         const p = mensagem.payload || {};
+        // O mapeamento grava/atualiza a RTI e a bomba usadas.
+        postToHost(BridgeMessageTypes.GET_HIDRANTES_REFERENCIAS, {});
         if (p.ok && p.pendente) {
           setInconsistenciaMapeamento(null);
           setMapeamentoPendente(p);
@@ -277,6 +300,12 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     setMapeamentoPendente(null);
     setInconsistenciaMapeamento(null);
     postToHost(BridgeMessageTypes.MAPEAR_TRECHOS, {});
+  }
+
+  function atualizarReferencia(qual) {
+    setAtualizandoReferencia(qual);
+    setInstrucaoMapeamento("");
+    postToHost(BridgeMessageTypes.ATUALIZAR_REFERENCIA_HIDRANTE, { qual });
   }
 
   function continuarMapeamento() {
@@ -653,6 +682,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                 pendente={mapeamentoPendente}
                 inconsistencia={inconsistenciaMapeamento}
                 trechos={trechosMapeados ?? resposta.mapeamento}
+                referencias={referencias}
+                atualizandoReferencia={atualizandoReferencia}
+                onAtualizarReferencia={atualizarReferencia}
                 onMapear={mapear}
                 onContinuar={continuarMapeamento}
               />

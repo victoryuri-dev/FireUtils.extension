@@ -201,6 +201,21 @@
  *         outra falha: "requisito" (falta classificação, projeto salvo…),
  *         "norma", "licenca", "servidor", ou "cancelado" (Esc no Revit).
  *
+ *   { type: "GET_HIDRANTES_REFERENCIAS" }
+ *     JS -> Python: pede as referências salvas do projeto (RTI, bomba e
+ *     famílias de válvula). "Mapear Trechos" reaproveita a RTI e a bomba
+ *     salvas em vez de pedir o clique de novo. Responde HIDRANTES_REFERENCIAS.
+ *
+ *   { type: "ATUALIZAR_REFERENCIA_HIDRANTE", payload: { qual: "rti" | "bomba" } }
+ *     JS -> Python: o usuário troca só a RTI ou só a bomba, clicando no Revit
+ *     (progresso em HIDRANTES_MAPEAR_PROGRESSO). Responde HIDRANTES_REFERENCIAS.
+ *
+ *   { type: "HIDRANTES_REFERENCIAS", payload }
+ *     Python -> JS: { ok: true, rti, bomba, familiasValvula: string[],
+ *       atualizado?: "rti" | "bomba" }, com rti/bomba = null (nada salvo) ou
+ *       { existe, descricao, eids } (`eids` alimenta o "Localizar"). Em falha:
+ *       { ok: false, categoria, erro } ("cancelado" = Esc no Revit).
+ *
  *   { type: "CONTINUAR_MAPEAMENTO" }
  *     JS -> Python: o usuário decidiu ignorar as inconsistências pendentes de
  *     um HIDRANTES_MAPEAR_RESULTADO `pendente`; grava e responde com
@@ -384,6 +399,9 @@ export const BridgeMessageTypes = {
   CONTINUAR_MAPEAMENTO: "CONTINUAR_MAPEAMENTO",
   HIDRANTES_MAPEAR_PROGRESSO: "HIDRANTES_MAPEAR_PROGRESSO",
   HIDRANTES_MAPEAR_RESULTADO: "HIDRANTES_MAPEAR_RESULTADO",
+  GET_HIDRANTES_REFERENCIAS: "GET_HIDRANTES_REFERENCIAS",
+  ATUALIZAR_REFERENCIA_HIDRANTE: "ATUALIZAR_REFERENCIA_HIDRANTE",
+  HIDRANTES_REFERENCIAS: "HIDRANTES_REFERENCIAS",
   GET_SAIDAS_OPCOES: "GET_SAIDAS_OPCOES",
   SAIDAS_OPCOES: "SAIDAS_OPCOES",
   IDENTIFICAR_AMBIENTES: "IDENTIFICAR_AMBIENTES",

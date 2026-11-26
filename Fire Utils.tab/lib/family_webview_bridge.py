@@ -319,6 +319,16 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             lambda uiapp: hidrantes_mapear_bridge.tratar_mapear_trechos(
                 uiapp, payload, fila_acoes, postar_mensagem)
         )
+    elif tipo == u"GET_HIDRANTES_REFERENCIAS":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_mapear_bridge.tratar_get_referencias(
+                uiapp, payload, fila_acoes, postar_mensagem)
+        )
+    elif tipo == u"ATUALIZAR_REFERENCIA_HIDRANTE":
+        fila_acoes.enfileirar(
+            lambda uiapp: hidrantes_mapear_bridge.tratar_atualizar_referencia(
+                uiapp, payload, fila_acoes, postar_mensagem)
+        )
     elif tipo == u"CONTINUAR_MAPEAMENTO":
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_mapear_bridge.tratar_continuar_mapeamento(

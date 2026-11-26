@@ -56,6 +56,77 @@ function ListaInconsistencias({ itens }) {
   );
 }
 
+const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio" };
+
+/**
+ * RTI e bomba salvas no projeto: "Mapear Trechos" reaproveita as duas, sem
+ * pedir o clique de novo. O usuário confere se continuam as mesmas (e
+ * localiza no Revit) e troca só a que mudou.
+ */
+function ReferenciasSalvas({ referencias, atualizando, instrucao, desabilitado, onAtualizar }) {
+  const linhas = ["rti", "bomba"].map((qual) => ({ qual, ref: referencias?.[qual] }));
+  const familias = referencias?.familiasValvula || [];
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div className="hiddim-tabela-wrap">
+        <table className="hiddim-tabela">
+          <thead>
+            <tr>
+              <th className="hiddim-th hiddim-align-center" style={{ width: 40 }} />
+              <th className="hiddim-th hiddim-align-left">Referência</th>
+              <th className="hiddim-th hiddim-align-left">Elemento salvo</th>
+              <th className="hiddim-th hiddim-align-center" />
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map(({ qual, ref }) => (
+              <tr key={qual}>
+                <td className="hiddim-td hiddim-align-center">
+                  <BotaoLocalizar eids={ref?.existe ? ref.eids : null} />
+                </td>
+                <td className="hiddim-td hiddim-align-left">{NOME_REFERENCIA[qual]}</td>
+                <td className="hiddim-td hiddim-align-left hiddim-cor-muted">
+                  {!ref
+                    ? "Não definida — será pedida no próximo mapeamento"
+                    : ref.existe
+                      ? ref.descricao
+                      : `${ref.descricao || "Elemento"} (não existe mais no modelo)`}
+                </td>
+                <td className="hiddim-td hiddim-align-center">
+                  <button
+                    type="button"
+                    className="se-botao"
+                    onClick={() => onAtualizar(qual)}
+                    disabled={desabilitado}
+                  >
+                    {atualizando === qual ? "Selecionando…" : ref ? "Atualizar" : "Definir"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {familias.length > 0 && (
+              <tr>
+                <td className="hiddim-td hiddim-align-center"><span className="hiddim-td-vazio">—</span></td>
+                <td className="hiddim-td hiddim-align-left">Famílias da válvula de hidrante</td>
+                <td className="hiddim-td hiddim-align-left hiddim-cor-muted" colSpan={2}>
+                  {familias.join(", ")}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {atualizando && (
+        <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+          <Loader size={16} />
+          <span>{instrucao || "Preparando…"} (Esc no Revit cancela)</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * "Mapeamento da rede" — substitui o botão "Mapear trechos" da faixa do
  * Revit. O usuário clica na RTI e na bomba NO REVIT; enquanto isso a
@@ -67,6 +138,7 @@ function ListaInconsistencias({ itens }) {
  */
 export default function HidrantesMapeamento({
   mapeando, instrucao, pendente, inconsistencia, trechos, onMapear, onContinuar,
+  referencias, atualizandoReferencia, onAtualizarReferencia,
 }) {
   const jaMapeado = trechos?.length > 0;
 
@@ -78,11 +150,19 @@ export default function HidrantesMapeamento({
           type="button"
           className="se-botao se-botao-accent se-pagina-header-botao"
           onClick={onMapear}
-          disabled={mapeando}
+          disabled={mapeando || !!atualizandoReferencia}
         >
           {mapeando ? "Mapeando…" : jaMapeado ? "Mapear Novamente" : "Mapear Trechos"}
         </button>
       </div>
+
+      <ReferenciasSalvas
+        referencias={referencias}
+        atualizando={atualizandoReferencia}
+        instrucao={instrucao}
+        desabilitado={mapeando || !!atualizandoReferencia}
+        onAtualizar={onAtualizarReferencia}
+      />
 
       {mapeando && (
         <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -132,7 +212,7 @@ export default function HidrantesMapeamento({
       <p className="hid-nota-aviso">
         {jaMapeado
           ? "Rede mapeada. Mapeie de novo se mudar a tubulação no Revit."
-          : "Passo antes de dimensionar: clique na RTI e na bomba no Revit."}
+          : "Passo antes de dimensionar: mapeie a rede. A RTI e a bomba são pedidas no Revit na primeira vez e depois ficam salvas."}
       </p>
     </div>
   );

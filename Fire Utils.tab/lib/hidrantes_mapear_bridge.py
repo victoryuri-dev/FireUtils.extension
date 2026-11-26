@@ -85,6 +85,8 @@ P_IDENTIFICADOR = u"FireUtils - Identificador"
 P_ID_HIDRANTE   = u"FireUtils - ID Hidrante"
 
 _CHAVE_FAMILIAS = u"familias_valvula"
+_CHAVE_REFERENCIAS = u"referencias"
+_TIPO_REFERENCIAS = u"HIDRANTES_REFERENCIAS"
 
 _TIPO_PROGRESSO = u"HIDRANTES_MAPEAR_PROGRESSO"
 _TIPO_RESULTADO = u"HIDRANTES_MAPEAR_RESULTADO"
@@ -108,6 +110,15 @@ class _Interrompido(Exception):
 class _FiltroTubo(ISelectionFilter):
     def AllowElement(self, e):
         return isinstance(e, Pipe)
+
+    def AllowReference(self, r, p):
+        return False
+
+
+class _FiltroEquipamentoOuTubo(ISelectionFilter):
+    """Primeira seleção da RTI: o reservatório ou o tubo de saída dele."""
+    def AllowElement(self, e):
+        return isinstance(e, (FamilyInstance, Pipe))
 
     def AllowReference(self, r, p):
         return False
@@ -253,6 +264,194 @@ def _set_param(elem, nome, valor):
 
 
 # ---------------------------------------------------------------------------
+# Referências salvas (RTI e bomba)
+# ---------------------------------------------------------------------------
+
+def _ler_referencias(projeto_dir):
+    dados, _erro = carregar_cache(projeto_dir, chave=_CHAVE_REFERENCIAS)
+    return dict(dados or {})
+
+
+def _gravar_referencias(projeto_dir, refs):
+    payload = dict((k, v) for k, v in refs.items()
+                   if k in (u"rti", u"bomba") and v)
+    salvar_cache(payload, projeto_dir, chave=_CHAVE_REFERENCIAS)
+
+
+def _elem(doc, eid):
+    if eid is None:
+        return None
+    try:
+        return doc.GetElement(to_element_id(eid))
+    except Exception:
+        return None
+
+
+def _montar_rti(uidoc, postar_mensagem, ref):
+    """RTI e tubo de saída. `ref` é a referência salva (ou None para pedir
+    ao usuário). A primeira seleção aceita o reservatório OU o tubo dele;
+    se o reservatório não estiver conectado a nenhum tubo, pede o tubo.
+    Devolve (rti, tubo_rti, intermediarios, rti_auto, ref_para_salvar);
+    quando o usuário clica direto no tubo, `rti` é o próprio tubo."""
+    doc = uidoc.Document
+    ref = ref or {}
+    rti = _elem(doc, ref.get(u"eid"))
+    if rti is None:
+        if ref:
+            postar_mensagem(_TIPO_PROGRESSO, {
+                u"instrucao": u"A RTI salva não existe mais no modelo. Selecione de novo."})
+        ref = {}
+        rti = _selecionar(
+            uidoc, postar_mensagem,
+            u"Clique no reservatório (RTI) ou no tubo de saída dele no Revit.",
+            u"Selecione a RTI ou o tubo de saída da RTI", _FiltroEquipamentoOuTubo())
+
+    if isinstance(rti, Pipe):
+        return rti, rti, [], False, {
+            u"eid": get_id(rti), u"eid_tubo": None,
+            u"descricao": descricao_curta_elemento(rti)}
+
+    tubo, interm = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
+    rti_auto = tubo is not None
+    eid_tubo = None
+    if tubo is None:
+        interm = []
+        tubo = _elem(doc, ref.get(u"eid_tubo"))
+        if not isinstance(tubo, Pipe):
+            tubo = _selecionar(
+                uidoc, postar_mensagem,
+                u"A RTI não está conectada a nenhum tubo. Clique no tubo de saída da RTI no Revit.",
+                u"Tubo de saída da RTI", _FiltroTubo())
+        eid_tubo = get_id(tubo)
+    return rti, tubo, interm, rti_auto, {
+        u"eid": get_id(rti), u"eid_tubo": eid_tubo,
+        u"descricao": descricao_curta_elemento(rti)}
+
+
+def _montar_bomba(uidoc, postar_mensagem, ref):
+    """Bomba e tubos de sucção/recalque. Mesma ideia de _montar_rti: usa a
+    referência salva, ou pede ao usuário. Devolve (bomba, tubo_succao,
+    interm_succao, tubo_recalque, interm_recalque, ref_para_salvar)."""
+    doc = uidoc.Document
+    ref = ref or {}
+    bomba = _elem(doc, ref.get(u"eid"))
+    if bomba is None:
+        if ref:
+            postar_mensagem(_TIPO_PROGRESSO, {
+                u"instrucao": u"A bomba salva não existe mais no modelo. Selecione de novo."})
+        ref = {}
+        bomba = _selecionar(
+            uidoc, postar_mensagem,
+            u"Clique na bomba de incêndio no Revit.",
+            u"Selecione a bomba de incêndio", _FiltroEquipamento())
+
+    tubo_s, interm_s = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
+    eid_s = None
+    if tubo_s is None:
+        interm_s = []
+        tubo_s = _elem(doc, ref.get(u"eid_tubo_succao"))
+        if not isinstance(tubo_s, Pipe):
+            tubo_s = _selecionar(
+                uidoc, postar_mensagem,
+                u"Não deu para identificar o tubo de entrada (sucção) da bomba. "
+                u"Clique no tubo que conecta na entrada da bomba.",
+                u"Tubo de sucção da bomba", _FiltroTubo())
+        eid_s = get_id(tubo_s)
+
+    tubo_r, interm_r = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
+    eid_r = None
+    if tubo_r is None:
+        interm_r = []
+        tubo_r = _elem(doc, ref.get(u"eid_tubo_recalque"))
+        if not isinstance(tubo_r, Pipe):
+            tubo_r = _selecionar(
+                uidoc, postar_mensagem,
+                u"Não deu para identificar o tubo de saída (recalque) da bomba. "
+                u"Clique no tubo que conecta na saída da bomba.",
+                u"Tubo de recalque da bomba", _FiltroTubo())
+        eid_r = get_id(tubo_r)
+
+    return bomba, tubo_s, interm_s, tubo_r, interm_r, {
+        u"eid": get_id(bomba), u"eid_tubo_succao": eid_s,
+        u"eid_tubo_recalque": eid_r,
+        u"descricao": descricao_curta_elemento(bomba)}
+
+
+def _payload_referencias(doc, projeto_dir):
+    """O que a dockpane mostra: RTI, bomba e famílias de válvula salvas."""
+    refs = _ler_referencias(projeto_dir)
+
+    def item(ref):
+        if not ref:
+            return None
+        elem = _elem(doc, ref.get(u"eid"))
+        ids = [ref.get(u"eid")] + [
+            ref.get(k) for k in (u"eid_tubo", u"eid_tubo_succao", u"eid_tubo_recalque")]
+        return {
+            u"existe": elem is not None,
+            u"descricao": (descricao_curta_elemento(elem) if elem is not None
+                           else ref.get(u"descricao") or u""),
+            u"eids": [i for i in ids if i is not None and _elem(doc, i) is not None],
+        }
+
+    return {
+        u"ok": True,
+        u"rti": item(refs.get(u"rti")),
+        u"bomba": item(refs.get(u"bomba")),
+        u"familiasValvula": _familias_salvas(projeto_dir),
+    }
+
+
+def _doc_e_pasta(uiapp):
+    uidoc = uiapp.ActiveUIDocument
+    if uidoc is None or not uidoc.Document.PathName:
+        raise _Interrompido(u"Salve o projeto Revit (.rvt) antes de mapear os trechos.")
+    return uidoc, os.path.dirname(uidoc.Document.PathName)
+
+
+def tratar_get_referencias(uiapp, payload, fila_acoes, postar_mensagem):
+    try:
+        uidoc, projeto_dir = _doc_e_pasta(uiapp)
+        postar_mensagem(_TIPO_REFERENCIAS, _payload_referencias(uidoc.Document, projeto_dir))
+    except _Interrompido:
+        # Projeto ainda não salvo: nada salvo para mostrar.
+        postar_mensagem(_TIPO_REFERENCIAS, {
+            u"ok": True, u"rti": None, u"bomba": None, u"familiasValvula": []})
+    except Exception as ex:
+        postar_mensagem(_TIPO_REFERENCIAS, {
+            u"ok": False, u"categoria": u"servidor",
+            u"erro": u"Não foi possível ler as referências: {}".format(texto_erro(ex))})
+
+
+def tratar_atualizar_referencia(uiapp, payload, fila_acoes, postar_mensagem):
+    """Troca só a RTI ou só a bomba (payload {qual: 'rti'|'bomba'}) pedindo
+    a nova seleção no Revit; a outra referência é mantida."""
+    try:
+        if not licenca.tem_acesso(u"hidrantes"):
+            raise _Interrompido(
+                u"Esta conta não tem o módulo Hidrantes liberado neste computador.", u"licenca")
+        qual = (payload or {}).get(u"qual")
+        if qual not in (u"rti", u"bomba"):
+            raise _Interrompido(u"Referência desconhecida: {}".format(qual))
+        uidoc, projeto_dir = _doc_e_pasta(uiapp)
+        refs = _ler_referencias(projeto_dir)
+        if qual == u"rti":
+            refs[u"rti"] = _montar_rti(uidoc, postar_mensagem, None)[4]
+        else:
+            refs[u"bomba"] = _montar_bomba(uidoc, postar_mensagem, None)[5]
+        _gravar_referencias(projeto_dir, refs)
+        resposta = _payload_referencias(uidoc.Document, projeto_dir)
+        resposta[u"atualizado"] = qual
+        postar_mensagem(_TIPO_REFERENCIAS, resposta)
+    except _Interrompido as ex:
+        postar_mensagem(_TIPO_REFERENCIAS, ex.resposta)
+    except Exception as ex:
+        postar_mensagem(_TIPO_REFERENCIAS, {
+            u"ok": False, u"categoria": u"servidor",
+            u"erro": u"Falha ao atualizar a referência: {}".format(texto_erro(ex))})
+
+
+# ---------------------------------------------------------------------------
 # Entrada
 # ---------------------------------------------------------------------------
 
@@ -333,42 +532,19 @@ def _mapear(uiapp, postar_mensagem):
         raise _Interrompido(u"Erro ao criar parâmetros: {}".format(texto_erro(ex)), u"servidor")
 
     # --- RTI e Bomba (conexões nativas de entrada/saída) -------------------
-    rti = _selecionar(
-        uidoc, postar_mensagem,
-        u"Clique no reservatório (RTI) no Revit.",
-        u"Selecione o reservatório (RTI)", _FiltroEquipamento())
+    # Pontos de referência que quase nunca mudam entre um mapeamento e outro
+    # (o que muda é a quantidade de hidrantes): ficam salvos no projeto e são
+    # reaproveitados. A dockpane mostra o que está salvo e permite trocar só
+    # a RTI ou só a bomba (ATUALIZAR_REFERENCIA_HIDRANTE).
+    refs = _ler_referencias(projeto_dir)
+    if refs.get(u"rti") and refs.get(u"bomba"):
+        postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": u"Usando a RTI e a bomba salvas…"})
 
-    tubo_rti, interm_rti = get_primeiro_tubo(rti, (FlowDirectionType.Out,))
-    rti_auto = tubo_rti is not None
-    if tubo_rti is None:
-        tubo_rti = _selecionar(
-            uidoc, postar_mensagem,
-            u"Não deu para identificar o tubo de saída da RTI. Clique nesse tubo no Revit.",
-            u"Tubo de saída da RTI", _FiltroTubo())
-        interm_rti = []
-
-    bomba = _selecionar(
-        uidoc, postar_mensagem,
-        u"Clique na bomba de incêndio no Revit.",
-        u"Selecione a bomba de incêndio", _FiltroEquipamento())
-
-    tubo_bomba, interm_succao_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
-    if tubo_bomba is None:
-        tubo_bomba = _selecionar(
-            uidoc, postar_mensagem,
-            u"Não deu para identificar o tubo de entrada (sucção) da bomba. "
-            u"Clique no tubo que conecta na entrada da bomba.",
-            u"Tubo de sucção da bomba", _FiltroTubo())
-        interm_succao_bomba = []
-
-    tubo_rec, interm_recalque_bomba = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
-    if tubo_rec is None:
-        tubo_rec = _selecionar(
-            uidoc, postar_mensagem,
-            u"Não deu para identificar o tubo de saída (recalque) da bomba. "
-            u"Clique no tubo que conecta na saída da bomba.",
-            u"Tubo de recalque da bomba", _FiltroTubo())
-        interm_recalque_bomba = []
+    rti, tubo_rti, interm_rti, rti_auto, ref_rti = _montar_rti(
+        uidoc, postar_mensagem, refs.get(u"rti"))
+    bomba, tubo_bomba, interm_succao_bomba, tubo_rec, interm_recalque_bomba, ref_bomba = \
+        _montar_bomba(uidoc, postar_mensagem, refs.get(u"bomba"))
+    _gravar_referencias(projeto_dir, {u"rti": ref_rti, u"bomba": ref_bomba})
 
     # Válvulas de hidrante: identificadas por 'ID Hidrante' (Acessórios de
     # tubulação), não mais só pela família. Sem nenhuma, o usuário clica.
