@@ -67,19 +67,24 @@ from projeto import carregar_dados_projeto, salvar_ponteiro
 from hidrantes.params import create_hydrant_params
 from hidrantes.norm_profiles import get_profile, req, NormProfileError
 from hidrantes.sistema import resolver_dados_sistema_puro
-from hidrantes.calc import extrair_trecho, calc_j_trecho, salvar_cache, combinacoes_pipe_type
+from hidrantes.calc import (
+    extrair_trecho, calc_j_trecho, salvar_cache, carregar_cache, combinacoes_pipe_type,
+)
 from hidrantes.rede import (
     get_id, to_element_id, get_primeiro_tubo, bfs_ate,
     percorre_rotas_hidrantes, get_pontas_abertas, descricao_curta_elemento,
     todas_valvulas_hidrante, get_cota_conector, diagnostico_conectores,
     get_comprimento, get_diametro_no_trecho, get_leq, get_nome,
     get_pipe_type_no_trecho, eh_acessorio_tubulacao, ID_HIDRANTE_PENDENTE,
+    tem_id_hidrante,
 )
 from family_error_utils import texto_erro
 
 P_TRECHO        = u"FireUtils - Trecho"
 P_IDENTIFICADOR = u"FireUtils - Identificador"
 P_ID_HIDRANTE   = u"FireUtils - ID Hidrante"
+
+_CHAVE_FAMILIAS = u"familias_valvula"
 
 _TIPO_PROGRESSO = u"HIDRANTES_MAPEAR_PROGRESSO"
 _TIPO_RESULTADO = u"HIDRANTES_MAPEAR_RESULTADO"
@@ -125,34 +130,41 @@ class _FiltroAcessorio(ISelectionFilter):
         return False
 
 
-def _marcar_valvulas_clicadas(uidoc, postar_mensagem):
-    """O projeto não tem nenhuma válvula identificada (nenhum Acessório de
-    tubulação com 'ID Hidrante' preenchido e nenhuma família conhecida):
-    pede para o usuário clicar nas válvulas de hidrante no Revit e grava
-    o parâmetro nelas. O valor é provisório (H-?); o ranking numera
-    H-01, H-02... em _gravar. Esc cancela o mapeamento."""
-    doc = uidoc.Document
-    postar_mensagem(_TIPO_PROGRESSO, {
-        u"instrucao": u"Nenhuma válvula de hidrante identificada no projeto. "
-                      u"Clique em TODAS as válvulas de hidrante (Acessórios de "
-                      u"tubulação) no Revit e clique em Concluir.",
-    })
+def _nome_familia(elem):
     try:
-        refs = uidoc.Selection.PickObjects(
-            ObjectType.Element, _FiltroAcessorio(),
-            u"Selecione as válvulas de hidrante e clique em Concluir")
-    except OperationCanceledException:
-        raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
+        return elem.Symbol.Family.Name
+    except Exception:
+        return None
 
-    valvulas = [doc.GetElement(r.ElementId) for r in refs]
-    if not valvulas:
-        raise _Interrompido(u"Nenhuma válvula foi selecionada.")
 
+def _familias_salvas(projeto_dir):
+    """Nomes das famílias que o usuário já indicou como válvula de hidrante
+    neste projeto (cache firedata.json, chave 'familias_valvula')."""
+    dados, _erro = carregar_cache(projeto_dir, chave=_CHAVE_FAMILIAS)
+    return list((dados or {}).get(u"nomes") or [])
+
+
+def _marcar_instancias_das_familias(doc, nomes):
+    """Grava o ID Hidrante provisório (H-?) em TODAS as instâncias, Acessórios
+    de tubulação, das famílias `nomes` que ainda não têm o parâmetro
+    preenchido — inclusive válvulas inseridas depois da escolha. O parâmetro
+    é de instância (não existe 'gravar na família'), por isso marca-se cada
+    instância. Devolve a lista das que não aceitaram o parâmetro."""
+    nomes = set(nomes)
+    if not nomes:
+        return []
+    alvos = [
+        e for e in FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements()
+        if eh_acessorio_tubulacao(e) and _nome_familia(e) in nomes
+        and not tem_id_hidrante(e)
+    ]
+    if not alvos:
+        return []
     sem_param = []
     with Transaction(doc, u"FireUtils - Marcar Válvulas de Hidrante") as t:
         t.Start()
         try:
-            for v in valvulas:
+            for v in alvos:
                 if not _set_param(v, P_ID_HIDRANTE, ID_HIDRANTE_PENDENTE):
                     sem_param.append(v)
             t.Commit()
@@ -160,6 +172,36 @@ def _marcar_valvulas_clicadas(uidoc, postar_mensagem):
             t.RollBack()
             raise _Interrompido(
                 u"Erro ao marcar as válvulas: {}".format(texto_erro(ex)), u"servidor")
+    return sem_param
+
+
+def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
+    """O projeto não tem nenhuma válvula identificada: pede para o usuário
+    clicar em UMA válvula de cada família de hidrante presente (normalmente
+    uma só; várias se o projeto tem famílias distintas). A partir das
+    selecionadas, marca todas as instâncias de cada família e guarda os
+    nomes das famílias para os próximos mapeamentos. Esc cancela."""
+    doc = uidoc.Document
+    postar_mensagem(_TIPO_PROGRESSO, {
+        u"instrucao": u"Nenhuma válvula de hidrante identificada no projeto. "
+                      u"Clique em uma válvula de cada família de hidrante "
+                      u"(Acessórios de tubulação) no Revit e clique em Concluir.",
+    })
+    try:
+        refs = uidoc.Selection.PickObjects(
+            ObjectType.Element, _FiltroAcessorio(),
+            u"Selecione uma válvula de cada família de hidrante e clique em Concluir")
+    except OperationCanceledException:
+        raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
+
+    nomes = sorted(set(
+        n for n in (_nome_familia(doc.GetElement(r.ElementId)) for r in refs) if n))
+    if not nomes:
+        raise _Interrompido(u"Nenhuma válvula foi selecionada.")
+
+    sem_param = _marcar_instancias_das_familias(doc, nomes)
+    salvar_cache({u"nomes": sorted(set(_familias_salvas(projeto_dir)) | set(nomes))},
+                 projeto_dir, chave=_CHAVE_FAMILIAS)
     if sem_param:
         raise _Interrompido(
             u"Não foi possível gravar '{}' em {} válvula(s) (ex.: ID {}). "
@@ -330,8 +372,15 @@ def _mapear(uiapp, postar_mensagem):
 
     # Válvulas de hidrante: identificadas por 'ID Hidrante' (Acessórios de
     # tubulação), não mais só pela família. Sem nenhuma, o usuário clica.
+    # Famílias já escolhidas antes: marca as instâncias novas (inseridas
+    # depois) antes de procurar.
+    sem_param = _marcar_instancias_das_familias(doc, _familias_salvas(projeto_dir))
+    if sem_param:
+        raise _Interrompido(
+            u"Não foi possível gravar '{}' em {} válvula(s) (ex.: ID {}).".format(
+                P_ID_HIDRANTE, len(sem_param), sem_param[0].Id))
     if not todas_valvulas_hidrante(doc):
-        _marcar_valvulas_clicadas(uidoc, postar_mensagem)
+        _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir)
 
     postar_mensagem(_TIPO_PROGRESSO, {u"instrucao": u"Percorrendo a rede…"})
 
