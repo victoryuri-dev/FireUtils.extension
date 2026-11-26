@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
+import InfoTip from "../InfoTip";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 import checkStrokeIconSvg from "../../assets/icons/check-stroke-icon.svg?raw";
@@ -227,13 +228,13 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
 
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
-      <h3 style={{ margin: 0 }}>Material da Tubulação</h3>
-      {/* .hid-secao-desc tem margin-top negativo (compensa o line-height de
-          outro card, "Bomba de Incêndio") — sobrescrito aqui pra não colar
-          no título. */}
-      <p className="hid-secao-desc" style={{ marginTop: 6 }}>
-        Material (coeficiente C) por trecho e tipo de tubo. Sem escolha, usa galvanizado (C=120).
-      </p>
+      <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        Material da Tubulação
+        <InfoTip
+          align="start"
+          text="Material (coeficiente C) por trecho e tipo de tubo. Sem escolha, usa galvanizado (C=120)."
+        />
+      </h3>
       {!carregado ? (
         <p className="vazio">Carregando…</p>
       ) : etapasComTubo.length === 0 ? (
