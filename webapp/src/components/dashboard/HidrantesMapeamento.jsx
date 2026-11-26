@@ -122,25 +122,18 @@ function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
   );
 }
 
-function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar, onIdentificar }) {
+// Nada identificado ainda (sem RTI, bomba nem válvula): o cartão mostra só o
+// botão "Identificar referências" no cabeçalho, que leva as três de uma vez.
+function semReferencias(referencias) {
+  return !referencias?.rti && !referencias?.bomba &&
+    !(referencias?.familiasValvula?.length > 0) && !(referencias?.qtdValvulas > 0);
+}
+
+function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar }) {
   const familias = referencias?.familiasValvula || [];
   const qtdValvulas = referencias?.qtdValvulas || 0;
 
-  // Nada identificado ainda: um botão só leva RTI, bomba e válvulas de uma vez.
-  if (!referencias?.rti && !referencias?.bomba && familias.length === 0 && qtdValvulas === 0) {
-    return (
-      <div className="hid-ref-grade">
-        <button
-          type="button"
-          className="se-botao se-botao-accent hid-ref-identificar"
-          onClick={onIdentificar}
-          disabled={desabilitado}
-        >
-          {atualizando ? "Identificando…" : "Identificar referências"}
-        </button>
-      </div>
-    );
-  }
+  if (semReferencias(referencias)) return null;
 
   return (
     <div className="hid-ref-grade">
@@ -194,6 +187,16 @@ export default function HidrantesMapeamento({
             text="Identifique os elementos essenciais para mapeamento e dimensionamento da rede de hidrantes."
           />
         </h3>
+        {semReferencias(referencias) && (
+          <button
+            type="button"
+            className="se-botao se-botao-accent se-pagina-header-botao"
+            onClick={onIdentificarReferencias}
+            disabled={mapeando || !!atualizandoReferencia}
+          >
+            {atualizandoReferencia ? "Identificando…" : "Identificar referências"}
+          </button>
+        )}
       </div>
 
       <ReferenciasSalvas
@@ -201,7 +204,6 @@ export default function HidrantesMapeamento({
         atualizando={atualizandoReferencia}
         desabilitado={mapeando || !!atualizandoReferencia}
         onAtualizar={onAtualizarReferencia}
-        onIdentificar={onIdentificarReferencias}
       />
 
       {!mapeando && inconsistencia && (
