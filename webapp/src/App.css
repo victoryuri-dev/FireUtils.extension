@@ -4827,131 +4827,23 @@ h1, h2, h3, h4, h5, h6,
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  background: transparent;
+  background: none;
   color: var(--text-3);
-  border: 1px solid var(--border-2);
-  border-radius: 2px;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
+  transition: color 0.15s;
 }
 
-.hid-instrucao-fechar svg {
-  width: 9px;
-  height: 9px;
-}
-
-.hid-instrucao-fechar:hover {
+.hid-instrucao-fechar:hover,
+.hid-instrucao-fechar:focus-visible {
+  background: none;
   color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-/* Referências (RTI, bomba, família da válvula): linhas empilhadas ------------ */
-.hid-ref-grade {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.hid-ref-box {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px 14px;
-  background: var(--bg-3);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
   outline: none;
-  transition: border-color 0.15s;
-}
-
-.hid-ref-box:hover:not(.hid-ref-box-desabilitado):not(.hid-ref-box-fixa),
-.hid-ref-box:focus-visible,
-.hid-ref-box-ativa {
-  border-color: var(--accent);
-}
-
-.hid-ref-box-desabilitado {
-  cursor: default;
-  opacity: 0.7;
-}
-
-.hid-ref-box-fixa {
-  cursor: default;
-}
-
-.hid-ref-esq {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-/* Reserva o espaço da lupa mesmo sem ela, pra alinhar os rótulos. */
-.hid-ref-lupa {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-}
-
-.hid-ref-rotulo {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.hid-ref-estado {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.hid-ref-estado-ok { color: var(--green); }
-.hid-ref-estado-alerta { color: var(--amber); }
-.hid-ref-estado-ativa { color: var(--accent); }
-
-/* No hover, o estado dá lugar à ação. */
-.hid-ref-estado-acao { display: none; }
-
-.hid-ref-box:hover:not(.hid-ref-box-desabilitado) .hid-ref-estado:not(.hid-ref-estado-ativa) .hid-ref-estado-texto,
-.hid-ref-box:focus-visible .hid-ref-estado:not(.hid-ref-estado-ativa) .hid-ref-estado-texto {
-  display: none;
-}
-
-.hid-ref-box:hover:not(.hid-ref-box-desabilitado) .hid-ref-estado-acao,
-.hid-ref-box:focus-visible .hid-ref-estado-acao {
-  display: inline;
-  color: var(--accent);
-}
-
-.hid-ref-familia {
-  font-size: 12px;
-  color: var(--text-2);
-  text-align: right;
-  overflow-wrap: anywhere;
-}
-
-.hiddim-localizar-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.hiddim-localizar-btn:disabled:hover {
-  border-color: var(--border-2);
-  color: var(--text-3);
 }
