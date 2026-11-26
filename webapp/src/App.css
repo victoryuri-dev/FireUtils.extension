@@ -5365,3 +5365,20 @@ h1, h2, h3, h4, h5, h6,
 .hid-pagina .hid-secao {
   margin-bottom: 0;
 }
+
+/* Cabeçalho do cartão (título + botão): o título quebra de linha e o botão
+   permanece ao lado, em vez de o botão descer para outra linha. */
+.hid-pagina .cartao-info > .se-pagina-header {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.hid-pagina .cartao-info > .se-pagina-header > h3 {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.hid-pagina .cartao-info > .se-pagina-header > .se-pagina-header-botao {
+  flex-shrink: 0;
+}
