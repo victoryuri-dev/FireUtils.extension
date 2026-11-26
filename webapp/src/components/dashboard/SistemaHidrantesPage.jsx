@@ -790,8 +790,8 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           {/* Box dos resultados: título + botão de dimensionar no cabeçalho;
               dentro, os dois hidrantes mais desfavoráveis e o ponto de
               operação do sistema. As verificações detalhadas vêm abaixo. */}
-          <div className="cartao-info" style={{ marginBottom: 14 }}>
-            <div className="se-pagina-header" style={{ marginBottom: dimensionamento ? 16 : 10 }}>
+          <div className="cartao-info hid-resultados">
+            <div className="se-pagina-header" style={{ marginBottom: dimensionamento ? 20 : 12 }}>
               <h3 style={{ margin: 0 }}>Resultados do dimensionamento</h3>
               <button
                 type="button"

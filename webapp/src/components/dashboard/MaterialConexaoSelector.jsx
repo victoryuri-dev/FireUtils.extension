@@ -227,7 +227,7 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
   const etapasComTubo = ETAPAS.filter((etapa) => (pipeTypesPorEtapa?.[etapa]?.length || 0) > 0);
 
   return (
-    <div className="cartao-info" style={{ marginBottom: 14 }}>
+    <div className="cartao-info">
       <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
         Material da Tubulação
         <InfoTip

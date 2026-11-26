@@ -180,7 +180,7 @@ export default function HidrantesMapeamento({
   referencias, atualizandoReferencia, onAtualizarReferencia, onIdentificarReferencias,
 }) {
   return (
-    <div className="cartao-info" style={{ marginBottom: 14 }}>
+    <div className="cartao-info">
       <div className="se-pagina-header" style={{ marginBottom: 0 }}>
         <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
           Referências

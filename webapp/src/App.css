@@ -5019,3 +5019,344 @@ h1, h2, h3, h4, h5, h6,
     grid-template-columns: 1fr;
   }
 }
+
+/* =============================================================================
+   Sistema de Hidrantes — camada de design (espaçamento e hierarquia)
+   Só estilo: nenhum dado ou estrutura muda. Escopada em .hid-pagina e colocada
+   no fim do arquivo para prevalecer sobre as regras base. Ideia geral:
+   - menos caixas dentro de caixas (as tabelas e os trechos perdem borda/fundo
+     próprios e se apoiam só em linhas finas);
+   - um ritmo de espaçamento (8 / 16 / 24 / 32) e três níveis de título;
+   - rótulos pequenos em cinza, valores em branco, e só o resultado em vermelho.
+   ============================================================================= */
+
+.hid-pagina .hid-etapas {
+  margin-bottom: 24px;
+}
+
+/* Cartões: respiro uniforme e separação entre blocos. */
+.hid-pagina .cartao-info,
+.hid-pagina .hiddim-secao {
+  padding: 20px 18px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+/* A configuração (classificação, referências, material) e os resultados são
+   dois grupos: mais distância entre eles do que dentro de cada um. */
+.hid-pagina .hid-resultados {
+  margin-top: 24px;
+}
+
+/* Nível 1 — título do cartão. */
+.hid-pagina .cartao-info > h3,
+.hid-pagina .cartao-info > .se-pagina-header > h3,
+.hid-pagina .hiddim-secao > .hiddim-secao-titulo {
+  font-family: var(--font-titulo);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.hid-pagina .cartao-info > h3,
+.hid-pagina .hiddim-secao > .hiddim-secao-titulo {
+  margin: 0 0 16px;
+}
+
+/* Nível 2 — subtítulo dentro de um cartão (ex.: Ponto de operação). */
+.hid-pagina .cartao-info > .hiddim-secao-titulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  margin: 28px 0 12px;
+}
+
+/* ── Classificação do sistema ───────────────────────────────────────────── */
+.hid-pagina .hiddim-stat-grid {
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.hid-pagina .hiddim-stat-grid:last-child {
+  margin-bottom: 0;
+}
+
+.hid-pagina .hiddim-stat-grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.hid-pagina .hiddim-stat-box {
+  background: var(--bg-3);
+  border-color: transparent;
+  border-radius: 6px;
+  padding: 12px;
+  text-align: left;
+  min-width: 0;
+}
+
+.hid-pagina .hiddim-stat-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.hid-pagina .hiddim-stat-val {
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.hid-pagina .hiddim-stat-val-grande {
+  font-size: 18px;
+  white-space: normal;
+  font-family: var(--font-titulo);
+  font-weight: 600;
+}
+
+.hid-pagina .hiddim-campo-label {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.hid-pagina .hid-pill {
+  padding: 11px 14px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+/* ── Referências ────────────────────────────────────────────────────────── */
+.hid-pagina .hid-ref-grade {
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.hid-pagina .hid-ref-box {
+  padding: 12px 14px;
+  background: var(--bg-3);
+  border-color: transparent;
+  border-radius: 6px;
+}
+
+/* ── Material da tubulação: sem caixa dentro de caixa ───────────────────── */
+.hid-pagina .hiddim-segmento {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.hid-pagina .hiddim-segmento + .hiddim-segmento {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+/* ── Resultados: hidrantes mais desfavoráveis e ponto de operação ───────── */
+.hid-pagina .hiddim-cartao {
+  background: var(--bg-3);
+  border-color: transparent;
+  border-radius: 8px;
+}
+
+.hid-pagina .hiddim-cartao-header {
+  background: transparent;
+  border-bottom: 0;
+  padding: 14px 16px 0;
+}
+
+.hid-pagina .hiddim-resumo-corpo {
+  padding: 14px 16px 16px;
+  gap: 10px;
+}
+
+.hid-pagina .hiddim-resumo-grid {
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.hid-pagina .cartao-info > .hiddim-resumo-wrap > .hiddim-resumo-grid {
+  margin-bottom: 0;
+}
+
+.hid-pagina .hiddim-resumo-linha-label {
+  font-size: 12px;
+}
+
+.hid-pagina .hiddim-resumo-linha-val {
+  font-size: 15px;
+}
+
+.hid-pagina .hiddim-resumo-chip {
+  margin-top: 4px;
+}
+
+.hid-pagina .hiddim-resultado-grid {
+  /* Duas colunas quando cabem; em tela estreita, uma abaixo da outra. */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.hid-pagina .hiddim-resultado-box {
+  min-width: 0;
+}
+
+.hid-pagina .hiddim-resultado-box {
+  background: var(--bg-3);
+  border-color: transparent;
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+
+.hid-pagina .hiddim-resultado-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.hid-pagina .hiddim-resultado-val {
+  font-family: var(--font-titulo);
+  font-size: 20px;
+  white-space: nowrap;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+/* ── Tabelas: só linhas finas, sem moldura nem faixa de cabeçalho ────────── */
+.hid-pagina .hiddim-tabela-wrap {
+  border: 0;
+  border-radius: 0;
+  margin-bottom: 0;
+}
+
+.hid-pagina .hiddim-th {
+  background: transparent;
+  border-radius: 0;
+  padding: 0 8px 10px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--border);
+}
+
+.hid-pagina .hiddim-td {
+  padding: 12px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.hid-pagina .hiddim-tabela tbody tr:last-child .hiddim-td {
+  border-bottom: 0;
+}
+
+/* Colunas numéricas: o cabeçalho não quebra ("LEQ TOTAL" em duas linhas). */
+.hid-pagina .hiddim-th.hiddim-align-right {
+  white-space: nowrap;
+}
+
+.hid-pagina .hiddim-th:first-child,
+.hid-pagina .hiddim-td:first-child {
+  padding-left: 0;
+}
+
+.hid-pagina .hiddim-th:last-child,
+.hid-pagina .hiddim-td:last-child {
+  padding-right: 0;
+}
+
+.hid-pagina .hiddim-expand-btn {
+  margin-top: 12px;
+  margin-bottom: 0;
+  border-color: transparent;
+  background: var(--bg-3);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+/* ── Perdas de carga por trecho: de cinco níveis de caixa para um ───────── */
+.hid-pagina .hiddim-trecho-cartao {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+  margin: 0;
+  padding: 24px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.hid-pagina .hiddim-trecho-cartao + .hiddim-trecho-cartao {
+  margin-top: 24px;
+}
+
+.hid-pagina .hiddim-secao-titulo + .hiddim-trecho-cartao {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.hid-pagina .hiddim-trecho-cartao .hiddim-cartao-header {
+  padding: 0 0 16px;
+  gap: 10px;
+}
+
+.hid-pagina .hiddim-trecho-label {
+  font-family: var(--font-titulo);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hid-pagina .hiddim-trecho-corpo {
+  padding: 0;
+  gap: 24px;
+}
+
+.hid-pagina .hiddim-segmento-topo {
+  margin-bottom: 16px;
+}
+
+.hid-pagina .hiddim-segmento-tubo {
+  font-size: 12px;
+}
+
+.hid-pagina .hiddim-segmento-acessorios {
+  margin-bottom: 16px;
+}
+
+.hid-pagina .hiddim-segmento-acessorios-titulo {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+}
+
+.hid-pagina .hiddim-ministat-grid {
+  gap: 8px;
+}
+
+.hid-pagina .hiddim-ministat {
+  background: var(--bg-3);
+  border-color: transparent;
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.hid-pagina .hiddim-ministat-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.hid-pagina .hiddim-ministat-val {
+  font-size: 15px;
+}
+
+/* A perda de carga do trecho (J) é o resultado: ocupa a linha toda e se destaca. */
+.hid-pagina .hiddim-ministat-grid .hiddim-ministat:last-child {
+  grid-column: 1 / -1;
+}
+
+.hid-pagina .hiddim-ministat-destaque {
+  font-family: var(--font-titulo);
+  font-size: 20px;
+  font-weight: 600;
+}
