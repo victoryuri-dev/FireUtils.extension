@@ -5045,9 +5045,7 @@ h1, h2, h3, h4, h5, h6,
 
 /* A configuração (classificação, referências, material) e os resultados são
    dois grupos: mais distância entre eles do que dentro de cada um. */
-.hid-pagina .hid-resultados {
-  margin-top: 24px;
-}
+
 
 /* Nível 1 — título do cartão. */
 .hid-pagina .cartao-info > h3,
@@ -5383,29 +5381,21 @@ h1, h2, h3, h4, h5, h6,
   flex-shrink: 0;
 }
 
-/* Blocos de informação que reúnem mais de uma seção num só cartão:
-   (Classificação + Material) e (Verificação do hidrante + Velocidade). As
-   seções internas perdem a moldura própria e ficam separadas por uma linha. */
-.hid-pagina .hid-bloco {
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px 18px;
-  margin-bottom: 16px;
+/* Grupos de informação: os cartões de um mesmo grupo ficam próximos entre si
+   (12 px) e os grupos ficam bem separados uns dos outros (32 px). Grupos:
+   Referências | Classificação + Material | Dimensionamento |
+   Verificação do hidrante + Velocidade | Perdas de carga. */
+.hid-pagina .hid-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 32px;
 }
 
-.hid-pagina .hid-bloco > .cartao-info,
-.hid-pagina .hid-bloco > .hiddim-secao {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0;
+.hid-pagina .hid-grupo > * {
   margin: 0;
 }
 
-.hid-pagina .hid-bloco > :is(.cartao-info, .hiddim-secao) + :is(.cartao-info, .hiddim-secao) {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+.hid-pagina .hid-grupo:last-child {
+  margin-bottom: 0;
 }

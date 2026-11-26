@@ -660,7 +660,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {/* Ordem sequencial: Referências → Classificação → Material → Dimensionar. */}
       {etapa === 1 && resposta?.ok && (
-        <>
+        <div className="hid-grupo">
         <HidrantesInstrucaoModal progresso={progresso} aberto={popupAberto} onFechar={cancelarSelecao} />
         <HidrantesMapeamento
           mapeando={mapeando}
@@ -673,11 +673,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
           onDimensionar={dimensionar}
           onContinuar={continuarMapeamento}
         />
-        </>
+        </div>
       )}
 
       {etapa === 1 && (
-      <div className="hid-secao hid-bloco">
+      <div className="hid-grupo">
         <Cartao titulo="Classificação do Sistema">
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
@@ -782,8 +782,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {etapa === 1 && resposta?.ok && (
         <>
+          <div className="hid-grupo">
           {!classificacao?.tipo && (
-            <div className="hid-aviso" style={{ marginBottom: 14 }}>
+            <div className="hid-aviso">
               Escolha e aplique o Tipo do sistema acima antes de dimensionar.
             </div>
           )}
@@ -810,6 +811,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                 {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
               </p>
             )}
+          </div>
           </div>
           {dimensionamento && <HidrantesDimensionamento d={dimensionamento} limites={limites} />}
         </>
