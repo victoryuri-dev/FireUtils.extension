@@ -742,8 +742,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               <HidrantesInstrucaoModal progresso={progresso} aberto={popupAberto} onFechar={cancelarSelecao} />
               <HidrantesMapeamento
                 mapeando={mapeando}
-                instrucao={progresso?.instrucao}
-                popupAberto={popupAberto}
                 pendente={mapeamentoPendente}
                 inconsistencia={inconsistenciaMapeamento}
                 referencias={referencias}

@@ -1,5 +1,4 @@
 import Icon from "../Icon";
-import Loader from "../Loader";
 import { postToHost, BridgeMessageTypes } from "../../lib/bridge";
 import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 
@@ -63,7 +62,7 @@ const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio
  * pedir o clique de novo. O usuário confere se continuam as mesmas (e
  * localiza no Revit) e troca só a que mudou.
  */
-function ReferenciasSalvas({ referencias, atualizando, instrucao, popupAberto, desabilitado, onAtualizar }) {
+function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar }) {
   const linhas = ["rti", "bomba"].map((qual) => ({ qual, ref: referencias?.[qual] }));
   const familias = referencias?.familiasValvula || [];
 
@@ -117,12 +116,6 @@ function ReferenciasSalvas({ referencias, atualizando, instrucao, popupAberto, d
           </tbody>
         </table>
       </div>
-      {atualizando && !popupAberto && (
-        <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
-          <Loader size={16} />
-          <span>{instrucao || "Preparando…"}</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -130,15 +123,15 @@ function ReferenciasSalvas({ referencias, atualizando, instrucao, popupAberto, d
 /**
  * "Mapeamento da rede" — substitui o botão "Mapear trechos" da faixa do
  * Revit. O usuário clica na RTI e na bomba NO REVIT; enquanto isso a
- * dockpane diz o que fazer (`instrucao`). Estados:
+ * dockpane abre um popup com o que fazer (HidrantesInstrucaoModal). Estados:
  *   mapeando       esperando o usuário/o plugin (botão desligado)
  *   pendente       achou inconsistências que podem ser ignoradas
  *   inconsistencia a rede não fecha: lista do que corrigir, nada foi gravado
  *   trechos        resultado do último mapeamento (ou o salvo no projeto)
  */
 export default function HidrantesMapeamento({
-  mapeando, instrucao, pendente, inconsistencia, onDimensionar, onContinuar,
-  referencias, atualizandoReferencia, onAtualizarReferencia, popupAberto,
+  mapeando, pendente, inconsistencia, onDimensionar, onContinuar,
+  referencias, atualizandoReferencia, onAtualizarReferencia,
 }) {
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
@@ -149,18 +142,9 @@ export default function HidrantesMapeamento({
       <ReferenciasSalvas
         referencias={referencias}
         atualizando={atualizandoReferencia}
-        instrucao={instrucao}
-        popupAberto={popupAberto}
         desabilitado={mapeando || !!atualizandoReferencia}
         onAtualizar={onAtualizarReferencia}
       />
-
-      {mapeando && !popupAberto && (
-        <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Loader size={16} />
-          <span>{instrucao || "Preparando…"}</span>
-        </div>
-      )}
 
       {!mapeando && inconsistencia && (
         <div style={{ marginTop: 10 }}>
