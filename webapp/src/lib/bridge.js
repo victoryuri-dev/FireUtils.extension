@@ -204,6 +204,12 @@
  *         outra falha: "requisito" (falta classificação, projeto salvo…),
  *         "norma", "licenca", "servidor", ou "cancelado" (Esc no Revit).
  *
+ *   { type: "CANCELAR_SELECAO_REVIT" }
+ *     JS -> Python: botão fechar do popup — cancela a seleção em andamento no
+ *     Revit (equivale ao Esc). O Python envia um Esc à janela do Revit e o
+ *     mapeamento termina com HIDRANTES_MAPEAR_RESULTADO/HIDRANTES_REFERENCIAS
+ *     de categoria "cancelado". Sem efeito se não há seleção em andamento.
+ *
  *   { type: "GET_HIDRANTES_REFERENCIAS" }
  *     JS -> Python: pede as referências salvas do projeto (RTI, bomba e
  *     famílias de válvula). "Mapear Trechos" reaproveita a RTI e a bomba
@@ -403,6 +409,7 @@ export const BridgeMessageTypes = {
   HIDRANTES_MAPEAR_PROGRESSO: "HIDRANTES_MAPEAR_PROGRESSO",
   HIDRANTES_MAPEAR_RESULTADO: "HIDRANTES_MAPEAR_RESULTADO",
   GET_HIDRANTES_REFERENCIAS: "GET_HIDRANTES_REFERENCIAS",
+  CANCELAR_SELECAO_REVIT: "CANCELAR_SELECAO_REVIT",
   ATUALIZAR_REFERENCIA_HIDRANTE: "ATUALIZAR_REFERENCIA_HIDRANTE",
   HIDRANTES_REFERENCIAS: "HIDRANTES_REFERENCIAS",
   GET_SAIDAS_OPCOES: "GET_SAIDAS_OPCOES",

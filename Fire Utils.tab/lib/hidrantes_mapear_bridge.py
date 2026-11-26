@@ -195,17 +195,18 @@ def _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir):
     doc = uidoc.Document
     _progresso(
         postar_mensagem,
-        u"Nenhuma válvula de hidrante foi identificada no projeto. No Revit, clique em UMA "
-        u"válvula de cada família de hidrante (normalmente é uma só) e depois em Concluir.",
-        u"Identifique as válvulas de hidrante", u"selecao",
-        u"Só Acessórios de tubulação podem ser selecionados. Se houver famílias de válvula "
-        u"diferentes, clique em uma de cada. Ao terminar, clique em Concluir na barra do Revit.")
+        u"Clique em uma válvula de cada família e depois em Concluir.",
+        u"Selecione as válvulas de hidrante", u"selecao")
+    global _selecionando
+    _selecionando = True
     try:
         refs = uidoc.Selection.PickObjects(
             ObjectType.Element, _FiltroAcessorio(),
             u"Selecione uma válvula de cada família de hidrante e clique em Concluir")
     except OperationCanceledException:
         raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
+    finally:
+        _selecionando = False
 
     _progresso(postar_mensagem, u"Válvulas selecionadas. Marcando as famílias no projeto…",
                u"Identificando as válvulas", u"processando")
@@ -234,17 +235,45 @@ def _progresso(postar_mensagem, instrucao, titulo=None, acao=u"processando", dic
         u"dica": dica or u""})
 
 
+# True enquanto o Revit espera um clique/seleção do usuário (PickObject[s]).
+_selecionando = False
+
+
+def cancelar_selecao_revit():
+    """Botão fechar do popup da dockpane: equivale ao Esc no Revit. Só age
+    enquanto há uma seleção em andamento. Roda direto na thread da
+    mensagem (a fila de ações está bloqueada dentro do PickObject), enviando
+    um Esc à janela principal do Revit. Devolve True se enviou."""
+    if not _selecionando:
+        return False
+    try:
+        import ctypes
+        from System.Diagnostics import Process
+        hwnd = int(Process.GetCurrentProcess().MainWindowHandle.ToInt64())
+        user32 = ctypes.windll.user32
+        VK_ESCAPE, WM_KEYDOWN, WM_KEYUP = 0x1B, 0x0100, 0x0101
+        user32.PostMessageW(hwnd, WM_KEYDOWN, VK_ESCAPE, 0x00000001)
+        user32.PostMessageW(hwnd, WM_KEYUP, VK_ESCAPE, 0xC0000001)
+        return True
+    except Exception:
+        return False
+
+
 def _selecionar(uidoc, postar_mensagem, instrucao, prompt, filtro, titulo=None, dica=None):
     """
     Pede um elemento no modelo. A instrução vai para a dockpane (o usuário
     está olhando para ela) e o prompt para a barra de status do Revit. Esc
     cancela o mapeamento inteiro.
     """
+    global _selecionando
     _progresso(postar_mensagem, instrucao, titulo, u"clique", dica)
+    _selecionando = True
     try:
         ref = uidoc.Selection.PickObject(ObjectType.Element, filtro, prompt)
     except OperationCanceledException:
         raise _Interrompido(u"Mapeamento cancelado.", u"cancelado")
+    finally:
+        _selecionando = False
     # Fecha o popup da dockpane até o próximo passo chegar.
     _progresso(postar_mensagem, u"Elemento selecionado. Continuando…", titulo, u"processando")
     return uidoc.Document.GetElement(ref.ElementId)
@@ -314,16 +343,13 @@ def _montar_rti(uidoc, postar_mensagem, ref):
     if rti is None:
         if ref:
             _progresso(postar_mensagem,
-                       u"A RTI salva não existe mais no modelo. Selecione de novo.",
-                       u"Reservatório (RTI)")
+                       u"A RTI salva não existe mais no modelo.", u"Selecione a RTI")
         ref = {}
         rti = _selecionar(
             uidoc, postar_mensagem,
-            u"No Revit, clique no reservatório (RTI) ou no tubo de saída dele.",
+            u"Clique no reservatório ou no tubo de saída dele.",
             u"Selecione a RTI ou o tubo de saída da RTI", _FiltroEquipamentoOuTubo(),
-            u"Selecione o reservatório (RTI)",
-            u"Pode clicar direto no tubo que sai do reservatório. Se o reservatório não estiver "
-            u"conectado a nenhum tubo, o próximo passo pede o tubo.")
+            u"Selecione a RTI")
 
     if isinstance(rti, Pipe):
         return rti, rti, [], False, {
@@ -339,9 +365,9 @@ def _montar_rti(uidoc, postar_mensagem, ref):
         if not isinstance(tubo, Pipe):
             tubo = _selecionar(
                 uidoc, postar_mensagem,
-                u"A RTI não está conectada a nenhum tubo. No Revit, clique no tubo de saída da RTI.",
+                u"A RTI não está conectada. Clique no tubo de saída dela.",
                 u"Tubo de saída da RTI", _FiltroTubo(),
-                u"Selecione o tubo de saída da RTI")
+                u"Selecione o tubo da RTI")
         eid_tubo = get_id(tubo)
     return rti, tubo, interm, rti_auto, {
         u"eid": get_id(rti), u"eid_tubo": eid_tubo,
@@ -358,14 +384,13 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
     if bomba is None:
         if ref:
             _progresso(postar_mensagem,
-                       u"A bomba salva não existe mais no modelo. Selecione de novo.",
-                       u"Bomba de incêndio")
+                       u"A bomba salva não existe mais no modelo.", u"Selecione a bomba")
         ref = {}
         bomba = _selecionar(
             uidoc, postar_mensagem,
-            u"No Revit, clique na bomba de incêndio.",
+            u"Clique na bomba de incêndio.",
             u"Selecione a bomba de incêndio", _FiltroEquipamento(),
-            u"Selecione a bomba de incêndio")
+            u"Selecione a bomba")
 
     tubo_s, interm_s = get_primeiro_tubo(bomba, (FlowDirectionType.In,))
     eid_s = None
@@ -375,10 +400,9 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
         if not isinstance(tubo_s, Pipe):
             tubo_s = _selecionar(
                 uidoc, postar_mensagem,
-                u"Não deu para identificar o tubo de entrada (sucção) da bomba. "
-                u"No Revit, clique no tubo que conecta na entrada da bomba.",
+                u"Clique no tubo ligado à entrada da bomba.",
                 u"Tubo de sucção da bomba", _FiltroTubo(),
-                u"Selecione o tubo de sucção da bomba")
+                u"Selecione o tubo de sucção")
         eid_s = get_id(tubo_s)
 
     tubo_r, interm_r = get_primeiro_tubo(bomba, (FlowDirectionType.Out,))
@@ -389,10 +413,9 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
         if not isinstance(tubo_r, Pipe):
             tubo_r = _selecionar(
                 uidoc, postar_mensagem,
-                u"Não deu para identificar o tubo de saída (recalque) da bomba. "
-                u"No Revit, clique no tubo que conecta na saída da bomba.",
+                u"Clique no tubo ligado à saída da bomba.",
                 u"Tubo de recalque da bomba", _FiltroTubo(),
-                u"Selecione o tubo de recalque da bomba")
+                u"Selecione o tubo de recalque")
         eid_r = get_id(tubo_r)
 
     return bomba, tubo_s, interm_s, tubo_r, interm_r, {

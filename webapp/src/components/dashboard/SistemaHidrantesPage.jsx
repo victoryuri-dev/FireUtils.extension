@@ -131,6 +131,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // Passo atual vindo do Python: { instrucao, titulo, acao, dica } — alimenta
   // o popup (HidrantesInstrucaoModal) e o aviso do cartão Referências.
   const [progresso, setProgresso] = useState(null);
+  // Popup fechado pelo usuário (cancelando): volta a abrir no próximo passo.
+  const [popupFechado, setPopupFechado] = useState(false);
+  const cancelandoRef = useRef(false);
   const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
   const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
   // RTI/bomba/famílias de válvula salvas no projeto (reaproveitadas por
@@ -191,6 +194,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       if (!mensagem) return;
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_REFERENCIAS) {
+        cancelandoRef.current = false;
         setAtualizandoReferencia(null);
         const p = mensagem.payload || {};
         if (p.ok) {
@@ -233,10 +237,12 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_MAPEAR_PROGRESSO) {
         setProgresso(mensagem.payload || null);
+        setPopupFechado(false);
         return;
       }
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_MAPEAR_RESULTADO) {
+        cancelandoRef.current = false;
         setMapeando(false);
         const p = mensagem.payload || {};
         // O mapeamento grava/atualiza a RTI e a bomba usadas.
@@ -343,7 +349,25 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       ? "clique"
       : "processando");
   const popupAberto =
-    (mapeando || !!atualizandoReferencia) && (acaoDoPasso === "clique" || acaoDoPasso === "selecao");
+    (mapeando || !!atualizandoReferencia) && !popupFechado &&
+    (acaoDoPasso === "clique" || acaoDoPasso === "selecao");
+
+  // Botão fechar do popup: cancela a seleção no Revit (como o Esc). Se o
+  // Revit não responder em alguns segundos, avisa para cancelar nele.
+  function cancelarSelecao() {
+    setPopupFechado(true);
+    cancelandoRef.current = true;
+    postToHost(BridgeMessageTypes.CANCELAR_SELECAO_REVIT, {});
+    setTimeout(() => {
+      if (!cancelandoRef.current) return;
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: "Não foi possível cancelar pelo painel",
+        mensagem: "Pressione Esc no Revit.",
+        duracaoMs: 8000,
+      });
+    }, 3000);
+  }
 
   async function continuarMapeamento() {
     const token = await tokenDaSessao();
@@ -715,7 +739,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               até o Tipo estar identificado. */}
           {classificacao?.tipo ? (
             <>
-              <HidrantesInstrucaoModal progresso={progresso} acao={acaoDoPasso} aberto={popupAberto} />
+              <HidrantesInstrucaoModal progresso={progresso} aberto={popupAberto} onFechar={cancelarSelecao} />
               <HidrantesMapeamento
                 mapeando={mapeando}
                 instrucao={progresso?.instrucao}

@@ -319,6 +319,9 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             lambda uiapp: hidrantes_mapear_bridge.tratar_mapear_trechos(
                 uiapp, payload, fila_acoes, postar_mensagem)
         )
+    elif tipo == u"CANCELAR_SELECAO_REVIT":
+        # Direto, sem fila: a fila está bloqueada dentro do PickObject.
+        hidrantes_mapear_bridge.cancelar_selecao_revit()
     elif tipo == u"GET_HIDRANTES_REFERENCIAS":
         fila_acoes.enfileirar(
             lambda uiapp: hidrantes_mapear_bridge.tratar_get_referencias(

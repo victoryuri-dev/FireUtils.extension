@@ -120,7 +120,7 @@ function ReferenciasSalvas({ referencias, atualizando, instrucao, popupAberto, d
       {atualizando && !popupAberto && (
         <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
           <Loader size={16} />
-          <span>{instrucao || "Preparando…"} (Esc no Revit cancela)</span>
+          <span>{instrucao || "Preparando…"}</span>
         </div>
       )}
     </div>
@@ -158,7 +158,7 @@ export default function HidrantesMapeamento({
       {mapeando && !popupAberto && (
         <div className="hid-aviso" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Loader size={16} />
-          <span>{instrucao || "Preparando…"} (Esc no Revit cancela)</span>
+          <span>{instrucao || "Preparando…"}</span>
         </div>
       )}
 
