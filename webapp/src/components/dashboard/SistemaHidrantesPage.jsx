@@ -658,7 +658,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {resposta && !resposta.ok && <p className="vazio">{resposta.erro}</p>}
 
-      {/* Ordem sequencial: 1 Referências → 2 Classificação → 3 Material → 4 Dimensionar. */}
+      {/* Ordem sequencial: Referências → Classificação → Material → Dimensionar. */}
       {etapa === 1 && resposta?.ok && (
         <>
         <HidrantesInstrucaoModal progresso={progresso} aberto={popupAberto} onFechar={cancelarSelecao} />
@@ -678,7 +678,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
       {etapa === 1 && (
       <div className="hid-secao">
-        <Cartao titulo={<><span className="hid-passo">2</span>Classificação do Sistema</>}>
+        <Cartao titulo="Classificação do Sistema">
           {sugestao.opcoes.length === 0 ? (
             <p className="vazio">
               Classificação automática não disponível — cadastre a ocupação e a carga de incêndio da estrutura no
@@ -792,7 +792,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               operação do sistema. As verificações detalhadas vêm abaixo. */}
           <div className="cartao-info hid-resultados">
             <div className="se-pagina-header" style={{ marginBottom: dimensionamento ? 20 : 12 }}>
-              <h3 style={{ margin: 0 }}><span className="hid-passo">4</span>Resultados do dimensionamento</h3>
+              <h3 style={{ margin: 0 }}>Resultados do dimensionamento</h3>
               <button
                 type="button"
                 className="se-botao se-botao-accent se-pagina-header-botao"

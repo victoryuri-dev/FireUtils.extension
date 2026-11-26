@@ -229,7 +229,6 @@ export default function MaterialConexaoSelector({ pipeTypesPorEtapa, adicionarTo
   return (
     <div className="cartao-info">
       <h3 style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-        <span className="hid-passo">3</span>
         Material da Tubulação
         <InfoTip
           align="start"
