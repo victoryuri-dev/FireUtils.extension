@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
@@ -130,10 +130,13 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   const [instrucaoMapeamento, setInstrucaoMapeamento] = useState("");
   const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
   const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
-  const [trechosMapeados, setTrechosMapeados] = useState(null);
   // RTI/bomba/famílias de válvula salvas no projeto (reaproveitadas por
   // "Mapear Trechos") e qual delas está sendo trocada no Revit agora.
   const [referencias, setReferencias] = useState(null);
+  // Enquanto "Dimensionar" está rodando o processo completo (mapear a rede →
+  // calcular), guarda o token da sessão; o resultado do mapeamento usa isso
+  // para seguir direto para o cálculo. null = nenhum processo em andamento.
+  const fluxoDimensionarRef = useRef(null);
   const [atualizandoReferencia, setAtualizandoReferencia] = useState(null);
   // Combinações (tipo de tubo, diâmetros) por etapa, pro seletor de
   // material/sistema de conexão (MaterialConexaoSelector) — vem do
@@ -236,6 +239,9 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         // O mapeamento grava/atualiza a RTI e a bomba usadas.
         postToHost(BridgeMessageTypes.GET_HIDRANTES_REFERENCIAS, {});
         if (p.ok && p.pendente) {
+          // Pausa para o usuário decidir; "Ignorar e continuar" retoma o
+          // processo, "Corrigi, dimensionar de novo" recomeça.
+          setDimensionando(false);
           setInconsistenciaMapeamento(null);
           setMapeamentoPendente(p);
           return;
@@ -243,18 +249,23 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         setMapeamentoPendente(null);
         if (p.ok) {
           setInconsistenciaMapeamento(null);
-          setTrechosMapeados(p.trechos || []);
           if (p.pipe_types_por_etapa) setPipeTypesPorEtapa(p.pipe_types_por_etapa);
+          const fluxo = fluxoDimensionarRef.current;
+          if (fluxo) {
+            // Mapeamento concluído dentro do "Dimensionar": segue para o cálculo.
+            postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, { accessToken: fluxo.token });
+            return;
+          }
           adicionarToast?.({
             tipo: "sucesso",
             titulo: "Rede mapeada",
-            mensagem: p.ignorados
-              ? `${p.ignorados} inconsistência(s) ignorada(s). Se já dimensionou, dimensione de novo.`
-              : "Se já dimensionou, dimensione de novo para refletir o novo mapeamento.",
-            duracaoMs: 7000,
+            duracaoMs: 5000,
           });
           return;
         }
+        // Qualquer falha ou cancelamento encerra o processo de dimensionar.
+        fluxoDimensionarRef.current = null;
+        setDimensionando(false);
         if (p.categoria === "cancelado") return;
         if (p.categoria === "inconsistencia") {
           setInconsistenciaMapeamento({ erro: p.erro, itens: p.itens || [] });
@@ -270,6 +281,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       }
 
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_DIMENSIONAR_RESULTADO) {
+        fluxoDimensionarRef.current = null;
         setDimensionando(false);
         const { ok, erro, categoria } = mensagem.payload || {};
         if (!ok) {
@@ -294,12 +306,20 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // O cálculo roda no servidor, que só atende com a sessão do usuário. O
   // token vai junto de cada pedido (e não guardado do lado do Revit) porque
   // aqui o supabase-js já o mantém renovado.
-  function mapear() {
-    setMapeando(true);
-    setInstrucaoMapeamento("");
-    setMapeamentoPendente(null);
-    setInconsistenciaMapeamento(null);
-    postToHost(BridgeMessageTypes.MAPEAR_TRECHOS, {});
+  // Token da sessão para o cálculo. Sem ele nem começa: o processo todo
+  // precisa de internet, e é melhor avisar antes de pedir cliques no Revit.
+  async function tokenDaSessao() {
+    const { data } = (await supabase?.auth.getSession()) ?? {};
+    const token = data?.session?.access_token ?? null;
+    if (!token) {
+      adicionarToast?.({
+        tipo: "erro",
+        titulo: TITULO_FALHA_DIMENSIONAMENTO.sessao,
+        mensagem: "Entre na sua conta com internet para dimensionar.",
+        duracaoMs: 9000,
+      });
+    }
+    return token;
   }
 
   function atualizarReferencia(qual) {
@@ -308,29 +328,33 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     postToHost(BridgeMessageTypes.ATUALIZAR_REFERENCIA_HIDRANTE, { qual });
   }
 
-  function continuarMapeamento() {
+  // O usuário decidiu ignorar as inconsistências leves: grava o mapeamento
+  // e, ao responder, o processo segue para o cálculo.
+  async function continuarMapeamento() {
+    const token = await tokenDaSessao();
+    if (!token) return;
+    fluxoDimensionarRef.current = { token };
+    setDimensionando(true);
     setMapeando(true);
     setInstrucaoMapeamento("Gravando o mapeamento…");
     setMapeamentoPendente(null);
     postToHost(BridgeMessageTypes.CONTINUAR_MAPEAMENTO, {});
   }
 
-  // Rede mapeada com sucesso (trechos salvos) — ver mesmo cálculo em
-  // HidrantesMapeamento.jsx (jaMapeado). Sem isso, o cache 'rotas' que
-  // "Dimensionar Hidrantes" lê do lado Python nem existe ainda (ou está
-  // desatualizado, de um mapeamento anterior barrado por inconsistência),
-  // então o botão fica bloqueado e a seção de resultados escondida — ver
-  // uso abaixo.
-  const trechosAtuais = trechosMapeados ?? resposta?.mapeamento;
-  const mapeamentoOk = trechosAtuais?.length > 0;
-
+  // Cada dimensionamento refaz o mapeamento inteiro (referências salvas,
+  // válvulas, rotas, perdas de carga, numeração dos hidrantes) para nada
+  // ficar de fora, e só então calcula. Inconsistência de conexão interrompe
+  // aqui e pede para corrigir e dimensionar de novo.
   async function dimensionar() {
-    if (!mapeamentoOk) return;
+    const token = await tokenDaSessao();
+    if (!token) return;
+    fluxoDimensionarRef.current = { token };
     setDimensionando(true);
-    const { data } = (await supabase?.auth.getSession()) ?? {};
-    postToHost(BridgeMessageTypes.DIMENSIONAR_HIDRANTES, {
-      accessToken: data?.session?.access_token ?? null,
-    });
+    setMapeando(true);
+    setInstrucaoMapeamento("");
+    setMapeamentoPendente(null);
+    setInconsistenciaMapeamento(null);
+    postToHost(BridgeMessageTypes.MAPEAR_TRECHOS, {});
   }
 
   // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site
@@ -681,23 +705,22 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                 instrucao={instrucaoMapeamento}
                 pendente={mapeamentoPendente}
                 inconsistencia={inconsistenciaMapeamento}
-                trechos={trechosMapeados ?? resposta.mapeamento}
                 referencias={referencias}
                 atualizandoReferencia={atualizandoReferencia}
                 onAtualizarReferencia={atualizarReferencia}
-                onMapear={mapear}
+                onDimensionar={dimensionar}
                 onContinuar={continuarMapeamento}
               />
               {/* Só existe tipo de tubo pra escolher material/conexão depois
-                  de mapear a rede pelo menos uma vez — antes disso fica
-                  oculto, em vez de mostrar um aviso/placeholder. */}
-              {mapeamentoOk && (
+                  de a rede ser mapeada pelo menos uma vez (o 1º dimensionamento
+                  usa o padrão) — antes disso fica oculto. */}
+              {pipeTypesPorEtapa && (
                 <MaterialConexaoSelector pipeTypesPorEtapa={pipeTypesPorEtapa} adicionarToast={adicionarToast} />
               )}
             </>
           ) : (
             <div className="hid-aviso" style={{ marginBottom: 14 }}>
-              Escolha e aplique o Tipo do sistema acima antes de mapear a rede.
+              Escolha e aplique o Tipo do sistema acima antes de dimensionar.
             </div>
           )}
           <div className="se-pagina-header" style={{ marginBottom: 14 }}>
@@ -708,8 +731,8 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               type="button"
               className="se-botao se-botao-accent se-pagina-header-botao"
               onClick={dimensionar}
-              disabled={dimensionando || mapeando || !mapeamentoOk}
-              title={mapeamentoOk ? undefined : 'Mapeie a rede (acima) antes de dimensionar'}
+              disabled={dimensionando || mapeando || !!atualizandoReferencia || !classificacao?.tipo}
+              title={classificacao?.tipo ? undefined : "Aplique o Tipo do sistema antes de dimensionar"}
             >
               {dimensionando ? "Dimensionando…" : dimensionamento ? "Dimensionar Novamente" : "Dimensionar Hidrantes"}
             </button>
@@ -720,7 +743,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               um resultado desatualizado (de um mapeamento anterior) ou o
               placeholder confundiria o RT. A seção some até lá; a própria
               HidrantesMapeamento acima já diz o que fazer. */}
-          {mapeamentoOk && (!dimensionamento ? (
+          {(!dimensionamento ? (
             <p className="vazio">
               {resposta.erroDimensionamento || 'Nenhum dimensionamento encontrado. Clique em "Dimensionar Hidrantes" acima.'}
             </p>

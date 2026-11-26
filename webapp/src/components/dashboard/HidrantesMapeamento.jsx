@@ -137,23 +137,13 @@ function ReferenciasSalvas({ referencias, atualizando, instrucao, desabilitado, 
  *   trechos        resultado do último mapeamento (ou o salvo no projeto)
  */
 export default function HidrantesMapeamento({
-  mapeando, instrucao, pendente, inconsistencia, trechos, onMapear, onContinuar,
+  mapeando, instrucao, pendente, inconsistencia, onDimensionar, onContinuar,
   referencias, atualizandoReferencia, onAtualizarReferencia,
 }) {
-  const jaMapeado = trechos?.length > 0;
-
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
       <div className="se-pagina-header" style={{ marginBottom: 0 }}>
-        <h3 style={{ margin: 0 }}>Mapeamento da Rede</h3>
-        <button
-          type="button"
-          className="se-botao se-botao-accent se-pagina-header-botao"
-          onClick={onMapear}
-          disabled={mapeando || !!atualizandoReferencia}
-        >
-          {mapeando ? "Mapeando…" : jaMapeado ? "Mapear Novamente" : "Mapear Trechos"}
-        </button>
+        <h3 style={{ margin: 0 }}>Referências</h3>
       </div>
 
       <ReferenciasSalvas
@@ -176,7 +166,7 @@ export default function HidrantesMapeamento({
           <div className="hid-aviso">{inconsistencia.erro}</div>
           {inconsistencia.itens?.length > 0 && <ListaInconsistencias itens={inconsistencia.itens} />}
           <p className="hid-nota-aviso">
-            Corrija a tubulação no Revit (o botão localiza cada ponto) e mapeie de novo.
+            Corrija a tubulação no Revit (o botão localiza cada ponto) e dimensione de novo.
           </p>
         </div>
       )}
@@ -193,8 +183,8 @@ export default function HidrantesMapeamento({
             <button type="button" className="se-botao se-botao-accent" onClick={onContinuar}>
               Ignorar e continuar
             </button>
-            <button type="button" className="se-botao" onClick={onMapear}>
-              Corrigi, mapear de novo
+            <button type="button" className="se-botao" onClick={onDimensionar}>
+              Corrigi, dimensionar de novo
             </button>
           </div>
         </div>
@@ -210,9 +200,9 @@ export default function HidrantesMapeamento({
       {/* Mesma formatação da nota "Sempre que trocar o sistema…" do cartão de
           classificação (.hid-nota-aviso), no pé do cartão. */}
       <p className="hid-nota-aviso">
-        {jaMapeado
-          ? "Rede mapeada. Mapeie de novo se mudar a tubulação no Revit."
-          : "Passo antes de dimensionar: mapeie a rede. A RTI e a bomba são pedidas no Revit na primeira vez e depois ficam salvas."}
+        A RTI e a bomba são pedidas no Revit na primeira vez e depois ficam salvas. Ao dimensionar,
+        a rede é mapeada de novo (válvulas, rotas e numeração dos hidrantes), então basta clicar em
+        Dimensionar depois de qualquer mudança no modelo.
       </p>
     </div>
   );
