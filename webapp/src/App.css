@@ -4955,18 +4955,3 @@ h1, h2, h3, h4, h5, h6,
   border-color: var(--border-2);
   color: var(--text-3);
 }
-
-.hid-ref-textos {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.hid-ref-sub {
-  font-size: 11px;
-  color: var(--text-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}

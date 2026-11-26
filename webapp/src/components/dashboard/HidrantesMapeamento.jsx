@@ -117,10 +117,7 @@ function BoxReferencia({ qual, referencia, atualizando, desabilitado, onAtualiza
         <span className="hid-ref-lupa" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <LupaReferencia eids={encontrada ? referencia.eids : null} />
         </span>
-        <span className="hid-ref-textos">
-          <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
-          {referencia?.sub && <span className="hid-ref-sub">{referencia.sub}</span>}
-        </span>
+        <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
       </span>
       <span className={`hid-ref-estado ${!referencia || !encontrada ? "hid-ref-estado-alerta" : "hid-ref-estado-ok"} ${ativa ? "hid-ref-estado-ativa" : ""}`}>
         <span className="hid-ref-estado-texto">{ativa ? acao : estado}</span>
@@ -146,7 +143,6 @@ function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar
     ? {
         existe: true,
         eids: referencias?.eidsValvulas || [],
-        sub: familias.length > 0 ? familias.join(", ") : `${qtdValvulas} identificada(s)`,
       }
     : null;
 
