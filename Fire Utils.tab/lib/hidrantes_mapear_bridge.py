@@ -424,6 +424,21 @@ def _montar_bomba(uidoc, postar_mensagem, ref):
         u"descricao": descricao_curta_elemento(bomba)}
 
 
+def _garantir_valvulas(uidoc, postar_mensagem, projeto_dir):
+    """Verifica se o projeto tem válvulas de hidrante identificadas (Acessório
+    de tubulação com 'ID Hidrante' preenchido, ou família já escolhida) e, se
+    não tiver nenhuma, pede para o usuário selecionar. Primeiro marca as
+    instâncias novas das famílias já salvas (inseridas depois)."""
+    doc = uidoc.Document
+    sem_param = _marcar_instancias_das_familias(doc, _familias_salvas(projeto_dir))
+    if sem_param:
+        raise _Interrompido(
+            u"Não foi possível gravar '{}' em {} válvula(s) (ex.: ID {}).".format(
+                P_ID_HIDRANTE, len(sem_param), sem_param[0].Id))
+    if not todas_valvulas_hidrante(doc):
+        _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir)
+
+
 def _payload_referencias(doc, projeto_dir):
     """O que a dockpane mostra: RTI, bomba e famílias de válvula salvas."""
     refs = _ler_referencias(projeto_dir)
@@ -446,6 +461,8 @@ def _payload_referencias(doc, projeto_dir):
         u"rti": item(refs.get(u"rti")),
         u"bomba": item(refs.get(u"bomba")),
         u"familiasValvula": _familias_salvas(projeto_dir),
+        # Válvulas identificadas no projeto (por parâmetro ou família salva).
+        u"qtdValvulas": len(todas_valvulas_hidrante(doc)),
     }
 
 
@@ -468,6 +485,36 @@ def tratar_get_referencias(uiapp, payload, fila_acoes, postar_mensagem):
         postar_mensagem(_TIPO_REFERENCIAS, {
             u"ok": False, u"categoria": u"servidor",
             u"erro": u"Não foi possível ler as referências: {}".format(texto_erro(ex))})
+
+
+def tratar_identificar_referencias(uiapp, payload, fila_acoes, postar_mensagem):
+    """Botão "Identificar referências": RTI, bomba e válvulas de hidrante de
+    uma vez, na ordem. O que já está salvo/identificado é reaproveitado."""
+    try:
+        if not licenca.tem_acesso(u"hidrantes"):
+            raise _Interrompido(
+                u"Esta conta não tem o módulo Hidrantes liberado neste computador.", u"licenca")
+        uidoc, projeto_dir = _doc_e_pasta(uiapp)
+        doc = uidoc.Document
+        try:
+            create_hydrant_params(doc)
+        except Exception as ex:
+            raise _Interrompido(
+                u"Erro ao criar parâmetros: {}".format(texto_erro(ex)), u"servidor")
+        refs = _ler_referencias(projeto_dir)
+        refs[u"rti"] = _montar_rti(uidoc, postar_mensagem, refs.get(u"rti"))[4]
+        refs[u"bomba"] = _montar_bomba(uidoc, postar_mensagem, refs.get(u"bomba"))[5]
+        _gravar_referencias(projeto_dir, refs)
+        _garantir_valvulas(uidoc, postar_mensagem, projeto_dir)
+        postar_mensagem(_TIPO_REFERENCIAS, _payload_referencias(doc, projeto_dir))
+    except _Interrompido as ex:
+        # Mesmo cancelado no meio, o que já foi identificado fica salvo e
+        # a dockpane precisa reler o estado.
+        postar_mensagem(_TIPO_REFERENCIAS, ex.resposta)
+    except Exception as ex:
+        postar_mensagem(_TIPO_REFERENCIAS, {
+            u"ok": False, u"categoria": u"servidor",
+            u"erro": u"Falha ao identificar as referências: {}".format(texto_erro(ex))})
 
 
 def tratar_atualizar_referencia(uiapp, payload, fila_acoes, postar_mensagem):
@@ -594,17 +641,9 @@ def _mapear(uiapp, postar_mensagem):
         _montar_bomba(uidoc, postar_mensagem, refs.get(u"bomba"))
     _gravar_referencias(projeto_dir, {u"rti": ref_rti, u"bomba": ref_bomba})
 
-    # Válvulas de hidrante: identificadas por 'ID Hidrante' (Acessórios de
-    # tubulação), não mais só pela família. Sem nenhuma, o usuário clica.
-    # Famílias já escolhidas antes: marca as instâncias novas (inseridas
-    # depois) antes de procurar.
-    sem_param = _marcar_instancias_das_familias(doc, _familias_salvas(projeto_dir))
-    if sem_param:
-        raise _Interrompido(
-            u"Não foi possível gravar '{}' em {} válvula(s) (ex.: ID {}).".format(
-                P_ID_HIDRANTE, len(sem_param), sem_param[0].Id))
-    if not todas_valvulas_hidrante(doc):
-        _escolher_familias_valvula(uidoc, postar_mensagem, projeto_dir)
+    # Válvulas de hidrante: mesma verificação do processo "Identificar
+    # referências" (nada a fazer se já estão identificadas).
+    _garantir_valvulas(uidoc, postar_mensagem, projeto_dir)
 
     _progresso(postar_mensagem,
                u"Percorrendo a tubulação da bomba até cada válvula de hidrante, "

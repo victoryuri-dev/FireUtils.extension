@@ -4945,3 +4945,18 @@ h1, h2, h3, h4, h5, h6,
   text-align: right;
   overflow-wrap: anywhere;
 }
+
+.hid-ref-identificar {
+  width: 100%;
+  padding: 12px 14px;
+}
+
+.hiddim-localizar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.hiddim-localizar-btn:disabled:hover {
+  border-color: var(--border-2);
+  color: var(--text-3);
+}

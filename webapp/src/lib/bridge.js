@@ -204,6 +204,14 @@
  *         outra falha: "requisito" (falta classificação, projeto salvo…),
  *         "norma", "licenca", "servidor", ou "cancelado" (Esc no Revit).
  *
+ *   { type: "IDENTIFICAR_REFERENCIAS" }
+ *     JS -> Python: botão "Identificar referências". Pede no Revit, em
+ *     sequência, a RTI, a bomba e (se o projeto ainda não tem) as válvulas de
+ *     hidrante; o que já está salvo é reaproveitado. Passos em
+ *     HIDRANTES_MAPEAR_PROGRESSO; responde HIDRANTES_REFERENCIAS (com
+ *     `qtdValvulas`, o nº de válvulas identificadas). É a mesma verificação
+ *     que o Dimensionar faz quando falta alguma referência.
+ *
  *   { type: "CANCELAR_SELECAO_REVIT" }
  *     JS -> Python: botão fechar do popup — cancela a seleção em andamento no
  *     Revit (equivale ao Esc). O Python envia um Esc à janela do Revit e o
@@ -410,6 +418,7 @@ export const BridgeMessageTypes = {
   HIDRANTES_MAPEAR_RESULTADO: "HIDRANTES_MAPEAR_RESULTADO",
   GET_HIDRANTES_REFERENCIAS: "GET_HIDRANTES_REFERENCIAS",
   CANCELAR_SELECAO_REVIT: "CANCELAR_SELECAO_REVIT",
+  IDENTIFICAR_REFERENCIAS: "IDENTIFICAR_REFERENCIAS",
   ATUALIZAR_REFERENCIA_HIDRANTE: "ATUALIZAR_REFERENCIA_HIDRANTE",
   HIDRANTES_REFERENCIAS: "HIDRANTES_REFERENCIAS",
   GET_SAIDAS_OPCOES: "GET_SAIDAS_OPCOES",

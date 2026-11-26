@@ -205,13 +205,17 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         const p = mensagem.payload || {};
         if (p.ok) {
           setReferencias(p);
-        } else if (p.categoria !== "cancelado") {
-          adicionarToast?.({
-            tipo: "erro",
-            titulo: "Não foi possível atualizar a referência",
-            mensagem: p.erro,
-            duracaoMs: 9000,
-          });
+        } else {
+          // Falha ou cancelamento no meio: o que já foi identificado ficou salvo.
+          postToHost(BridgeMessageTypes.GET_HIDRANTES_REFERENCIAS, {});
+          if (p.categoria !== "cancelado") {
+            adicionarToast?.({
+              tipo: "erro",
+              titulo: "Não foi possível atualizar a referência",
+              mensagem: p.erro,
+              duracaoMs: 9000,
+            });
+          }
         }
         return;
       }
@@ -338,6 +342,13 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       });
     }
     return token;
+  }
+
+  function identificarReferencias() {
+    setAtualizandoReferencia("todas");
+    setProgresso(null);
+    setPopupFechado(false);
+    postToHost(BridgeMessageTypes.IDENTIFICAR_REFERENCIAS, {});
   }
 
   function atualizarReferencia(qual) {
@@ -758,6 +769,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                 referencias={referencias}
                 atualizandoReferencia={atualizandoReferencia}
                 onAtualizarReferencia={atualizarReferencia}
+                onIdentificarReferencias={identificarReferencias}
                 onDimensionar={dimensionar}
                 onContinuar={continuarMapeamento}
               />

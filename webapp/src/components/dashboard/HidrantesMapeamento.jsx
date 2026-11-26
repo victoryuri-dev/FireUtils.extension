@@ -8,7 +8,7 @@ import searchIconSvg from "../../assets/icons/search-icon.svg?raw";
 // aviso de erro: um tem a lista na própria página, o outro foi escolha do
 // usuário.
 export const TITULO_FALHA_MAPEAMENTO = {
-  requisito: "Falta um passo antes de mapear",
+  requisito: "Falta um passo antes de dimensionar",
   norma: "Não foi possível ler a norma",
   licenca: "Módulo não contratado",
   servidor: "Não foi possível mapear",
@@ -66,6 +66,23 @@ const NOME_REFERENCIA = { rti: "Reservatório (RTI)", bomba: "Bomba de incêndio
  * definido); no hover vira a ação ("Alterar referência" / "Definir
  * referência").
  */
+/** Lupa que localiza o elemento no Revit; sempre presente na linha, apagada
+ * quando ainda não há elemento salvo. */
+function LupaReferencia({ eids }) {
+  const ativa = eids?.length > 0;
+  return (
+    <button
+      type="button"
+      className="hiddim-localizar-btn"
+      disabled={!ativa}
+      onClick={() => localizar(eids)}
+      title={ativa ? "Ver no Revit" : "Sem elemento para localizar"}
+    >
+      <Icon svg={searchIconSvg} />
+    </button>
+  );
+}
+
 function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
   const ativa = atualizando === qual;
   const encontrada = !!ref?.existe;
@@ -93,7 +110,7 @@ function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
       <span className="hid-ref-esq">
         {/* Não aciona a troca da referência ao localizar. */}
         <span className="hid-ref-lupa" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-          {encontrada && ref.eids?.length > 0 && <BotaoLocalizar eids={ref.eids} />}
+          <LupaReferencia eids={encontrada ? ref.eids : null} />
         </span>
         <span className="hid-ref-rotulo">{NOME_REFERENCIA[qual]}</span>
       </span>
@@ -105,8 +122,25 @@ function BoxReferencia({ qual, ref, atualizando, desabilitado, onAtualizar }) {
   );
 }
 
-function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar }) {
+function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar, onIdentificar }) {
   const familias = referencias?.familiasValvula || [];
+  const qtdValvulas = referencias?.qtdValvulas || 0;
+
+  // Nada identificado ainda: um botão só leva RTI, bomba e válvulas de uma vez.
+  if (!referencias?.rti && !referencias?.bomba && familias.length === 0 && qtdValvulas === 0) {
+    return (
+      <div className="hid-ref-grade">
+        <button
+          type="button"
+          className="se-botao se-botao-accent hid-ref-identificar"
+          onClick={onIdentificar}
+          disabled={desabilitado}
+        >
+          {atualizando ? "Identificando…" : "Identificar referências"}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="hid-ref-grade">
@@ -120,15 +154,19 @@ function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar
           onAtualizar={onAtualizar}
         />
       ))}
-      {familias.length > 0 && (
-        <div className="hid-ref-box hid-ref-box-fixa">
-          <span className="hid-ref-esq">
-            <span className="hid-ref-lupa" />
-            <span className="hid-ref-rotulo">Família da válvula de hidrante</span>
+      <div className="hid-ref-box hid-ref-box-fixa">
+        <span className="hid-ref-esq">
+          <span className="hid-ref-lupa" />
+          <span className="hid-ref-rotulo">Válvula de hidrante</span>
+        </span>
+        {familias.length > 0 || qtdValvulas > 0 ? (
+          <span className="hid-ref-familia">
+            {familias.length > 0 ? familias.join(", ") : `${qtdValvulas} identificada(s)`}
           </span>
-          <span className="hid-ref-familia">{familias.join(", ")}</span>
-        </div>
-      )}
+        ) : (
+          <span className="hid-ref-estado hid-ref-estado-alerta">Não definida</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -144,7 +182,7 @@ function ReferenciasSalvas({ referencias, atualizando, desabilitado, onAtualizar
  */
 export default function HidrantesMapeamento({
   mapeando, pendente, inconsistencia, onDimensionar, onContinuar,
-  referencias, atualizandoReferencia, onAtualizarReferencia,
+  referencias, atualizandoReferencia, onAtualizarReferencia, onIdentificarReferencias,
 }) {
   return (
     <div className="cartao-info" style={{ marginBottom: 14 }}>
@@ -163,6 +201,7 @@ export default function HidrantesMapeamento({
         atualizando={atualizandoReferencia}
         desabilitado={mapeando || !!atualizandoReferencia}
         onAtualizar={onAtualizarReferencia}
+        onIdentificar={onIdentificarReferencias}
       />
 
       {!mapeando && inconsistencia && (
