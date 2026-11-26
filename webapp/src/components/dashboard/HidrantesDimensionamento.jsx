@@ -201,7 +201,7 @@ export function ResumoExecutivo({ d }) {
       cor: "red",
       rows: [
         { label: labelPressao, val: fmca(p01) },
-        { label: "Vazão real", val: lmin(res.Q_hd01), opc: true },
+        { label: "Vazão real", val: lmin(res.Q_hd01) },
       ],
       atende: p01 >= pmin && p01 <= pmax,
     },
@@ -211,23 +211,26 @@ export function ResumoExecutivo({ d }) {
       cor: "amber",
       rows: [
         { label: labelPressao, val: fmca(p02) },
-        { label: "Vazão real", val: lmin(res.Q_hd02), opc: true },
+        { label: "Vazão real", val: lmin(res.Q_hd02) },
       ],
       atende: p02 >= pmin && p02 <= pmax,
     },
   ];
 
+  // O wrapper é o container da media query: em tela estreita os dois cards
+  // ficam um abaixo do outro (ver App.css).
   return (
+    <div className="hiddim-resumo-wrap">
     <div className="hiddim-resumo-grid">
       {cards.map((c) => (
         <Cartao key={c.id}>
           <CartaoHeader>
-            <span className={`hiddim-situacao hiddim-situacao-${c.cor} hiddim-opc`}>{c.label}</span>
+            <span className={`hiddim-situacao hiddim-situacao-${c.cor}`}>{c.label}</span>
             <span className="hiddim-id-badge hiddim-id-badge-neutro">{c.id}</span>
           </CartaoHeader>
           <div className="hiddim-resumo-corpo">
             {c.rows.map((r, i) => (
-              <div key={i} className={`hiddim-resumo-linha ${r.opc ? "hiddim-opc" : ""}`}>
+              <div key={i} className="hiddim-resumo-linha">
                 <span className="hiddim-resumo-linha-label">{r.label}</span>
                 <span className="hiddim-resumo-linha-val">{r.val}</span>
               </div>
@@ -238,6 +241,7 @@ export function ResumoExecutivo({ d }) {
           </div>
         </Cartao>
       ))}
+    </div>
     </div>
   );
 }

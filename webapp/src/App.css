@@ -4971,12 +4971,12 @@ h1, h2, h3, h4, h5, h6,
   margin-bottom: 0;
 }
 
-.cartao-info > .hiddim-resumo-grid {
+.cartao-info > .hiddim-resumo-wrap > .hiddim-resumo-grid {
   margin-bottom: 18px;
 }
 
 /* Containers dos cards/cabeçalhos que também encurtam em tela estreita. */
-.hiddim-resumo-grid,
+.hiddim-resumo-wrap,
 .hiddim-trecho-cartao {
   container-type: inline-size;
 }
@@ -5009,10 +5009,13 @@ h1, h2, h3, h4, h5, h6,
     padding: 3px 6px;
   }
 
-  /* Itens opcionais: rótulo de ranking e vazão dos cards HID, resumo Q/J do
-     cabeçalho do trecho. */
-  .hiddim-opc,
+  /* Resumo Q/J do cabeçalho do trecho. */
   .hiddim-trecho-info {
     display: none;
+  }
+
+  /* Cards dos dois hidrantes: um abaixo do outro, sem esconder nada. */
+  .hiddim-resumo-grid {
+    grid-template-columns: 1fr;
   }
 }
