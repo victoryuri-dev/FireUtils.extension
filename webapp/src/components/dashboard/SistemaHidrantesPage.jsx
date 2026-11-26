@@ -134,6 +134,12 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
   // Popup fechado pelo usuário (cancelando): volta a abrir no próximo passo.
   const [popupFechado, setPopupFechado] = useState(false);
   const cancelandoRef = useRef(false);
+  // Trocar o Tipo do sistema com as referências já identificadas dimensiona
+  // sozinho assim que a classificação é aplicada no Revit. `dimensionarRef`
+  // guarda sempre a versão atual de dimensionar() (o listener da bridge é
+  // criado uma vez só e enxergaria um estado velho).
+  const dimensionarAposAplicarRef = useRef(false);
+  const dimensionarRef = useRef(null);
   const [mapeamentoPendente, setMapeamentoPendente] = useState(null);
   const [inconsistenciaMapeamento, setInconsistenciaMapeamento] = useState(null);
   // RTI/bomba/famílias de válvula salvas no projeto (reaproveitadas por
@@ -220,6 +226,8 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
       if (mensagem.type === BridgeMessageTypes.HIDRANTES_CLASSIFICACAO_SAVED) {
         setAplicando(false);
         const { ok, erro } = mensagem.payload || {};
+        const dimensionarAgora = dimensionarAposAplicarRef.current;
+        dimensionarAposAplicarRef.current = false;
         if (!ok) {
           adicionarToast?.({
             tipo: "erro",
@@ -232,6 +240,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
         // Sucesso muda o que está gravado no Project Information — recarrega
         // pra "Sistema Classificado" refletir a classificação recém-aplicada.
         recarregar();
+        if (dimensionarAgora) dimensionarRef.current?.();
         return;
       }
 
@@ -395,6 +404,7 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
     setInconsistenciaMapeamento(null);
     postToHost(BridgeMessageTypes.MAPEAR_TRECHOS, {});
   }
+  dimensionarRef.current = dimensionar;
 
   // Classificação (Tabela 3) calculada aqui, com os mesmos dados que o site
   // usa (área da estrutura vinculada + ocupação/carga de incêndio dos
@@ -427,6 +437,11 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
 
   async function aplicar(tipo, rti, tipoVariante) {
     setAplicando(true);
+    // Com RTI, bomba e família da válvula já identificadas, a troca do
+    // sistema já dimensiona (ver HIDRANTES_CLASSIFICACAO_SAVED).
+    dimensionarAposAplicarRef.current =
+      !!referencias?.rti?.existe && !!referencias?.bomba?.existe &&
+      (referencias?.familiasValvula?.length ?? 0) > 0 && !dimensionando && !mapeando;
     // RTI não vai pro Project Information — o motor de cálculo nunca lê
     // RTI de lá (dimensiona o reservatório, não a rede hidráulica). Só o
     // que "Dimensionar Hidrantes"/"Mapear Trechos" de fato consomem.
@@ -711,10 +726,6 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
                   </div>
                 </div>
               )}
-
-              <p className="hid-nota-aviso">
-                Sempre que trocar o sistema, clique em "Dimensionar" novamente.
-              </p>
             </>
           )}
         </Cartao>
