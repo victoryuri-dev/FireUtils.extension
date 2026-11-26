@@ -1,0 +1,119 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Fire Utils"
+        Width="220"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        ShowInTaskbar="False"
+        Topmost="False"
+        WindowStartupLocation="Manual"
+        Background="Transparent">
+
+    <!-- Barra flutuante modeless de ferramentas: um botão por ferramenta do
+         grupo. Os botões são criados em Python (ferramentas_flutuantes.py) a
+         partir da definição do grupo, então esta janela serve a qualquer
+         grupo futuro (hidrantes, extintores...) sem XAML novo. -->
+    <Window.Resources>
+        <SolidColorBrush x:Key="BrushCard"   Color="#17171C"/>
+        <SolidColorBrush x:Key="BrushHover"  Color="#1D1E24"/>
+        <SolidColorBrush x:Key="BrushBorda"  Color="#2C2C33"/>
+        <SolidColorBrush x:Key="BrushTexto"  Color="#F5F5F7"/>
+        <SolidColorBrush x:Key="BrushAccent" Color="#C0152A"/>
+        <SolidColorBrush x:Key="BrushTitulo" Color="#87878D"/>
+        <SolidColorBrush x:Key="BrushPontos" Color="#45454B"/>
+
+        <Style x:Key="BotaoFerramenta" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource BrushTexto}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{StaticResource BrushCard}"
+                                BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
+                                CornerRadius="0" Padding="10,8,10,8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource BrushHover}"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Botões pequenos do cabeçalho (reduzir / fechar). -->
+        <Style x:Key="BotaoTopo" TargetType="Button">
+            <Setter Property="Width" Value="20"/>
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource BrushTexto}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="{StaticResource BrushAccent}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Moldura própria (sem a barra branca nativa do Windows): borda
+         arredondada escura, cabeçalho arrastável e botões reduzir/fechar. -->
+    <Border Background="#101014" BorderBrush="{StaticResource BrushBorda}" BorderThickness="1"
+            CornerRadius="0">
+        <StackPanel Margin="10">
+            <!-- Alça de arrastar: faixa pontilhada no topo, centralizada. -->
+            <Border x:Name="AlcaArrastar" Background="Transparent" Cursor="SizeAll"
+                    Margin="0,0,0,10" ToolTip="Arrastar">
+                <UniformGrid Rows="2" Columns="3" HorizontalAlignment="Center">
+                    <UniformGrid.Resources>
+                        <Style TargetType="Ellipse">
+                            <Setter Property="Width" Value="3"/>
+                            <Setter Property="Height" Value="3"/>
+                            <Setter Property="Margin" Value="2"/>
+                            <Setter Property="Fill" Value="{StaticResource BrushPontos}"/>
+                        </Style>
+                    </UniformGrid.Resources>
+                    <Ellipse/><Ellipse/><Ellipse/>
+                    <Ellipse/><Ellipse/><Ellipse/>
+                </UniformGrid>
+            </Border>
+            <Grid x:Name="Cabecalho" Background="Transparent" Margin="0,0,0,10" Cursor="SizeAll">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtTitulo" Text="" FontSize="11" FontWeight="SemiBold"
+                           Foreground="{StaticResource BrushTitulo}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" Margin="2,0,0,0"/>
+                <StackPanel x:Name="PainelBotoesTopo" Grid.Column="1" Orientation="Horizontal"
+                            HorizontalAlignment="Right">
+                    <Button x:Name="BtnReduzir" Content="«" Style="{StaticResource BotaoTopo}"
+                            ToolTip="Reduzir (só ícones)"/>
+                    <Button x:Name="BtnFechar" Content="✕" Style="{StaticResource BotaoTopo}"
+                            Margin="0" ToolTip="Fechar"/>
+                </StackPanel>
+            </Grid>
+            <StackPanel x:Name="Botoes" Margin="0,0,0,-6"/>
+        </StackPanel>
+    </Border>
+</Window>

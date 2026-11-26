@@ -28,6 +28,7 @@ from Autodesk.Revit.DB import (
     TextNote, TextNoteOptions, HorizontalTextAlignment,
 )
 from pyrevit import forms
+from tema_dialogos import JanelaFireUtils
 
 _XAML_LIMITE_ATINGIDO = os.path.join(os.path.dirname(__file__), u"linha_limite_atingido.xaml")
 
@@ -60,10 +61,10 @@ def listar_estilos_de_linha(doc):
     return estilos
 
 
-class _JanelaLimiteAtingido(forms.WPFWindow):
+class _JanelaLimiteAtingido(JanelaFireUtils):
 
     def __init__(self, mensagem):
-        forms.WPFWindow.__init__(self, _XAML_LIMITE_ATINGIDO)
+        JanelaFireUtils.__init__(self, _XAML_LIMITE_ATINGIDO)
         self.TxtMensagem.Text = mensagem
         self.inserir_comprimento = False
 

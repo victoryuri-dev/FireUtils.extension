@@ -27,6 +27,7 @@ import json
 import os
 
 from pyrevit import forms
+from tema_dialogos import JanelaFireUtils
 
 from projeto import carregar_cache, cache_path
 
@@ -152,10 +153,10 @@ def _preencher_combo(combo, nomes, nome_atual):
         combo.SelectedIndex = indice_selecionado
 
 
-class _JanelaConfiguracao(forms.WPFWindow):
+class _JanelaConfiguracao(JanelaFireUtils):
 
     def __init__(self, estilos, estilo_atual, prefixo_atual, tipos_texto, tipo_texto_atual):
-        forms.WPFWindow.__init__(self, _XAML_PATH)
+        JanelaFireUtils.__init__(self, _XAML_PATH)
         self.resultado = None  # (nome_estilo, prefixo, nome_tipo_texto) se "Salvar", senão None
 
         _preencher_combo(self.CmbEstilo, sorted(estilos.keys()), estilo_atual)

@@ -286,7 +286,7 @@ export default function Dashboard({
       saidasEstruturaId={saidasEstruturaId}
       onEscolherEstruturaSaidas={setSaidasEstruturaId}
       // A tela de Saída de Emergência edita e persiste direto no Supabase
-      // (ver AcessosDescargasView.jsx) — isso atualiza `estado.linha` aqui
+      // (ver FluxogramaSaidas.jsx) — isso atualiza `estado.linha` aqui
       // pra manter uma única fonte de verdade (a mesma linha que o resto
       // do Dashboard já lê), sem precisar buscar o projeto de novo.
       onAtualizarProjeto={(novaLinha) => setEstado((s) => ({ ...s, linha: novaLinha }))}

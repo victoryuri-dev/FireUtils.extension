@@ -2,14 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import Icon from "../Icon";
 import Loader from "../Loader";
 import { postToHost, escutarMensagensDoHost, BridgeMessageTypes } from "../../lib/bridge";
-import ocupacaoIconSvg from "../../assets/icons/ocupacao-icon.svg?raw";
-import porNivelIconSvg from "../../assets/icons/pornivel-icon.svg?raw";
-import todosIconSvg from "../../assets/icons/todos-icon.svg?raw";
-import sincronizarIconSvg from "../../assets/icons/sincronizar-ambiente-icon.svg?raw";
+import { consumirFerramenta, observarFerramenta } from "../../lib/ferramentasFlutuantes";
 import chevronDownIconSvg from "../../assets/icons/chevron-down-icon.svg?raw";
 import chevronRightIconSvg from "../../assets/icons/chevron-right-icon.svg?raw";
 
-// As quatro ferramentas de ocupação e população, ex-painel "Saídas" da faixa
+// As ferramentas de ocupação e população, ex-painel "Saídas" da faixa
 // do Revit (ver saidas_ocupacao_bridge.py). Trocam dados com o site, então só
 // existem aqui. Os três primeiros modos pedem uma ocupação (como o antigo
 // formulário WPF: Grupo -> Tipo, com taxa e notas); "Por nível" pede também os
@@ -19,41 +16,21 @@ const FERRAMENTAS = [
     modo: "selecao",
     titulo: "Identificar por ambiente",
     ajuda: "Você clica nos ambientes no Revit.",
-    icone: ocupacaoIconSvg,
     pedeNiveis: false,
   },
   {
     modo: "niveis",
     titulo: "Identificar por nível",
     ajuda: "Todos os ambientes dos níveis que você escolher.",
-    icone: porNivelIconSvg,
     pedeNiveis: true,
   },
   {
     modo: "todos",
     titulo: "Identificar todos sem ocupação",
     ajuda: "Todos os ambientes que ainda não têm ocupação.",
-    icone: todosIconSvg,
     pedeNiveis: false,
   },
 ];
-
-function Cartao({ titulo, icone, onClick, ocupado, desabilitado }) {
-  return (
-    <button
-      type="button"
-      className="cartao-dimensionamento cartao-dimensionamento-clicavel"
-      onClick={onClick}
-      disabled={desabilitado || ocupado}
-    >
-      <span className="cartao-dimensionamento-icone">
-        <Icon svg={icone} />
-      </span>
-      <span className="cartao-dimensionamento-titulo">{titulo}</span>
-      {ocupado && <span className="status-dimensionamento status-carregando">Em andamento…</span>}
-    </button>
-  );
-}
 
 function ModalOcupacao({ ferramenta, opcoes, estruturas, estruturaPadraoId, onCancelar, onConfirmar }) {
   const [uso, setUso] = useState("");
@@ -269,7 +246,7 @@ function notificarResultado(r, adicionarToast) {
 }
 
 /**
- * Botões das ferramentas de ocupação, no estilo dos cartões do Dashboard.
+ * Ferramentas de ocupação (seletor, execução e notificações), acionadas pela barra flutuante.
  * `onConcluido` é chamado quando uma ação termina sem erro (a página usa para
  * recarregar os ambientes que o plugin acabou de enviar ao site).
  */
@@ -289,6 +266,10 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
         setOpcoes(mensagem.payload || { ok: false, erro: "Sem resposta do Revit." });
       } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_PROGRESSO) {
         setExecutando((atual) => (atual ? { ...atual, instrucao: mensagem.payload?.instrucao || "" } : atual));
+      } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_ATUALIZADOS) {
+        // Ação feita pela barra flutuante (janela própria, sem a dockpane):
+        // só falta trazer os ambientes novos para a página.
+        concluidoRef.current?.();
       } else if (mensagem.type === BridgeMessageTypes.SAIDAS_AMBIENTES_RESULTADO) {
         const r = mensagem.payload || {};
         setExecutando(null);
@@ -318,29 +299,32 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
 
   const ocupado = !!executando;
 
-  return (
-    <section className="saidas-secao">
-      <p className="dashboard-subtitulo se-secao-titulo-pagina">Ocupação e população</p>
-      <div className="saidas-grade">
-        {FERRAMENTAS.map((f) => (
-          <Cartao
-            key={f.modo}
-            titulo={f.titulo}
-            icone={f.icone}
-            onClick={() => abrir(f)}
-            desabilitado={ocupado}
-            ocupado={executando?.acao === "identificar" && executando.modo === f.modo}
-          />
-        ))}
-        <Cartao
-          titulo="Sincronizar ambientes"
-          icone={sincronizarIconSvg}
-          onClick={sincronizar}
-          desabilitado={ocupado}
-          ocupado={executando?.acao === "sincronizar"}
-        />
-      </div>
+  // Cliques da barra flutuante (ferramentas_flutuantes.py) chegam como se o
+  // usuário tivesse clicado no cartão. A ref aponta sempre para a versão mais
+  // recente das funções acima (elas fecham sobre o estado atual) e o efeito
+  // roda uma vez só: ao montar também consome o pedido que chegou antes.
+  const executarPedidoRef = useRef(null);
+  executarPedidoRef.current = () => {
+    const acao = consumirFerramenta();
+    if (!acao || ocupado) return;
+    if (acao === "sincronizar") {
+      sincronizar();
+      return;
+    }
+    const f = FERRAMENTAS.find((item) => item.modo === acao);
+    if (f) abrir(f);
+  };
+  useEffect(() => {
+    const executar = () => executarPedidoRef.current?.();
+    executar();
+    return observarFerramenta(executar);
+  }, []);
 
+  // Sem botões na página: as ferramentas são disparadas pela barra flutuante
+  // (ferramentas_flutuantes.py, via lib/ferramentasFlutuantes.js). O componente
+  // continua aqui porque guarda o seletor de ocupação e o resultado das ações.
+  return (
+    <>
       {executando && (
         <div className="hid-aviso saidas-andamento">
           <Loader size={16} />
@@ -358,6 +342,6 @@ export default function SaidasFerramentas({ onConcluido, estruturas = [], estrut
           onConfirmar={confirmar}
         />
       )}
-    </section>
+    </>
   );
 }

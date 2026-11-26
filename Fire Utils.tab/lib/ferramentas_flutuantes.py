@@ -1,0 +1,498 @@
+# -*- coding: utf-8 -*-
+"""
+ferramentas_flutuantes.py — Fire Utils · lib/
+Barra flutuante de ferramentas: janela WPF modeless, estreita e vertical, com
+um botão por ferramenta de um grupo ("saidas", "tubos", "linha"). Abre a partir da
+sidebar da dockpane (ícones abaixo do divisor), fica acima do Revit, é
+arrastável pelo cabeçalho (moldura própria, sem barra nativa) e fecha quando o
+usuário quiser. Pode ser reduzida a só ícones. Não grava posição nem estado: a
+cada sessão do Revit começa fechada e no canto padrão.
+
+Mesmo padrão das janelas de prévia do plugin (forms.WPFWindow com Show(), não
+ShowDialog()). Para onde vai o clique depende do grupo (GRUPOS[...]["destino"]):
+  "dockpane"  Saídas: o clique manda FERRAMENTA_FLUTUANTE para a dockpane, que
+              já tem os seletores (estrutura, ocupação, níveis), o envio ao
+              site e as notificações — reaproveitar essa UI evita uma segunda
+              cópia dela em WPF. O clique também mostra a dockpane escondida.
+  "python"    Tubos: a ferramenta roda aqui, como o botão da faixa de opções.
+
+Contexto de API: um clique numa janela modeless acontece fora do contexto
+válido do Revit, então o que depende da API (rodar a ferramenta, mostrar o
+DockablePane, pegar o handle da janela do Revit para ser dona desta) vai por
+fila_acoes (family_loader_events — ExternalEvent), nunca direto do clique.
+
+Mensagens (contrato em webapp/src/lib/bridge.js):
+  ABRIR_JANELA_FERRAMENTAS {grupo}  JS -> Python: abre/fecha a barra do grupo.
+  JANELA_FERRAMENTAS_ESTADO {grupo, aberta}  Python -> JS: o ícone da sidebar
+      fica ativo enquanto a barra está aberta (inclusive quando ela é fechada
+      pelo X da própria janela).
+  FERRAMENTA_FLUTUANTE {grupo, acao}  Python -> JS: botão clicado.
+"""
+
+import os
+
+import clr
+clr.AddReference(u"PresentationFramework")
+clr.AddReference(u"PresentationCore")
+clr.AddReference(u"WindowsBase")
+
+from pyrevit import forms
+from tema_dialogos import mensagem
+
+from family_error_utils import texto_erro, print_seguro
+
+_LIB_DIR = os.path.dirname(os.path.abspath(__file__))
+_XAML_PATH = os.path.join(_LIB_DIR, u"ferramentas_flutuantes.xaml")
+# PNGs dos ícones, renderizados dos mesmos SVGs da dockpane
+# (webapp/src/assets/icons/*-icon.svg) com o claro do duotone em #F5F5F7, a
+# cor que o tema escuro dá a eles lá. O WPF não lê SVG com máscara.
+_ICONES_DIR = os.path.join(_LIB_DIR, u"assets", u"ferramentas")
+
+_TIPO_ESTADO = u"JANELA_FERRAMENTAS_ESTADO"
+_TIPO_CLIQUE = u"FERRAMENTA_FLUTUANTE"
+_TIPO_AMBIENTES_ATUALIZADOS = u"SAIDAS_AMBIENTES_ATUALIZADOS"
+
+# Largura da janela (XAML) e folga deixada à direita para a dockpane no
+# posicionamento inicial.
+_LARGURA = 220
+_LARGURA_REDUZIDA = 68  # 46 do botão + 10 de cada lado + 2 da borda
+_FOLGA_DOCKPANE = 470
+
+# grupo -> título, destino e ferramentas (acao, texto do botão, arquivo do
+# ícone em assets/ferramentas/).
+#   destino "nativo": Saídas — seletor em janela WPF própria (saidas_dialogo.py)
+#     e execução pela bridge de ocupação, sem precisar da dockpane aberta.
+#   destino "dockpane": o clique vai para a dockpane, que tem os seletores da
+#     ferramenta (webapp/src/components/dashboard/SaidasFerramentas.jsx).
+#     Hoje nenhum grupo usa; o caminho continua disponível.
+#   destino "python": a ferramenta roda aqui mesmo (ver _rodar_comando_python),
+#     como o botão equivalente da faixa de opções.
+GRUPOS = {
+    u"saidas": {
+        u"titulo": u"SAÍDAS DE EMERGÊNCIA",
+        u"destino": u"nativo",
+        u"ferramentas": [
+            (u"selecao", u"Identificar por ambiente", u"ocupacao"),
+            (u"niveis", u"Identificar por nível", u"pornivel"),
+            (u"todos", u"Identificar todos sem ocupação", u"todos"),
+            (u"sincronizar", u"Sincronizar ambientes", u"sincronizar-ambiente"),
+        ],
+    },
+    u"tubos": {
+        u"titulo": u"TUBOS",
+        u"destino": u"python",
+        u"ferramentas": [
+            (u"hidrante", u"Inserir hidrante por nível", u"tubos-hidrante"),
+            (u"abrigo", u"Conectar abrigo", u"tubos-abrigo"),
+            (u"tubo", u"Conectar tubo", u"tubos-tubo"),
+        ],
+    },
+    u"linha": {
+        u"titulo": u"LINHAS",
+        u"destino": u"python",
+        u"ferramentas": [
+            (u"limite", u"Inserir linha com limite", u"linha-limite"),
+            (u"medir", u"Medir comprimento de linhas", u"linha-medir"),
+            (u"configurar", u"Configurar", u"linha-configurar"),
+        ],
+    },
+}
+
+# Estado compartilhado entre engines do pyRevit: a barra pode ser aberta pela
+# dockpane (engine longo dela) ou por um botão da faixa de opções (engine novo
+# a cada clique), e os dois precisam enxergar as mesmas janelas abertas — senão
+# o segundo clique abriria uma barra duplicada em vez de fechar a primeira.
+#   janelas   grupo -> janela aberta
+#   reduzida  só ícones ou ícones com nomes; lembrado até fechar o Revit
+_CHAVE_ESTADO = u"FIREUTILS_BARRAS_FLUTUANTES"
+
+
+def _compartilhado():
+    from pyrevit import script
+    dados = script.get_envvar(_CHAVE_ESTADO)
+    if dados is None:
+        dados = {u"janelas": {}, u"reduzida": False}
+        script.set_envvar(_CHAVE_ESTADO, dados)
+    return dados
+
+
+def _mostrar_dockpane():
+    """Garante a dockpane visível: o seletor da ferramenta mora nela."""
+    try:
+        from family_loader_webview_forms import PainelCarregadorFamiliasWeb
+        painel = forms.get_dockable_panel(PainelCarregadorFamiliasWeb)
+        if not painel.IsShown():
+            painel.Show()
+    except Exception as ex:
+        print_seguro(u"[AVISO] Não foi possível mostrar a dockpane: {}".format(texto_erro(ex)))
+
+
+class _JanelaFerramentas(forms.WPFWindow):
+    def __init__(self, grupo, definicao, ao_clicar):
+        forms.WPFWindow.__init__(self, _XAML_PATH)
+        self.grupo = grupo
+        self.TxtTitulo.Text = definicao[u"titulo"]
+        # Partes que mudam entre os modos (preenchidas por _criar_botao).
+        self._colunas_icone = []
+        self._colunas_texto = []
+        self._imagens = []
+        self._botoes = []
+        self._rotulos = []
+        for acao, texto, icone in definicao[u"ferramentas"]:
+            self.Botoes.Children.Add(self._criar_botao(acao, texto, icone, ao_clicar))
+        self.BtnReduzir.Click += self._ao_alternar_reducao
+        self.BtnFechar.Click += lambda sender, args: self.Close()
+        # Sem barra de título nativa, o cabeçalho é a alça de arrastar. Os
+        # botões tratam o próprio clique, então não iniciam o arrasto.
+        self.Cabecalho.MouseLeftButtonDown += self._ao_arrastar
+        self.AlcaArrastar.MouseLeftButtonDown += self._ao_arrastar
+        self._aplicar_reducao(_compartilhado()[u"reduzida"])
+
+    def _ao_arrastar(self, sender, args):
+        try:
+            self.DragMove()
+        except Exception:
+            pass  # DragMove lança se o botão já foi solto; sem importância.
+
+    def _ao_alternar_reducao(self, sender, args):
+        dados = _compartilhado()
+        dados[u"reduzida"] = not dados[u"reduzida"]
+        self._aplicar_reducao(dados[u"reduzida"])
+
+    def _aplicar_reducao(self, reduzida):
+        """Reduzida: só os ícones (centralizados, nome fica no tooltip).
+        Expandida: ícone + nome."""
+        from System import Double
+        from System.Windows import GridLength, GridUnitType, HorizontalAlignment, Visibility
+        from System.Windows.Controls import Grid
+
+        for coluna in self._colunas_icone:
+            coluna.Width = GridLength(1, GridUnitType.Star) if reduzida else GridLength(34)
+        for coluna in self._colunas_texto:
+            coluna.Width = GridLength(0) if reduzida else GridLength(1, GridUnitType.Star)
+        for imagem in self._imagens:
+            imagem.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Left
+        # Reduzida: botões quadrados (46x46) e ícone maior; expandida: botão
+        # na largura toda, altura do conteúdo (NaN = automático).
+        for botao in self._botoes:
+            botao.Width = 46 if reduzida else Double.NaN
+            botao.Height = 46 if reduzida else Double.NaN
+            botao.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Stretch
+        for imagem in self._imagens:
+            imagem.Width = 28
+            imagem.Height = 28
+        for rotulo in self._rotulos:
+            rotulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
+
+        self.TxtTitulo.Visibility = Visibility.Collapsed if reduzida else Visibility.Visible
+        Grid.SetColumnSpan(self.PainelBotoesTopo, 2 if reduzida else 1)
+        self.PainelBotoesTopo.HorizontalAlignment = HorizontalAlignment.Center if reduzida else HorizontalAlignment.Right
+        self.BtnReduzir.Content = u"»" if reduzida else u"«"
+        self.BtnReduzir.ToolTip = u"Expandir (ícones e nomes)" if reduzida else u"Reduzir (só ícones)"
+        self.Width = _LARGURA_REDUZIDA if reduzida else _LARGURA
+
+    def _criar_botao(self, acao, texto, icone, ao_clicar):
+        from System import Uri, UriKind
+        from System.Windows import GridLength, GridUnitType, TextWrapping, Thickness, VerticalAlignment
+        from System.Windows.Controls import Button, ColumnDefinition, Grid, Image, TextBlock
+        from System.Windows.Media.Imaging import BitmapCacheOption, BitmapImage
+
+        botao = Button()
+        botao.Style = self.FindResource(u"BotaoFerramenta")
+        botao.ToolTip = texto
+        self._botoes.append(botao)
+
+        conteudo = Grid()
+        coluna_icone = ColumnDefinition()
+        coluna_icone.Width = GridLength(26)
+        coluna_texto = ColumnDefinition()
+        coluna_texto.Width = GridLength(1, GridUnitType.Star)
+        conteudo.ColumnDefinitions.Add(coluna_icone)
+        self._colunas_icone.append(coluna_icone)
+        self._colunas_texto.append(coluna_texto)
+        conteudo.ColumnDefinitions.Add(coluna_texto)
+
+        caminho = os.path.join(_ICONES_DIR, icone + u".png")
+        if os.path.isfile(caminho):
+            imagem_fonte = BitmapImage()
+            imagem_fonte.BeginInit()
+            imagem_fonte.UriSource = Uri(caminho, UriKind.Absolute)
+            # OnLoad: lê o arquivo na hora e solta — sem isso o PNG ficaria
+            # travado enquanto a janela existe (atrapalha atualizar o plugin).
+            imagem_fonte.CacheOption = BitmapCacheOption.OnLoad
+            imagem_fonte.EndInit()
+            imagem = Image()
+            imagem.Source = imagem_fonte
+            imagem.Width = 28
+            imagem.Height = 28
+            imagem.VerticalAlignment = VerticalAlignment.Center
+            Grid.SetColumn(imagem, 0)
+            self._imagens.append(imagem)
+            conteudo.Children.Add(imagem)
+
+        # TextBlock próprio: é ele que quebra a linha (TextWrapping não é
+        # propriedade anexável, então não dá para pôr no ContentPresenter).
+        rotulo = TextBlock()
+        rotulo.Text = texto
+        rotulo.TextWrapping = TextWrapping.Wrap
+        rotulo.VerticalAlignment = VerticalAlignment.Center
+        rotulo.Margin = Thickness(0, 0, 0, 0)
+        Grid.SetColumn(rotulo, 1)
+        self._rotulos.append(rotulo)
+        conteudo.Children.Add(rotulo)
+        botao.Content = conteudo
+
+        # O lambda fica dentro deste método (não direto no laço de __init__):
+        # cada chamada tem a sua `acao`, sem o bug do closure compartilhado.
+        botao.Click += lambda sender, args: ao_clicar(acao)
+        return botao
+
+
+def _carregar_comando(grupo, acao):
+    """Função(doc, uidoc, output) da ferramenta, ou None. Imports aqui dentro:
+    cada módulo puxa a API do Revit e só interessa quando a ferramenta roda."""
+    if grupo == u"tubos":
+        if acao == u"hidrante":
+            from hydrant_insert_core import run_coluna_multilevel
+            return run_coluna_multilevel
+        if acao == u"abrigo":
+            from connect_shelter_core_preview import conectar_abrigo_preview
+            return conectar_abrigo_preview
+        if acao == u"tubo":
+            from connect_pipe import run
+            return run
+    elif grupo == u"linha":
+        import linha_comandos
+        comando = {
+            u"limite": linha_comandos.inserir_linha_com_limite_comando,
+            u"medir": linha_comandos.medir_e_inserir_texto_comando,
+            u"configurar": linha_comandos.configurar_comando,
+        }.get(acao)
+        if comando is not None:
+            return lambda doc, uidoc, output: comando(doc, uidoc)
+    return None
+
+
+def _rodar_comando_python(uiapp, grupo, acao):
+    """Roda a ferramenta como o botão da faixa de opções roda (os script.py
+    são só estas chamadas), já no contexto de API desta fila. As ferramentas
+    abrem as próprias janelas modeless e pedem seleção no modelo, o que o
+    ExternalEvent permite."""
+    from pyrevit import script
+
+    uidoc = uiapp.ActiveUIDocument
+    if uidoc is None:
+        mensagem(u"Abra um projeto no Revit antes de usar esta ferramenta.", aviso=True)
+        return
+    try:
+        # Mesma trava de licença dos botões da faixa: exigir() encerra o
+        # "script" com SystemExit, que aqui só pode encerrar a ferramenta —
+        # deixá-lo subir chegaria ao Revit como exceção de ExternalEvent.
+        from licenca_guard import exigir
+        exigir(u"pro")
+
+        executar = _carregar_comando(grupo, acao)
+        if executar is None:
+            print_seguro(u"[AVISO] Ferramenta desconhecida: {}/{}".format(grupo, acao))
+            return
+        executar(uidoc.Document, uidoc, script.get_output())
+    except SystemExit:
+        pass  # pyscript.exit() / mensagem(sair=True) / exigir(): fim normal
+
+
+# modo -> (título, ajuda, pede níveis): mesmos textos do modal da dockpane.
+_SAIDAS_MODOS = {
+    u"selecao": (u"Identificar por ambiente", u"Você clica nos ambientes no Revit.", False),
+    u"niveis": (u"Identificar por nível", u"Todos os ambientes dos níveis que você escolher.", True),
+    u"todos": (u"Identificar todos sem ocupação", u"Todos os ambientes que ainda não têm ocupação.", False),
+}
+
+
+def _mostrar_resultado_saidas(r):
+    """Resultado de identificar/sincronizar como um aviso do Revit (o que a
+    dockpane mostra em notificações). Mesmos campos de
+    SAIDAS_AMBIENTES_RESULTADO (saidas_ocupacao_bridge.py)."""
+    sincronizar = r.get(u"acao") == u"sincronizar"
+    rotulo = u"sincronizar ambientes" if sincronizar else u"identificar ambientes"
+    if not r.get(u"ok"):
+        forms.alert(r.get(u"erro") or u"Falha ao {}.".format(rotulo), aviso=True)
+        return
+
+    linhas = list(r.get(u"resumoOk") or [])
+    falhas = list(r.get(u"resumoFalhas") or [])
+    erro_envio = r.get(u"erroEnvio")
+    if erro_envio and erro_envio not in falhas:
+        falhas.append(erro_envio)
+    populacao = r.get(u"populacao")
+    if populacao:
+        if populacao.get(u"erro"):
+            falhas.append(u"População não sincronizada: {}".format(populacao[u"erro"]))
+        else:
+            linhas.append(u"{} ambiente(s) com população atualizada a partir do site.".format(
+                populacao.get(u"atualizados", 0)))
+            if populacao.get(u"naoEncontrados", 0) > 0:
+                falhas.append(u"{} ambiente(s) do site não foram encontrados neste modelo "
+                              u"(apagados ou em outro arquivo).".format(populacao[u"naoEncontrados"]))
+    manuais = r.get(u"populacaoManual") or []
+    if manuais:
+        falhas.append(u"{} ambiente(s) sem taxa por área: informe a população no parâmetro "
+                      u"\"População\" do ambiente.".format(len(manuais)))
+    if not linhas and not falhas:
+        linhas.append(r.get(u"resumo") or u"Concluído.")
+
+    texto = u"\n".join(linhas)
+    if falhas:
+        texto += u"\n\nAtenção:\n" + u"\n".join(falhas)
+    mensagem(texto, titulo=u"Ambientes sincronizados" if sincronizar else u"Ambientes identificados",
+             aviso=bool(falhas))
+
+
+def _rodar_saidas(uiapp, acao, fila_acoes, postar_mensagem):
+    """Ferramentas de Saídas sem a dockpane: o seletor é a janela WPF de
+    saidas_dialogo.py e a execução é a mesma bridge que a dockpane usa — só
+    que as respostas viram avisos do Revit em vez de mensagens ao React."""
+    import os
+    import saidas_ocupacao_bridge as ponte
+
+    def responder(tipo, payload):
+        # SAIDAS_AMBIENTES_PROGRESSO é ignorado: o próprio Revit mostra o
+        # prompt da seleção na barra de status.
+        if tipo == u"SAIDAS_AMBIENTES_RESULTADO":
+            # Antes do aviso (que é modal): a dockpane recarrega os ambientes
+            # do Revit enquanto o aviso está na tela, como fazia quando o
+            # botão era dela. Só se o site recebeu — mesma condição de antes.
+            if payload.get(u"ok") and not payload.get(u"erroEnvio"):
+                try:
+                    postar_mensagem(_TIPO_AMBIENTES_ATUALIZADOS, {u"acao": payload.get(u"acao")})
+                except Exception as ex:
+                    print_seguro(u"[AVISO] Falha ao avisar a dockpane: {}".format(texto_erro(ex)))
+            _mostrar_resultado_saidas(payload)
+
+    if acao == u"sincronizar":
+        ponte.tratar_sincronizar_ambientes(uiapp, fila_acoes, responder)
+        return
+
+    modo = _SAIDAS_MODOS.get(acao)
+    if modo is None:
+        print_seguro(u"[AVISO] Ferramenta de saídas desconhecida: {}".format(acao))
+        return
+    titulo, ajuda, pede_niveis = modo
+
+    opcoes = {}
+    ponte.tratar_get_saidas_opcoes(uiapp, lambda tipo, payload: opcoes.update(payload))
+    if not opcoes.get(u"ok"):
+        mensagem(opcoes.get(u"erro") or u"Sem resposta do Revit.", aviso=True)
+        return
+
+    from sync import estruturas_vinculadas
+    projeto_dir = os.path.dirname(uiapp.ActiveUIDocument.Document.PathName)
+    estruturas = estruturas_vinculadas(projeto_dir)
+    if not estruturas:
+        mensagem(u"Este arquivo não tem estrutura vinculada. Vincule o projeto e a "
+                 u"estrutura no Dashboard da dockpane (uma vez) e tente de novo.", aviso=True)
+        return
+
+    from saidas_dialogo import pedir_ocupacao
+    pedido = pedir_ocupacao(uiapp, titulo, ajuda, opcoes, estruturas, pede_niveis)
+    if pedido is None:
+        return
+    pedido[u"modo"] = acao
+    ponte.tratar_identificar_ambientes(uiapp, pedido, fila_acoes, responder)
+
+
+def _rodar_saidas_seguro(uiapp, acao, fila_acoes, postar_mensagem):
+    """Falha ao montar o seletor ou rodar a ferramenta vira aviso na tela: sem
+    isso o erro só iria para a janela de saída do pyRevit e o clique pareceria
+    não fazer nada."""
+    try:
+        _rodar_saidas(uiapp, acao, fila_acoes, postar_mensagem)
+    except SystemExit:
+        pass
+    except Exception as ex:
+        print_seguro(u"[AVISO] Ferramenta de saídas falhou: {}".format(texto_erro(ex)))
+        mensagem(u"Não foi possível executar a ferramenta:\n\n{}".format(texto_erro(ex)), aviso=True)
+
+
+def _posicionar(janela):
+    from System.Windows import SystemParameters
+    area = SystemParameters.WorkArea
+    largura = _LARGURA_REDUZIDA if _compartilhado()[u"reduzida"] else _LARGURA
+    # Cada barra já aberta empurra a nova um pouco para a esquerda, para não
+    # nascerem uma em cima da outra.
+    deslocamento = len(_compartilhado()[u"janelas"]) * (largura + 12)
+    janela.Left = max(area.Left, area.Right - largura - _FOLGA_DOCKPANE - deslocamento)
+    janela.Top = area.Top + 140
+
+
+def _definir_dona(janela, uiapp):
+    """Dona = janela do Revit: a barra fica sempre acima dele e some junto ao
+    minimizar, sem cobrir outros programas (Topmost global cobriria)."""
+    try:
+        from System.Windows.Interop import WindowInteropHelper
+        WindowInteropHelper(janela).Owner = uiapp.MainWindowHandle
+    except Exception as ex:
+        print_seguro(u"[AVISO] Barra flutuante sem janela dona (usando Topmost): {}".format(texto_erro(ex)))
+        janela.Topmost = True
+
+
+def alternar(uiapp, grupo, fila_acoes, postar_mensagem):
+    """Abre a barra do grupo, ou fecha se já estiver aberta. Chamar na thread
+    de API (via fila_acoes), de onde há o uiapp para pegar o handle do Revit."""
+    janelas = _compartilhado()[u"janelas"]
+    existente = janelas.get(grupo)
+    if existente is not None:
+        existente.Close()  # o evento Closed limpa o registro e avisa a dockpane
+        return
+
+    definicao = GRUPOS.get(grupo)
+    if definicao is None:
+        print_seguro(u"[AVISO] Grupo de ferramentas desconhecido: {}".format(grupo))
+        return
+
+    def ao_clicar(acao):
+        if definicao[u"destino"] == u"nativo":
+            fila_acoes.enfileirar(lambda uiapp: _rodar_saidas_seguro(uiapp, acao, fila_acoes, postar_mensagem))
+            return
+        if definicao[u"destino"] == u"python":
+            fila_acoes.enfileirar(lambda uiapp: _rodar_comando_python(uiapp, grupo, acao))
+            return
+
+        def executar(_uiapp):
+            _mostrar_dockpane()
+            postar_mensagem(_TIPO_CLIQUE, {u"grupo": grupo, u"acao": acao})
+        fila_acoes.enfileirar(executar)
+
+    janela = _JanelaFerramentas(grupo, definicao, ao_clicar)
+    _definir_dona(janela, uiapp)
+    _posicionar(janela)
+
+    def ao_fechar(sender, args):
+        janelas.pop(grupo, None)
+        try:
+            postar_mensagem(_TIPO_ESTADO, {u"grupo": grupo, u"aberta": False})
+        except Exception as ex:
+            print_seguro(u"[AVISO] Falha ao avisar o fechamento da barra: {}".format(texto_erro(ex)))
+
+    janela.Closed += ao_fechar
+    janelas[grupo] = janela
+    janela.Show()
+    postar_mensagem(_TIPO_ESTADO, {u"grupo": grupo, u"aberta": True})
+
+
+def tratar_abrir_janela(uiapp, payload, fila_acoes, postar_mensagem):
+    """ABRIR_JANELA_FERRAMENTAS. Rede de segurança como nas outras bridges:
+    sem ela, uma exceção só apareceria no console do pyRevit."""
+    try:
+        alternar(uiapp, (payload or {}).get(u"grupo"), fila_acoes, postar_mensagem)
+    except Exception as ex:
+        print_seguro(u"[AVISO] Falha ao abrir a barra de ferramentas: {}".format(texto_erro(ex)))
+        postar_mensagem(_TIPO_ESTADO, {u"grupo": (payload or {}).get(u"grupo"), u"aberta": False})
+
+
+def alternar_pelo_botao(uiapp, grupo):
+    """Para um botão da faixa de opções (engine próprio, contexto de API
+    válido): abre/fecha a barra do grupo sem depender da dockpane. A fila de
+    ações é criada aqui, onde o ExternalEvent pode ser criado; o aviso de
+    estado à dockpane é dispensado (ela não é alcançável deste engine)."""
+    from family_loader_events import criar_fila_acoes
+    alternar(uiapp, grupo, criar_fila_acoes(), lambda tipo, payload: None)

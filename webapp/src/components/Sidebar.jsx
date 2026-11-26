@@ -11,6 +11,9 @@ import libraryIconSvg from "../assets/icons/library-icon.svg?raw";
 import dashboardIconSvg from "../assets/icons/dashboard-icon.svg?raw";
 import hydrantIconSvg from "../assets/icons/hydrant-icon.svg?raw";
 import exitIconSvg from "../assets/icons/exit-icon.svg?raw";
+import janelaSaidasIconPng from "../assets/icons/janela-saidas-icon.png";
+import janelaTubosIconPng from "../assets/icons/janela-tubos-icon.png";
+import janelaLinhaIconPng from "../assets/icons/janela-linha-icon.png";
 import perfilIconSvg from "../assets/icons/perfil-icon.svg?raw";
 import downloadIconSvg from "../assets/icons/download-icon.svg?raw";
 import unlinkIconSvg from "../assets/icons/unlinked-icon.svg?raw";
@@ -25,6 +28,17 @@ const ITENS_NAV = [
   { id: "dashboard", label: "Dashboard", svg: dashboardIconSvg },
   { id: "hidrantes", label: "Sistema de Hidrantes", svg: hydrantIconSvg },
   { id: "saidas", label: "Saídas de Emergência", svg: exitIconSvg },
+];
+
+// Janelas flutuantes de ferramentas (ferramentas_flutuantes.py): abaixo do
+// divisor, um botão por grupo. Abre/fecha a barra modeless do grupo. O ícone é
+// o do primeiro botão da própria barra (cores próprias, não herdam `color`).
+const ITENS_JANELAS = [
+  { id: "saidas", label: "Janela flutuante: Saídas de Emergência", png: janelaSaidasIconPng },
+  // Sem entrada em MODULO_POR_ABA: cada ferramenta de tubos confere a
+  // licença PRO por conta própria (licenca_guard), como o botão da faixa.
+  { id: "tubos", label: "Janela flutuante: Ferramentas de Tubos", png: janelaTubosIconPng },
+  { id: "linha", label: "Janela flutuante: Ferramentas de Linha", png: janelaLinhaIconPng },
 ];
 
 // Duração até a barra de maior delay (loader-bar-1: 0.28s) terminar de
@@ -47,6 +61,8 @@ export default function Sidebar({
   modulosLiberados,
   atualizacao,
   versaoPlugin,
+  janelasAbertas,
+  onAlternarJanela,
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [logoAnimando, setLogoAnimando] = useState(false);
@@ -117,6 +133,29 @@ export default function Sidebar({
             </button>
           );
         })}
+
+        <div className="sidebar-divisor" role="separator" />
+
+        {ITENS_JANELAS.map((item) => {
+          const aberta = !!janelasAbertas?.[item.id];
+          const bloqueada = modulosLiberados != null && !abaLiberada(modulosLiberados, item.id);
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`sidebar-item ${aberta ? "janela-aberta" : ""} ${bloqueada ? "bloqueada" : ""}`}
+              onClick={() => onAlternarJanela?.(item.id)}
+              title={bloqueada ? `${item.label} (fora da sua assinatura)` : item.label}
+              aria-pressed={aberta}
+            >
+              {item.png ? (
+                <img className="sidebar-item-img" src={item.png} alt={item.label} />
+              ) : (
+                <Icon svg={item.svg} title={item.label} />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className="sidebar-rodape">
@@ -170,10 +209,18 @@ export default function Sidebar({
           {menuAberto && (
             <div className="avatar-popover">
               <p className="avatar-popover-email">{email}</p>
-              <p className="avatar-popover-versao" title="Versão do plugin instalado">
+              <button
+                type="button"
+                className="avatar-popover-versao"
+                title="Ver as novidades desta versão"
+                onClick={() => {
+                  setMenuAberto(false);
+                  onSelecionarAba?.("atualizacoes");
+                }}
+              >
                 <Icon svg={logoSvg} />
                 <span>Fire Utils {textoDaVersao(versaoPlugin)}</span>
-              </p>
+              </button>
               <button type="button" className="avatar-popover-sair" onClick={sair}>
                 <Icon svg={exitIconSvg} />
                 Sair

@@ -100,7 +100,8 @@
  *     Segurança, Luminárias, Ambientes e Dispositivos de Alarme de
  *     Incêndio) são ignoradas, não dá erro. Selecionar a TAG de um
  *     ambiente vale o mesmo que selecionar o ambiente (resolvido pro
- *     Room por trás). Botão "Atribuir seleção à estrutura" do Dashboard.
+ *     Room por trás). Botão "Atribuir" do box de quantitativos do Dashboard
+ *     (o "Gravar" é um botão separado no mesmo box — ver GRAVAR_QUANTITATIVOS).
  *
  *   { type: "ESTRUTURA_ATRIBUIDA", payload: { ok, erro?, estruturaNome?, marcados?, ignorados? } }
  *     Python -> JS: resultado de um ASSIGN_ESTRUTURA_SELECAO. `ok: false`
@@ -278,6 +279,9 @@
  *     ambientes escolhidos e envia ao site. "selecao": o usuário clica nos
  *     ambientes no Revit; "niveis": os dos níveis em `niveis` (nomes); "todos":
  *     os que ainda não têm Grupo. Substitui os 3 botões "Identificar..." da faixa.
+ *     Opcionais (usados pela janela WPF da barra flutuante): popTipo: "area" (padrão) |
+ *     "fixo" | "manual" e populacao: number — com "fixo"/"manual" esse valor é gravado
+ *     em cada ambiente em vez do cálculo por área.
  *
  *   { type: "SINCRONIZAR_AMBIENTES" }
  *     JS -> Python: Revit -> site (nome/grupo/área) e site -> Revit (população e
@@ -293,6 +297,25 @@
  *     Python -> JS: fim de IDENTIFICAR_AMBIENTES/SINCRONIZAR_AMBIENTES. `resumo`
  *     é o texto por estrutura do envio ao site; `erroEnvio` preenchido = o Revit
  *     foi atualizado mas o site não recebeu.
+ *
+ *   { type: "ABRIR_JANELA_FERRAMENTAS", payload: { grupo: "saidas" | "tubos" | "linha" } }
+ *     JS -> Python: abre (ou fecha, se já aberta) a barra flutuante modeless com
+ *     um botão por ferramenta do grupo (ferramentas_flutuantes.py). "tubos" e "linha" rodam as ferramentas no Python; "saidas" devolve o clique à dockpane (FERRAMENTA_FLUTUANTE).
+ *
+ *   { type: "JANELA_FERRAMENTAS_ESTADO", payload: { grupo, aberta: boolean } }
+ *     Python -> JS: a barra do grupo abriu ou fechou (inclusive pelo X da própria
+ *     janela) — a sidebar usa para marcar o ícone como ativo.
+ *
+ *   { type: "FERRAMENTA_FLUTUANTE", payload: { grupo: "saidas",
+ *     acao: "selecao" | "niveis" | "todos" | "sincronizar" } }
+ *     Python -> JS: botão clicado na barra flutuante. A dockpane (já mostrada pelo
+ *     Python) vai para a página do grupo e abre a mesma ferramenta que o cartão
+ *     correspondente.
+ *
+ *   { type: "SAIDAS_AMBIENTES_ATUALIZADOS", payload: { acao: "identificar" | "sincronizar" } }
+ *     Python -> JS: a barra flutuante de Saídas (sem passar pela dockpane) acabou de
+ *     identificar/sincronizar ambientes com sucesso. A página de Saídas recarrega os
+ *     ambientes do Revit, como se a ação tivesse sido feita por ela.
  *
  *   { type: "INSTALAR_ATUALIZACAO", payload: { versao, arquivo, urlInstalador, urlHash, abrirPasta? } }
  *     JS -> Python: baixa, confere e instala uma versão nova do plugin
@@ -336,7 +359,9 @@
  *     parâmetro "Estrutura" (ver estrutura_param.py), grava o firedata.json
  *     e envia pro site um lote por (medida, estrutura) — sem seleção
  *     nenhuma (sempre todas as medidas) e sem abrir nenhum outro painel
- *     (nem janela WPF, nem o output window do pyRevit).
+ *     (nem janela WPF, nem o output window do pyRevit). Botão "Gravar" do
+ *     box de quantitativos do Dashboard, ao lado do "Atribuir" (ver
+ *     ASSIGN_ESTRUTURA_SELECAO acima) — um não dispara o outro.
  *
  *   { type: "QUANTITATIVOS_GRAVADOS", payload: { ok, erro?,
  *     medidas?: [{ chave, rotulo, estruturaNome, quantidade, enviado, motivo?,
@@ -427,6 +452,10 @@ export const BridgeMessageTypes = {
   SINCRONIZAR_AMBIENTES: "SINCRONIZAR_AMBIENTES",
   SAIDAS_AMBIENTES_PROGRESSO: "SAIDAS_AMBIENTES_PROGRESSO",
   SAIDAS_AMBIENTES_RESULTADO: "SAIDAS_AMBIENTES_RESULTADO",
+  SAIDAS_AMBIENTES_ATUALIZADOS: "SAIDAS_AMBIENTES_ATUALIZADOS",
+  ABRIR_JANELA_FERRAMENTAS: "ABRIR_JANELA_FERRAMENTAS",
+  JANELA_FERRAMENTAS_ESTADO: "JANELA_FERRAMENTAS_ESTADO",
+  FERRAMENTA_FLUTUANTE: "FERRAMENTA_FLUTUANTE",
   INSTALAR_ATUALIZACAO: "INSTALAR_ATUALIZACAO",
   INSTALAR_PACOTE: "INSTALAR_PACOTE",
   RECARREGAR_PYREVIT: "RECARREGAR_PYREVIT",

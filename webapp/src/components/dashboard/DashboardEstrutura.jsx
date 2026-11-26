@@ -198,12 +198,6 @@ function rotuloPavimentosEstrutura(estrutura) {
   return `${nPav} pav.${nSub ? ` + ${nSub} subsolo${nSub !== 1 ? "s" : ""}` : ""}`;
 }
 
-// `dimensionado` cobre o caso comum (status persistente: Pendente/
-// Dimensionado/Verificando...). "Gravar Quantitativos" não tem esse
-// conceito — é uma ação disparável de novo a qualquer momento, não um
-// estado que fica "concluído" — por isso usa `dimensionado={null}` (sem
-// badge nenhum, só o botão) + `carregando` (status "Gravando..." enquanto
-// o host processa, mesmo "Verificando..." visual dos outros cartões).
 function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotuloConcluido = "Dimensionado", carregando = false, rotuloCarregando = "Verificando..." }) {
   const Tag = onClick ? "button" : "div";
   return (
@@ -228,40 +222,54 @@ function CartaoDimensionamento({ titulo, iconeSvg, dimensionado, onClick, rotulo
   );
 }
 
-/** Seletor da estrutura a marcar na seleção atual do Revit + botão —
- * precisa de um valor escolhido antes de poder agir, então não cabe no
- * padrão de clique único dos outros cartões (CartaoDimensionamento). Lista
- * só as estruturas vinculadas a este arquivo (`estruturasVinculadas`, ver
- * Dashboard.jsx) — nunca escreve nada sozinho: só quando "Atribuir" é
- * clicado. */
-function AtribuirEstruturaCartao({ estruturas, onAtribuir, atribuindo }) {
+/** Box único com as duas ações de quantitativos, em botões separados:
+ * "Atribuir" marca a estrutura escolhida na seleção atual do Revit e
+ * "Gravar" grava e envia os quantitativos do projeto inteiro pro site (não
+ * depende da estrutura escolhida). Um não dispara o outro — cada clique faz
+ * só o que o botão diz. O seletor lista só as estruturas vinculadas a este
+ * arquivo (`estruturasVinculadas`, ver Dashboard.jsx); sem nenhuma, só o
+ * "Gravar" aparece. Nada é escrito sozinho: só quando um botão é clicado. */
+function QuantitativosCartao({ estruturas, onAtribuir, onGravar, atribuindo, gravando }) {
   const [escolhidaId, setEscolhidaId] = useState(estruturas[0]?.id || "");
 
-  if (estruturas.length === 0) return null;
-
   const estruturaEscolhida = estruturas.find((e) => e.id === escolhidaId);
+  const processando = atribuindo || gravando;
 
   return (
     <div className="cartao-dimensionamento cartao-atribuir-estrutura">
       <span className="cartao-dimensionamento-icone">
         <Icon svg={saveIconSvg} />
       </span>
-      <span className="cartao-dimensionamento-titulo">Atribuir seleção à estrutura</span>
+      <span className="cartao-dimensionamento-titulo">{estruturas.length > 0 ? "Atribuir e gravar quantitativos" : "Gravar quantitativos"}</span>
       <div className="cartao-atribuir-estrutura-controles">
-        <select value={escolhidaId} onChange={(e) => setEscolhidaId(e.target.value)} disabled={atribuindo}>
-          {estruturas.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.nome}
-            </option>
-          ))}
-        </select>
+        {estruturas.length > 0 && (
+          <>
+            <select value={escolhidaId} onChange={(e) => setEscolhidaId(e.target.value)} disabled={processando}>
+              {estruturas.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.nome}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="botao"
+              title="Marca a estrutura escolhida na seleção atual do Revit"
+              disabled={processando || !estruturaEscolhida}
+              onClick={() => onAtribuir(estruturaEscolhida.nome)}
+            >
+              {atribuindo ? "Atribuindo..." : "Atribuir"}
+            </button>
+          </>
+        )}
         <button
           type="button"
           className="botao accent"
-          disabled={atribuindo || !estruturaEscolhida}
-          onClick={() => onAtribuir(estruturaEscolhida.nome)}
+          title="Grava e envia os quantitativos do projeto inteiro pro site"
+          disabled={processando}
+          onClick={onGravar}
         >
-          {atribuindo ? "Atribuindo..." : "Atribuir"}
+          {gravando ? "Gravando..." : "Gravar"}
         </button>
       </div>
     </div>
@@ -443,18 +451,12 @@ export default function DashboardEstrutura({
           rotuloConcluido="Correlacionado"
           onClick={() => setMostrarCorrelacaoNiveis(true)}
         />
-        <CartaoDimensionamento
-          titulo="Gravar Quantitativos"
-          iconeSvg={saveIconSvg}
-          dimensionado={null}
-          carregando={gravandoQuantitativos}
-          rotuloCarregando="Gravando..."
-          onClick={onGravarQuantitativos}
-        />
-        <AtribuirEstruturaCartao
+        <QuantitativosCartao
           estruturas={estruturasVinculadas}
           onAtribuir={onAtribuirEstrutura}
+          onGravar={onGravarQuantitativos}
           atribuindo={atribuindoEstrutura}
+          gravando={gravandoQuantitativos}
         />
       </div>
 

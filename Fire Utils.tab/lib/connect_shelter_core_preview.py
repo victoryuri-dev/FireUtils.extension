@@ -61,6 +61,7 @@ from Autodesk.Revit.DB.Plumbing import Pipe
 from Autodesk.Revit.DB.Structure import StructuralType
 from Autodesk.Revit.UI.Selection import ObjectType, ISelectionFilter
 from pyrevit import forms, script as pyscript
+from tema_dialogos import JanelaFireUtils
 
 try:
     from Autodesk.Revit.DB import UnitTypeId
@@ -273,7 +274,7 @@ def _construir_valvula_stub_e_rota(doc, pipe_ref, pt_click_ref, simbolo,
 # FORM — preferências de conexão (lado do ramal + altura), com prévia
 # ===========================================================================
 
-class _JanelaOpcoesAbrigo(forms.WPFWindow):
+class _JanelaOpcoesAbrigo(JanelaFireUtils):
     """Janela WPF MODELESS (connect_shelter_opcoes.xaml) com PRÉVIA AO VIVO:
     a cada troca de opção (lado do ramal / onde conectar / ordem dos
     eixos), válvula + stub + roteamento são reconstruídos no modelo para o
@@ -322,7 +323,7 @@ class _JanelaOpcoesAbrigo(forms.WPFWindow):
     def __init__(self, doc, uidoc, pipe_ref, pt_click_ref, simbolo,
                  pt_abrigo, nivel, dir_face, pipe_type_id, sys_type_id, output,
                  clicou_ponta_exata=False):
-        forms.WPFWindow.__init__(self, _XAML_OPCOES_PATH)
+        JanelaFireUtils.__init__(self, _XAML_OPCOES_PATH)
         self.doc           = doc
         self.uidoc         = uidoc
         self.pipe_ref      = pipe_ref

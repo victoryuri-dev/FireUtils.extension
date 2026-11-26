@@ -20,12 +20,16 @@
 .PARAMETER Version
     Versao do instalador (ex: 1.0.0). Padrao: conteudo de installer\VERSION.
 
+.PARAMETER PermitirNaoRastreados
+    Monta mesmo com arquivos em Fire Utils.tab que o git nao conhece.
+
 .EXAMPLE
     .\build.ps1 -Version 1.0.0
 #>
 [CmdletBinding()]
 param(
-    [string] $Version
+    [string] $Version,
+    [switch] $PermitirNaoRastreados
 )
 
 Set-StrictMode -Version Latest
@@ -237,6 +241,25 @@ function Test-Branding {
     Write-Host '    OK'
 }
 
+# Arquivos de "Fire Utils.tab" que o git nao conhece (nem ignora): sobras de outra
+# branch ou de botoes antigos. Sem esta conferencia eles entrariam no
+# instalador e reapareceriam como botoes velhos na faixa do Revit.
+# -PermitirNaoRastreados libera quando sao arquivos novos que voce quer levar.
+function Test-NaoRastreados {
+    if ($PermitirNaoRastreados) { return }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Write-Warning 'git nao encontrado: nao deu para conferir arquivos soltos em "Fire Utils.tab".'
+        return
+    }
+    $soltos = @(& git -C $RepoRoot ls-files --others --exclude-standard -- 'Fire Utils.tab' 2>$null)
+    if ($soltos.Count -gt 0) {
+        $lista = ($soltos | ForEach-Object { "    $_" }) -join [Environment]::NewLine
+        throw ("Ha arquivos em 'Fire Utils.tab' que o git nao conhece (provavelmente sobras de botoes antigos ou de outra branch):" +
+               [Environment]::NewLine + $lista + [Environment]::NewLine +
+               "Apague-os (ou faca commit, se forem novos de verdade) e rode de novo. Para levar assim mesmo: -PermitirNaoRastreados.")
+    }
+}
+
 function Test-ItensNovosNaRaiz {
     $contemplados = $IgnoradosNaRaiz + ($ItensDoPayload | ForEach-Object { $_.Origem.Split('\')[0] })
 
@@ -262,6 +285,10 @@ Write-Passo 'Conferindo a chave de licenca'
 Test-ChaveDeLicenca
 Test-PublicadorDaAssinatura
 Test-ChaveDePacote
+
+Write-Passo 'Conferindo arquivos soltos em Fire Utils.tab'
+Test-NaoRastreados
+Write-Host '    OK'
 
 Write-Passo 'Conferindo a raiz do repositorio'
 Test-ItensNovosNaRaiz

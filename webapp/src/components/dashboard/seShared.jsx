@@ -1,12 +1,14 @@
 import { useState } from "react";
 import Icon from "../Icon";
-import { taxaOpcoes, popTipoPadrao, calcPT } from "../../data/se_calc";
+import { taxaOpcoes, popTipoPadrao, calcPopAmb, calcPT, calcPopArquibancada, divisaoComArquibancada, ARQUIBANCADA_TAXA } from "../../data/se_calc";
 import checkIconSvg from "../../assets/icons/check-icon.svg?raw";
 import xIconSvg from "../../assets/icons/x-icon.svg?raw";
+import chevronDownIconSvg from "../../assets/icons/chevron-down-icon.svg?raw";
+import chevronRightIconSvg from "../../assets/icons/chevron-right-icon.svg?raw";
 
 /**
  * seShared.jsx — UI compartilhada da árvore de Saída de Emergência
- * (SaidaEmergenciaPage.jsx / AcessosDescargasView.jsx), portada de
+ * (SaidaEmergenciaPage.jsx / FluxogramaSaidas.jsx), portada de
  * ETOS.FireUtils/src/pages/medidas/se_shared.jsx — mesmas regras de
  * negócio, reescrita em CSS simples (App.css) em vez das classes utility
  * do Tailwind que o site usa, pra ficar consistente com o resto desta
@@ -55,12 +57,12 @@ function DivisaoSelect({ value, onChange, ocupacoes }) {
 
 // ── Formulário de ambiente ────────────────────────────────────────────
 // Sem campo de nome — o nome do ambiente é editado pelo lápis no título
-// do modal que envolve este formulário (ver AcessosDescargasView.jsx).
+// do modal que envolve este formulário (ver FluxogramaSaidas.jsx).
 // `larguras`, se informado, habilita o cálculo de N° UP (porta) no
 // rodapé.
 export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, larguras }) {
   const { TAXA_POPULACIONAL, NOTAS_NORMATIVAS } = seNorma;
-  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", popManual: "" };
+  const blank = { divisao: "", popTipo: "area", area: "", assentos: "", vagas: "", popManual: "", arquibancada: false, arquibancadaComprimento: "", areaApoio: false };
   const [form, setForm] = useState(() =>
     initial
       ? {
@@ -68,32 +70,45 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           popTipo: initial.popTipo,
           area: initial.area ? String(initial.area) : "",
           assentos: initial.assentos ? String(initial.assentos) : "",
+          vagas: initial.vagas ? String(initial.vagas) : "",
           popManual: initial.popManual ? String(initial.popManual) : "",
+          arquibancada: !!initial.arquibancada,
+          areaApoio: !!initial.areaApoio,
+          arquibancadaComprimento: initial.arquibancadaComprimento ? String(initial.arquibancadaComprimento) : "",
         }
       : blank
   );
 
+  const [notasAbertas, setNotasAbertas] = useState(false); // notas normativas começam retraídas
   const taxa = TAXA_POPULACIONAL[form.divisao];
   const opcoes = taxaOpcoes(form.divisao, TAXA_POPULACIONAL);
   const isManual = form.popTipo === "manual";
   const isFixo = form.popTipo === "fixo";
+  const isVagas = form.popTipo === "vagas";
   const isArea = form.popTipo === "area";
 
+  const temArquibancada = divisaoComArquibancada(form.divisao);
+  const arquibancadaOn = temArquibancada && form.arquibancada;
+
   const popCalc = () => {
-    if (isFixo) return parseInt(form.assentos) || 0;
-    if (isManual) return parseInt(form.popManual) || 0;
-    return taxa?.A && form.area ? Math.ceil(parseFloat(form.area) / taxa.A) : 0;
+    const arq = calcPopArquibancada({ divisao: form.divisao, arquibancada: form.arquibancada, arquibancadaComprimento: form.arquibancadaComprimento });
+    if (isFixo) return (parseInt(form.assentos) || 0) + arq;
+    if (isVagas) return calcPopAmb({ divisao: form.divisao, popTipo: "vagas", vagas: form.vagas }, TAXA_POPULACIONAL) + arq;
+    if (isManual) return (parseInt(form.popManual) || 0) + arq;
+    return (taxa?.A && form.area ? Math.ceil(parseFloat(form.area) / taxa.A) : 0) + arq;
   };
 
   const setDivisao = (div) =>
-    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), area: "", assentos: "", popManual: "" }));
-  const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, area: "", assentos: "", popManual: "" }));
+    setForm((f) => ({ ...f, divisao: div, popTipo: popTipoPadrao(div, TAXA_POPULACIONAL), assentos: "", vagas: "", popManual: "", arquibancada: false, arquibancadaComprimento: "" }));
+  const setTipo = (tipo) => setForm((f) => ({ ...f, popTipo: tipo, assentos: "", vagas: "", popManual: "" }));
 
   const canSave = () => {
     if (!form.divisao) return false;
     if (isArea && !form.area) return false;
     if (isFixo && !form.assentos) return false;
+    if (isVagas && !(parseInt(form.vagas) > 0)) return false;
     if (isManual && !form.popManual) return false;
+    if (arquibancadaOn && !(parseFloat(form.arquibancadaComprimento) > 0)) return false;
     return true;
   };
 
@@ -104,11 +119,15 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
       popTipo: form.popTipo,
       area: parseFloat(form.area) || 0,
       assentos: parseInt(form.assentos) || 0,
+      vagas: parseInt(form.vagas) || 0,
       popManual: parseInt(form.popManual) || 0,
+      areaApoio: form.areaApoio,
+      arquibancada: arquibancadaOn,
+      arquibancadaComprimento: arquibancadaOn ? parseFloat(form.arquibancadaComprimento) || 0 : 0,
     });
   };
 
-  const inputLabel = isArea ? "Área (m²)" : isFixo ? "Assentos" : "N° de pessoas";
+  const inputLabel = isArea ? "Área (m²)" : isFixo ? "Assentos" : isVagas ? "Vagas de carro" : "População estimada (pessoas)";
   const pop = popCalc();
   const nUP = larguras ? calcPT(pop, taxa?.PT ?? 100, larguras).n : null;
 
@@ -159,6 +178,17 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
                 onKeyDown={(e) => e.key === "Enter" && handleSave()}
               />
             )}
+            {isVagas && (
+              <input
+                className="se-input"
+                type="number"
+                min="0"
+                placeholder="ex.: 40"
+                value={form.vagas}
+                onChange={(e) => setForm((f) => ({ ...f, vagas: e.target.value }))}
+                onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              />
+            )}
             {isManual && (
               <input
                 className="se-input"
@@ -174,12 +204,62 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
         </div>
       )}
 
-      {taxa?.notas?.length > 0 && (
+      {temArquibancada && (
         <div>
-          <div className="se-label">Notas</div>
-          <div className="se-notas">
-            {taxa.notas.map((k) => NOTAS_NORMATIVAS[k] && <div key={k} className="se-nota">{NOTAS_NORMATIVAS[k]}</div>)}
+          <Toggle
+            label="Possui arquibancada?"
+            checked={form.arquibancada}
+            onChange={(v) => setForm((f) => ({ ...f, arquibancada: v, arquibancadaComprimento: "" }))}
+          />
+        </div>
+      )}
+
+      {arquibancadaOn && (
+        <div className="se-form-row">
+          <div>
+            <div className="se-label">Taxa normativa (arquibancada)</div>
+            <div className="se-select se-select-fixo">{ARQUIBANCADA_TAXA.obs}</div>
           </div>
+          <div>
+            <div className="se-label">Comprimento de banco (m)</div>
+            <input
+              className="se-input"
+              type="number"
+              min="0"
+              placeholder="ex.: 40"
+              value={form.arquibancadaComprimento}
+              onChange={(e) => setForm((f) => ({ ...f, arquibancadaComprimento: e.target.value }))}
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            />
+          </div>
+        </div>
+      )}
+
+      <div>
+        <Toggle label="Área de apoio da edificação" checked={form.areaApoio} onChange={(v) => setForm((f) => ({ ...f, areaApoio: v }))} />
+        <div className="se-nota" style={{ marginTop: 6 }}>
+          {form.areaApoio
+            ? "Ativado: a população deste ambiente não soma na população total da edificação nem no dimensionamento de acessos e escadas — é a mesma de outros ambientes. Ela é usada só para dimensionar a porta deste ambiente."
+            : "Ative se este ambiente (ex.: depósito, vestiário, copa) só é usado por pessoas que já estão em outros ambientes da edificação."}
+        </div>
+      </div>
+
+      {taxa?.notas?.length > 0 && (
+        <div className="saidas-ocup-notas">
+          <button
+            type="button"
+            className="saidas-ocup-notas-toggle"
+            onClick={() => setNotasAbertas((a) => !a)}
+            aria-expanded={notasAbertas}
+          >
+            <Icon svg={notasAbertas ? chevronDownIconSvg : chevronRightIconSvg} />
+            Notas ({taxa.notas.filter((k) => NOTAS_NORMATIVAS[k]).length})
+          </button>
+          {notasAbertas && (
+            <div className="se-notas saidas-ocup-notas-corpo">
+              {taxa.notas.map((k) => NOTAS_NORMATIVAS[k] && <div key={k} className="se-nota">{NOTAS_NORMATIVAS[k]}</div>)}
+            </div>
+          )}
         </div>
       )}
 
@@ -188,6 +268,7 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           <div>
             <div className="se-stat-label">População</div>
             <div className={`se-stat-value ${pop > 0 ? "se-stat-value-red" : "se-stat-value-faint"}`}>{pop} Pessoas</div>
+            {form.areaApoio && <div className="se-nota">não soma no total · só dimensiona a porta</div>}
           </div>
           {nUP !== null && (
             <div>
@@ -205,6 +286,15 @@ export function AmbienteForm({ initial, onSave, onCancel, seNorma, ocupacoes, la
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function StatCol({ label, value, big }) {
+  return (
+    <div className="se-stat-col">
+      <div className="se-stat-col-label">{label}</div>
+      <div className={`se-stat-col-value ${big ? "se-stat-col-value-big" : ""}`}>{value}</div>
     </div>
   );
 }

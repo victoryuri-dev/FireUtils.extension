@@ -43,6 +43,7 @@ import hidrantes_material_conexao_bridge
 import plugin_atualizacao
 import plugin_pacote
 import saidas_ocupacao_bridge
+import ferramentas_flutuantes
 import quantitativos_bridge
 import atribuir_estrutura_bridge
 import niveis_bridge
@@ -356,6 +357,11 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
             lambda uiapp: saidas_ocupacao_bridge.tratar_sincronizar_ambientes(
                 uiapp, fila_acoes, postar_mensagem)
         )
+    elif tipo == u"ABRIR_JANELA_FERRAMENTAS":
+        fila_acoes.enfileirar(
+            lambda uiapp: ferramentas_flutuantes.tratar_abrir_janela(
+                uiapp, payload, fila_acoes, postar_mensagem)
+        )
     elif tipo == u"INSTALAR_PACOTE":
         # Atualização rápida: só o código Python, por pacote assinado.
         fila_acoes.enfileirar(
@@ -417,5 +423,10 @@ def processar_mensagem_webview(mensagem_json, fila_acoes, postar_mensagem):
         _postar_licencas(postar_mensagem)
     elif tipo == u"GET_LICENCAS":
         _postar_licencas(postar_mensagem)
+        # Aproveita a abertura da dockpane (uma vez por sessão) para apagar
+        # pastas de botões que sobraram de pacotes antigos.
+        fila_acoes.enfileirar(
+            lambda uiapp: plugin_pacote.limpar_pastas_orfas(postar_mensagem)
+        )
     else:
         print(u"[AVISO] Tipo de mensagem da bridge web desconhecido: {}".format(tipo))
