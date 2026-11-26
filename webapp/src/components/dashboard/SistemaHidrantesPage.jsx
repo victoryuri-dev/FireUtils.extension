@@ -675,25 +675,25 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               {sugestao.opcoes.length > 1 && (
                 <div style={{ marginTop: 14, marginBottom: 14 }}>
                   <p className="hiddim-campo-label">A norma permite dois sistemas para esta ocupação, escolha qual adotar</p>
-                  <div className="hid-pills-linha" style={{ marginTop: 6 }}>
+                  <div className="hid-pills-linha hid-pills-linha-cheia" style={{ marginTop: 6 }}>
                     {sugestao.opcoes.map((op) => (
                       <Pill key={op.tipo} active={tipoEfetivo === op.tipo} onClick={() => escolherTipo(op)} disabled={aplicando}>
-                        Tipo {op.tipo} — RTI {op.rti} m³
+                        Tipo {op.tipo}
                       </Pill>
                     ))}
                   </div>
                 </div>
               )}
               {sugestao.opcoes.length === 1 && (
-                <div className="hid-pills-linha" style={{ marginTop: 14, marginBottom: 14 }}>
+                <div className="hid-pills-linha hid-pills-linha-cheia" style={{ marginTop: 14, marginBottom: 14 }}>
                   <Pill active onClick={() => escolherTipo(sugestao.opcoes[0])} disabled={aplicando}>
-                    Tipo {sugestao.opcoes[0].tipo} — RTI {sugestao.opcoes[0].rti} m³
+                    Tipo {sugestao.opcoes[0].tipo}
                   </Pill>
                 </div>
               )}
 
               {variantesDoTipoEfetivo.length > 1 && (
-                <div className="hid-pills-linha" style={{ marginBottom: 14 }}>
+                <div className="hid-pills-linha hid-pills-linha-cheia" style={{ marginBottom: 14 }}>
                   {variantesDoTipoEfetivo.map((v, i) => (
                     <Pill
                       key={i}
@@ -710,8 +710,10 @@ export default function SistemaHidrantesPage({ projeto, estrutura, onProjetoAtua
               {classificacao && (
                 <div className="hiddim-stat-grid hiddim-stat-grid-3">
                   <div className="hiddim-stat-box">
-                    <div className="hiddim-stat-label">Tipo</div>
-                    <div className="hiddim-stat-val">Tipo {classificacao.tipo}</div>
+                    <div className="hiddim-stat-label">RTI</div>
+                    <div className="hiddim-stat-val">
+                      {rtiParaTipo(classificacao.tipo) != null ? `${rtiParaTipo(classificacao.tipo)} m³` : "—"}
+                    </div>
                   </div>
                   <div className="hiddim-stat-box">
                     <div className="hiddim-stat-label">Esguicho</div>

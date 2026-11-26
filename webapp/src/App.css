@@ -4847,3 +4847,9 @@ h1, h2, h3, h4, h5, h6,
   color: #fff;
   outline: none;
 }
+
+/* Botões de escolha (tipo/variante) ocupando toda a largura da linha. */
+.hid-pills-linha-cheia .hid-pill {
+  flex: 1 1 auto;
+  text-align: center;
+}
